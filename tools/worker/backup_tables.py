@@ -100,6 +100,8 @@ def prune(root: str, keep: int) -> list:
 
 def run_backup(out_root: str | None = None, tables: list | None = None) -> dict:
     root = out_root or backup_root()
+    if not out_root and not os.environ.get("FIRSTOA_BACKUP_ROOT") and os.path.dirname(root) == os.path.expanduser("~"):
+        log("경고: 구글 드라이브(또는 OneDrive) 폴더가 없어 백업이 이 PC 안에만 남습니다 — 구글 드라이브 데스크톱을 설치해 로그인하면 다음 백업부터 거기로 갑니다", "backup")
     stamp = kst_now().strftime("%Y-%m-%d")  # 폴더명은 KST — 새벽 작업이 전날 폴더에 들어가지 않게
     out_dir = os.path.join(root, stamp)
     os.makedirs(out_dir, exist_ok=True)
@@ -129,7 +131,7 @@ def run_backup(out_root: str | None = None, tables: list | None = None) -> dict:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", help="백업 폴더(기본: OneDrive 바탕화면\\FIRSTOA-백업)")
+    ap.add_argument("--out", help="백업 폴더(기본: 구글 드라이브\\FIRSTOA-백업, 없으면 OneDrive 바탕화면, 둘 다 없으면 사용자 폴더)")
     ap.add_argument("--tables", help="쉼표로 나열한 표 이름(기본: 전체)")
     args = ap.parse_args()
     m = run_backup(args.out, args.tables.split(",") if args.tables else None)

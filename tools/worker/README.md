@@ -6,7 +6,7 @@
 | 일 | 언제 | 어떻게 |
 |---|---|---|
 | 심박 | 1분마다 | `worker_heartbeat` 에 살아 있음 기록. 15분 끊기면 DB 파수꾼이 담당자에게 웹푸시 |
-| 전체 표 백업 | 매일 02:30 KST | `backup_tables.py` — 60여 표를 `OneDrive\Desktop\FIRSTOA-백업\<날짜>\` 에 jsonl.gz, 14회차 보관 |
+| 전체 표 백업 | 매일 02:30 KST | `backup_tables.py` — 60여 표를 `구글 드라이브\FIRSTOA-백업\<날짜>\` 에 jsonl.gz, 14회차 보관 |
 | 카톡 PC 발송 중계 | 5분마다 | 봇이 3분 넘게 못 가져간 outbox 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`) |
 | 월요 키맨 포스터 | 월 08시 | `tools/kakao-pc/poster_send.py --weekly` |
 | 일감 처리 | 들어올 때 | `worker_jobs` 의 queued 행을 잡아 실행 — `ping` `backup` `relay` `poster` (음성·OCR 은 자리만) |
@@ -27,13 +27,13 @@
 그 다음 손으로 할 것 세 가지:
 1. **카톡 PC** 설치 → 업무폰(봇) 계정으로 로그인(폰에서 인증번호) → 자동 로그인 체크. 로그인 뒤 **마감방·지역 운영방을 더블클릭해 별도 창으로 열어 둔다**(실행기는 열린 창에만 붙여 넣는다). 창은 최소화해도 되지만 닫으면 안 된다.
 2. **윈도우 자동 로그인**: `netplwiz` → "사용자 이름과 암호를 입력해야…" 체크 해제. 정전 뒤 재부팅돼도 로그온 작업이 다시 뜨게.
-3. **백업 위치**: OneDrive 에 로그인하면 `OneDrive\Desktop\FIRSTOA-백업` 에, 아니면 `사용자 폴더\FIRSTOA-백업` 에 쌓인다(환경 변수 `FIRSTOA_BACKUP_ROOT` 로 바꿀 수 있다).
+3. **백업 위치 = 구글 드라이브**: [구글 드라이브 데스크톱](https://www.google.com/drive/download/)을 설치해 회사 구글 계정으로 로그인하면 `내 드라이브\FIRSTOA-백업` 에 쌓인다(스트리밍 `G:\내 드라이브` 든 미러 `사용자 폴더\내 드라이브` 든 알아서 찾는다. 실행 중에 설치해도 다음 백업부터 적용). 구글 드라이브가 없으면 OneDrive 바탕화면, 그것도 없으면 `사용자 폴더\FIRSTOA-백업` 에 PC 안에만 남고 로그에 경고가 찍힌다. 환경 변수 `FIRSTOA_BACKUP_ROOT` 로 아무 폴더나 지정할 수도 있다.
 
 ## 설치 (손으로 할 때)
 
 1. 노트북 설정: 덮개 닫아도 동작 · 절전 끄기 · 자동 로그인 · 업데이트 사용 시간 지정 · 원격 접속 켜기.
 2. Python 3.11 이상 설치(python.org, "Add to PATH" 체크).
-3. 이 저장소를 노트북에 둔다 — git clone 또는 OneDrive 로 동기화된 `문서\New project\FIRSTOA-inspection-finder-MG` 그대로.
+3. 이 저장소를 노트북에 둔다 — `git clone https://github.com/FIRSTOA/FIRSTOA-inspection-finder-MG.git`(bootstrap.ps1 이 하는 일).
 4. Supabase SQL Editor 에서 `supabase/worker-heartbeat.sql` 을 한 번 실행(심박·일감 표 + 파수꾼 크론).
 5. PowerShell(일반 사용자):
    ```

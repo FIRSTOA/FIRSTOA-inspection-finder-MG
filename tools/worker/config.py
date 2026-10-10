@@ -74,11 +74,27 @@ class RestError(Exception):
         self.status = status
 
 
+def google_drive_dir() -> str:
+    """구글 드라이브 데스크톱 폴더 — 스트리밍(X:\\내 드라이브)·미러(사용자 폴더\\내 드라이브) 둘 다. 없으면 빈 문자열"""
+    home = os.path.expanduser("~")
+    cands = [os.path.join(home, n) for n in ("내 드라이브", "My Drive", "Google Drive")]
+    for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
+        cands += [f"{letter}:\\내 드라이브", f"{letter}:\\My Drive"]
+    for c in cands:
+        if os.path.isdir(c):
+            return c
+    return ""
+
+
 def backup_root() -> str:
-    """백업 폴더 — 환경 변수 FIRSTOA_BACKUP_ROOT > OneDrive 바탕화면\\FIRSTOA-백업(기존 위치) > 사용자 폴더\\FIRSTOA-백업"""
+    """백업 폴더 — 환경 변수 FIRSTOA_BACKUP_ROOT > 구글 드라이브\\FIRSTOA-백업(회사는 구글 계정, 2026-10-10)
+    > OneDrive 바탕화면\\FIRSTOA-백업(데스크톱의 옛 위치) > 사용자 폴더\\FIRSTOA-백업(클라우드 없음 — 로그에 경고)"""
     env = os.environ.get("FIRSTOA_BACKUP_ROOT")
     if env:
         return env
+    gd = google_drive_dir()
+    if gd:
+        return os.path.join(gd, "FIRSTOA-백업")
     one = os.path.join(os.path.expanduser("~"), "OneDrive", "Desktop")
     if os.path.isdir(one):
         return os.path.join(one, "FIRSTOA-백업")

@@ -96,6 +96,7 @@ Write-Host ''
 Write-Host 'DONE. Next, by hand:' -ForegroundColor Green
 Write-Host '  - Install KakaoTalk PC (https://www.kakaocorp.com/page/service/service/KakaoTalk), log in with the bot phone account, tick auto-login.'
 Write-Host '  - Double-click each room the worker must post into (closing room, regional rooms) so it stays open as its own window.'
+Write-Host '  - Install Google Drive for desktop (https://www.google.com/drive/download/), sign in with the company Google account: daily backups then go to My Drive (FIRSTOA-backup folder). Until then they stay on this PC only.'
 Write-Host '  - Windows: Settings > Accounts > Sign-in options > turn OFF "require sign-in"; netplwiz > untick "users must enter a password" for auto-login after a reboot.'
 Write-Host '  - Check: FIELD app > Counter SMS > settings tab should say the worker is alive within a minute.'
 Write-Host ("  - Logs: " + (Join-Path $dest 'tools\worker\logs'))
