@@ -18,8 +18,6 @@ import { syncPush } from "./push";
 import { useInboxBadge } from "./useInboxBadge";
 import InspectionChecklist from "./InspectionChecklist";
 import KeymanCard from "./KeymanCard";
-import { PromoWorkspace } from "./CustomerEngagement";
-import { AsReception, CsCalendar, buildMonthlyCloneRow } from "./CsAsWorkspace";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
@@ -76,6 +74,10 @@ const ItLearningHistory = lazyScreen(() => import("./ItLearningHistory"), "IT �
 const CounterSms = lazyScreen(() => import("./CounterSms"), "카운터 문자");
 const AutoSchedule = lazyScreen(() => import("./AutoSchedule"), "자동 일정");
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
+// 일정리스트·캘린더·홍보물 발송은 이름 있는 export 라 default 로 감싸서 lazy — 일정리스트 모듈(2,700줄)이 첫 로딩에 끼어 있던 것(2026-10-10 속도 2차)
+const AsReception = lazyScreen(() => import("./CsAsWorkspace").then((m) => ({ default: m.AsReception })), "일정리스트");
+const CsCalendar = lazyScreen(() => import("./CsAsWorkspace").then((m) => ({ default: m.CsCalendar })), "캘린더");
+const PromoWorkspace = lazyScreen(() => import("./CustomerEngagement").then((m) => ({ default: m.PromoWorkspace })), "홍보물 발송");
 // 통합이력 팝업은 열 때만 받는다(77KB) — 다른 화면(일정리스트·서비스접수·조회…)과 같은 조각을 나눠 쓴다(2026-10-10 속도)
 const UnifiedHistoryLazy = lazy(() => import("./UnifiedHistory"));
 
@@ -5862,6 +5864,7 @@ export default function App() {
   const nextBizYmd = (date: string) => nextBusinessDay(date); // 공용 — 주말+공휴일 제외
   // 반복 클론 생성 전 같은 업체·날짜·유형 일정이 이미 있으면 건너뛴다 (시리즈 미리 생성분과 중복 방지)
   const spawnMonthlyCloneIfMissing = async (row: Record<string, unknown>) => {
+    const { buildMonthlyCloneRow } = await import("./CsAsWorkspace"); // 드물게 쓰는 길이라 그때 받는다
     const clone = buildMonthlyCloneRow(row);
     const dup = await selectRows<{ id: string }>("as_tickets",
       `select=id&vendor=eq.${encodeURIComponent(String(clone["vendor"] || ""))}&date=eq.${encodeURIComponent(String(clone["date"] || ""))}&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent(String(clone["scheduleType"] || ""))}&limit=1`).catch(() => []);
