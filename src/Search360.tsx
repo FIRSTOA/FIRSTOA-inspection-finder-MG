@@ -281,7 +281,7 @@ export default function Search360({ author }: { author: string }) {
                 <div className="text-[11px] font-black text-slate-500">이렇게 써 보세요</div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {TRY_THESE.map((t) => (
-                    <button key={t.text} type="button" disabled={busy} onClick={() => void submit(t.text, "auto")} className="group inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-bold text-slate-100 transition hover:border-blue-400 hover:bg-slate-200 disabled:opacity-50">
+                    <button key={t.text} type="button" disabled={busy} onClick={() => void submit(t.text, "auto")} className="group inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-bold text-slate-700 transition hover:border-blue-400 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50">
                       <span className={`rounded px-1 text-[9px] font-black ${t.kind === "검색" ? "bg-blue-100 text-blue-700" : t.kind === "업체 질문" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}`}>{t.kind}</span>{t.text}
                     </button>
                   ))}
