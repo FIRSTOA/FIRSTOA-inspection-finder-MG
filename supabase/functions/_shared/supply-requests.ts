@@ -106,7 +106,27 @@ const squash = (s: string) => String(s || "").toLowerCase().replace(/[\s\-_/·.(
 const COLOR_WORDS: Array<[RegExp, string]> = [
   [/^(k|bk|black|검정|블랙|흑백)$/i, "K"], [/^(c|cyan|시안|사이안|청색|파랑)$/i, "C"], [/^(m|magenta|마젠타|마젠다|빨강|적색)$/i, "M"], [/^(y|yellow|옐로우|옐로|노랑|황색)$/i, "Y"],
 ];
-const colorOf = (word: string): string => { const w = String(word || "").replace(/토너/g, "").trim(); for (const [re, c] of COLOR_WORDS) if (re.test(w)) return c; return ""; };
+const colorOf = (word: string): string => {
+  let w = String(word || "").replace(/토너/g, "").trim();
+  const mm = w.match(/^\d{3,4}\s*([kcmy])$/i);          // "420K" = 420 기종의 K 토너
+  if (mm) w = mm[1];
+  for (const [re, c] of COLOR_WORDS) if (re.test(w)) return c;
+  return "";
+};
+/** 사전(재고 표)이 비어 있거나 못 맞출 때 쓰는 기본 품목 — 가장 흔한 것만 */
+const BUILTIN: CatalogItem[] = [
+  { id: "", kind: "자가", name: "토너 K", category: "토너", color: "K", aliases: ["K", "검정", "검정토너", "블랙", "BK"], models: [] },
+  { id: "", kind: "자가", name: "토너 C", category: "토너", color: "C", aliases: ["C", "시안", "파랑"], models: [] },
+  { id: "", kind: "자가", name: "토너 M", category: "토너", color: "M", aliases: ["M", "마젠타", "빨강"], models: [] },
+  { id: "", kind: "자가", name: "토너 Y", category: "토너", color: "Y", aliases: ["Y", "옐로우", "노랑"], models: [] },
+  { id: "", kind: "자가", name: "폐토너통", category: "폐토너통", color: "", aliases: ["폐", "폐통", "폐토너", "폐토너박스", "폐토너통"], models: [] },
+  { id: "", kind: "부품", name: "드럼", category: "드럼", color: "", aliases: ["드럼", "드럼유닛", "DRUM"], models: [] },
+  { id: "", kind: "부품", name: "현상기", category: "현상기", color: "", aliases: ["현상기", "현상유닛"], models: [] },
+  { id: "", kind: "부품", name: "픽업롤러", category: "롤러", color: "", aliases: ["픽업롤러", "픽업", "급지롤러"], models: [] },
+  { id: "", kind: "부품", name: "정착기", category: "정착기", color: "", aliases: ["정착기", "퓨저"], models: [] },
+];
+const SET_RE = /(?:^|\s)(?:토너\s*)?(?:(\d+)\s*)?(세트|셋트|셋|set)(?:\s*(\d+))?(?:\s|$)/i;
+const WASTE_RE = /^(폐|폐통|폐토너|폐토너통|폐토너박스)(\d+)?$/;
 
 /** 컬러기인지 — 사전의 기종표가 있으면 그걸로, 없으면 기종명으로 짐작(컬러 계열: CLX·X7·C22xx·C25xx·Apeos C·MFC-L8900CDW·CLP…) */
 export function isColorModel(model: string, catalog: CatalogItem[] = []): boolean {
@@ -115,14 +135,15 @@ export function isColorModel(model: string, catalog: CatalogItem[] = []): boolea
     const toners = catalog.filter((c) => c.category === "토너" && c.models.some((m) => squash(m) === key));
     if (toners.length) return toners.some((c) => c.color && c.color !== "K");
   }
-  return /clx|clp|x7|x4|c2[0-9]{3}|c3[0-9]{3}|c4[0-9]{3}|apeosc|docucentrevc|cdw|cdn|mfcl8|mfcl9|컬러/i.test(key);
+  // 삼성 SL-X 계열(X3220·X4220·X7400…)·CLX·CLP 는 컬러, SL-M/SL-K 는 흑백. 제록스 C22xx·C25xx·Apeos C, 브라더 L8900CDW 등
+  return /clx|clp|slx\d|(^|[^a-z])x\d{3,4}|c2[0-9]{3}|c3[0-9]{3}|c4[0-9]{3}|apeosc|docucentrevc|cdw|cdn|mfcl8|mfcl9|컬러/i.test(key);
 }
 
 /** 사전에서 이름 찾기 — 이름·별칭을 공백 없이 비교, 못 찾으면 글 안에 든 가장 긴 별칭 */
 export function matchCatalog(raw: string, catalog: CatalogItem[], kind?: SupplyKind): CatalogItem | null {
   const key = squash(raw);
   if (!key) return null;
-  const pool = catalog.filter((c) => c.kind !== "기기" && (!kind || c.kind === kind || c.category === "토너" || c.category === "폐토너통"));
+  const pool = [...catalog, ...BUILTIN].filter((c) => c.kind !== "기기" && (!kind || c.kind === kind || c.category === "토너" || c.category === "폐토너통"));
   for (const c of pool) if (squash(c.name) === key || c.aliases.some((a) => squash(a) === key)) return c;
   let best: { c: CatalogItem; len: number } | null = null;
   for (const c of pool) for (const a of [c.name, ...c.aliases]) { const ak = squash(a); if (ak.length >= 2 && key.includes(ak) && (!best || ak.length > best.len)) best = { c, len: ak.length }; }
@@ -130,7 +151,7 @@ export function matchCatalog(raw: string, catalog: CatalogItem[], kind?: SupplyK
 }
 
 const tonerStd = (color: string, catalog: CatalogItem[]): { name: string; id: string } => {
-  const hit = catalog.find((c) => c.category === "토너" && c.color === color);
+  const hit = [...catalog, ...BUILTIN].find((c) => c.category === "토너" && c.color === color);
   return { name: hit?.name || `토너 ${color}`, id: hit?.id || "" };
 };
 
@@ -141,7 +162,17 @@ export function normalizeItems(items: SupplyItem[], catalog: CatalogItem[], mode
   for (const s of items) {
     const text = `${s.item}${s.qty ? ` ${s.qty}` : ""}`.trim();
     // "1세트" / "세트 1" / "1set" / "풀세트" / "토너 1세트"
-    const setM = text.match(/(?:^|\s)(?:토너\s*)?(?:(\d+)\s*)?(세트|셋트|set)(?:\s*(\d+))?(?:\s|$)/i) || (/풀\s*세트/i.test(text) ? ["", "1", "세트", ""] as unknown as RegExpMatchArray : null);
+    // "K1 폐"처럼 색 토큰과 폐통이 섞인 것 — 띄어쓰기 단위가 모두 아는 것(색+숫자 / 폐통류)이면 각각으로
+    const toks = text.split(/\s+/).filter(Boolean);
+    if (toks.length >= 2 && toks.every((tk) => /^[kcmy]\d*$/i.test(tk) || WASTE_RE.test(tk))) {
+      for (const tk of toks) {
+        const wm = tk.match(WASTE_RE);
+        if (wm) { const w = matchCatalog("폐토너통", catalog, "자가"); out.push({ ...base(s), item: w?.name || "폐토너통", qty: wm[2] || "1", itemStd: w?.name || "폐토너통", category: "폐토너통", color: "", stockItemId: w?.id || "" }); }
+        else { const c = tk[0].toUpperCase(); const t = tonerStd(c, catalog); out.push({ ...base(s), item: t.name, qty: tk.slice(1) || "1", itemStd: t.name, category: "토너", color: c, stockItemId: t.id }); }
+      }
+      continue;
+    }
+    const setM = text.replace(/셋트|셋/g, "세트").match(SET_RE) || (/풀\s*세트/i.test(text) ? ["", "1", "세트", ""] as unknown as RegExpMatchArray : null);
     if (setM && s.kind === "자가") {
       const n = String(setM[1] || setM[3] || "1");
       const colors = isColorModel(model, catalog) ? ["K", "C", "M", "Y"] : ["K"];

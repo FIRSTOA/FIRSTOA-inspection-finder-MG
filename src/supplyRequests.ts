@@ -103,14 +103,22 @@ export async function backfillSupplyMonth(ym: string): Promise<{ read: number; i
 /** 미정의 품목(item_std 가 빈 행)을 사전으로 다시 맞춘다 — 관리 탭에서 별칭을 추가한 뒤 누른다 */
 export async function renormalizeUndefined(): Promise<{ checked: number; fixed: number }> {
   const catalog = await loadSupplyCatalog(true);
-  const rows = await selectRows<{ id: number; kind: "부품" | "자가"; item: string; qty: string; model: string }>("supply_requests", "select=id,kind,item,qty,model&item_std=eq.&order=id.desc&limit=2000");
+  const rows = await selectRows<Record<string, unknown> & { id: number; kind: "부품" | "자가"; item: string; qty: string; model: string }>("supply_requests", "select=*&item_std=eq.&order=id.desc&limit=2000");
   let fixed = 0;
   for (const r of rows) {
-    const [n] = normalizeItems([{ kind: r.kind, item: r.item, qty: r.qty, status: "", warranty: "", counter: "", expected: "", raw: "" }], catalog, r.model);
-    if (n && n.itemStd && !n.setLabel) {
-      await updateRows("supply_requests", `id=eq.${r.id}`, { item_std: n.itemStd, category: n.category, color: n.color, stock_item_id: n.stockItemId });
-      fixed += 1;
+    const list = normalizeItems([{ kind: r.kind, item: r.item, qty: r.qty, status: String(r.status || ""), warranty: "", counter: "", expected: "", raw: String(r.raw || "") }], catalog, r.model);
+    if (!list.length || !list[0].itemStd) continue;
+    const [first, ...rest] = list;
+    await updateRows("supply_requests", `id=eq.${r.id}`, { item: first.item, qty: first.qty, item_std: first.itemStd, category: first.category, color: first.color, stock_item_id: first.stockItemId, set_label: first.setLabel });
+    // "토너 1셋" → K·C·M·Y 처럼 여러 행으로 풀리면 나머지는 같은 보고의 새 행으로(중복키는 품목·수량이 달라 새로 생긴다)
+    for (const n of rest) {
+      const copy: Record<string, unknown> = { ...r };
+      for (const k of ["id", "created_at", "stage", "issued_at", "issued_by", "used_vendor", "used_at", "used_by", "returned_at", "return_by", "return_note"]) delete copy[k];
+      const s = { kind: r.kind, item: n.item, qty: n.qty, status: String(r.status || ""), warranty: String(r.warranty || ""), counter: String(r.counter || ""), expected: String(r.expected || ""), raw: String(r.raw || "") };
+      await insertRow("supply_requests", { ...copy, item: n.item, qty: n.qty, item_std: n.itemStd, category: n.category, color: n.color, stock_item_id: n.stockItemId, set_label: n.setLabel,
+        _dupKey: md5(supplyDupSource(String(r.source_table || ""), String(r.request_date || "").slice(0, 10), String(r.author || ""), String(r.vendor || ""), s)) }).catch(() => undefined);
     }
+    fixed += 1;
   }
   return { checked: rows.length, fixed };
 }
