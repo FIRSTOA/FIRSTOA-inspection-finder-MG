@@ -457,14 +457,69 @@ export type State = {
   bulman: { date: string; status: string; text: string } | null;
   lastInspect: string; lastAs: string; lastAsFrom: string; lastVisit: string;
   openReceptions: number; upcomingTickets: number; changes: number; photos: number;
-  workin: { team: string; quarter: string; kind: string; label: string }[];
+  /** 워킨맵 등록 — (팀·분기·종류·라벨)별로 묶어 개수와 함께. 기기 1대=장소 1개라 웍스피어처럼 34개가 나란히 뜨던 것(2026-10-10) */
+  workin: { team: string; quarter: string; kind: string; label: string; count: number }[];
   /** 현장 메모 — 특이사항(출근·점심·주의), 워킨맵 메모 줄, 임대리스트 추가조건. 상태 카드에 바로 보인다(2026-10-10 "출근시간·특이사항 안 나오나") */
   notes: { kind: "특이사항" | "워킨맵" | "임대조건"; text: string; from: string; pinned: boolean }[];
   counts: { label: string; group: Group; exact: number; loose: number; ok: boolean; rawSkipped: boolean }[];
   total: number; oldest: string; newest: string;
 };
 
-const latest =(events: EventItem[], table: string) => events.filter((ev) => !ev.loose && ev.source.table === table && ev.date).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+// ── 워킨맵 묶기 — 기기 1대 = 장소 1개라 그대로 보여 주면 웍스피어는 34줄이 된다(2026-10-10) ──
+const KIND_KO: Record<string, string> = { quarter: "분기점검", monthly: "매월점검", renewal: "재계약" };
+/** (팀·분기·종류·라벨)별 개수. 최신 분기가 앞 */
+export function summarizeWorkin(rows: Row[]): { team: string; quarter: string; kind: string; label: string; count: number }[] {
+  const m = new Map<string, { team: string; quarter: string; kind: string; label: string; count: number }>();
+  for (const r of rows) {
+    const team = str(r, "team"), quarter = str(r, "quarter"), kind = KIND_KO[str(r, "kind")] || str(r, "kind"), label = str(r, "label");
+    const k = `${team}|${quarter}|${kind}|${label}`;
+    const cur = m.get(k) || { team, quarter, kind, label, count: 0 }; cur.count += 1; m.set(k, cur);
+  }
+  return Array.from(m.values()).sort((a, b) => Number(b.quarter) - Number(a.quarter) || b.count - a.count);
+}
+/**
+ * 워킨맵 메모 → 현장 메모 줄. 임대리스트에서 온 꼬리표(방문주기·계약종료·미수·한조/틴텍·연평균·임대료·납품교체일…)는 **최신 분기의 장소들을 모아 한 줄로**,
+ * 사람이 쓴 글(엘베 없음·몇 층…)만 따로 한 줄씩(중복 제거). 기기 줄(comment: 모델/기번/IP)은 ② 기기 카드가 있으니 여기선 뺀다.
+ */
+export function workinNotes(rows: Row[], e: Entity): { kind: "워킨맵"; text: string; from: string; pinned: boolean }[] {
+  if (!rows.length) return [];
+  const latestQ = Math.max(...rows.map((r) => Number(str(r, "quarter")) || 0));
+  const latestRows = rows.filter((r) => (Number(str(r, "quarter")) || 0) === latestQ);
+  const team = str(latestRows[0], "team");
+  const tags = new Map<string, Set<string>>();
+  const free = new Set<string>();
+  const put = (k: string, v: string) => { const s = (v || "").trim(); if (!s) return; if (!tags.has(k)) tags.set(k, new Set()); tags.get(k)!.add(s.replace(/(\d+)\.\d{3,}/g, "$1")); };
+  const skip = (m: string) => /^(N|NN|S|SS|V|일반|임대중|임대종료|소송|매월|분기|재계약|복합기확장성|IT확장성|\/IT확장성|복합기확장성\/IT확장성|\d{1,6}|\/)$/.test(m)
+    || /^(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)/.test(m)
+    || /^(강남|강서|경기|지방|CSS)$/.test(m)
+    || e.nameKeys.includes(vendorMatchKey(m));
+  for (const r of latestRows) {
+    const memos = Array.isArray(r.memos) ? (r.memos as unknown[]).map(String).map((x) => x.trim()).filter(Boolean) : [];
+    for (const m of memos) {
+      if (skip(m)) continue;
+      let hit: RegExpMatchArray | null;
+      if ((hit = m.match(/^방문주기\s*(.+)$/))) put("방문주기", hit[1]);
+      else if ((hit = m.match(/^계약종료년월\s*\/?\s*(\S+)/))) put("계약종료", hit[1]);
+      else if ((hit = m.match(/^미수금\s*(\S+?)\s*\/\s*(\S+)/))) put("미수", `${hit[1]} / ${hit[2]}`);
+      else if ((hit = m.match(/^한조\s*(\S+?)\s*\/?\s*틴텍\s*(\S+)/))) { put("한조", hit[1]); put("틴텍", hit[2]); }
+      else if ((hit = m.match(/^연평균(\S+?)거래처$/))) put("연평균", hit[1].replace(/(만원)(이상|이하)/, "$1 $2"));
+      else if ((hit = m.match(/^기본임대료\s*(\S+?)\s*\/\s*연평균임대료\s*(\S+?)\s*\/\s*컬러기본\s*(\S+?)\s*\/\s*흑백기본\s*(\S+)/))) { put("기본", hit[1]); put("컬러기본", hit[3]); put("흑백기본", hit[4]); }
+      else if ((hit = m.match(/^납품교체일\s*[:：]\s*(.+)/))) put("납품교체일", hit[1]);
+      else if ((hit = m.match(/^유지보수업체\s*[:：]\s*(.+)/))) put("유지보수", hit[1]);
+      else if ((hit = m.match(/^장비소유주\s*[:：]\s*(.+)/))) put("소유주", hit[1]);
+      else free.add(m.replace(/\s+/g, " ").slice(0, 120));
+    }
+  }
+  const order = ["방문주기", "계약종료", "미수", "한조", "틴텍", "연평균", "기본", "컬러기본", "흑백기본", "납품교체일", "유지보수", "소유주"];
+  const summary = order.filter((k) => tags.has(k)).map((k) => { const vs = Array.from(tags.get(k)!); return `${k} ${vs.slice(0, 3).join("/")}${vs.length > 3 ? " 외" : ""}`; }).join(" · ");
+  const from = `${team}팀 ${latestQ}Q · ${latestRows.length}곳${rows.length > latestRows.length ? ` (이전 분기 ${rows.length - latestRows.length}곳 생략)` : ""}`;
+  return [
+    ...(summary ? [{ kind: "워킨맵" as const, pinned: false, from, text: summary }] : []),
+    ...Array.from(free).slice(0, 8).map((text) => ({ kind: "워킨맵" as const, pinned: false, from: `${team}팀 ${latestQ}Q`, text })),
+  ];
+}
+
+const latest = (events: EventItem[], table: string) => events.filter((ev) => !ev.loose && ev.source.table === table && ev.date).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
 
 export function deriveState(e: Entity, results: SourceResult[], today = new Date()): State {
   const events = toEvents(results);
@@ -533,32 +588,13 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
     upcomingTickets: exact.filter((ev) => ev.source.table === "as_tickets" && ev.date >= todayYmd && !/완료|취소/.test(str(ev.row, "status"))).length,
     changes: changes.length,
     photos: exact.filter((ev) => ev.source.table === "photo_albums").reduce((n, ev) => n + (Array.isArray(ev.row.urls) ? (ev.row.urls as unknown[]).length : 0), 0),
-    workin: exact.filter((ev) => ev.source.table === "workin_map_places").map((ev) => ({ team: str(ev.row, "team"), quarter: str(ev.row, "quarter"), kind: str(ev.row, "kind"), label: str(ev.row, "label") })),
+    workin: summarizeWorkin(exact.filter((ev) => ev.source.table === "workin_map_places").map((ev) => ev.row)),
     notes: [
       ...exact.filter((ev) => ev.source.table === "vendor_notes").sort((a, b) => Number(!!b.row.pinned) - Number(!!a.row.pinned) || b.date.localeCompare(a.date)).map((ev) => ({
         kind: "특이사항" as const, pinned: !!ev.row.pinned, from: `${str(ev.row, "author")}${ev.date ? ` ${ev.date}` : ""}`.trim(),
         text: [str(ev.row, "work_start") && `출근 ${str(ev.row, "work_start")}`, str(ev.row, "lunch_time") && `점심 ${str(ev.row, "lunch_time")}`, str(ev.row, "note")].filter(Boolean).join(" · "),
       })),
-      // 워킨맵 메모는 임대리스트에서 온 꼬리표가 줄마다 쪼개져 있다("방문주기1개월"·"계약종료년월/2607"·"일반"·"임대중"…) → 장소 하나당 한 줄로 합치고,
-      // 상태 카드에 이미 있는 것(업체명·등급·임대여부·주소·지역)은 뺀다(2026-10-10 "메모가 다 나뉘어 나온다")
-      ...exact.filter((ev) => ev.source.table === "workin_map_places").map((ev) => {
-        const memos = Array.isArray(ev.row.memos) ? (ev.row.memos as unknown[]).map(String).map((m) => m.trim()).filter(Boolean) : [];
-        const comment = str(ev.row, "comment");
-        const skip = (m: string) => /^(N|NN|S|SS|V|일반|임대중|임대종료|소송|복합기확장성|IT확장성|\/IT확장성|복합기확장성\/IT확장성|\d{1,6})$/.test(m)
-          || /^(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)/.test(m)
-          || /^(강남|강서|경기|지방|CSS)$/.test(m)
-          || e.nameKeys.includes(vendorMatchKey(m));
-        const tidy = (m: string) => m
-          .replace(/(\d+)\.\d{3,}/g, "$1")                                   // 726333.333333 → 726333
-          .replace(/^방문주기\s*/, "방문주기 ").replace(/^계약종료년월\s*\/?\s*/, "계약종료 ")
-          .replace(/^한조\s*(\d+)\s*\/?\s*틴텍\s*(\S+)/, "한조 $1 · 틴텍 $2")
-          .replace(/^미수금\s*(\S+?)\s*\/\s*(\S+)/, "미수 $1 · $2")
-          .replace(/^기본임대료\s*(\S+?)\s*\/\s*연평균임대료\s*(\S+?)\s*\/\s*컬러기본\s*(\S+?)\s*\/\s*흑백기본\s*(\S+)/, "기본 $1 · 연평균 $2 · 컬러기본 $3 · 흑백기본 $4")
-          .replace(/^연평균(\d+)만원(이상|이하)거래처$/, "연평균 $1만원 $2");
-        const parts = memos.filter((m) => !skip(m)).map(tidy);
-        const text = [comment, ...parts].filter(Boolean).join(" · ").slice(0, 240);
-        return { kind: "워킨맵" as const, pinned: false, from: `${str(ev.row, "team")}팀 ${str(ev.row, "quarter")}Q${str(ev.row, "label") ? ` ${str(ev.row, "label")}` : ""}`, text };
-      }),
+      ...workinNotes(exact.filter((ev) => ev.source.table === "workin_map_places").map((ev) => ev.row), e),
       ...lease.map((r) => str(r, "추가조건")).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).map((text) => ({ kind: "임대조건" as const, pinned: false, from: "임대리스트", text })),
     ].filter((n) => n.text),
     counts, total: exact.length, oldest: dated[0] || "", newest: dated[dated.length - 1] || "",

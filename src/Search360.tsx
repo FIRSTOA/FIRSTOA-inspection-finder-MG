@@ -359,7 +359,8 @@ export default function Search360({ author }: { author: string }) {
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {state.grade && chip(`${state.grade}등급`, "bg-white/15 text-white")}
                     {state.leaseStatus && chip(state.leaseStatus, "bg-white/15 text-white")}
-                    {state.workin.map((w, i) => <span key={i}>{chip(`워킨맵 ${w.team}팀 ${w.quarter}Q ${w.kind || ""} ${w.label || ""}`.replace(/\s+/g, " ").trim(), "bg-cyan-500/25 text-cyan-100")}</span>)}
+                    {state.workin.slice(0, 4).map((w, i) => <span key={i}>{chip(`워킨맵 ${w.team}팀 ${w.quarter}Q ${w.kind || ""}${w.count > 1 ? ` ${w.count}대` : ""}${w.label ? ` · ${w.label}${w.label === "G5" ? " 완료" : ""}` : ""}`.replace(/\s+/g, " ").trim(), i === 0 ? "bg-cyan-500/25 text-cyan-100" : "bg-white/10 text-slate-300")}</span>)}
+                    {state.workin.length > 4 && chip(`워킨맵 외 ${state.workin.length - 4}묶음`, "bg-white/10 text-slate-300")}
                     {entity.names.length > 1 && chip(`이름 표기 ${entity.names.length}가지`, "bg-white/10 text-slate-300")}
                     {entity.phones.length > 0 && chip(`연락처 ${entity.phones.length}개로 문자·해피콜 연결`, "bg-white/10 text-slate-300")}
                   </div>

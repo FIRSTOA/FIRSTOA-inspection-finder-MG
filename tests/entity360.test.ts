@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildExactQuery, buildLooseQuery, buildRawQuery, coreNameOf, dateOf, daysSince, deriveState, entityTokensFromQuestion, identKey, inList, isOtherVendor, looksLikeDevice, matchesEntity, modelKey, phonesIn, SOURCES, toEvent, toEvents, withKeys, type Entity, type SourceResult } from "../src/entity360";
+import { buildExactQuery, buildLooseQuery, buildRawQuery, coreNameOf, dateOf, daysSince, deriveState, entityTokensFromQuestion, identKey, inList, isOtherVendor, looksLikeDevice, matchesEntity, modelKey, phonesIn, SOURCES, summarizeWorkin, toEvent, toEvents, withKeys, workinNotes, type Entity, type SourceResult } from "../src/entity360";
 
 const src = (table: string) => SOURCES.find((s) => s.table === table)!;
 const entity: Entity = withKeys({ code: "23013", leaseCode: "21462", name: "주식회사 무암", names: ["주식회사 무암", "무암(주)"], serials: ["ZPBLBJST8000GQV", "B1"], assets: ["A5571"], core: "무암", query: "무암", leaseRows: [] });
@@ -44,6 +44,16 @@ describe("entity360 — 키·조건 조립", () => {
     expect(matchesEntity(src("vendor_notes"), { vendor: "세무법인" }, gunyoung)).toBe(false);
     expect(matchesEntity(src("jeomgeom"), { _업체명: "다른곳", 자산기번: "a-5571" }, entity)).toBe(true);
     expect(matchesEntity(src("jeomgeom"), { _업체명: "다른곳", _기번목록: ["x", "zpblbjst8000gqv"] }, entity)).toBe(true);
+  });
+  it("workinNotes: 기기 34대가 3·4분기에 각각 있어도 최신 분기 꼬리표 한 줄 + 사람 글만, 값이 다르면 '/'로", () => {
+    const place = (q: number, label: string, i: number, extra: string[] = []) => ({ id: i, team: "C", quarter: q, kind: "monthly", label, comment: `D470/8091507102${i} (172.16.104.${i})`, memos: ["방문주기 1개월", "계약종료년월 2801", "미수금0원/0개월미수", "한조11263틴텍213644", "연평균15만원이상거래처", `기본임대료${i % 2 ? 260000 : 150000}/연평균임대료260000/컬러기본1000/흑백기본4000`, "매월", "일반", "임대중", "V", "서울/서초구", ...extra] });
+    const rows = [...Array.from({ length: 17 }, (_, i) => place(4, "G1", i, i === 3 ? ["엘베 없음, 계단", "16~18층"] : [])), ...Array.from({ length: 17 }, (_, i) => place(3, "G5", 100 + i))];
+    const notes = workinNotes(rows, entity);
+    expect(notes).toHaveLength(3);
+    expect(notes[0].text).toBe("방문주기 1개월 · 계약종료 2801 · 미수 0원 / 0개월미수 · 한조 11263 · 틴텍 213644 · 연평균 15만원 이상 · 기본 150000/260000 · 컬러기본 1000 · 흑백기본 4000");
+    expect(notes[0].from).toBe("C팀 4Q · 17곳 (이전 분기 17곳 생략)");
+    expect(notes.slice(1).map((n) => n.text)).toEqual(["엘베 없음, 계단", "16~18층"]);
+    expect(summarizeWorkin(rows)).toEqual([{ team: "C", quarter: "4", kind: "매월점검", label: "G1", count: 17 }, { team: "C", quarter: "3", kind: "매월점검", label: "G5", count: 17 }]);
   });
   it("isOtherVendor: 같은 기기를 쓰던 다른 업체 기록을 가려낸다", () => {
     const ev = toEvent(src("jeomgeom"), { id: 1, _업체명: "정상에듀학원", 자산기번: "A5571" }, false);
@@ -122,7 +132,9 @@ describe("entity360 — 날짜·사건·현재 상태", () => {
     expect(s.openReceptions).toBe(1);   // 느슨 일치는 세지 않는다
     expect(s.total).toBe(10);
     expect(s.notes[0]).toMatchObject({ kind: "특이사항", pinned: true, text: "출근 9시 · 점심 12~13시 · ★ 카드키 받을 것" });
-    expect(s.notes.filter((n) => n.kind === "워킨맵").map((n) => n.text)).toEqual(["D450 / 123 · 방문주기 1개월 · 엘베 없음"]); // 장소당 한 줄
+    // 워킨맵: 꼬리표는 한 줄로 모으고 사람이 쓴 글만 따로. 기기 줄(comment)은 기기 카드가 있으니 뺀다
+    expect(s.notes.filter((n) => n.kind === "워킨맵").map((n) => n.text)).toEqual(["방문주기 1개월", "엘베 없음"]);
+    expect(s.workin).toEqual([{ team: "C", quarter: "4", kind: "분기점검", label: "G1", count: 1 }]);
     // 마지막 AS: AS 보고(없음)보다 늦은 접수(복합기 AS)가 있으면 그 날짜 + 출처
     const s2 = deriveState(e, [...results, { source: src("service_receptions"), exact: [{ id: 20, receipt_date: "2026-10-06", type: "복합기 AS", status: "접수" }], loose: [], ok: true }], new Date("2026-10-10T12:00:00+09:00"));
     expect(s2.lastAs).toBe("2026-10-06");
