@@ -1761,7 +1761,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </div>
                     <div className="space-y-1.5">
                       {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).map((ticket) => (
-                        <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className={`block w-full rounded-lg px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
+                        <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className={`[content-visibility:auto] [contain-intrinsic-size:auto_96px] block w-full rounded-lg px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
                           <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span><span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {inspectionTypeLabel(ticket)}</span></div>
                           {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
                         </button>
@@ -1936,7 +1936,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       const dow = new Date(`${ticket.date}T00:00:00`).getDay();
                       const newDate = dayFilter === "scheduled" && (gi === 0 || group.rows[gi - 1].date !== ticket.date);
                       return (
-                        <div key={ticket.id}>
+                        <div key={ticket.id} className="[content-visibility:auto] [contain-intrinsic-size:auto_120px]">
                           {newDate && (
                             <div className="sticky top-0 z-10 -mx-2 mb-1.5 flex items-center gap-2 border-b border-slate-200 bg-slate-50/95 px-2 py-1 backdrop-blur">
                               <span className={`rounded px-1.5 py-0.5 text-[12px] font-black tabular-nums text-white ${dow === 0 ? "bg-rose-500" : dow === 6 ? "bg-blue-500" : "bg-slate-700"}`}>

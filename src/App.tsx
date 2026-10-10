@@ -8,7 +8,6 @@ import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
 import CopierExpansionForm, { EMPTY_COPIER_EXPANSION_FORM, buildCopierExpansionText, type CopierExpansionFormState } from "./CopierExpansionForm";
 import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
-import UnifiedHistory from "./UnifiedHistory";
 import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey , extractCompanyForTemplate} from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { ToastHost, notify } from "./toast";
@@ -77,6 +76,8 @@ const ItLearningHistory = lazyScreen(() => import("./ItLearningHistory"), "IT �
 const CounterSms = lazyScreen(() => import("./CounterSms"), "카운터 문자");
 const AutoSchedule = lazyScreen(() => import("./AutoSchedule"), "자동 일정");
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
+// 통합이력 팝업은 열 때만 받는다(77KB) — 다른 화면(일정리스트·서비스접수·조회…)과 같은 조각을 나눠 쓴다(2026-10-10 속도)
+const UnifiedHistoryLazy = lazy(() => import("./UnifiedHistory"));
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
   | "logistics" | "replacement" | "contact-change" | "bulman" | "misu" | "overage-adjust" | "recontract" | "praise";
@@ -7296,15 +7297,19 @@ export default function App() {
         </div>
       )}
 
-      {/* 통합이력 팝업 (controlled) */}
-      <UnifiedHistory
-        vendor={historyPopupVendor}
-        accent={config.accent}
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        onError={(m) => showToast(m, "error")}
-        author={author}
-      />
+      {/* 통합이력 팝업 (controlled) — 열릴 때만 코드까지 받는다 */}
+      {historyOpen && (
+        <Suspense fallback={null}>
+          <UnifiedHistoryLazy
+            vendor={historyPopupVendor}
+            accent={config.accent}
+            open={historyOpen}
+            onClose={() => setHistoryOpen(false)}
+            onError={(m) => showToast(m, "error")}
+            author={author}
+          />
+        </Suspense>
+      )}
 
       {/* Toast */}
       {sending && <span data-busy="true" className="hidden" />}

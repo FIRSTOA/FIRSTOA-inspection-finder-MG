@@ -2662,7 +2662,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
           const placeCode = place.name.match(/^\s*((?:\d{4}\/)?\d+[#/\-\s]*(?:SS|NN|S|N|V)?)(?=[가-힣(㈜\s])/i)?.[1]?.trim() || "";
           const placeTail = place.name.match(/(매월마감|분기마감|매주마감|월말마감|단순마감|매년마감|매월방문|매주방문|격주방문|월말방문)/)?.[1] || "";
           return (
-            <div key={place.id} data-place-id={place.id} className={`relative hover:z-30 ${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
+            <div key={place.id} data-place-id={place.id} className={`[content-visibility:auto] [contain-intrinsic-size:auto_96px] relative hover:z-30 ${!place.visible ? "opacity-55" : ""} ${selectedId === place.id ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}>
               <div className="group flex items-start gap-3 px-3 py-3">
               <button type="button" onClick={() => {
                 if (editMode) return toggleChecked(place.id);
