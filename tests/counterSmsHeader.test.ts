@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { parseListHeader, splitBlocks } from "../src/counterSmsParser";
+import { detectListKind, mergeTargets, parseBlocks, parseListHeader, splitBlocks } from "../src/counterSmsParser";
+
+// 관리부가 따로 올리는 CMS 마감 목록 — 머리글이 [수도권C](대괄호), 블록 끝에 "CMS.15"(결제일)
+const CMS_SAMPLE = `[수도권C]
+1, 1N엑솔라코리아 유한회사-매월마감
+현수용 010-2596-9264
+MFC-8900CDW / E76881E5F508444 / B7468
+서울 강남구 테헤란로 4길 5, 해암빌딩 9층
+CMS.15
+`;
 
 // 관리부가 마감방에 올리는 실제 목록 머리글 — 【수도권C】 + "26-10" (2026-10-10 사용자 예시)
 const SAMPLE = `【수도권C】
@@ -40,5 +49,29 @@ describe("parseListHeader — 관리부 마감 목록 머리글", () => {
   });
   it("머리글·[구역] 줄이 있어도 업체 블록 수는 그대로", () => {
     expect(splitBlocks(SAMPLE)).toHaveLength(3);
+  });
+});
+
+describe("CMS 마감 목록 — 종류 구분 (같은 종류끼리만 맞추기)", () => {
+  it("[수도권C] 대괄호 머리글도 C팀으로 읽고, 달은 없다", () => {
+    expect(parseListHeader(CMS_SAMPLE)).toEqual({ team: "C", ym: undefined, monthLabel: undefined });
+  });
+  it("블록의 CMS.15 → CMS 마감·결제일 15, 일반 목록 블록은 ''", () => {
+    expect(detectListKind(CMS_SAMPLE)).toEqual({ listKind: "CMS", cmsDay: 15 });
+    expect(detectListKind("CMS 마감\n")).toEqual({ listKind: "CMS", cmsDay: null });
+    const blocks = parseBlocks(SAMPLE, []);
+    expect(blocks.every((b) => b.listKind === "")).toBe(true);
+    const cms = parseBlocks(CMS_SAMPLE, []);
+    expect(cms).toHaveLength(1);
+    expect(cms[0]).toMatchObject({ listKind: "CMS", cmsDay: 15 });
+    expect(cms[0].vendor).toMatch(/^N 엑솔라코리아/);
+  });
+  it("같은 번호라도 일반 마감과 CMS 마감은 한 통으로 합치지 않는다", () => {
+    const general = `1, 1N무암-매월마감\n김담당 010-1111-2222\nSL-X3220NR / A / B\n`;
+    const cms = `2, 2N무암 CMS-매월마감\n김담당 010-1111-2222\nSL-X3220NR / A / B\nCMS.20\n`;
+    const merged = mergeTargets(parseBlocks(`${general}\n${cms}`, []));
+    expect(merged).toHaveLength(2);
+    expect(merged.map((t) => t.listKind).sort()).toEqual(["", "CMS"]);
+    expect(merged.find((t) => t.listKind === "CMS")?.cmsDay).toBe(20);
   });
 });

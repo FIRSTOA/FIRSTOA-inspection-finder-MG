@@ -27,6 +27,8 @@ const NON_NAME_WORDS = new Set([
 
 export type GradeGroup = "v_group" | "s_group";
 export type ParsedContact = { phone: string; label: string };
+/** 목록 종류 — "" 일반 마감, "CMS" CMS 마감(관리부가 따로 올리는 목록, 블록에 "CMS.15"처럼 결제일이 붙는다). 맞추기는 같은 종류끼리만(2026-10-10) */
+export type ListKind = "" | "CMS";
 export type ParsedBlock = {
   index: number;
   raw: string;
@@ -34,6 +36,8 @@ export type ParsedBlock = {
   gradeGroup: GradeGroup;
   contacts: ParsedContact[];
   machine: string;
+  listKind: ListKind;
+  cmsDay: number | null;   // "CMS.15" → 15 (CMS 결제일), 없으면 null
 };
 export type MergedTarget = {
   key: string;
@@ -43,7 +47,17 @@ export type MergedTarget = {
   labels: Record<string, string>;
   machines: string[];      // 중복 포함 (대수 계산용)
   vendorNames: string[];   // 통합된 지점·위치 이름들
+  listKind: ListKind;
+  cmsDay: number | null;
 };
+
+/** 블록의 목록 종류 — "CMS.15" / "CMS 15" / "CMS마감" 같은 줄이 있으면 CMS 마감 */
+export function detectListKind(block: string): { listKind: ListKind; cmsDay: number | null } {
+  const m = block.match(/(?:^|\n)\s*CMS\s*[.·-]?\s*(\d{1,2})?\s*일?\s*(?:마감)?\s*(?:\r?\n|$)/i) || block.match(/CMS\s*마감/i);
+  if (!m) return { listKind: "", cmsDay: null };
+  const day = m[1] ? Number(m[1]) : NaN;
+  return { listKind: "CMS", cmsDay: day >= 1 && day <= 31 ? day : null };
+}
 
 function nameAfter(after: string): string | null {
   const stripped = after.replace(/^[\s:\-/,·()]+/, "");
@@ -172,12 +186,12 @@ export function matchMachine(block: string, machineKeys: string[]): string {
 }
 
 /**
- * 관리부 마감 목록 머리글 — "【수도권C】" 팀, 그 아래 "26-10" 달.
+ * 관리부 마감 목록 머리글 — "【수도권C】"(CMS 목록은 "[수도권C]") 팀, 그 아래 "26-10" 달.
  * 팀은 A~E 글자(【CSS】·【지방】은 E). 둘 다 없으면 undefined — 호출부가 고른 팀·이번 달을 그대로 쓴다. (2026-10-10)
  */
 export function parseListHeader(rawText: string): { team?: string; ym?: string; monthLabel?: string } {
   const head = String(rawText || "").slice(0, 400);
-  const teamMatch = head.match(/【\s*(?:수도권\s*)?([A-Ea-e])\s*】|【\s*(CSS|지방)\s*】/);
+  const teamMatch = head.match(/[【[]\s*(?:수도권\s*)?([A-Ea-e])\s*[】\]]|[【[]\s*(CSS|지방)\s*[】\]]/);
   const team = teamMatch ? (teamMatch[1] ? teamMatch[1].toUpperCase() : "E") : undefined;
   const ymMatch = head.match(/(?:^|\n)\s*(\d{2}|\d{4})\s*[-./]\s*(\d{1,2})\s*(?:\r?\n|$)/);
   const ym = ymMatch ? `${ymMatch[1].length === 2 ? `20${ymMatch[1]}` : ymMatch[1]}-${ymMatch[2].padStart(2, "0")}` : undefined;
@@ -207,33 +221,35 @@ export function parseBlocks(rawText: string, machineKeys: string[]): ParsedBlock
   return splitBlocks(rawText).map((raw, i) => {
     const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
     const { gradeGroup, vendor } = parseCompanyAndGrade(lines[0] || "");
-    return { index: i + 1, raw, vendor, gradeGroup, contacts: extractContacts(raw), machine: matchMachine(raw, machineKeys) };
+    return { index: i + 1, raw, vendor, gradeGroup, contacts: extractContacts(raw), machine: matchMachine(raw, machineKeys), ...detectListKind(raw) };
   });
 }
 
-/** 같은 번호(+같은 등급군)면 한 통으로 병합 — 원본 grouped 로직 */
+/** 같은 번호(+같은 등급군·같은 목록 종류)면 한 통으로 병합 — 원본 grouped 로직. 일반 마감과 CMS 마감은 같은 번호라도 따로 간다 */
 export function mergeTargets(blocks: ParsedBlock[]): MergedTarget[] {
   const groups = new Map<string, MergedTarget>();
   const phoneToKey = new Map<string, string>();
   let noPhoneSeq = 0;
   for (const b of blocks) {
     const phones = b.contacts.map((c) => c.phone);
+    const scope = `${b.listKind}|${b.gradeGroup}`;
     let key = "";
     for (const p of phones) {
-      const hit = phoneToKey.get(`${b.gradeGroup}_${p}`);
+      const hit = phoneToKey.get(`${scope}_${p}`);
       if (hit) { key = hit; break; }
     }
-    if (!key) key = phones.length ? `${b.gradeGroup}_${b.vendor}` : `NOPHONE_${b.gradeGroup}_${++noPhoneSeq}`;
+    if (!key) key = phones.length ? `${scope}_${b.vendor}` : `NOPHONE_${scope}_${++noPhoneSeq}`;
     if (!groups.has(key)) {
-      groups.set(key, { key, vendor: b.vendor, gradeGroup: b.gradeGroup, phones: [], labels: {}, machines: [], vendorNames: [] });
+      groups.set(key, { key, vendor: b.vendor, gradeGroup: b.gradeGroup, phones: [], labels: {}, machines: [], vendorNames: [], listKind: b.listKind, cmsDay: b.cmsDay });
     }
     const g = groups.get(key)!;
     for (const c of b.contacts) {
       if (!g.phones.includes(c.phone)) g.phones.push(c.phone);
       if (c.label && !g.labels[c.phone]) g.labels[c.phone] = c.label;
-      phoneToKey.set(`${b.gradeGroup}_${c.phone}`, key);
+      phoneToKey.set(`${scope}_${c.phone}`, key);
     }
     g.machines.push(b.machine);
+    if (g.cmsDay === null && b.cmsDay !== null) g.cmsDay = b.cmsDay;
     if (!g.vendorNames.includes(b.vendor)) g.vendorNames.push(b.vendor);
   }
   return [...groups.values()];

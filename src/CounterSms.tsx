@@ -28,6 +28,8 @@ type TargetRow = {
   sent_at: string | null; sent_by: string | null; sent_phone: string | null;
   // 2026-09-24 추가 컬럼(supabase/counter-sms-done.sql) — 표가 아직 옛 모양이면 undefined
   done_at?: string | null; done_by?: string | null; added_at?: string | null; added_by?: string | null;
+  // 2026-10-10 추가 컬럼(supabase/counter-sms-list-kind.sql) — "" 일반 마감 / "CMS" CMS 마감(따로 올라오는 목록), cms_day 는 CMS 결제일
+  list_kind?: string | null; cms_day?: number | null;
 };
 
 const TEAMS = ["A", "B", "C", "D", "E"] as const;
@@ -102,6 +104,13 @@ export default function CounterSms({ author }: { author: string }) {
   useEffect(() => {
     selectRows("counter_sms_targets", "select=done_at,added_at&limit=1").then(() => setExtended(true)).catch(() => setExtended(false));
   }, []);
+  // 목록 종류 컬럼(list_kind·cms_day)이 있는지 — 없으면 CMS 목록은 "추가만"으로 올리고 안내한다(맞추기를 하면 일반 마감이 다 완료돼 버린다)
+  const [kindCol, setKindCol] = useState<boolean | null>(null);
+  useEffect(() => {
+    selectRows("counter_sms_targets", "select=list_kind,cms_day&limit=1").then(() => setKindCol(true)).catch(() => setKindCol(false));
+  }, []);
+  const kindOf = (t: { list_kind?: string | null }) => (t.list_kind === "CMS" ? "CMS" : "");
+  const kindLabel = (k: string) => (k === "CMS" ? "CMS 마감" : "일반 마감");
 
   const loadBatch = useCallback(async (t: string) => {
     if (!t) return;
@@ -153,7 +162,7 @@ export default function CounterSms({ author }: { author: string }) {
     const message = buildMessage(row.machines, machinesSet, templatesSet, row.grade_group, row.vendor);
     setPickedPhone(row.sent_phone || pickDefaultPhone(contactChoices(row.phones, row.labels, rulesForVendor(contactRules, row.vendor))));
     setSendTarget({
-      target: { key: row.id, vendor: row.vendor, gradeGroup: row.grade_group, phones: row.phones, labels: row.labels, machines: row.machines, vendorNames: row.vendor_names },
+      target: { key: row.id, vendor: row.vendor, gradeGroup: row.grade_group, phones: row.phones, labels: row.labels, machines: row.machines, vendorNames: row.vendor_names, listKind: kindOf(row) as "" | "CMS", cmsDay: row.cms_day ?? null },
       message, row,
     });
   };
@@ -215,6 +224,9 @@ export default function CounterSms({ author }: { author: string }) {
     const keys = Object.keys(mergeFormats(profile?.machines));
     const parsed = parseBlocks(uploadRaw, keys);
     setUploadBlocks(parsed);
+    // CMS 마감 목록(블록에 "CMS.15")은 따로 올라온다 — 같은 종류끼리만 맞추므로 이 목록으로 일반 마감이 지워지지 않는다
+    const cms = parsed.filter((b) => b.listKind === "CMS").length;
+    if (cms) notes.push(`CMS 마감 ${cms}건${cms < parsed.length ? ` + 일반 ${parsed.length - cms}건` : ""} — 같은 종류끼리만 맞춥니다${kindCol === false ? " (구분 컬럼이 없어 CMS는 추가만)" : ""}`);
     setNotice(parsed.length ? `${parsed.length}개 블록을 인식했습니다${notes.length ? ` · ${notes.join(" · ")}` : ""} — 확인 후 아래 버튼을 누르세요.` : "인식된 업체 블록이 없습니다 — 원문 형식을 확인해 주세요.");
   };
   const patchUploadBlock = (index: number, patch: Partial<ParsedBlock>) =>
@@ -226,28 +238,36 @@ export default function CounterSms({ author }: { author: string }) {
     // 기존 목록이 있으면 — sync(기본): 붙여넣은 목록을 "지금 열린 전체"로 보고 맞춘다 / merge: 없는 업체만 추가.
     // 있는 업체는 전송·완료 표시 그대로. 언제 누가 몇 곳을 추가·완료했는지 목록 머리에 남긴다(2026-09-24 추가 이력, 2026-10-10 맞추기)
     if (uploadMode !== "replace" && batch && batch.team === team) {
-      const keyOf = (vendor: string) => contactVendorKey(vendor);
-      const existing = new Set(batchTargets.map((t) => keyOf(t.vendor)));
-      const incoming = new Set(merged.map((t) => keyOf(t.vendor)));
-      const fresh = merged.filter((t) => !existing.has(keyOf(t.vendor)));
-      const dupes = merged.filter((t) => existing.has(keyOf(t.vendor)));
+      // 업체 키는 목록 종류까지 포함 — 일반 마감의 A업체와 CMS 마감의 A업체는 다른 카드
+      const keyOf = (kind: string, vendor: string) => `${kind}|${contactVendorKey(vendor)}`;
+      const existing = new Set(batchTargets.map((t) => keyOf(kindOf(t), t.vendor)));
+      const incoming = new Set(merged.map((t) => keyOf(t.listKind, t.vendor)));
+      const fresh = merged.filter((t) => !existing.has(keyOf(t.listKind, t.vendor)));
+      const dupes = merged.filter((t) => existing.has(keyOf(t.listKind, t.vendor)));
       // 관리부는 마감(카운터 회신)이 끝난 업체를 빼고 다시 올린다 → 열린 업체 중 이번 목록에 없는 곳은 완료로.
-      // 이미 완료된 카드는 건드리지 않는다. 완료 컬럼이 없으면(SQL 미실행) 추가만 한다.
-      const sync = uploadMode === "sync" && !!extended;
-      const open = batchTargets.filter((t) => !t.done_at);
-      const dropped = sync ? open.filter((t) => !incoming.has(keyOf(t.vendor))) : [];
+      // 단, **이번 목록에 든 종류끼리만** 비교한다 — CMS 마감 목록(따로 올라옴)을 붙여넣어도 일반 마감 업체는 손대지 않는다(2026-10-10).
+      // 이미 완료된 카드는 건드리지 않는다. 완료 컬럼이 없으면(SQL 미실행) 추가만 한다. 종류 컬럼이 없는데 CMS 목록이면 역시 추가만.
+      const kindsInPaste = new Set(merged.map((t) => t.listKind));
+      const cmsWithoutCol = !kindCol && kindsInPaste.has("CMS");
+      const sync = uploadMode === "sync" && !!extended && !cmsWithoutCol;
+      const open = batchTargets.filter((t) => !t.done_at && kindsInPaste.has(kindOf(t) as "" | "CMS"));
+      const untouched = batchTargets.filter((t) => !t.done_at && !kindsInPaste.has(kindOf(t) as "" | "CMS")).length;
+      const dropped = sync ? open.filter((t) => !incoming.has(keyOf(kindOf(t), t.vendor))) : [];
       const droppedUnsent = dropped.filter((t) => !t.sent_at);
       const kept = open.length - dropped.length;
       // 관리부가 일부(한 구역·추가분)만 보낸 목록을 전체로 오해하면 멀쩡한 업체가 완료돼 버린다 — 절반 넘게 빠지면 경고
       const tooMany = dropped.length > 0 && dropped.length * 2 >= open.length && merged.length * 2 < open.length;
+      const kindsText = [...kindsInPaste].map(kindLabel).join(" + ");
       const lines = [
-        sync ? `${team}팀 목록을 이 목록에 맞출까요?` : `${team}팀 기존 목록에 추가할까요?`,
+        sync ? `${team}팀 ${kindsText} 목록을 이 목록에 맞출까요?` : `${team}팀 기존 목록에 추가할까요?`,
         "",
         `새로 추가 ${fresh.length}곳`,
         `그대로 유지 ${sync ? kept : dupes.length}곳 (전송·완료 표시 유지)`,
         ...(sync ? [`목록에서 빠짐 → 완료 처리 ${dropped.length}곳${dropped.length ? `: ${dropped.slice(0, 8).map((t) => t.vendor).join(", ")}${dropped.length > 8 ? " 외" : ""}` : ""}${droppedUnsent.length ? `\n  (문자를 안 보낸 곳 ${droppedUnsent.length}곳 포함 — 관리부 쪽에서 끝난 것으로 봅니다)` : ""}`] : []),
+        ...(sync && untouched ? [`다른 종류(${[...kindsInPaste].includes("CMS") ? "일반 마감" : "CMS 마감"}) ${untouched}곳은 그대로 둡니다`] : []),
         ...(tooMany ? ["", "⚠ 열린 업체의 절반 넘게 빠집니다. 관리부가 일부만 보낸 목록이면 [추가만]으로 올리세요."] : []),
         ...(uploadMode === "sync" && !extended ? ["", "※ 완료 컬럼이 아직 없어(supabase/counter-sms-done.sql 미실행) 빠진 업체 완료 처리는 건너뜁니다."] : []),
+        ...(uploadMode === "sync" && cmsWithoutCol ? ["", "※ 목록 종류 컬럼이 아직 없어(supabase/counter-sms-list-kind.sql 미실행) CMS 목록은 추가만 합니다 — 맞추기를 하면 일반 마감이 모두 완료돼 버리기 때문입니다."] : []),
       ];
       if (!await askConfirm(lines.join("\n"), { okLabel: sync ? "목록 맞추기" : "추가" })) return;
       setBusy(true);
@@ -259,6 +279,7 @@ export default function CounterSms({ author }: { author: string }) {
             id: `${batch.id}-a${Date.now().toString(36)}-${String(i).padStart(3, "0")}`, batch_id: batch.id, team,
             vendor: t.vendor, grade_group: t.gradeGroup, phones: t.phones, labels: t.labels, machines: t.machines, vendor_names: t.vendorNames,
             ...(extended ? { added_at: stamp, added_by: by } : {}),
+            ...(kindCol ? { list_kind: t.listKind, cms_day: t.cmsDay } : {}),
           });
         }
         // 빠진 업체 자동 완료 — done_by 에 사유를 남겨 손으로 누른 완료와 구분한다. 잘못됐으면 카드의 [완료 취소]
@@ -272,7 +293,7 @@ export default function CounterSms({ author }: { author: string }) {
         }
         setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
         setNotice(sync
-          ? `${team}팀 목록을 맞췄습니다 — 새로 ${fresh.length}곳 · 유지 ${kept}곳 · 목록에서 빠져 완료 ${dropped.length}곳${dropped.length ? `(${dropped.slice(0, 6).map((t) => t.vendor).join(", ")}${dropped.length > 6 ? " 외" : ""})` : ""}`
+          ? `${team}팀 ${kindsText} 목록을 맞췄습니다 — 새로 ${fresh.length}곳 · 유지 ${kept}곳 · 목록에서 빠져 완료 ${dropped.length}곳${dropped.length ? `(${dropped.slice(0, 6).map((t) => t.vendor).join(", ")}${dropped.length > 6 ? " 외" : ""})` : ""}${untouched ? ` · 다른 종류 ${untouched}곳 그대로` : ""}`
           : `${team}팀 목록에 ${fresh.length}곳을 추가했습니다${dupes.length ? ` · 이미 있어 건너뜀 ${dupes.length}곳(${dupes.map((t) => t.vendor).join(", ")})` : ""}.`);
         await loadBatch(team);
       } catch (e) {
@@ -297,6 +318,7 @@ export default function CounterSms({ author }: { author: string }) {
           vendor: t.vendor, grade_group: t.gradeGroup, phones: t.phones, labels: t.labels,
           machines: t.machines, vendor_names: t.vendorNames,
           ...(extended ? { added_at: new Date().toISOString(), added_by: author || "미지정" } : {}),
+          ...(kindCol ? { list_kind: t.listKind, cms_day: t.cmsDay } : {}),
         });
       }
       setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
@@ -459,6 +481,7 @@ export default function CounterSms({ author }: { author: string }) {
                       <button type="button" onClick={() => openSendRow(row)} className="block w-full text-left">
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                           <span className="min-w-0 flex-1 basis-[60%] truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
+                          {row.list_kind === "CMS" && <span title="CMS 마감 — 관리부가 따로 올리는 목록. 맞추기는 CMS끼리만" className="shrink-0 rounded bg-cyan-100 px-1 py-0.5 text-[9px] font-black text-cyan-800">CMS{row.cms_day ? ` ${row.cms_day}일` : ""}</span>}
                           {ruleBadges(row.vendor, row.phones)}
                           {addedTag(row) && <span title={`${row.added_at?.slice(0, 16).replace("T", " ")} ${row.added_by || ""} 추가`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black text-amber-800">{addedTag(row)}</span>}
                           {row.done_at
@@ -580,7 +603,7 @@ export default function CounterSms({ author }: { author: string }) {
                   <div className="max-h-[36vh] divide-y divide-slate-100 overflow-y-auto">
                     {uploadBlocks.map((b) => (
                       <div key={b.index} className="grid gap-2 px-3 py-2.5 md:grid-cols-[1.4fr_1fr]">
-                        <label className="text-[10px] font-black text-slate-400">업체명(등급)
+                        <label className="text-[10px] font-black text-slate-400">업체명(등급){b.listKind === "CMS" && <span className="ml-1 rounded bg-cyan-100 px-1 py-0.5 text-[9px] font-black text-cyan-800">CMS{b.cmsDay ? ` ${b.cmsDay}일` : ""}</span>}
                           <input value={b.vendor} onChange={(e) => patchUploadBlock(b.index, { vendor: e.target.value })}
                             className="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-blue-500" />
                         </label>
