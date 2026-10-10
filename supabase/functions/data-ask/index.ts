@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
         const answer = data.output_text || (data.output || []).flatMap((o: { content?: Array<{ text?: string }> }) => o.content || []).map((c: { text?: string }) => c.text || "").join("\n") || "";
         const sbUrl = Deno.env.get("SUPABASE_URL") || ""; const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
         const sbHeaders = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, "Content-Type": "application/json" };
-        const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k));
+        const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k), model);
         const usd = priceUsage(usage, prices);
         await logUsage(sbUrl, sbHeaders, { fn: "data-ask", model, question, author: String(body.author || ""), usage, usd, ms: Date.now() - t0 });
         return Response.json({ answer: String(answer).trim().slice(0, 6000), rows: lastRows.slice(0, 120), table: lastTable, calls, model, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });

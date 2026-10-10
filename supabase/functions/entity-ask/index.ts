@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     const usage = addUsage(emptyUsage(), data.usage);
     const sbUrl = Deno.env.get("SUPABASE_URL") || ""; const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const sbHeaders = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, "Content-Type": "application/json" };
-    const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k));
+    const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k), model);
     const usd = priceUsage(usage, prices);
     await logUsage(sbUrl, sbHeaders, { fn: "entity-ask", model, question, author: String(body.author || ""), usage, usd, ms: Date.now() - t0 });
     return Response.json({ answer: String(answer).trim().slice(0, 4000), model, used: payload.events.length, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });

@@ -7,7 +7,18 @@
  * 브라우저 테스트(vitest)에서도 불러 쓰므로 Deno 전용 API 는 쓰지 않는다(fetch 만).
  */
 export type Usage = { input: number; cached: number; output: number; reasoning: number; rounds: number };
-export type Prices = { input: number; output: number; cached: number; known: boolean };
+export type Prices = { input: number; output: number; cached: number; known: boolean; source?: string };
+
+/** 설정이 없을 때 쓰는 공식 가격표(developers.openai.com/api/docs/pricing, 2026-10-10 조회, 100만 토큰당 달러). 모델 이름 앞부분으로 고른다. 가격이 바뀌면 app_config AI_PRICE_* 로 덮어쓴다 */
+const DEFAULT_PRICES: Array<[string, number, number, number]> = [
+  ["gpt-5.5-pro", 30, 3, 180], ["gpt-5.5", 5, 0.5, 30], ["gpt-5.4-mini", 0.75, 0.075, 4.5], ["gpt-5.4-nano", 0.2, 0.02, 1.25], ["gpt-5.4", 2.5, 0.25, 15],
+  ["gpt-5.2", 1.75, 0.175, 14], ["gpt-5.1", 1.25, 0.125, 10], ["gpt-5-mini", 0.25, 0.025, 2], ["gpt-5-nano", 0.05, 0.005, 0.4], ["gpt-5", 1.25, 0.125, 10],
+];
+export function defaultPricesFor(model: string): Prices {
+  const m = String(model || "").toLowerCase();
+  const hit = DEFAULT_PRICES.find(([prefix]) => m.startsWith(prefix));
+  return hit ? { input: hit[1], cached: hit[2], output: hit[3], known: true, source: "공식 가격표 2026-10" } : { input: 0, cached: 0, output: 0, known: false };
+}
 export type Cost = { usd: number | null; priced: boolean; model: string };
 
 export const emptyUsage = (): Usage => ({ input: 0, cached: 0, output: 0, reasoning: 0, rounds: 0 });
@@ -35,7 +46,7 @@ export function priceUsage(u: Usage, p: Prices): number | null {
   return (fresh * p.input + u.cached * cachedRate + u.output * p.output) / 1_000_000;
 }
 
-export async function loadPrices(sbUrl: string, headers: Record<string, string>, env: (k: string) => string | undefined): Promise<Prices> {
+export async function loadPrices(sbUrl: string, headers: Record<string, string>, env: (k: string) => string | undefined, model = ""): Promise<Prices> {
   let input = 0, output = 0, cached = 0;
   try {
     const res = await fetch(`${sbUrl}/rest/v1/app_config?select=key,value&key=in.(AI_PRICE_IN,AI_PRICE_OUT,AI_PRICE_CACHED)`, { headers });
@@ -48,7 +59,8 @@ export async function loadPrices(sbUrl: string, headers: Record<string, string>,
   input = input || Number(env("OPENAI_PRICE_IN") || 0);
   output = output || Number(env("OPENAI_PRICE_OUT") || 0);
   cached = cached || Number(env("OPENAI_PRICE_CACHED") || 0);
-  return { input, output, cached, known: input > 0 && output > 0 };
+  if (input > 0 && output > 0) return { input, output, cached, known: true, source: "설정" };
+  return defaultPricesFor(model);   // 설정이 없으면 공식 가격표 기본값
 }
 
 /** ai_usage 표에 한 줄 — 표가 없으면(SQL 미실행) 조용히 넘어간다 */
