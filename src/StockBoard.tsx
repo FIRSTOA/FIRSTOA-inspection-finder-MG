@@ -7,6 +7,7 @@ import { askConfirm } from "./confirmModal";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { ALL_MODEL_NAMES, CATALOG_BRANDS, brandOfModel } from "./modelCatalog";
 import { notify } from "./toast";
+import { BUILTIN, isColorModel, modelCore } from "../supabase/functions/_shared/supply-requests.ts";
 
 type StockItem = {
   id: string; created_at: string; updated_at: string; updated_by: string;
@@ -45,6 +46,9 @@ export default function StockBoard({ author }: { author: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState({ brand: "삼성", name: "", condition: "새기기" as "새기기" | "리퍼" | "", qty: 0, note: "", category: "", color: "", aliases: "", models: "" });
   const [busy, setBusy] = useState(false);
+  // 기종별 자가 세트(토너 K·C·M·Y + 폐토너통)를 기기 목록에서 골라 한 번에 — 3220 K 와 4220 K 를 따로 센다(2026-10-11 사용자)
+  const [setOpen, setSetOpen] = useState(false);
+  const [setModel, setSetModel] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +92,44 @@ export default function StockBoard({ author }: { author: string }) {
     }
     return map;
   }, [filtered]);
+
+  // 자가·부품은 "쓰는 기종"으로 묶어 보여 준다 — 기종이 없는 품목은 공통(기종 미지정)으로 맨 위
+  const byModel = useMemo(() => {
+    const map = new Map<string, { label: string; rows: StockItem[] }>();
+    for (const item of filtered) {
+      const models = item.models || [];
+      const key = models.length ? modelCore(models[0]) : "";
+      const cur = map.get(key) || { label: models.length ? models.join(", ") : "공통(기종 미지정)", rows: [] };
+      cur.rows.push(item);
+      map.set(key, cur);
+    }
+    return Array.from(map.entries()).sort((a, b) => (a[0] === "" ? -1 : b[0] === "" ? 1 : a[1].label.localeCompare(b[1].label))).map(([, v]) => v);
+  }, [filtered]);
+  const deviceNames = useMemo(() => Array.from(new Set([...items.filter((i) => i.kind === "기기").map((i) => i.name), ...ALL_MODEL_NAMES])).sort(), [items]);
+  const addModelSet = async () => {
+    const model = setModel.trim();
+    if (!model || busy) return;
+    const core = modelCore(model);
+    const colors = isColorModel(model) ? ["K", "C", "M", "Y"] : ["K"];
+    const defs = [...colors.map((c) => ({ name: `토너 ${c}`, category: "토너", color: c })), { name: "폐토너통", category: "폐토너통", color: "" }];
+    setBusy(true);
+    try {
+      let added = 0;
+      for (const d of defs) {
+        if (items.some((i) => i.kind === "자가" && i.name === d.name && (i.models || []).some((m) => modelCore(m) === core))) continue;
+        const b = BUILTIN.find((x) => x.name === d.name);
+        await insertRow("stock_items", { kind: "자가", brand: brandOfModel(model) || "", name: d.name, condition: "", qty: 0, note: "", updated_by: author || "미지정", category: d.category, color: d.color, aliases: b?.aliases || [], models: [model] });
+        added += 1;
+      }
+      notify(added ? `${model} 자가 품목 ${added}종을 추가했습니다 (${colors.length === 1 ? "흑백기: 토너 K + 폐토너통" : "컬러기: 토너 K·C·M·Y + 폐토너통"})` : `${model} 자가 품목은 이미 있습니다`, added ? "success" : "info");
+      setSetOpen(false); setSetModel("");
+      await load();
+    } catch (e) {
+      notify(`추가 실패: ${(e as Error).message}`, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const totalOf = (targetKind: "기기" | "부품" | "자가") => items.filter((i) => i.kind === targetKind).reduce((sum, i) => sum + i.qty, 0);
   const kindItems = items.filter((i) => i.kind === kind);
@@ -163,8 +205,13 @@ export default function StockBoard({ author }: { author: string }) {
             <label className="text-[11px] font-black text-slate-500 sm:col-span-2">별칭 <span className="font-bold text-slate-400">· 양식 글에서 이 품목을 부르는 다른 이름, 쉼표로</span>
               <input value={info.aliases} onChange={(e) => setInfo({ ...info, aliases: e.target.value })} placeholder="예: 검정토너, BK, K토너" className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[12px] font-semibold" />
             </label>
-            <label className="text-[11px] font-black text-slate-500 sm:col-span-2">쓰는 기종(자가표) <span className="font-bold text-slate-400">· 쉼표로. "1세트"를 색별로 풀 때 이 기종표를 본다</span>
-              <input value={info.models} onChange={(e) => setInfo({ ...info, models: e.target.value })} placeholder="예: SL-X3220NR, SL-X4220RX" className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[12px] font-semibold" />
+            <label className="text-[11px] font-black text-slate-500 sm:col-span-2">쓰는 기종(자가표) <span className="font-bold text-slate-400">· 쉼표로. 같은 토너를 쓰는 기종은 여기 같이 적으면 신청이 이 재고로 연결되고 "1세트"도 이 기종표로 푼다</span>
+              <div className="mt-1 flex gap-1.5">
+                <input value={info.models} onChange={(e) => setInfo({ ...info, models: e.target.value })} placeholder="예: SL-X3220NR, SL-X4220RX" className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-[12px] font-semibold" />
+                <select value="" onChange={(e) => { const v = e.target.value; if (v) setInfo({ ...info, models: info.models.trim() ? `${info.models.trim().replace(/,\s*$/, "")}, ${v}` : v }); }} className="w-36 shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-600">
+                  <option value="">기기 목록에서 추가…</option>{deviceNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
             </label>
             <div className="sm:col-span-2"><button type="button" onClick={() => void (async () => { try { await updateRows("stock_items", `id=eq.${item.id}`, { category: info.category, color: info.color, aliases: splitList(info.aliases), models: splitList(info.models), updated_by: author || "미지정" }); notify("품목 정보를 저장했습니다", "success"); setInfoId(""); await load(); } catch (e) { notify(`저장 실패: ${(e as Error).message}`, "error"); } })()} className="rounded-full bg-slate-900 px-4 py-1.5 text-[12px] font-black text-white">저장</button></div>
           </div>
@@ -192,7 +239,10 @@ export default function StockBoard({ author }: { author: string }) {
             </button>
           ))}
         </div>
-        <button type="button" onClick={() => setAddOpen(true)} className="my-2 mr-3 shrink-0 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">+ 항목 추가</button>
+        <span className="my-2 mr-3 flex shrink-0 items-center gap-1.5">
+          {kind === "자가" && <button type="button" onClick={() => setSetOpen(true)} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">+ 기종별 세트</button>}
+          <button type="button" onClick={() => setAddOpen(true)} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">+ 항목 추가</button>
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 2xl:grid-cols-8">
@@ -251,7 +301,38 @@ export default function StockBoard({ author }: { author: string }) {
           </section>
         ))
       ) : (
-        !loading && filtered.length > 0 && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm 2xl:grid 2xl:grid-cols-2 2xl:gap-x-0">{filtered.map(renderRow)}</section>
+        !loading && filtered.length > 0 && (
+          <>
+            {kind === "자가" && <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-[11.5px] font-bold text-emerald-900">기종을 지정한 품목은 신청 행의 기종과 저절로 연결됩니다 — 3220 K 와 4220 K 가 따로 집계되고, 출고하면 그 기종 재고가 줄어듭니다. 같은 토너를 쓰는 기종은 한 품목의 "쓰는 기종"에 같이 적으세요. 기종이 없는 공통 품목은 기종을 못 맞춘 신청이 붙는 자리입니다.</div>}
+            {byModel.map((g) => (
+              <section key={g.label} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-700">
+                  <span>{g.label} <span className="ml-1 font-bold text-slate-400">{g.rows.length}종</span></span>
+                  <span className="text-slate-500">{g.rows.reduce((sum, r) => sum + r.qty, 0)}개</span>
+                </div>
+                <div className="2xl:grid 2xl:grid-cols-2 2xl:gap-x-0">{g.rows.map(renderRow)}</div>
+              </section>
+            ))}
+          </>
+        )
+      )}
+
+      {setOpen && (
+        <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setSetOpen(false)}>
+          <div className="w-full rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+            <b className="text-slate-950">기종별 자가 세트 추가</b>
+            <p className="mt-1 text-[11.5px] font-semibold text-slate-500">기기 목록에서 기종을 고르면 그 기종의 토너 K·C·M·Y(흑백기는 K만)와 폐토너통이 수량 0으로 생깁니다. 이미 있는 것은 건너뜁니다.</p>
+            <label className="mt-4 block text-xs font-bold text-slate-500">기종
+              <input value={setModel} list="stock-model-set" onChange={(e) => setSetModel(e.target.value)} placeholder="예: SL-X3220NR" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              <datalist id="stock-model-set">{deviceNames.map((name) => <option key={name} value={name} />)}</datalist>
+            </label>
+            {setModel.trim() && <div className="mt-2 text-[11.5px] font-bold text-slate-600">{isColorModel(setModel) ? "컬러기로 봅니다 → 토너 K·C·M·Y + 폐토너통" : "흑백기로 봅니다 → 토너 K + 폐토너통"} <span className="font-semibold text-slate-400">· 틀리면 추가 뒤 품목을 지우거나 더하면 됩니다</span></div>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setSetOpen(false)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-500">취소</button>
+              <button type="button" disabled={busy || !setModel.trim()} onClick={() => void addModelSet()} className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-40">{busy ? "추가 중…" : "세트 추가"}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {addOpen && (
@@ -303,7 +384,12 @@ export default function StockBoard({ author }: { author: string }) {
                     <input value={draft.aliases} onChange={(e) => setDraft({ ...draft, aliases: e.target.value })} placeholder="예: 검정토너, BK, K토너" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none" />
                   </label>
                   <label className="block text-xs font-bold text-slate-500">쓰는 기종 (쉼표로) <span className="font-semibold text-slate-400">· 자가표</span>
-                    <input value={draft.models} onChange={(e) => setDraft({ ...draft, models: e.target.value })} placeholder="예: SL-X3220NR, SL-X4220RX" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none" />
+                    <div className="mt-1 flex gap-1.5">
+                      <input value={draft.models} onChange={(e) => setDraft({ ...draft, models: e.target.value })} placeholder="예: SL-X3220NR, SL-X4220RX" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none" />
+                      <select value="" onChange={(e) => { const v = e.target.value; if (v) setDraft({ ...draft, models: draft.models.trim() ? `${draft.models.trim().replace(/,\s*$/, "")}, ${v}` : v }); }} className="w-36 shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-[11px] font-bold text-slate-600">
+                        <option value="">기기 목록에서 추가…</option>{deviceNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
                   </label>
                 </>
               )}

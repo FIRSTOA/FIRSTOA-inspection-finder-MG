@@ -187,9 +187,24 @@ export function matchCatalog(raw: string, catalog: CatalogItem[], kind?: SupplyK
   return best?.c || null;
 }
 
-const tonerStd = (color: string, catalog: CatalogItem[]): { name: string; id: string } => {
-  const hit = [...catalog, ...BUILTIN].find((c) => c.category === "토너" && c.color === color);
+/** 기종 표기의 알맹이 — "SL-X3220NR"·"X3220"·"3220" → "3220", "ApeosPort-V C3375(세이토)" → "3375", "D450"·"450" → "450". 재고 품목의 쓰는 기종과 신청 행의 기종을 이걸로 맞춘다 */
+export function modelCore(model: string): string {
+  const key = squash(model);
+  const m = key.match(/\d{3,4}/);
+  return m ? m[0] : key;
+}
+/** 같은 이름 후보 중 이 기종을 쓰는 품목 → 없으면 기종 지정이 없는 공통 품목 → 없으면 undefined(기종이 다른 품목에 잘못 붙지 않게) */
+const pickByModel = (cands: CatalogItem[], model: string): CatalogItem | undefined => {
+  const core = modelCore(model);
+  return (core ? cands.find((c) => c.models.some((m) => modelCore(m) === core)) : undefined) || cands.find((c) => !c.models.length);
+};
+const tonerStd = (color: string, catalog: CatalogItem[], model = ""): { name: string; id: string } => {
+  const hit = pickByModel(catalog.filter((c) => c.category === "토너" && c.color === color), model) || BUILTIN.find((c) => c.category === "토너" && c.color === color);
   return { name: hit?.name || `토너 ${color}`, id: hit?.id || "" };
+};
+const wasteStd = (catalog: CatalogItem[], model = ""): { name: string; id: string } => {
+  const hit = pickByModel(catalog.filter((c) => c.category === "폐토너통"), model);
+  return { name: hit?.name || "폐토너통", id: hit?.id || "" };
 };
 
 // ── 품목 글 하나를 조각(색 토너 · 폐토너통 · 부품[+색] · 세트)으로 나누기 (2026-10-11, 실제 표기 400여 종 기준) ──
@@ -365,7 +380,7 @@ function piecesOf(item: string, qty: string, model: string, catalog: CatalogItem
 export function normalizeItems(items: SupplyItem[], catalog: CatalogItem[], model: string): NormalizedItem[] {
   const out: NormalizedItem[] = [];
   const base = (s: SupplyItem): NormalizedItem => ({ ...s, itemStd: "", category: "", color: "", stockItemId: "", setLabel: "" });
-  const exact = (name: string): CatalogItem | undefined => { const k = squash(name); return catalog.find((c) => squash(c.name) === k); };
+  const exact = (name: string): CatalogItem | undefined => { const k = squash(name); return pickByModel(catalog.filter((c) => squash(c.name) === k), model); };
   for (const s of items) {
     const pieces = piecesOf(s.item, s.qty, model, catalog);
     if (!pieces) { out.push(base(s)); continue; }           // 미정의 품목 — 재고 탭에서 별칭을 지정하면 다음부터 맞는다
@@ -376,14 +391,14 @@ export function normalizeItems(items: SupplyItem[], catalog: CatalogItem[], mode
         const colors = p.setColors === "cmy" ? ["C", "M", "Y"] : isColorModel(model, catalog) ? ["K", "C", "M", "Y"] : ["K"];
         for (const c of colors) {
           if (isPart) { const name = `${p.base} ${c}`; const hit = exact(name); rows.push({ ...base(s), item: name, qty: p.qty, itemStd: name, category: p.cat!.category, color: c, stockItemId: hit?.id || "", setLabel: s.item }); }
-          else { const t = tonerStd(c, catalog); rows.push({ ...base(s), item: t.name, qty: p.qty, itemStd: t.name, category: "토너", color: c, stockItemId: t.id, setLabel: s.item }); }
+          else { const t = tonerStd(c, catalog, model); rows.push({ ...base(s), item: t.name, qty: p.qty, itemStd: t.name, category: "토너", color: c, stockItemId: t.id, setLabel: s.item }); }
         }
         continue;
       }
-      if (p.kind === "toner") { const t = tonerStd(p.color, catalog); rows.push({ ...base(s), item: t.name, qty: p.qty, itemStd: t.name, category: "토너", color: p.color, stockItemId: t.id }); continue; }
-      if (p.kind === "waste") { const w = matchCatalog("폐토너통", catalog, "자가"); rows.push({ ...base(s), item: w?.name || "폐토너통", qty: p.qty, itemStd: w?.name || "폐토너통", category: "폐토너통", color: "", stockItemId: w?.id || "" }); continue; }
+      if (p.kind === "toner") { const t = tonerStd(p.color, catalog, model); rows.push({ ...base(s), item: t.name, qty: p.qty, itemStd: t.name, category: "토너", color: p.color, stockItemId: t.id }); continue; }
+      if (p.kind === "waste") { const w = wasteStd(catalog, model); rows.push({ ...base(s), item: w.name, qty: p.qty, itemStd: w.name, category: "폐토너통", color: "", stockItemId: w.id }); continue; }
       const name = p.color ? `${p.base} ${p.color}` : p.base;
-      const hit = p.color ? exact(name) : p.cat;
+      const hit = exact(name) || (p.color ? undefined : p.cat);
       rows.push({ ...base(s), item: name, qty: p.qty, itemStd: name, category: p.cat?.category || "", color: p.color, stockItemId: hit?.id || "" });
     }
     // 조각이 하나면 원래 적은 글을 그대로 둔다(표준 이름은 itemStd). 여럿이면 행마다 표준 이름이 품목(중복키가 갈리도록)
