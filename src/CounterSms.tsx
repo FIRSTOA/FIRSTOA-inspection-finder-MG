@@ -11,17 +11,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { MessageSquare, RotateCcw, Save, Settings2, Upload, X } from "lucide-react";
-import { deleteRows, insertRow, selectRows, updateRows, upsertRow } from "./supabase";
+import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows, upsertRow } from "./supabase";
 import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
 import { buildMessage, formatPhone, mergeTargets, parseBlocks, parseListHeader, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
 import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
 import { counterRoomEntries, prepareCounterSend, sendCounterPhoto, type SendPlan } from "./counterSmsPhoto";
+import { saveActivityEvent } from "./operations";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
 // dropped·kept·mode 는 2026-10-10 "목록 맞추기"부터 — 관리부가 완료분을 빼고 다시 올린 목록에 맞춰 빠진 업체를 자동 완료한 기록
-type BatchLogEntry = { at: string; by: string; added: number; skipped: string[]; dropped?: string[]; kept?: number; mode?: "sync" | "merge" | "remove"; removed?: string[] };
+type BatchLogEntry = { at: string; by: string; added: number; skipped: string[]; dropped?: string[]; kept?: number; mode?: "sync" | "merge" | "remove" | "auto"; removed?: string[]; missing?: string[]; inbox_id?: number };
 type BatchRow = { id: string; team: string; title: string; raw: string; created_by: string; created_at: string; log?: BatchLogEntry[] | null };
 type TargetRow = {
   id: string; batch_id: string; team: string; vendor: string; grade_group: "s_group" | "v_group";
@@ -34,7 +35,7 @@ type TargetRow = {
   // 2026-10-10 추가 컬럼(supabase/counter-sms-identity.sql) — 관리부 목록 기기 줄의 임대 코드·기번·자산번호. 이름 표기가 바뀌어도 같은 업체를 잇는다
   lease_code?: string | null; serials?: string[] | null; assets?: string[] | null;
 };
-type InboxRow = { id: number; room: string; sender: string; text: string; received_at: string };
+type InboxRow = { id: number; room: string; sender: string; text: string; received_at: string; applied_at?: string | null; applied_by?: string | null; note?: string | null };
 
 const TEAMS = ["A", "B", "C", "D", "E"] as const;
 
@@ -125,12 +126,19 @@ export default function CounterSms({ author }: { author: string }) {
   }, []);
   const ruleCtx = (row: TargetRow) => ({ phones: row.phones, leaseCodes: row.lease_code ? [row.lease_code] : [], serials: row.serials || [] });
   // 관리부 목록 도착함 — 봇 폰의 점검AS 스크립트(gas-and-bot/supabase-outbox-poller.js ⑧)가 마감방 글을 넣어 둔다. 표가 없으면 조용히 빈 목록
+  // 2026-10-10 "그냥 자동으로 올라가게": 탭을 열 때 엣지 함수 counter-inbox-ingest 를 먼저 불러 대기 중인 글을 넣고(크론도 2분마다 같은 일),
+  // 도착함에는 자동으로 못 넣은 글(팀 불명·형식 오류)만 남아 [직접 넣기]로 처리한다. 최근 자동 반영 결과는 따로 보여 준다
   const [inbox, setInbox] = useState<InboxRow[]>([]);
+  const [autoDone, setAutoDone] = useState<InboxRow[]>([]);
   const [uploadInboxId, setUploadInboxId] = useState<number | null>(null);
-  const loadInbox = useCallback(async () => {
-    setInbox(await selectRows<InboxRow>("counter_sms_inbox", "select=id,room,sender,text,received_at&applied_at=is.null&order=received_at.desc&limit=5").catch(() => [] as InboxRow[]));
+  const runIngest = useCallback(async (): Promise<number> => {
+    const out = await invokeEdgeFunction<{ processed?: unknown[] }>("counter-inbox-ingest", {}, 25_000).catch(() => ({ processed: [] as unknown[] }));
+    return Array.isArray(out?.processed) ? out.processed.length : 0;
   }, []);
-  useEffect(() => { void loadInbox(); }, [loadInbox]);
+  const loadInbox = useCallback(async (t: string) => {
+    setInbox(await selectRows<InboxRow>("counter_sms_inbox", "select=id,room,sender,text,received_at,note&applied_at=is.null&order=received_at.desc&limit=5").catch(() => [] as InboxRow[]));
+    setAutoDone(t ? await selectRows<InboxRow>("counter_sms_inbox", `select=id,room,sender,received_at,applied_at,applied_by,note&applied_by=eq.${encodeURIComponent("자동")}&note=like.${encodeURIComponent(`${t}팀*`)}&order=applied_at.desc&limit=4`).catch(() => [] as InboxRow[]) : []);
+  }, []);
   // 카운터 사진 한 장으로 마감방 전송 + 완료 — 사진 고르기 외엔 손이 안 간다(2026-10-10)
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoRow, setPhotoRow] = useState<TargetRow | null>(null);
@@ -159,6 +167,13 @@ export default function CounterSms({ author }: { author: string }) {
     setPhotoBusyId(row.id);
     try {
       const res = await sendCounterPhoto(row, file, author, { ...plan, caption: caption.trim() || plan.caption });
+      // 통합검색 타임라인에 남긴다 — 마감 카운터 사진을 언제 누가 어느 방으로 보냈나(2026-10-10 "모두 기록에 남아야")
+      void saveActivityEvent({
+        activityDate: new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10), author: author || "미지정", team: row.team, category: "counter", vendor: row.vendor,
+        quantity: 1, machineCount: Math.max(1, (row.machines || []).length),
+        sourceText: `${res.caption}\n방: ${res.room} · ${res.channel === "pc" ? "카톡 PC 사진" : "봇 글+링크"}\n사진: ${res.url}`,
+        metadata: { kind: "counter_photo", room: res.room, channel: res.channel, url: res.url, target_id: row.id, batch_id: row.batch_id, lease_code: row.lease_code || null },
+      }).catch(() => undefined);
       const patch = { done_at: new Date().toISOString(), done_by: `${author || "미지정"} · 카운터 사진` };
       if (extended) { setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t))); void persistPatch(row, patch, "완료"); }
       closePhotoConfirm();
@@ -186,7 +201,10 @@ export default function CounterSms({ author }: { author: string }) {
       setBatch(null); setBatchTargets([]);
     } finally { setBatchLoading(false); }
   }, []);
-  useEffect(() => { void loadBatch(team); }, [team, loadBatch]);
+  useEffect(() => {
+    if (!team) return;
+    void (async () => { await runIngest(); await loadBatch(team); await loadInbox(team); })();
+  }, [team, loadBatch, loadInbox, runIngest]);
 
   // 팀 글자 → 문구 세트 지역 ("A" → "A지역"). 없으면 지금 고른 지역 세트
   const regionForTeam = useCallback((t: string) => profiles.find((p) => p.region === `${t}지역`)?.region || region, [profiles, region]);
@@ -518,23 +536,35 @@ export default function CounterSms({ author }: { author: string }) {
 
       {tab === "main" ? (
         <>
-          {/* 관리부 목록 도착함 — 봇이 마감방 글을 넣어 둔 것. 복사·붙여넣기 없이 바로 맞춘다(2026-10-10) */}
-          {inbox.length > 0 && (
-            <section className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-3">
-              <div className="text-[12px] font-black text-emerald-900">📥 관리부가 마감방에 올린 목록 {inbox.length}건 — 붙여넣기 없이 바로 넣을 수 있습니다</div>
-              <div className="mt-2 space-y-1.5">
-                {inbox.map((row) => {
-                  const head = parseListHeader(row.text); const first = row.text.trim().split("\n").find((l) => l.trim()) || "";
-                  return (
-                    <div key={row.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[12px]">
-                      <span className="font-black text-slate-800">{head.team ? `${head.team}팀` : row.room}{head.monthLabel ? ` · ${head.monthLabel}` : ""}</span>
-                      <span className="min-w-0 flex-1 truncate font-semibold text-slate-500">{first.slice(0, 40)} · {row.text.length.toLocaleString()}자 · {row.sender} · {row.received_at.slice(5, 16).replace("T", " ")}</span>
-                      <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); setUploadMode("sync"); setUploadRaw(row.text); setUploadInboxId(row.id); setUploadTitle(""); window.setTimeout(() => uploadConvert(row.text), 0); }} className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white hover:bg-emerald-700">이 목록 넣기</button>
-                      <button type="button" onClick={() => void markInbox(row.id, "", "무시")} className="rounded-full border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">무시</button>
-                    </div>
-                  );
-                })}
-              </div>
+          {/* 관리부 목록 — 봇이 마감방 글을 넣으면 엣지 함수가 자동으로 반영한다(있는 업체 그대로, 없는 업체만 추가). 여기엔 최근 자동 반영 결과와 자동으로 못 넣은 글만 보인다(2026-10-10) */}
+          {(autoDone.length > 0 || inbox.length > 0) && (
+            <section className={`rounded-xl border p-3 ${inbox.length ? "border-amber-300 bg-amber-50/70" : "border-emerald-300 bg-emerald-50/70"}`}>
+              {autoDone.length > 0 && (
+                <div>
+                  <div className="text-[12px] font-black text-emerald-900">⚡ 관리부 목록 자동 반영 <span className="font-bold text-emerald-700">· 있는 업체는 그대로(완료·문자 보냄 유지), 없는 업체만 추가 · "목록에 없는 열린 곳"은 관리부가 끝낸 것이면 카드에서 [완료]</span></div>
+                  <ul className="mt-1 space-y-0.5 text-[11px] font-bold text-slate-700">
+                    {autoDone.map((r) => <li key={r.id}>{(r.applied_at || "").slice(5, 16).replace("T", " ")} · {r.sender || r.room} → {r.note}</li>)}
+                  </ul>
+                </div>
+              )}
+              {inbox.length > 0 && (
+                <div className={autoDone.length ? "mt-2 border-t border-amber-200 pt-2" : ""}>
+                  <div className="text-[12px] font-black text-amber-900">📥 자동으로 못 넣은 목록 {inbox.length}건 — 확인하고 [직접 넣기]</div>
+                  <div className="mt-2 space-y-1.5">
+                    {inbox.map((row) => {
+                      const head = parseListHeader(row.text); const first = row.text.trim().split("\n").find((l) => l.trim()) || "";
+                      return (
+                        <div key={row.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px]">
+                          <span className="font-black text-slate-800">{head.team ? `${head.team}팀` : row.room}{head.monthLabel ? ` · ${head.monthLabel}` : ""}</span>
+                          <span className="min-w-0 flex-1 truncate font-semibold text-slate-500">{first.slice(0, 40)} · {row.text.length.toLocaleString()}자 · {row.sender} · {row.received_at.slice(5, 16).replace("T", " ")}{row.note ? ` · ${row.note}` : " · 아직 처리 전"}</span>
+                          <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); setUploadMode("merge"); setUploadRaw(row.text); setUploadInboxId(row.id); setUploadTitle(""); window.setTimeout(() => uploadConvert(row.text), 0); }} className="rounded-full bg-amber-600 px-3 py-1.5 text-[11px] font-black text-white hover:bg-amber-700">직접 넣기</button>
+                          <button type="button" onClick={() => void markInbox(row.id, "", "무시")} className="rounded-full border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">무시</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
           )}
           {/* 팀 공유 마감 목록 — 관리부가 한 번 올리면 팀원 모두 여기서 바로 보낸다 */}
@@ -571,7 +601,7 @@ export default function CounterSms({ author }: { author: string }) {
                     {(batch.log || []).length > 0 && (
                       <div className="mt-1 space-y-0.5 text-[10px] font-bold text-slate-500">
                         {(batch.log || []).slice(-3).reverse().map((entry, i) => (
-                          <div key={`${entry.at}-${i}`}>{entry.mode === "sync" ? "⇄" : entry.mode === "remove" ? "－" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "remove" ? `삭제 ${(entry.removed || []).join(", ")}` : `${entry.mode === "sync" ? "목록 맞춤 — " : ""}${entry.added}곳 추가`}{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
+                          <div key={`${entry.at}-${i}`}>{entry.mode === "auto" ? "⚡" : entry.mode === "sync" ? "⇄" : entry.mode === "remove" ? "－" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "remove" ? `삭제 ${(entry.removed || []).join(", ")}` : entry.mode === "auto" ? `자동 반영 — 신규 ${entry.added}곳 · 중복 ${entry.skipped.length}곳${entry.missing?.length ? ` · 목록에 없는 열린 곳 ${entry.missing.length}곳(${entry.missing.join(", ")})` : ""}` : `${entry.mode === "sync" ? "목록 맞춤 — " : ""}${entry.added}곳 추가`}{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length && entry.mode !== "auto" ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
                         ))}
                       </div>
                     )}

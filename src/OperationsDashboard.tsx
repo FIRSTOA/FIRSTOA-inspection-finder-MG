@@ -29,6 +29,7 @@ const CATEGORY_TONES: Record<ActivityKind, string> = {
   overage: "bg-orange-50 text-orange-700",
   recontract: "bg-emerald-50 text-emerald-700",
   replacement: "bg-teal-50 text-teal-700",
+  counter: "bg-lime-50 text-lime-700",
 };
 const FILTER_OPTIONS: Array<{ key: Exclude<FilterKey, "all">; label: string; tone: string }> = [
   { key: "inspection", label: "점검", tone: CATEGORY_TONES.inspection },
@@ -100,6 +101,7 @@ function filterCount(events: ActivityEvent[], filter: Exclude<FilterKey, "all">)
 }
 
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- author 는 아직 안 쓰지만 호출부 계약 유지
 export default function OperationsDashboard({ author: _author }: Props) {
   const today = kstDate();
   const currentYear = Number(today.slice(0, 4));

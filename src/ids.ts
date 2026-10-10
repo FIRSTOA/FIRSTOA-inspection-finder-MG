@@ -5,22 +5,9 @@ export function normalizeId(value: string) {
 }
 
 // 워킨맵 지명("25#V보림토건(주) 3분기…")에서 접두 번호·등급·꼬리표를 벗겨 업체명 비교키를 만든다.
-// (WalkingMap 로컬 구현을 공용으로 승격 — vendorFlags·일정리스트 배지에서도 같은 기준 사용)
-export function vendorMatchKey(value: string) {
-  return String(value || "")
-    // ㈜·(주)는 기호 제거를 거치면 맨 앞 "주"만 남아 "주식회사" 제거 규칙을 빠져나간다 — 먼저 지운다
-    .replace(/㈜|\(주\)|\(유\)/g, "")
-    // 괄호 메모("(bluedot Inc.)", "(비번 2580*")는 키를 오염시킨다 — SQL vendor_key_와 같은 규칙 (닫힘 유실 포함)
-    .replace(/\([^)]*\)?/g, " ")
-    // 접두 번호와 등급 사이에 #·/·- 가 끼는 형식("20#SS…", "2609/17#V…")이 워킨맵에 190곳 있다
-    .replace(/^(?:\d{4}\/)?\d+[#/\-\s]*(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
-    .replace(/^(?:\d{4}\/)?\d+[#/\-\s]*(?:SS|NN|S|N|V)?/i, "")
-    .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, "")
-    .replace(/[^0-9a-z가-힣]/gi, "")
-    .toLowerCase()
-    // 법인표기는 위치 불문 변별력이 없다 — "블루닷 주식회사" vs "블루닷"이 같은 키가 되도록 (SQL vendor_key_와 거울)
-    .replace(/(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인)/g, "");
-}
+// 2026-10-10: 본문은 supabase/functions/_shared/counter-sms/vendorKey.ts (엣지 함수와 같은 규칙) — 여기선 다시 내보낸다
+import { vendorMatchKey } from "../supabase/functions/_shared/counter-sms/vendorKey.ts";
+export { vendorMatchKey };
 
 // 업체명을 낱말로 — vendorMatchKey와 같은 정규화(법인표기·괄호·접두 등급 제거)를 낱말 단위로 한 것
 export function vendorTokens(value: string): string[] {
@@ -54,7 +41,7 @@ export function workinVendorName(value: string) {
   const noTail = beforeSlash.replace(/(매월마감|분기마감|매주마감|월말마감|단순마감|매년마감|매월방문|매주방문|격주방문|월말방문|마감|매년).*$/, "")
     .replace(/[\s\-·,()]+$/, "");
   // "블루닷 주식회사(bluedot Inc.)" — 영문 괄호 꼬리(닫힘 유실 포함)와 뒤에 붙은 법인표기를 벗겨야 이력 키가 맞는다
-  const noParenTail = noTail.replace(/\s*\([A-Za-z0-9 .,&\-]*\)?\s*$/, "");
+  const noParenTail = noTail.replace(/\s*\([A-Za-z0-9 .,&-]*\)?\s*$/, "");
   const noCorpTail = noParenTail.replace(/\s*(주식회사|유한회사|\(주\)|㈜)\s*$/, "");
   return noCorpTail.replace(/[\s\-·,()]+$/, "").trim();
 }
@@ -76,7 +63,7 @@ export function historyCoreName(raw: string) {
   // 임대리스트·시트 원문에는 엑셀 잔재로 큰따옴표가 섞인다("4N주식회사 …) — 그러면 등급 접두 규칙이
   // 깨져 그 토큰(`"4N주식회사`)이 그대로 검색어가 됐다(2026-08-19 사고). 따옴표류는 구분자로 취급한다.
   const flat = noAssignee.replace(/_x000d_|\r|\n/g, " ").replace(/["'“”„‟]/g, " ").replace(/\s+/g, " ").trim();
-  const tokens = flat.split(/[\s|·,~()/\-]+/);
+  const tokens = flat.split(/[\s|·,~()/-]+/);
   // 1순위: "30S제이드자산운용"·"20#SS한불엠앤에스"처럼 순번+등급 접두 토큰 — 임대리스트 표기라 업체명일 확률이 가장 높다
   for (let i = 0; i < tokens.length; i += 1) {
     const match = tokens[i].match(/^\d{1,4}[#]?(?:SS|NN|S|N|V)([가-힣㈜].*)$/);
@@ -131,7 +118,7 @@ export function parseInspectionBlocks(raw: string): InspBlock[] {
   let pendingLoc = "";
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (/^[ㅡ―—=_\-]{3,}$/.test(line)) { if (cur) out.push(cur); cur = null; curField = ""; pendingLoc = ""; continue; }
+    if (/^[ㅡ―—=_-]{3,}$/.test(line)) { if (cur) out.push(cur); cur = null; curField = ""; pendingLoc = ""; continue; }
     const labeled = line.match(/^([가-힣A-Za-z]{2,8})\s*[:：]\s*(.*)$/);
     const fieldKey = labeled ? INSP_KEY[labeled[1]] : undefined;
     if (labeled && (fieldKey || /유무$/.test(labeled[1]))) {

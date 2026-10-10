@@ -88,7 +88,9 @@ export const SOURCES: SourceDef[] = [
     dateKeys: ["등록일", "체크일"], titleKeys: ["품목(원문)", "프로젝트"], snippetKeys: ["영업진행상황", "최종결과(대기 등)"], authorKeys: ["등록자", "전략영업담당자"], teamKeys: ["미팅지역"], modelKeys: [], serialKeys: [], assetKeys: [] },
   // churn_defense(해지방어)·mgmt_support(관리지원)는 아직 빈 표라 칸 이름을 모른다 — 데이터가 생기면 칸을 확인해 넣는다(2026-10-10)
   { table: "counter_sms_targets", label: "마감 문자", group: "고객 소통", tone: T.msg, nameCols: [], deviceCols: [], rawCols: [], looseCols: ["vendor"],
-    dateKeys: ["sent_at", "added_at"], titleKeys: ["vendor"], snippetKeys: ["team", "sent_by", "done_by"], authorKeys: ["sent_by"], teamKeys: ["team"], modelKeys: [], serialKeys: [], assetKeys: [] },
+    dateKeys: ["done_at", "sent_at", "added_at"], titleKeys: ["vendor"], snippetKeys: ["team", "sent_by", "done_by"], authorKeys: ["done_by", "sent_by"], teamKeys: ["team"], modelKeys: [], serialKeys: [], assetKeys: [],
+    // 한 행이 "목록에 오름 → 문자 보냄 → 완료"를 거친다 — 제목에 지금 단계를 적는다(카운터 사진으로 끝낸 것은 따로, 2026-10-10)
+    titleFn: (row) => `${str(row, "vendor")} — ${str(row, "done_at") ? (/카운터 사진/.test(str(row, "done_by")) ? "카운터 사진 전송·완료" : "마감 완료") : str(row, "sent_at") ? "카운터 문자 보냄" : "마감 목록에 오름"}` },
   { table: "counter_sms_contact_rules", label: "연락처 규칙", group: "고객 소통", tone: T.msg, nameCols: ["vendor"], deviceCols: [], rawCols: [], looseCols: ["vendor"],
     dateKeys: ["updated_at", "created_at"], titleKeys: ["kind"], snippetKeys: ["name", "memo"], authorKeys: ["updated_by"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [],
     titleFn: (row) => (str(row, "kind") === "block" ? "🚫 보내지 말 것" : str(row, "kind") === "prefer" ? "⭐ 새 담당" : str(row, "kind")) },
@@ -460,7 +462,7 @@ export type State = {
   /** 워킨맵 등록 — (팀·분기·종류·라벨)별로 묶어 개수와 함께. 기기 1대=장소 1개라 웍스피어처럼 34개가 나란히 뜨던 것(2026-10-10) */
   workin: { team: string; quarter: string; kind: string; label: string; count: number }[];
   /** 현장 메모 — 특이사항(출근·점심·주의), 워킨맵 메모 줄, 임대리스트 추가조건. 상태 카드에 바로 보인다(2026-10-10 "출근시간·특이사항 안 나오나") */
-  notes: { kind: "특이사항" | "워킨맵" | "임대조건"; text: string; from: string; pinned: boolean }[];
+  notes: { kind: "연락금지" | "특이사항" | "워킨맵" | "임대조건"; text: string; from: string; pinned: boolean }[];
   counts: { label: string; group: Group; exact: number; loose: number; ok: boolean; rawSkipped: boolean }[];
   total: number; oldest: string; newest: string;
 };
@@ -590,6 +592,11 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
     photos: exact.filter((ev) => ev.source.table === "photo_albums").reduce((n, ev) => n + (Array.isArray(ev.row.urls) ? (ev.row.urls as unknown[]).length : 0), 0),
     workin: summarizeWorkin(exact.filter((ev) => ev.source.table === "workin_map_places").map((ev) => ev.row)),
     notes: [
+      // 🚫 보내지 말 것(마감 문자 연락처 규칙) — 누구에게 연락하면 안 되는지는 가장 먼저 보여야 한다(2026-10-10)
+      ...exact.filter((ev) => ev.source.table === "counter_sms_contact_rules" && str(ev.row, "kind") === "block").map((ev) => ({
+        kind: "연락금지" as const, pinned: true, from: `${str(ev.row, "updated_by")}${ev.date ? ` ${ev.date}` : ""}`.trim(),
+        text: `🚫 보내지 말 것${str(ev.row, "name") ? ` — ${str(ev.row, "name")}` : ""}${str(ev.row, "phone") ? ` ${str(ev.row, "phone")}` : ""}${str(ev.row, "memo") ? ` · ${str(ev.row, "memo")}` : ""}`,
+      })),
       ...exact.filter((ev) => ev.source.table === "vendor_notes").sort((a, b) => Number(!!b.row.pinned) - Number(!!a.row.pinned) || b.date.localeCompare(a.date)).map((ev) => ({
         kind: "특이사항" as const, pinned: !!ev.row.pinned, from: `${str(ev.row, "author")}${ev.date ? ` ${ev.date}` : ""}`.trim(),
         text: [str(ev.row, "work_start") && `출근 ${str(ev.row, "work_start")}`, str(ev.row, "lunch_time") && `점심 ${str(ev.row, "lunch_time")}`, str(ev.row, "note")].filter(Boolean).join(" · "),

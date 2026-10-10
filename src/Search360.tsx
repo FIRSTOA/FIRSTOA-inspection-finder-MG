@@ -383,11 +383,11 @@ export default function Search360({ author }: { author: string }) {
             {/* 현장 메모 — 특이사항(출근·점심·주의)·워킨맵 메모·임대 조건. 가기 전에 꼭 봐야 하는 것이라 상태 카드 안에 */}
             {state.notes.length > 0 && (
               <div className="border-t border-amber-100 bg-amber-50/60 px-5 py-3">
-                <div className="text-[10.5px] font-black text-amber-800">현장 메모 <span className="font-bold text-amber-600">· 특이사항 {state.notes.filter((n) => n.kind === "특이사항").length} · 워킨맵 {state.notes.filter((n) => n.kind === "워킨맵").length} · 임대 조건 {state.notes.filter((n) => n.kind === "임대조건").length}</span></div>
+                <div className="text-[10.5px] font-black text-amber-800">현장 메모 <span className="font-bold text-amber-600">{state.notes.some((n) => n.kind === "연락금지") ? <span className="mr-1 rounded bg-rose-600 px-1.5 py-0.5 text-white">연락 금지 {state.notes.filter((n) => n.kind === "연락금지").length}</span> : null}· 특이사항 {state.notes.filter((n) => n.kind === "특이사항").length} · 워킨맵 {state.notes.filter((n) => n.kind === "워킨맵").length} · 임대 조건 {state.notes.filter((n) => n.kind === "임대조건").length}</span></div>
                 <ul className="mt-1 grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
                   {state.notes.slice(0, 14).map((n, i) => (
-                    <li key={i} className={`flex min-w-0 items-start gap-1.5 text-[12px] leading-5 ${n.kind === "특이사항" ? "font-black text-slate-900" : "font-semibold text-slate-700"}`}>
-                      <span className={`mt-1 shrink-0 rounded px-1 text-[9px] font-black ${n.kind === "특이사항" ? "bg-amber-500 text-white" : n.kind === "워킨맵" ? "bg-cyan-100 text-cyan-800" : "bg-emerald-100 text-emerald-800"}`}>{n.kind}</span>
+                    <li key={i} className={`flex min-w-0 items-start gap-1.5 text-[12px] leading-5 ${n.kind === "연락금지" ? "font-black text-rose-700" : n.kind === "특이사항" ? "font-black text-slate-900" : "font-semibold text-slate-700"}`}>
+                      <span className={`mt-1 shrink-0 rounded px-1 text-[9px] font-black ${n.kind === "연락금지" ? "bg-rose-600 text-white" : n.kind === "특이사항" ? "bg-amber-500 text-white" : n.kind === "워킨맵" ? "bg-cyan-100 text-cyan-800" : "bg-emerald-100 text-emerald-800"}`}>{n.kind}</span>
                       <span className="min-w-0 whitespace-pre-line break-words">{n.pinned ? "📌 " : ""}{n.text}{n.from ? <span className="ml-1 text-[10px] font-bold text-slate-400">· {n.from}</span> : null}</span>
                     </li>
                   ))}

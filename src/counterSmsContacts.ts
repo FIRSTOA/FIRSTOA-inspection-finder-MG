@@ -6,7 +6,7 @@
  * 테이블이 아직 없으면(SQL 미실행) 조용히 빈 규칙으로 동작한다.
  */
 import { deleteRows, selectRows, upsertRow } from "./supabase";
-import { vendorMatchKey } from "./ids";
+import { contactVendorKey } from "../supabase/functions/_shared/counter-sms/vendorKey.ts";
 
 export type ContactRuleKind = "block" | "prefer";
 export type ContactRule = {
@@ -29,12 +29,8 @@ export type MatchedRule = ContactRule & { how: "코드 일치" | "기번 일치"
 
 const TABLE = "counter_sms_contact_rules";
 
-/** 업체 비교키 — 파서가 붙인 등급 접두("N 주식회사 무암")·순번·법인표기를 벗긴다. 이름 표기가 조금 달라도 같은 업체로 잇기 위해 */
-export function contactVendorKey(vendor: string): string {
-  const raw = String(vendor || "").trim();
-  const stripped = raw.replace(/^(?:SS|NN|V|S|N)\s+/i, "");
-  return vendorMatchKey(stripped) || vendorMatchKey(raw) || stripped.toLowerCase();
-}
+/** 업체 비교키 — 본문은 _shared/counter-sms/vendorKey.ts (앱·엣지 함수 공용, 2026-10-10) */
+export { contactVendorKey };
 
 export function normalizePhone(phone: string): string {
   return String(phone || "").replace(/\D/g, "");

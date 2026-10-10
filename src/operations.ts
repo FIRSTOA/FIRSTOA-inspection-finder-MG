@@ -13,7 +13,8 @@ export type ActivityKind =
   | "misu"
   | "overage"
   | "recontract"
-  | "replacement";
+  | "replacement"
+  | "counter";       // 마감 카운터 사진 전송(2026-10-10) — 통합검색 타임라인에 남긴다
 
 export const ACTIVITY_LABELS: Record<ActivityKind, string> = {
   inspection: "점검",
@@ -27,6 +28,7 @@ export const ACTIVITY_LABELS: Record<ActivityKind, string> = {
   overage: "초과조정",
   recontract: "재계약",
   replacement: "교체양식",
+  counter: "마감 카운터",
 };
 
 export type ActivityEventDraft = {

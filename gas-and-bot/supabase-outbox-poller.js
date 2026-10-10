@@ -26,6 +26,7 @@
  *      어느 방이 마감방인지는 이 파일에 적지 않는다 — FIELD 관리 탭 → 카톡방 매핑 → 업무 종류 "마감"(room_map)을
  *      10분마다 읽는다(앱·노트북 실행기와 한 곳에서 관리). onMessage 는 글을 큐에만 넣고(통신 없음) 폴링 스레드가
  *      flushLists 로 보낸다 — ①②와 같은 규칙. 봇 폰에서 그 방의 알림이 켜져 있어야 글이 들어온다.
+ *      저장 뒤 엣지 함수 counter-inbox-ingest 를 불러 FIELD 목록에 바로 반영한다(있는 업체 그대로, 없는 업체만 추가).
  */
 
 // ===================== 설정 =====================
@@ -143,7 +144,7 @@ function httpDelete(path) {
 }
 
 function httpPostJson(path, json) {
-  org.jsoup.Jsoup.connect(REST + path)
+  org.jsoup.Jsoup.connect(/^https?:/.test(path) ? path : REST + path)
     .header("apikey", SUPABASE_ANON)
     .header("Authorization", "Bearer " + SUPABASE_ANON)
     .header("Content-Type", "application/json")
@@ -198,10 +199,13 @@ function flushLists() {
     _listQueue = [];
     return out;
   }) || [];
+  var saved = 0;
   for (var j = 0; j < jobs.length; j++) {
-    try { httpPostJson("/counter_sms_inbox", jobs[j].json); Log.i("[마감수집] 저장 " + jobs[j].room + " · " + jobs[j].len + "자 · " + jobs[j].sender); }
+    try { httpPostJson("/counter_sms_inbox", jobs[j].json); saved++; Log.i("[마감수집] 저장 " + jobs[j].room + " · " + jobs[j].len + "자 · " + jobs[j].sender); }
     catch (e) { Log.e("[마감수집] 저장 실패(" + jobs[j].room + "): " + e); }
   }
+  // 저장했으면 바로 자동 반영을 깨운다(안 되면 2분 크론·앱이 탭 열 때 처리) — 사람이 [목록 맞추기]를 누르지 않아도 목록에 들어간다
+  if (saved) { try { httpPostJson(SUPABASE_URL + "/functions/v1/counter-inbox-ingest", "{}"); Log.i("[마감수집] 자동 반영 요청"); } catch (e) { Log.e("[마감수집] 자동 반영 요청 실패(크론이 처리): " + e); } }
 }
 // --------------------------------------------------------------------------
 
