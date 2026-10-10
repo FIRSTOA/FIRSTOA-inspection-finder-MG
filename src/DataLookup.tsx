@@ -1,5 +1,5 @@
 import { teamLabel, useMembers } from "./authors";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "./toast";
 import { askConfirm } from "./confirmModal";
 import { Download, RefreshCw, Search, X } from "lucide-react";
@@ -72,6 +72,8 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     return no ? `${m}월 ${no}주차` : `${m}월`;
   }, [week]);
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc"); // 최신순이 기본 — 오래된 것부터 훑을 때만 바꾼다(2026-09-16 요청)
+  // 묶음 탭을 누르면 그 묶음에서 마지막으로 보던 항목으로(없으면 첫 항목) — 2단 선택(묶음 → 항목)
+  const lastInGroup = useRef<Record<string, string>>({});
   const [team, setTeam] = useState("전체");
   // 팀 아래 인원 필터(2026-10-08) — 팀을 고르면 그 팀 사람 단추가 나오고 사람별 건수가 같이 보인다(PC확장성 개인별 실적)
   const [member, setMember] = useState("");
@@ -233,22 +235,30 @@ export default function DataLookup({ author = "" }: { author?: string }) {
             </button>
           </div>
         </div>
-        <div className="space-y-2 p-3">
-          {LOOKUP_GROUPS.map((group) => {
-            const items = LOOKUP_CATEGORIES.filter((item) => item.group === group);
-            if (!items.length) return null;
-            return (
-              <div key={group} className="flex flex-wrap items-center gap-1.5">
-                <span className="w-full shrink-0 text-[10px] font-black tracking-wide text-slate-400 sm:w-20">{group}</span>
-                {items.map((item) => (
-                  <button key={item.key} type="button" onClick={() => setCategoryKey(item.key)}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${item.key === categoryKey ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            );
-          })}
+        <div className="p-3">
+          {/* 1단 — 묶음. 좁은 화면에서는 옆으로 민다 */}
+          <div className="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {LOOKUP_GROUPS.map((group) => {
+              const on = group === category.group;
+              const n = LOOKUP_CATEGORIES.filter((item) => item.group === group).length;
+              return (
+                <button key={group} type="button" onClick={() => { lastInGroup.current[category.group] = categoryKey; setCategoryKey(lastInGroup.current[group] || LOOKUP_CATEGORIES.find((item) => item.group === group)?.key || categoryKey); }}
+                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-black transition ${on ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+                  {group} <span className={`ml-0.5 text-[10px] tabular-nums ${on ? "text-slate-300" : "text-slate-400"}`}>{n}</span>
+                </button>
+              );
+            })}
+          </div>
+          {/* 2단 — 그 묶음의 항목 */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5">
+            {LOOKUP_CATEGORIES.filter((item) => item.group === category.group).map((item) => (
+              <button key={item.key} type="button" onClick={() => { lastInGroup.current[item.group] = item.key; setCategoryKey(item.key); }}
+                className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-black transition ${item.key === categoryKey ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-900"}`}>
+                {item.label}
+              </button>
+            ))}
+            {category.note && <span className="ml-auto hidden text-[11px] font-semibold text-slate-400 lg:inline">{category.note}</span>}
+          </div>
         </div>
       </section>
 

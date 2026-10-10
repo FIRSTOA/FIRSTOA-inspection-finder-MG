@@ -242,20 +242,29 @@ export default function Search360({ author }: { author: string }) {
   const landing = phase === "idle";
 
   const chip = (text: string, tone = "bg-slate-100 text-slate-700") => <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${tone}`}>{text}</span>;
+  // 방식 — 한 덩어리 분할 단추(알약 4개가 따로 떠 있던 것을 정리)
   const modePill = (m: Mode, label: string) => (
-    <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${mode === m ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label}</button>
+    <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${mode === m ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>
   );
+  const KIND_DOT: Record<string, string> = { 검색: "bg-blue-500", "업체 질문": "bg-indigo-500", "전체 질문": "bg-emerald-500" };
 
   return (
     <div className="space-y-3">
       {/* ── 입력 하나 — 첫 화면은 크게, 결과가 있으면 한 줄로 ── */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className={landing ? "px-5 pb-6 pt-8 sm:px-10 sm:pb-8 sm:pt-10" : "px-4 py-3 sm:px-5"}>
+        <div className={landing ? "px-5 pb-5 pt-6 sm:px-8 sm:pb-6 sm:pt-7" : "px-4 py-3 sm:px-5"}>
           {landing && (
-            <div className="mb-5">
-              <div className="flex items-center gap-1.5 text-[11px] font-black tracking-widest text-blue-600"><Sparkles size={13} /> FIRSTOA 기록 비서</div>
-              <h3 className="mt-2 text-[26px] font-black leading-tight text-slate-900 sm:text-[32px]">무엇이든 물어보세요</h3>
-              <p className="mt-2 max-w-2xl text-[13px] font-semibold leading-6 text-slate-600">업체명이나 자산기번·시리얼을 치면 회사에 있는 기록을 전부 모아 한 장으로 보여 주고, 문장으로 물으면 그 기록을 근거로 답합니다. 팀·기간·등급으로 추리는 질문도 됩니다.</p>
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+              <div>
+                <div className="flex items-center gap-1.5 text-[10.5px] font-black tracking-widest text-blue-600"><Sparkles size={12} /> FIRSTOA 기록 비서</div>
+                <h3 className="mt-1 text-[22px] font-black leading-tight text-slate-900 sm:text-[26px]">무엇이든 물어보세요</h3>
+                <p className="mt-1 text-[12.5px] font-semibold text-slate-500">업체명·자산기번·시리얼은 검색, 문장은 질문 — 회사 기록을 근거로 답합니다.</p>
+              </div>
+              {/* 오른쪽 작은 숫자 — 기록 전체 건수(누르면 표별), 이번 달 AI 사용 */}
+              <div className="flex flex-col items-end gap-0.5 text-[10.5px] font-bold text-slate-400">
+                <button type="button" onClick={() => setShowTotals((v) => !v)} className="hover:text-slate-700">기록 <span className="font-black tabular-nums text-slate-700">{totalAll ? totalAll.toLocaleString() : "…"}</span>건 · 표 {SOURCES.length}개 {showTotals ? "▴" : "▾"}</button>
+                {aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표)">이번 달 AI 질문 {aiMonth.count}건{aiMonth.priced ? ` · 약 $${aiMonth.usd.toFixed(2)}` : ` · 토큰 ${fmtK(aiMonth.tokens)}`}</span>}
+              </div>
             </div>
           )}
           <form className="flex items-stretch gap-2" onSubmit={(e) => { e.preventDefault(); void submit(input); }}>
@@ -269,28 +278,29 @@ export default function Search360({ author }: { author: string }) {
               {phase === "resolving" ? "찾는 중…" : phase === "gathering" ? "모으는 중…" : dataAsking ? "조회 중…" : <>검색·질문 <ArrowRight size={16} /></>}
             </button>
           </form>
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[10.5px] font-bold text-slate-500">방식</span>
-            {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터에 질문")}
-            {mode === "auto" && <span className="text-[10.5px] font-semibold text-slate-500">· 문장이면 질문, 아니면 검색으로 봅니다</span>}
-            {aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표). 단가를 넣으면 금액도 보입니다" className="ml-auto text-[10.5px] font-bold text-slate-500">이번 달 AI 질문 {aiMonth.count}건 · 토큰 {fmtK(aiMonth.tokens)}{aiMonth.priced ? ` · 약 $${aiMonth.usd.toFixed(2)}` : ""}</span>}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <div className="flex rounded-full bg-slate-100 p-0.5" title="자동: 문장이면 질문, 아니면 검색으로 봅니다">
+              {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터에 질문")}
+            </div>
+            {!landing && aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표)" className="ml-auto text-[10.5px] font-bold text-slate-400">이번 달 AI {aiMonth.count}건{aiMonth.priced ? ` · $${aiMonth.usd.toFixed(2)}` : ""}</span>}
           </div>
           {landing && (
             <>
-              <div className="mt-5">
-                <div className="text-[11px] font-black text-slate-500">이렇게 써 보세요</div>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {TRY_THESE.map((t) => (
-                    <button key={t.text} type="button" disabled={busy} onClick={() => void submit(t.text, "auto")} className="group inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-bold text-slate-700 transition hover:border-blue-400 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50">
-                      <span className={`rounded px-1 text-[9px] font-black ${t.kind === "검색" ? "bg-blue-100 text-blue-700" : t.kind === "업체 질문" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}`}>{t.kind}</span>{t.text}
-                    </button>
-                  ))}
-                </div>
+              {/* 예시 — 종류는 글자 꼬리표 대신 색 점 하나 */}
+              <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                <span className="mr-0.5 text-[10.5px] font-black text-slate-400">예시</span>
+                {TRY_THESE.map((t) => (
+                  <button key={t.text} type="button" disabled={busy} onClick={() => void submit(t.text, "auto")} title={t.kind} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-bold text-slate-700 transition hover:border-blue-400 hover:text-slate-900 disabled:opacity-50">
+                    <span className={`h-1.5 w-1.5 rounded-full ${KIND_DOT[t.kind]}`} />{t.text}
+                  </button>
+                ))}
+                <span className="ml-1 hidden items-center gap-2 text-[10px] font-bold text-slate-400 sm:inline-flex"><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />검색</span><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />업체 질문</span><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />전체 질문</span></span>
               </div>
               {recent.length > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="font-black text-slate-500">최근</span>
-                  {recent.map((q) => <button key={q} type="button" disabled={busy} onClick={() => void submit(q, "auto")} className="rounded-full bg-slate-100 px-2.5 py-1 font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50">{q.length > 28 ? `${q.slice(0, 28)}…` : q}</button>)}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="mr-0.5 text-[10.5px] font-black text-slate-400">최근</span>
+                  {recent.slice(0, 5).map((q) => <button key={q} type="button" disabled={busy} onClick={() => void submit(q, "auto")} title={q} className="rounded-full bg-slate-50 px-2.5 py-1 font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50">{q.length > 22 ? `${q.slice(0, 22)}…` : q}</button>)}
+                  <button type="button" onClick={() => { setRecent([]); try { localStorage.removeItem(RECENT_KEY); } catch { /* 무시 */ } }} className="text-[10.5px] font-bold text-slate-300 hover:text-slate-500">지우기</button>
                 </div>
               )}
             </>
@@ -299,15 +309,17 @@ export default function Search360({ author }: { author: string }) {
           {routeNote && !dataAsking && <div className="mt-2 text-[11px] font-bold text-slate-500">{routeNote}</div>}
         </div>
         {landing && (
-          <div className="border-t border-slate-100 bg-slate-50 px-5 py-3 sm:px-10">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
-              <span className="font-black text-slate-900">회사 기록 전체 {totalAll ? `${totalAll.toLocaleString()}건` : "세는 중…"}</span>
-              <span className="font-bold text-slate-500">표 {SOURCES.length}개를 한 번에 뒤집니다</span>
-              <button type="button" onClick={() => setShowTotals((v) => !v)} className="ml-auto text-[11px] font-black text-blue-600 hover:text-blue-700">{showTotals ? "표별 건수 접기" : "표별 건수 보기"}</button>
+          <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-2.5 sm:px-8">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500">
+              <span className="font-black text-slate-600">결과 순서</span>
+              <span>① 현재 상태(주소·키맨·등급·미수·현장 메모)</span><span className="text-slate-300">→</span>
+              <span>② 기기</span><span className="text-slate-300">→</span>
+              <span>③ 어디에 몇 건</span><span className="text-slate-300">→</span>
+              <span>④ 월별 타임라인</span>
             </div>
             {showTotals && (
               <div className="mt-2 flex flex-wrap gap-1">
-                {SOURCES.filter((s) => s.table !== "plan_memos").map((s) => <span key={s.table} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-700">{s.label} <span className="tabular-nums text-slate-500">{totals[s.label] == null ? "…" : totals[s.label]!.toLocaleString()}</span></span>)}
+                {SOURCES.filter((s) => s.table !== "plan_memos").map((s) => <span key={s.table} className="rounded bg-white px-1.5 py-0.5 text-[10px] font-black text-slate-700 ring-1 ring-slate-200">{s.label} <span className="tabular-nums text-slate-500">{totals[s.label] == null ? "…" : totals[s.label]!.toLocaleString()}</span></span>)}
               </div>
             )}
           </div>
@@ -344,14 +356,6 @@ export default function Search360({ author }: { author: string }) {
           <div className="mt-1.5 text-[10px] font-bold text-slate-500">표를 직접 조회해 만든 답입니다. 미수·초과료는 팀 칸이 없어 일정·접수·점검 기록으로 팀을 붙였습니다. 중요한 판단은 원본 표를 확인하세요.</div>
         </section>
       ))}
-
-      {landing && (
-        <section className="grid gap-2 sm:grid-cols-4">
-          {[["① 현재 상태", "주소·키맨·등급·미수·재계약·불만·현장 메모·마지막 점검/AS를 한 장에"], ["② 기기", "기기별 계약 기간·임대료·마지막 점검/AS, 누르면 그 기기 기록만"], ["③ 어디에 몇 건", "표별 건수(0건도)와 이름이 비슷한 기록은 따로"], ["④ 타임라인", "월별로 묶어 날짜순, 종류·글자·기기로 걸러 보기, 원문 보기"]].map(([t, d]) => (
-            <div key={t} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-sm"><div className="text-[12px] font-black text-slate-800">{t}</div><div className="mt-0.5 text-[11px] font-semibold leading-4 text-slate-500">{d}</div></div>
-          ))}
-        </section>
-      )}
 
       {/* 후보 고르기 */}
       {phase === "choose" && (
