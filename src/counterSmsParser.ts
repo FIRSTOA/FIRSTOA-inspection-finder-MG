@@ -38,6 +38,9 @@ export type ParsedBlock = {
   machine: string;
   listKind: ListKind;
   cmsDay: number | null;   // "CMS.15" → 15 (CMS 결제일), 없으면 null
+  leaseCode: string;       // 기기 줄 맨 앞 임대 코드 "23013 / DOCUCENTRE-V … / 705790 / B6945" → "23013" (없으면 "")
+  serials: string[];       // 기기 줄의 기번(긴 영숫자)
+  assets: string[];        // 기기 줄의 자산번호(B6945·X7258 꼴)
 };
 export type MergedTarget = {
   key: string;
@@ -49,7 +52,31 @@ export type MergedTarget = {
   vendorNames: string[];   // 통합된 지점·위치 이름들
   listKind: ListKind;
   cmsDay: number | null;
+  leaseCodes: string[];    // 블록들의 임대 코드(중복 제거)
+  serials: string[];
+  assets: string[];
 };
+
+/**
+ * 기기 줄에서 임대 코드·기번·자산번호 — "23013 / DOCUCENTRE-V C2263(마블) / 705790 / B6945", "10013# / SL-X4220RX / 28S3BJLK40000NX / X7258",
+ * "MFC-8900CDW / E76881E5F508444 / B7468"(코드 없음). 연락처 규칙·목록 맞추기가 이름 표기와 무관하게 같은 업체·기기를 잇는 열쇠(2026-10-10).
+ */
+export function detectDevices(block: string): { leaseCode: string; serials: string[]; assets: string[] } {
+  let leaseCode = ""; const serials: string[] = []; const assets: string[] = [];
+  for (const line of block.split("\n")) {
+    const parts = line.split("/").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) continue;
+    const code = parts[0].match(/^(\d{4,6})#?$/);
+    if (code && !leaseCode) leaseCode = code[1];
+    for (const p of parts.slice(code ? 1 : 0)) {
+      const tok = p.replace(/\s+/g, "");
+      if (/^(미부착|없음|미상)$/.test(tok)) continue;
+      if (/^[A-Za-z0-9]{8,}$/.test(tok) && /\d/.test(tok)) { if (!serials.includes(tok)) serials.push(tok); continue; }
+      if (/^[A-Za-z]{1,2}\d{3,5}$/.test(tok)) { if (!assets.includes(tok)) assets.push(tok); }
+    }
+  }
+  return { leaseCode, serials, assets };
+}
 
 /** 블록의 목록 종류 — "CMS.15" / "CMS 15" / "CMS마감" 같은 줄이 있으면 CMS 마감 */
 export function detectListKind(block: string): { listKind: ListKind; cmsDay: number | null } {
@@ -221,7 +248,7 @@ export function parseBlocks(rawText: string, machineKeys: string[]): ParsedBlock
   return splitBlocks(rawText).map((raw, i) => {
     const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
     const { gradeGroup, vendor } = parseCompanyAndGrade(lines[0] || "");
-    return { index: i + 1, raw, vendor, gradeGroup, contacts: extractContacts(raw), machine: matchMachine(raw, machineKeys), ...detectListKind(raw) };
+    return { index: i + 1, raw, vendor, gradeGroup, contacts: extractContacts(raw), machine: matchMachine(raw, machineKeys), ...detectListKind(raw), ...detectDevices(raw) };
   });
 }
 
@@ -240,7 +267,7 @@ export function mergeTargets(blocks: ParsedBlock[]): MergedTarget[] {
     }
     if (!key) key = phones.length ? `${scope}_${b.vendor}` : `NOPHONE_${scope}_${++noPhoneSeq}`;
     if (!groups.has(key)) {
-      groups.set(key, { key, vendor: b.vendor, gradeGroup: b.gradeGroup, phones: [], labels: {}, machines: [], vendorNames: [], listKind: b.listKind, cmsDay: b.cmsDay });
+      groups.set(key, { key, vendor: b.vendor, gradeGroup: b.gradeGroup, phones: [], labels: {}, machines: [], vendorNames: [], listKind: b.listKind, cmsDay: b.cmsDay, leaseCodes: [], serials: [], assets: [] });
     }
     const g = groups.get(key)!;
     for (const c of b.contacts) {
@@ -251,6 +278,9 @@ export function mergeTargets(blocks: ParsedBlock[]): MergedTarget[] {
     g.machines.push(b.machine);
     if (g.cmsDay === null && b.cmsDay !== null) g.cmsDay = b.cmsDay;
     if (!g.vendorNames.includes(b.vendor)) g.vendorNames.push(b.vendor);
+    if (b.leaseCode && !g.leaseCodes.includes(b.leaseCode)) g.leaseCodes.push(b.leaseCode);
+    b.serials.forEach((s) => { if (!g.serials.includes(s)) g.serials.push(s); });
+    b.assets.forEach((a) => { if (!g.assets.includes(a)) g.assets.push(a); });
   }
   return [...groups.values()];
 }

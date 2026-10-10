@@ -152,6 +152,13 @@ export type Candidate = { code: string; leaseCode: string; name: string; deviceC
 type MasterRow = { code: string; name: string; aliases?: string[] | null; device_count?: number | null };
 
 export const looksLikeDevice = (q: string) => /^[A-Za-z0-9\-/.#]+$/.test(q) && /\d/.test(q) && q.length >= 3;
+/** 느슨 검색용 핵심 이름 — 법인 표기·지점·일반어를 뺀 첫 토큰. "세무법인 건영 논현지점" → "건영" (historyCoreName 은 "세무법인"을 돌려줘 엉뚱한 기록을 끌어왔다) */
+const CORE_SKIP = new Set(["주식회사", "유한회사", "유한책임회사", "세무법인", "법무법인", "회계법인", "의료법인", "학교법인", "재단법인", "사단법인", "농업회사법인", "본사", "지점", "지사", "본점", "사무실", "현장", "공장", "센터", "병원", "의원", "학원", "협동조합", "주", "유"]);
+export function coreNameOf(name: string): string {
+  const tokens = String(name || "").replace(/\([^)]*\)?/g, " ").replace(/㈜|\(주\)|\(유\)/g, " ").split(/[\s/·,\-–—]+/).map((t) => t.replace(/[^0-9a-zA-Z가-힣]/g, "")).filter(Boolean);
+  const pick = tokens.find((t) => t.length >= 2 && !CORE_SKIP.has(t) && !/^\d+[a-zA-Z]*$/.test(t)) || tokens.find((t) => t.length >= 2) || "";
+  return pick.length >= 2 ? pick.slice(0, 10) : (historyCoreName(name) || "");
+}
 
 export async function resolveCandidates(query: string): Promise<Candidate[]> {
   const raw = query.trim();
@@ -220,7 +227,7 @@ export async function buildEntity(candidate: Candidate | null, query: string): P
   if (!candidate) {
     // 코드를 못 찾은 검색어 — 그래도 이름·번호 그대로 모든 표를 뒤진다(임대리스트에 없는 업체·옛 기기)
     const device = looksLikeDevice(raw);
-    return withKeys({ code: "", leaseCode: "", name: raw, names: device ? [] : [raw], serials: device ? [raw] : [], assets: device ? [raw] : [], phones: phonesIn(raw), core: device ? "" : (historyCoreName(raw) || raw), query: raw, leaseRows: [] });
+    return withKeys({ code: "", leaseCode: "", name: raw, names: device ? [] : [raw], serials: device ? [raw] : [], assets: device ? [raw] : [], phones: phonesIn(raw), core: device ? "" : (coreNameOf(raw) || raw), query: raw, leaseRows: [] });
   }
   const safeRows = (p: Promise<Row[]>) => p.catch(() => [] as Row[]);
   const master = candidate.code ? (await selectRows<MasterRow>("vendor_master", `select=code,name,aliases&code=eq.${enc(candidate.code)}&limit=1`).catch(() => [] as MasterRow[]))[0] : undefined;
@@ -248,7 +255,7 @@ export async function buildEntity(candidate: Candidate | null, query: string): P
   // 전화번호 — 임대리스트(일반전화·키맨 글) + 리포트 수신자. 번호로만 남는 해피콜·예약 문자를 이 업체에 붙이는 열쇠
   const recipients = names.length ? await safeRows(selectRows<Row>("report_recipients", `select=phone&vendor=${inList(names.slice(0, 25))}&limit=50`)) : [];
   const phones = uniq([...leaseRows.flatMap((r) => [...phonesIn(str(r, "일반전화")), ...phonesIn(str(r, "키맨"))]), ...recipients.map((r) => digitsOnly(str(r, "phone")))]).filter((p) => p.length >= 9).slice(0, 20);
-  return withKeys({ code, leaseCode, name, names, serials, assets, phones, core: historyCoreName(name) || vendorMatchKey(name).slice(0, 6) || name, query: raw, leaseRows });
+  return withKeys({ code, leaseCode, name, names, serials, assets, phones, core: coreNameOf(name) || vendorMatchKey(name).slice(0, 6) || name, query: raw, leaseRows });
 }
 
 /** 질문 문장에서 업체·기기 번호로 보이는 말을 뽑는다 — "잡플러스 AS 몇 번 터졌어?" → ["잡플러스"]. 긴 말·기기 번호 우선 */
@@ -295,10 +302,20 @@ export function buildRawQuery(src: SourceDef, e: Entity): string | null {
   const parts = longKeys.flatMap((s) => src.rawCols.map((c) => `${col(c)}.ilike.*${enc(s)}*`));
   return `select=${src.select || "*"}&or=(${parts.join(",")})${src.hidden ? `&${src.hidden}` : ""}&limit=${Math.min(src.limit || 400, 200)}`;
 }
-/** 느슨 일치를 정확으로 승격하는 기준 — 이름 키가 같거나(표기만 다름) 기기 번호가 같으면 같은 업체·기기다 */
+/**
+ * 느슨 일치를 정확으로 승격하는 기준 — 이름 키가 같거나(표기만 다름) 기기 번호가 같으면 같은 업체·기기다.
+ * 이름 키가 "앞부분만 같은" 경우도 짧은 쪽이 5자 이상이면 같은 업체로 본다: "세무법인건영" ⊂ "세무법인건영논현지점"(2026-10-10 건영 특이사항이 안 보이던 사고).
+ * 4자 이하("세무법인"·"주식회사")는 너무 흔해 안 쓴다.
+ */
+export const sameVendorKey = (a: string, b: string): boolean => {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+  return s.length >= 5 && l.startsWith(s);
+};
 export function matchesEntity(src: SourceDef, row: Row, e: Entity): boolean {
   const nameCols = uniq([...src.nameCols, ...(src.looseCols || []), ...src.titleKeys.filter((k) => /vendor|업체|상호|company|name/.test(k))]);
-  for (const c of nameCols) { const v = str(row, c); if (v && e.nameKeys.includes(vendorMatchKey(v))) return true; }
+  for (const c of nameCols) { const v = str(row, c); if (v && e.nameKeys.some((k) => sameVendorKey(k, vendorMatchKey(v)))) return true; }
   for (const c of [...src.serialKeys, ...src.assetKeys]) { const v = identKey(str(row, c)); if (v.length >= 3 && e.deviceKeys.includes(v)) return true; }
   const list = row["_기번목록"];
   if (Array.isArray(list) && list.some((v) => e.deviceKeys.includes(identKey(String(v))))) return true;

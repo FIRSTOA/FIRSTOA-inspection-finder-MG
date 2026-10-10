@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { detectListKind, mergeTargets, parseBlocks, parseListHeader, splitBlocks } from "../src/counterSmsParser";
+import { detectDevices, detectListKind, mergeTargets, parseBlocks, parseListHeader, splitBlocks } from "../src/counterSmsParser";
+import { rulesForVendor, type ContactRule } from "../src/counterSmsContacts";
 
 // 관리부가 따로 올리는 CMS 마감 목록 — 머리글이 [수도권C](대괄호), 블록 끝에 "CMS.15"(결제일)
 const CMS_SAMPLE = `[수도권C]
@@ -49,6 +50,36 @@ describe("parseListHeader — 관리부 마감 목록 머리글", () => {
   });
   it("머리글·[구역] 줄이 있어도 업체 블록 수는 그대로", () => {
     expect(splitBlocks(SAMPLE)).toHaveLength(3);
+  });
+});
+
+describe("기기 줄 → 임대 코드·기번·자산번호, 연락처 규칙 매칭", () => {
+  it("detectDevices: '23013 / 모델 / 705790 / B6945' → 코드 23013·기번 705790·자산 B6945, '10013#' 꼴도, 코드 없는 줄도", () => {
+    expect(detectDevices("23013 / DOCUCENTRE-V C2263(마블) / 705790 / B6945")).toEqual({ leaseCode: "23013", serials: [], assets: ["B6945"] });
+    expect(detectDevices("10013# / SL-X4220RX / 28S3BJLK40000NX / X7258")).toEqual({ leaseCode: "10013", serials: ["28S3BJLK40000NX"], assets: ["X7258"] });
+    expect(detectDevices("MFC-8900CDW / E76881E5F508444 / B7468")).toEqual({ leaseCode: "", serials: ["E76881E5F508444"], assets: ["B7468"] });
+    expect(detectDevices("17473 / CLX-9201NA / Z8D9B1AF200014N / 미부착").assets).toEqual([]);
+    const blocks = parseBlocks(SAMPLE, []);
+    expect(blocks[0]).toMatchObject({ leaseCode: "23013", assets: ["B6945"] });
+    expect(mergeTargets(blocks)[0].leaseCodes).toEqual(["23013"]);
+  });
+  it("rulesForVendor: 코드 → 기번 → 번호 → 이름 일치 → 이름 유사 순으로 잇고, 주소·층 차이는 상관없다", () => {
+    const base = { kind: "block" as const, name: "", memo: "", updated_by: "김종희", updated_at: "2026-10-07T00:00:00Z" };
+    const rules: ContactRule[] = [
+      { ...base, id: "1", vendor_key: "청산", vendor: "N (주)청산-", phone: "01025072776", lease_code: "21111", serial: "" },
+      { ...base, id: "2", vendor_key: "영모터스추가", vendor: "NN 영모터스추가", phone: "01026664594", lease_code: "", serial: "" },
+      { ...base, id: "3", vendor_key: "우주건설", vendor: "N 김하담(개인)우주건설", phone: "01083661885", lease_code: "", serial: "zpb1" },
+    ];
+    // 이름이 "(주)청산 2층 경리부"로 달라졌지만 임대 코드가 같다
+    expect(rulesForVendor(rules, "N (주)청산 2층 경리부", { leaseCodes: ["21111"] }).map((r) => [r.id, r.how])).toEqual([["1", "코드 일치"]]);
+    // 이름은 전혀 다른데 🚫 번호가 이번 블록에 그대로 있다
+    expect(rulesForVendor(rules, "S 다른회사", { phones: ["010-2666-4594"] }).map((r) => [r.id, r.how])).toEqual([["2", "번호 일치"]]);
+    // 기번 일치
+    expect(rulesForVendor(rules, "S 또다른회사", { serials: ["ZPB1"] })[0]).toMatchObject({ id: "3", how: "기번 일치" });
+    // 이름 키만 같음(주소·층 무관) / 이름 앞부분만 같음(확인 필요)
+    expect(rulesForVendor(rules, "N 영모터스추가 (서울 강남구 2층)")[0]).toMatchObject({ id: "2", how: "이름 일치" });
+    expect(rulesForVendor(rules, "N 영모터스")[0]).toMatchObject({ id: "2", how: "이름 유사" });
+    expect(rulesForVendor(rules, "N 무관한곳")).toEqual([]);
   });
 });
 

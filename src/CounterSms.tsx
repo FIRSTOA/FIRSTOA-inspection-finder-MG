@@ -30,7 +30,10 @@ type TargetRow = {
   done_at?: string | null; done_by?: string | null; added_at?: string | null; added_by?: string | null;
   // 2026-10-10 추가 컬럼(supabase/counter-sms-list-kind.sql) — "" 일반 마감 / "CMS" CMS 마감(따로 올라오는 목록), cms_day 는 CMS 결제일
   list_kind?: string | null; cms_day?: number | null;
+  // 2026-10-10 추가 컬럼(supabase/counter-sms-identity.sql) — 관리부 목록 기기 줄의 임대 코드·기번·자산번호. 이름 표기가 바뀌어도 같은 업체를 잇는다
+  lease_code?: string | null; serials?: string[] | null; assets?: string[] | null;
 };
+type InboxRow = { id: number; room: string; sender: string; text: string; received_at: string };
 
 const TEAMS = ["A", "B", "C", "D", "E"] as const;
 
@@ -62,17 +65,19 @@ export default function CounterSms({ author }: { author: string }) {
     finally { setRuleBusy(false); }
   };
   // 목록 카드의 규칙 표시 — 🚫 차단 번호가 섞여 있거나 ⭐ 새 담당이 기록된 업체
-  const ruleBadges = (vendor: string, phones: string[]) => {
-    const rr = rulesForVendor(contactRules, vendor);
+  const ruleBadges = (row: TargetRow) => {
+    const rr = rulesForVendor(contactRules, row.vendor, ruleCtx(row));
     if (!rr.length) return null;
-    const digits = phones.map(normalizePhone);
+    const digits = row.phones.map(normalizePhone);
     const blocked = rr.filter((r) => r.kind === "block" && digits.includes(normalizePhone(r.phone)));
     const prefer = rr.find((r) => r.kind === "prefer");
     const allBlocked = blocked.length > 0 && digits.length > 0 && digits.every((p) => blocked.some((r) => normalizePhone(r.phone) === p)) && !prefer;
+    const loose = rr.some((r) => r.how === "이름 유사") && !rr.some((r) => r.how !== "이름 유사");
     return (
       <>
-        {prefer && <span title={`⭐ 새 담당 ${prefer.name || formatPhone(prefer.phone)} · ${ruleStamp(prefer)}`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-black text-amber-800">⭐</span>}
-        {blocked.length > 0 && <span title={blocked.map((r) => `🚫 ${formatPhone(r.phone)} ${r.memo || ""} · ${ruleStamp(r)}`).join("\n")} className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-black ${allBlocked ? "bg-rose-600 text-white" : "bg-rose-100 text-rose-700"}`}>🚫{allBlocked ? " 전부" : ""}</span>}
+        {prefer && <span title={`⭐ 새 담당 ${prefer.name || formatPhone(prefer.phone)} · ${ruleStamp(prefer)} · ${prefer.how}`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-black text-amber-800">⭐</span>}
+        {blocked.length > 0 && <span title={blocked.map((r) => `🚫 ${formatPhone(r.phone)} ${r.memo || ""} · ${ruleStamp(r)} · ${r.how}`).join("\n")} className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-black ${allBlocked ? "bg-rose-600 text-white" : "bg-rose-100 text-rose-700"}`}>🚫{allBlocked ? " 전부" : ""}</span>}
+        {loose && <span title="업체명이 비슷하게만 맞는 기록 — 같은 업체인지 확인" className="shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-black text-slate-600">이름 유사</span>}
       </>
     );
   };
@@ -111,6 +116,24 @@ export default function CounterSms({ author }: { author: string }) {
   }, []);
   const kindOf = (t: { list_kind?: string | null }) => (t.list_kind === "CMS" ? "CMS" : "");
   const kindLabel = (k: string) => (k === "CMS" ? "CMS 마감" : "일반 마감");
+  // 식별 칸(lease_code·serials, 규칙의 lease_code)이 있는지 — counter-sms-identity.sql 실행 여부
+  const [identCols, setIdentCols] = useState<boolean | null>(null);
+  useEffect(() => {
+    Promise.all([selectRows("counter_sms_targets", "select=lease_code,serials&limit=1"), selectRows("counter_sms_contact_rules", "select=lease_code&limit=1")])
+      .then(() => setIdentCols(true)).catch(() => setIdentCols(false));
+  }, []);
+  const ruleCtx = (row: TargetRow) => ({ phones: row.phones, leaseCodes: row.lease_code ? [row.lease_code] : [], serials: row.serials || [] });
+  // 관리부 목록 도착함 — 봇(gas-and-bot/counter-list-collector.js)이 마감방 글을 넣어 둔다. 표가 없으면 조용히 빈 목록
+  const [inbox, setInbox] = useState<InboxRow[]>([]);
+  const [uploadInboxId, setUploadInboxId] = useState<number | null>(null);
+  const loadInbox = useCallback(async () => {
+    setInbox(await selectRows<InboxRow>("counter_sms_inbox", "select=id,room,sender,text,received_at&applied_at=is.null&order=received_at.desc&limit=5").catch(() => [] as InboxRow[]));
+  }, []);
+  useEffect(() => { void loadInbox(); }, [loadInbox]);
+  const markInbox = async (id: number, batchId: string, note = "") => {
+    await updateRows("counter_sms_inbox", `id=eq.${id}`, { applied_at: new Date().toISOString(), applied_by: author || "미지정", batch_id: batchId || null, note }).catch(() => undefined);
+    setInbox((cur) => cur.filter((r) => r.id !== id));
+  };
 
   const loadBatch = useCallback(async (t: string) => {
     if (!t) return;
@@ -160,9 +183,9 @@ export default function CounterSms({ author }: { author: string }) {
     const machinesSet = mergeFormats(profile?.machines);
     const templatesSet = mergeTemplates(profile?.templates);
     const message = buildMessage(row.machines, machinesSet, templatesSet, row.grade_group, row.vendor);
-    setPickedPhone(row.sent_phone || pickDefaultPhone(contactChoices(row.phones, row.labels, rulesForVendor(contactRules, row.vendor))));
+    setPickedPhone(row.sent_phone || pickDefaultPhone(contactChoices(row.phones, row.labels, rulesForVendor(contactRules, row.vendor, ruleCtx(row)))));
     setSendTarget({
-      target: { key: row.id, vendor: row.vendor, gradeGroup: row.grade_group, phones: row.phones, labels: row.labels, machines: row.machines, vendorNames: row.vendor_names, listKind: kindOf(row) as "" | "CMS", cmsDay: row.cms_day ?? null },
+      target: { key: row.id, vendor: row.vendor, gradeGroup: row.grade_group, phones: row.phones, labels: row.labels, machines: row.machines, vendorNames: row.vendor_names, listKind: kindOf(row) as "" | "CMS", cmsDay: row.cms_day ?? null, leaseCodes: row.lease_code ? [row.lease_code] : [], serials: row.serials || [], assets: row.assets || [] },
       message, row,
     });
   };
@@ -224,10 +247,11 @@ export default function CounterSms({ author }: { author: string }) {
   };
 
   // 마감 목록 올리기 — 붙여넣기 → 변환 미리보기(수정 가능) → 팀에 등록
-  const uploadConvert = () => {
-    if (!uploadRaw.trim()) { setNotice("마감 목록을 붙여넣어 주세요."); return; }
+  const uploadConvert = (textOverride?: string) => {
+    const text = textOverride ?? uploadRaw;
+    if (!text.trim()) { setNotice("마감 목록을 붙여넣어 주세요."); return; }
     // 머리글 【수도권C】·26-10 을 읽어 팀·제목을 맞춘다 — 다른 팀 목록을 내 팀에 올리는 실수 방지(2026-10-10)
-    const header = parseListHeader(uploadRaw);
+    const header = parseListHeader(text);
     const notes: string[] = [];
     let targetTeam = team;
     if (header.team && (TEAMS as readonly string[]).includes(header.team) && header.team !== team) {
@@ -242,7 +266,7 @@ export default function CounterSms({ author }: { author: string }) {
     const regionName = regionForTeam(targetTeam);
     const profile = profiles.find((p) => p.region === regionName);
     const keys = Object.keys(mergeFormats(profile?.machines));
-    const parsed = parseBlocks(uploadRaw, keys);
+    const parsed = parseBlocks(text, keys);
     setUploadBlocks(parsed);
     // CMS 마감 목록(블록에 "CMS.15")은 따로 올라온다 — 같은 종류끼리만 맞추므로 이 목록으로 일반 마감이 지워지지 않는다
     const cms = parsed.filter((b) => b.listKind === "CMS").length;
@@ -258,12 +282,18 @@ export default function CounterSms({ author }: { author: string }) {
     // 기존 목록이 있으면 — sync(기본): 붙여넣은 목록을 "지금 열린 전체"로 보고 맞춘다 / merge: 없는 업체만 추가.
     // 있는 업체는 전송·완료 표시 그대로. 언제 누가 몇 곳을 추가·완료했는지 목록 머리에 남긴다(2026-09-24 추가 이력, 2026-10-10 맞추기)
     if (uploadMode !== "replace" && batch && batch.team === team) {
-      // 업체 키는 목록 종류까지 포함 — 일반 마감의 A업체와 CMS 마감의 A업체는 다른 카드
-      const keyOf = (kind: string, vendor: string) => `${kind}|${contactVendorKey(vendor)}`;
-      const existing = new Set(batchTargets.map((t) => keyOf(kindOf(t), t.vendor)));
-      const incoming = new Set(merged.map((t) => keyOf(t.listKind, t.vendor)));
-      const fresh = merged.filter((t) => !existing.has(keyOf(t.listKind, t.vendor)));
-      const dupes = merged.filter((t) => existing.has(keyOf(t.listKind, t.vendor)));
+      // 업체 키는 목록 종류까지 포함 — 일반 마감의 A업체와 CMS 마감의 A업체는 다른 카드.
+      // 같은 업체 판정은 임대 코드(기기 줄 맨 앞 번호)가 있으면 코드로, 없으면 이름 키로 — 이름이 조금 달라져도(층·메모·글자) 코드가 같으면 같은 업체(2026-10-10)
+      const nameKey = (kind: string, vendor: string) => `${kind}|${contactVendorKey(vendor)}`;
+      const codeKey = (kind: string, code?: string | null) => (code ? `${kind}|code:${code}` : "");
+      const existingNames = new Set(batchTargets.map((t) => nameKey(kindOf(t), t.vendor)));
+      const existingCodes = new Set(batchTargets.map((t) => codeKey(kindOf(t), t.lease_code)).filter(Boolean));
+      const isExisting = (t: MergedTarget) => existingNames.has(nameKey(t.listKind, t.vendor)) || (t.leaseCodes[0] ? existingCodes.has(codeKey(t.listKind, t.leaseCodes[0])) : false);
+      const incomingNames = new Set(merged.map((t) => nameKey(t.listKind, t.vendor)));
+      const incomingCodes = new Set(merged.flatMap((t) => t.leaseCodes.map((c) => codeKey(t.listKind, c))));
+      const isIncoming = (t: TargetRow) => incomingNames.has(nameKey(kindOf(t), t.vendor)) || (t.lease_code ? incomingCodes.has(codeKey(kindOf(t), t.lease_code)) : false);
+      const fresh = merged.filter((t) => !isExisting(t));
+      const dupes = merged.filter((t) => isExisting(t));
       // 관리부는 마감(카운터 회신)이 끝난 업체를 빼고 다시 올린다 → 열린 업체 중 이번 목록에 없는 곳은 완료로.
       // 단, **이번 목록에 든 종류끼리만** 비교한다 — CMS 마감 목록(따로 올라옴)을 붙여넣어도 일반 마감 업체는 손대지 않는다(2026-10-10).
       // 이미 완료된 카드는 건드리지 않는다. 완료 컬럼이 없으면(SQL 미실행) 추가만 한다. 종류 컬럼이 없는데 CMS 목록이면 역시 추가만.
@@ -272,7 +302,7 @@ export default function CounterSms({ author }: { author: string }) {
       const sync = uploadMode === "sync" && !!extended && !cmsWithoutCol;
       const open = batchTargets.filter((t) => !t.done_at && kindsInPaste.has(kindOf(t) as "" | "CMS"));
       const untouched = batchTargets.filter((t) => !t.done_at && !kindsInPaste.has(kindOf(t) as "" | "CMS")).length;
-      const dropped = sync ? open.filter((t) => !incoming.has(keyOf(kindOf(t), t.vendor))) : [];
+      const dropped = sync ? open.filter((t) => !isIncoming(t)) : [];
       const droppedUnsent = dropped.filter((t) => !t.sent_at);
       const kept = open.length - dropped.length;
       // 관리부가 일부(한 구역·추가분)만 보낸 목록을 전체로 오해하면 멀쩡한 업체가 완료돼 버린다 — 절반 넘게 빠지면 경고
@@ -300,6 +330,7 @@ export default function CounterSms({ author }: { author: string }) {
             vendor: t.vendor, grade_group: t.gradeGroup, phones: t.phones, labels: t.labels, machines: t.machines, vendor_names: t.vendorNames,
             ...(extended ? { added_at: stamp, added_by: by } : {}),
             ...(kindCol ? { list_kind: t.listKind, cms_day: t.cmsDay } : {}),
+            ...(identCols ? { lease_code: t.leaseCodes[0] || null, serials: t.serials, assets: t.assets } : {}),
           });
         }
         // 빠진 업체 자동 완료 — done_by 에 사유를 남겨 손으로 누른 완료와 구분한다. 잘못됐으면 카드의 [완료 취소]
@@ -311,6 +342,7 @@ export default function CounterSms({ author }: { author: string }) {
           const entry: BatchLogEntry = { at: stamp, by, added: fresh.length, skipped: sync ? [] : dupes.map((t) => t.vendor), dropped: dropped.map((t) => t.vendor), kept, mode: sync ? "sync" : "merge" };
           await updateRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`, { log: [...(batch.log || []), entry] }).catch(() => undefined);
         }
+        if (uploadInboxId) { await markInbox(uploadInboxId, batch.id, sync ? "맞추기" : "추가"); setUploadInboxId(null); }
         setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
         setNotice(sync
           ? `${team}팀 ${kindsText} 목록을 맞췄습니다 — 새로 ${fresh.length}곳 · 유지 ${kept}곳 · 목록에서 빠져 완료 ${dropped.length}곳${dropped.length ? `(${dropped.slice(0, 6).map((t) => t.vendor).join(", ")}${dropped.length > 6 ? " 외" : ""})` : ""}${untouched ? ` · 다른 종류 ${untouched}곳 그대로` : ""}`
@@ -339,8 +371,10 @@ export default function CounterSms({ author }: { author: string }) {
           machines: t.machines, vendor_names: t.vendorNames,
           ...(extended ? { added_at: new Date().toISOString(), added_by: author || "미지정" } : {}),
           ...(kindCol ? { list_kind: t.listKind, cms_day: t.cmsDay } : {}),
+          ...(identCols ? { lease_code: t.leaseCodes[0] || null, serials: t.serials, assets: t.assets } : {}),
         });
       }
+      if (uploadInboxId) { await markInbox(uploadInboxId, id, "새 목록"); setUploadInboxId(null); }
       setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
       setNotice(`${team}팀에 ${merged.length}곳을 등록했습니다 — 팀원 모두에게 보입니다.`);
       await loadBatch(team);
@@ -447,6 +481,25 @@ export default function CounterSms({ author }: { author: string }) {
 
       {tab === "main" ? (
         <>
+          {/* 관리부 목록 도착함 — 봇이 마감방 글을 넣어 둔 것. 복사·붙여넣기 없이 바로 맞춘다(2026-10-10) */}
+          {inbox.length > 0 && (
+            <section className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-3">
+              <div className="text-[12px] font-black text-emerald-900">📥 관리부가 마감방에 올린 목록 {inbox.length}건 — 붙여넣기 없이 바로 넣을 수 있습니다</div>
+              <div className="mt-2 space-y-1.5">
+                {inbox.map((row) => {
+                  const head = parseListHeader(row.text); const first = row.text.trim().split("\n").find((l) => l.trim()) || "";
+                  return (
+                    <div key={row.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[12px]">
+                      <span className="font-black text-slate-800">{head.team ? `${head.team}팀` : row.room}{head.monthLabel ? ` · ${head.monthLabel}` : ""}</span>
+                      <span className="min-w-0 flex-1 truncate font-semibold text-slate-500">{first.slice(0, 40)} · {row.text.length.toLocaleString()}자 · {row.sender} · {row.received_at.slice(5, 16).replace("T", " ")}</span>
+                      <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); setUploadMode("sync"); setUploadRaw(row.text); setUploadInboxId(row.id); setUploadTitle(""); window.setTimeout(() => uploadConvert(row.text), 0); }} className="rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-black text-white hover:bg-emerald-700">이 목록 넣기</button>
+                      <button type="button" onClick={() => void markInbox(row.id, "", "무시")} className="rounded-full border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">무시</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
           {/* 팀 공유 마감 목록 — 관리부가 한 번 올리면 팀원 모두 여기서 바로 보낸다 */}
           {batchLoading && <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-xs font-bold text-slate-400">{team}팀 목록을 불러오는 중…</div>}
           {!batchLoading && !batch && (
@@ -502,7 +555,7 @@ export default function CounterSms({ author }: { author: string }) {
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                           <span className="min-w-0 flex-1 basis-[60%] truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
                           {row.list_kind === "CMS" && <span title="CMS 마감 — 관리부가 따로 올리는 목록. 맞추기는 CMS끼리만" className="shrink-0 rounded bg-cyan-100 px-1 py-0.5 text-[9px] font-black text-cyan-800">CMS{row.cms_day ? ` ${row.cms_day}일` : ""}</span>}
-                          {ruleBadges(row.vendor, row.phones)}
+                          {ruleBadges(row)}
                           {addedTag(row) && <span title={`${row.added_at?.slice(0, 16).replace("T", " ")} ${row.added_by || ""} 추가`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black text-amber-800">{addedTag(row)}</span>}
                           {row.done_at
                             ? <span className="shrink-0 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓✓ 완료</span>
@@ -614,6 +667,7 @@ export default function CounterSms({ author }: { author: string }) {
                 <input value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} placeholder={`제목 (비우면 "${new Date().getMonth() + 1}월 마감")`}
                   className="w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold outline-none focus:border-blue-500 sm:w-auto sm:min-w-[160px]" />
               </div>
+              {uploadInboxId && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-black text-emerald-800">📥 관리부가 마감방에 올린 글을 그대로 가져왔습니다 — 등록하면 도착함에서 처리됨으로 표시됩니다</div>}
               <textarea value={uploadRaw} onChange={(e) => setUploadRaw(e.target.value)} rows={8}
                 placeholder="카톡 마감 목록을 그대로 붙여넣으세요"
                 className="w-full resize-y rounded-lg border border-slate-300 p-3 font-mono text-[12px] leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -651,7 +705,7 @@ export default function CounterSms({ author }: { author: string }) {
               </div>
             )}
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
-              <button type="button" onClick={uploadConvert} className="rounded-full border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-700">🔍 변환 미리보기</button>
+              <button type="button" onClick={() => uploadConvert()} className="rounded-full border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-black text-blue-700">🔍 변환 미리보기</button>
               <button type="button" disabled={busy || !uploadBlocks?.length} onClick={() => void publishBatch()}
                 className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">
                 {busy ? "등록 중…" : uploadMode !== "replace" && batch && batch.team === team
@@ -665,7 +719,7 @@ export default function CounterSms({ author }: { author: string }) {
 
       {sendTarget && (() => {
         const { target, message } = sendTarget;
-        const vendorRules = rulesForVendor(contactRules, target.vendor);
+        const vendorRules = rulesForVendor(contactRules, target.vendor, sendTarget.row ? ruleCtx(sendTarget.row) : { phones: target.phones });
         const pickedChoice = contactChoices(target.phones, target.labels, vendorRules).find((c) => c.phone === pickedPhone);
         const label = pickedChoice?.label || target.labels[pickedPhone] || "";
         return (
@@ -686,7 +740,8 @@ export default function CounterSms({ author }: { author: string }) {
                   </div>
                 )}
                 <ContactRulesPanel vendor={target.vendor} phones={target.phones} labels={target.labels} rules={vendorRules}
-                  picked={pickedPhone} onPick={setPickedPhone} author={author} onRulesChanged={reloadRules} onNotice={setNotice} />
+                  picked={pickedPhone} onPick={setPickedPhone} author={author} onRulesChanged={reloadRules} onNotice={setNotice}
+                  leaseCode={sendTarget.row?.lease_code || ""} serial={(sendTarget.row?.serials || [])[0] || ""} identCols={!!identCols} />
                 {sendTarget.row && (
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-[11px] font-bold text-emerald-800">
                     [문자 보내기]를 누르면 팀 목록에 <b>전송 완료 ✓</b>로 표시됩니다 (누가·언제 보냈는지 팀원 모두에게 보입니다). 실제로 안 보냈으면 카드의 [전송 취소]로 되돌리세요.
@@ -720,9 +775,10 @@ export default function CounterSms({ author }: { author: string }) {
  * 여기서 한 번 표시해 두면 팀 전체가 다음 마감에 그 업체가 다시 올라와도 바로 본다(2026-09-16 요청).
  * 사유·기록자·날짜가 함께 남아 나중에 헷갈리지 않는다.
  */
-function ContactRulesPanel({ vendor, phones, labels, rules, picked, onPick, author, onRulesChanged, onNotice }: {
+function ContactRulesPanel({ vendor, phones, labels, rules, picked, onPick, author, onRulesChanged, onNotice, leaseCode = "", serial = "", identCols = false }: {
   vendor: string; phones: string[]; labels: Record<string, string>; rules: ContactRule[];
   picked: string; onPick: (phone: string) => void; author: string; onRulesChanged: () => Promise<void> | void; onNotice: (message: string) => void;
+  leaseCode?: string; serial?: string; identCols?: boolean; // 규칙에 임대 코드·기번을 같이 저장 — 다음 마감에 이름이 달라져도 잡힌다
 }) {
   const choices = contactChoices(phones, labels, rules);
   const sendable = choices.filter((c) => !c.blocked);
@@ -737,12 +793,12 @@ function ContactRulesPanel({ vendor, phones, labels, rules, picked, onPick, auth
     finally { setBusy(false); }
   };
   const block = (phone: string, memo: string) => run(async () => {
-    await saveContactRule({ vendor, phone, kind: "block", memo, author });
+    await saveContactRule({ vendor, phone, kind: "block", memo, author, leaseCode, serial, identCols });
     if (picked === phone) onPick(sendable.find((c) => c.phone !== phone)?.phone || ""); // 차단한 번호가 선택돼 있었으면 다음 번호로
   }, `🚫 ${formatPhone(phone)} — 이 업체엔 보내지 않기로 기록했습니다 (다음 마감에도 표시됩니다)`);
   const unset = (rule: ContactRule) => run(() => removeContactRule(rule.id), "규칙을 해제했습니다");
   const addPrefer = () => run(async () => {
-    const saved = await saveContactRule({ vendor, phone: add.phone, kind: "prefer", name: add.name, memo: add.memo, author });
+    const saved = await saveContactRule({ vendor, phone: add.phone, kind: "prefer", name: add.name, memo: add.memo, author, leaseCode, serial, identCols });
     onPick(saved.phone);
     setAdd({ name: "", phone: "", memo: "" });
     setAddOpen(false);

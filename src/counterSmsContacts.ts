@@ -19,7 +19,13 @@ export type ContactRule = {
   memo: string;
   updated_by: string;
   updated_at: string;
+  // 2026-10-10 추가(supabase/counter-sms-identity.sql) — 이름 표기가 바뀌어도 같은 업체·기기를 잇는 열쇠. 표가 옛 모양이면 undefined
+  lease_code?: string | null;
+  serial?: string | null;
 };
+/** 규칙을 찾을 때 이름 말고도 쓸 단서 — 지금 목록 블록의 번호·임대 코드·기번 */
+export type RuleContext = { phones?: string[]; leaseCodes?: string[]; serials?: string[] };
+export type MatchedRule = ContactRule & { how: "코드 일치" | "기번 일치" | "번호 일치" | "이름 일치" | "이름 유사" };
 
 const TABLE = "counter_sms_contact_rules";
 
@@ -38,7 +44,7 @@ export async function loadContactRules(): Promise<ContactRule[]> {
   return selectRows<ContactRule>(TABLE, "select=*&order=updated_at.desc").catch(() => [] as ContactRule[]);
 }
 
-export async function saveContactRule(input: { id?: string; vendor: string; phone: string; kind: ContactRuleKind; name?: string; memo?: string; author: string }): Promise<ContactRule> {
+export async function saveContactRule(input: { id?: string; vendor: string; phone: string; kind: ContactRuleKind; name?: string; memo?: string; author: string; leaseCode?: string; serial?: string; identCols?: boolean }): Promise<ContactRule> {
   const row: ContactRule = {
     id: input.id || `ccr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     vendor_key: contactVendorKey(input.vendor),
@@ -49,6 +55,8 @@ export async function saveContactRule(input: { id?: string; vendor: string; phon
     memo: String(input.memo || "").trim(),
     updated_by: input.author || "미지정",
     updated_at: new Date().toISOString(),
+    // 임대 코드·기번은 컬럼이 있을 때만(SQL 미실행 표에 보내면 400)
+    ...(input.identCols ? { lease_code: String(input.leaseCode || "").trim(), serial: String(input.serial || "").trim() } : {}),
   };
   await upsertRow(TABLE, row, "vendor_key,phone");
   return row;
@@ -58,9 +66,29 @@ export async function removeContactRule(id: string): Promise<void> {
   await deleteRows(TABLE, `id=eq.${encodeURIComponent(id)}`);
 }
 
-export function rulesForVendor(rules: ContactRule[], vendor: string): ContactRule[] {
+/**
+ * 이 업체(블록)에 해당하는 규칙 — 이름이 똑같아야만 잡히던 것을(2026-10-10 "글자를 덜 썼거나 주소가 바뀌면 못 잡는 거 아니냐")
+ * 여러 단서로 잇는다. 확실한 순서: 임대 코드 → 기번 → 전화번호(🚫 번호가 이 블록에 그대로 있음) → 이름 키 일치 → 이름 키 포함(4자 이상, "확인 필요"급).
+ * 주소·층·메모는 비교에 안 쓴다(이름 키에서 이미 떼어 냄).
+ */
+export function rulesForVendor(rules: ContactRule[], vendor: string, ctx: RuleContext = {}): MatchedRule[] {
   const key = contactVendorKey(vendor);
-  return key ? rules.filter((rule) => rule.vendor_key === key) : [];
+  const phones = new Set((ctx.phones || []).map(normalizePhone).filter(Boolean));
+  const codes = new Set((ctx.leaseCodes || []).map((c) => String(c || "").trim()).filter(Boolean));
+  const serials = new Set((ctx.serials || []).map((s) => String(s || "").replace(/\s+/g, "").toLowerCase()).filter(Boolean));
+  const out: MatchedRule[] = [];
+  for (const rule of rules) {
+    const rk = String(rule.vendor_key || "");
+    let how: MatchedRule["how"] | "" = "";
+    if (rule.lease_code && codes.has(String(rule.lease_code).trim())) how = "코드 일치";
+    else if (rule.serial && serials.has(String(rule.serial).replace(/\s+/g, "").toLowerCase())) how = "기번 일치";
+    else if (key && rk === key) how = "이름 일치";
+    else if (rule.phone && phones.has(normalizePhone(rule.phone))) how = "번호 일치";
+    else if (key && rk && key.length >= 4 && rk.length >= 4 && (rk.startsWith(key) || key.startsWith(rk))) how = "이름 유사";
+    if (how) out.push({ ...rule, how });
+  }
+  const rank = (h: MatchedRule["how"]) => ["코드 일치", "기번 일치", "번호 일치", "이름 일치", "이름 유사"].indexOf(h);
+  return out.sort((a, b) => rank(a.how) - rank(b.how));
 }
 
 export type ContactChoice = { phone: string; label: string; blocked?: ContactRule; preferred?: ContactRule };

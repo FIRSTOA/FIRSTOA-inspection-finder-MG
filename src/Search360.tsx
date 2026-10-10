@@ -1,11 +1,14 @@
 /**
- * 통합 검색 360 — 자산기번·시리얼·업체명 중 하나로 "이 업체(기기)에 대해 회사가 가진 모든 기록"을 한 화면에.
+ * 통합 검색 360 — 입력 하나로 "검색"과 "질문"을 다 받는다.
  *
- * 첫 화면: 큰 검색창 + "질문으로 바로 찾기"(질문에서 업체·기번을 뽑아 모은 뒤 답) + 최근 검색 + 회사 기록 전체 건수(표별).
- * 결과: ① 현재 상태 카드 → ② 기기 카드 → ③ 표별 건수(0건도 표시) → ③-1 질문하기 → ③-2 기종 참고 자료 → ④ 월별 타임라인 → 느슨 일치는 접어 둠.
+ * 첫 화면: 큰 입력칸 하나. 업체명·자산기번·시리얼이면 그 업체의 모든 기록을 모으고(28개 표),
+ *   문장으로 물으면 ① 질문 속 업체가 있으면 그 업체 기록만 근거로 답(entity-ask) ② 없으면 표 전체를 조건으로 추려 답(data-ask).
+ *   방식은 자동 판정이고 알약으로 고정할 수도 있다. 아래에 예시 질문·최근 검색·회사 기록 전체 건수.
+ * 결과: ① 현재 상태 카드(현장 메모 포함) → ② 기기 카드 → ③ 표별 건수 → ③-1 질문하기 → ③-2 기종 참고 → ④ 월별 타임라인.
  * 로직은 entity360.ts.
  */
 import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, Search as SearchIcon, Sparkles } from "lucide-react";
 import { notify } from "./toast";
 import { invokeEdgeFunction } from "./supabase";
 import UnifiedHistory from "./UnifiedHistory";
@@ -15,12 +18,17 @@ import {
 } from "./entity360";
 
 type Phase = "idle" | "resolving" | "choose" | "gathering" | "done";
+type Mode = "auto" | "search" | "entity" | "data";
 const GROUPS: Group[] = ["기기·계약", "현장 기록", "영업·관리", "고객 소통", "기타"];
 const EXACT_HOW = new Set(["기번·자산번호 일치", "임대리스트 기기 번호 일치", "업체명 일치"]);
 const RECENT_KEY = "cs_search360_recent_v1";
 const TOTALS_KEY = "cs_search360_totals_v1";
 const fmtDays = (ymd: string) => { const d = daysSince(ymd); return d === null ? "" : d === 0 ? "오늘" : `${d}일 전`; };
 const loadRecent = (): string[] => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); return Array.isArray(v) ? v.map(String).slice(0, 8) : []; } catch { return []; } };
+// 문장인가(질문·요청) — 이게 아니면 업체명·기번 검색으로 본다
+const QUESTION_RE = /[?？]|몇|언제|어디|어떻|무슨|뭐|얼마|줘|주세요|알려|정리|요약|목록|리스트|있어|있나|됐어|했어|중에|추려|비교|평균|합계|건수|누가|왜|해야|필요|만들/;
+// 표 전체를 조건으로 추리는 질문의 단서 — 팀·기간·등급·"각각/씩/전체"
+const DATA_RE = /[A-E]\s*팀|이번\s*주|지난\s*주|이번\s*달|지난\s*달|\d{1,2}\s*월|등급|전체|모든|각각|몇\s*개씩|씩|리스트|목록|순위|합계|평균|건수|누가|제일|가장/;
 
 /** 에이전트에게 넘길 압축 기록 — 정확 일치만, 최신순 350건, 글자 수 제한(토큰 절약) */
 function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
@@ -32,7 +40,7 @@ function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
     entity: { name: entity.name, code: entity.code, leaseCode: entity.leaseCode, names: entity.names.slice(0, 8), serials: entity.serials, assets: entity.assets },
     state: {
       address: state.address, addressFrom: state.addressFrom, keyman: state.keyman, tel: state.tel, grade: state.grade, leaseStatus: state.leaseStatus,
-      devices: state.devices, misu: state.misu, overage: state.overage, recontract: state.recontract, bulman: state.bulman,
+      devices: state.devices, misu: state.misu, overage: state.overage, recontract: state.recontract, bulman: state.bulman, notes: state.notes.slice(0, 12).map((n) => `${n.kind}: ${n.text}`),
       lastInspect: state.lastInspect, lastAs: state.lastAs, lastVisit: state.lastVisit, openReceptions: state.openReceptions, upcomingTickets: state.upcomingTickets,
       counts: state.counts.filter((c) => c.exact).map((c) => `${c.label} ${c.exact}`), total: state.total, oldest: state.oldest, newest: state.newest,
     },
@@ -40,10 +48,19 @@ function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
   };
 }
 const ASK_SUGGESTIONS = ["AS가 몇 번 있었고 주로 무슨 문제였어?", "언제부터 임대했고 기기는 어떻게 바뀌었어?", "이 기기 이전 사용처가 있어?", "초과료·미수 흐름을 정리해 줘", "이 업체를 처음 가는 사람에게 한 문단으로 요약해 줘"];
-const EXAMPLES = ["잡플러스", "무암", "B6945", "ZPBLBJST8000GQV"];
+const TRY_THESE: Array<{ text: string; kind: "검색" | "업체 질문" | "전체 질문" }> = [
+  { text: "잡플러스", kind: "검색" },
+  { text: "B6945", kind: "검색" },
+  { text: "잡플러스 AS 몇 번 터졌어?", kind: "업체 질문" },
+  { text: "무암 언제부터 임대했고 기기 이동 이력 있어?", kind: "업체 질문" },
+  { text: "C팀 미수 중 CS가 체크할 곳 리스트 줘", kind: "전체 질문" },
+  { text: "C팀 이번 주 PC 확장성 몇 개씩 했어?", kind: "전체 질문" },
+];
+const PLACEHOLDERS = ["잡플러스", "B6945", "잡플러스 AS 몇 번 터졌어?", "C팀 미수 중 CS가 체크할 곳 리스트 줘", "ZPBLBJST8000GQV", "C팀 이번 주 PC 확장성 몇 개씩 했어?"];
 
 export default function Search360({ author }: { author: string }) {
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState<Mode>("auto");
   const [query, setQuery] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -60,31 +77,20 @@ export default function Search360({ author }: { author: string }) {
   const [histVendor, setHistVendor] = useState("");
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [totals, setTotals] = useState<Record<string, number | null>>({});
-  // 질문하기 — 모인 기록을 그대로 넘겨 답을 받는다(entity-ask 엣지 함수). 기록에 없는 건 없다고 답하게 돼 있다
+  const [showTotals, setShowTotals] = useState(false);
+  const [phIndex, setPhIndex] = useState(0);
+  // 업체 질문(entity-ask) — 모인 기록만 근거
   const [question, setQuestion] = useState("");
-  const [directQ, setDirectQ] = useState("");
-  const [pendingQ, setPendingQ] = useState("");     // 후보를 고른 뒤 이어서 물을 질문
+  const [pendingQ, setPendingQ] = useState("");
   const [asking, setAsking] = useState(false);
   const [answers, setAnswers] = useState<Array<{ q: string; a: string; used: number }>>([]);
-  const [foundBy, setFoundBy] = useState("");       // "질문의 '잡플러스'로 찾았습니다"
-  // 전체 데이터 질문 — 한 업체가 아니라 표 전체를 팀·달·등급으로 추리는 질문(data-ask 엣지 함수, 모델이 직접 조회)
-  const [dataQ, setDataQ] = useState("");
+  const [foundBy, setFoundBy] = useState("");
+  // 전체 질문(data-ask) — 표를 직접 조회
   const [dataAsking, setDataAsking] = useState(false);
   const [dataAnswers, setDataAnswers] = useState<Array<{ q: string; a: string; rows: Record<string, unknown>[]; table: string; calls: string[] }>>([]);
-  const askData = async (text: string) => {
-    const q = text.trim();
-    if (q.length < 4 || dataAsking) return;
-    setDataAsking(true); setDataQ("");
-    try {
-      const res = await invokeEdgeFunction<{ answer?: string; rows?: Record<string, unknown>[]; table?: string; calls?: string[]; error?: string }>("data-ask", { question: q, author }, 180_000);
-      if (res.error) throw new Error(res.error);
-      setDataAnswers((cur) => [{ q, a: String(res.answer || "").trim(), rows: res.rows || [], table: res.table || "", calls: res.calls || [] }, ...cur].slice(0, 5));
-    } catch (err) {
-      notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
-    } finally { setDataAsking(false); }
-  };
+  const [routeNote, setRouteNote] = useState(""); // "문장으로 보여 전체 데이터에 물었습니다"
 
-  // 첫 화면의 "회사 기록 전체" — 표별 건수. 10분 캐시(세션)
+  useEffect(() => { const t = window.setInterval(() => setPhIndex((i) => (i + 1) % PLACEHOLDERS.length), 3200); return () => window.clearInterval(t); }, []);
   useEffect(() => {
     try {
       const cached = JSON.parse(sessionStorage.getItem(TOTALS_KEY) || "null");
@@ -133,12 +139,11 @@ export default function Search360({ author }: { author: string }) {
   };
   const run = async (raw: string, followUp = "") => {
     const q = raw.trim();
-    if (q.length < 2) { notify("두 글자 이상 넣어 주세요 — 자산기번·시리얼·업체명 아무거나", "info"); return; }
-    setInput(q); setQuery(q); resetFilters(); setEntity(null); setResults([]); setPhase("resolving"); setPendingQ(followUp);
+    if (q.length < 2) { notify("두 글자 이상 넣어 주세요", "info"); return; }
+    setQuery(q); resetFilters(); setEntity(null); setResults([]); setPhase("resolving"); setPendingQ(followUp);
     const list = await resolveCandidates(q).catch(() => [] as Candidate[]);
     setCandidates(list);
-    remember(q);
-    // 하나뿐이거나, 정확 일치가 딱 하나면 바로 모은다. 애매하면 고르게 한다(엉뚱한 업체를 모으지 않게)
+    remember(followUp || q);
     const exactOnes = list.filter((c) => EXACT_HOW.has(c.how));
     const chosen = list.length === 1 ? list[0] : exactOnes.length === 1 ? exactOnes[0] : null;
     if (chosen || !list.length) {
@@ -148,21 +153,48 @@ export default function Search360({ author }: { author: string }) {
     }
     setPhase("choose");
   };
-  /** 질문만 치면 — 질문에서 업체·기번을 뽑아 먼저 찾고, 모은 뒤 바로 답한다 */
-  const askDirect = async (text: string) => {
+  const askData = async (text: string) => {
     const q = text.trim();
-    if (q.length < 4) { notify("질문에 업체명이나 기번을 함께 넣어 주세요 — 예: 잡플러스 AS 몇 번?", "info"); return; }
+    if (q.length < 4 || dataAsking) return;
+    setDataAsking(true); remember(q);
+    try {
+      const res = await invokeEdgeFunction<{ answer?: string; rows?: Record<string, unknown>[]; table?: string; calls?: string[]; error?: string }>("data-ask", { question: q, author }, 180_000);
+      if (res.error) throw new Error(res.error);
+      setDataAnswers((cur) => [{ q, a: String(res.answer || "").trim(), rows: res.rows || [], table: res.table || "", calls: res.calls || [] }, ...cur].slice(0, 5));
+    } catch (err) {
+      notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
+    } finally { setDataAsking(false); }
+  };
+  /** 질문 속 업체·기번으로 먼저 찾는다. 찾으면 true(모은 뒤 답까지 진행), 못 찾으면 false */
+  const askEntity = async (q: string): Promise<boolean> => {
     const tokens = entityTokensFromQuestion(q);
-    setPhase("resolving"); setDirectQ("");
     for (const token of tokens) {
       const list = await resolveCandidates(token).catch(() => [] as Candidate[]);
       if (!list.length) continue;
       setFoundBy(`질문의 "${token}"으로 찾았습니다`);
       await run(token, q);
-      return;
+      return true;
     }
+    return false;
+  };
+  /** 입력 하나로 검색·업체 질문·전체 질문을 가른다 */
+  const submit = async (raw: string, forced: Mode = mode) => {
+    const text = raw.trim();
+    if (!text) return;
+    setInput(text); setRouteNote("");
+    const isQuestion = QUESTION_RE.test(text) || text.split(/\s+/).length >= 4;
+    const m: Mode = forced !== "auto" ? forced : !isQuestion ? "search" : "auto";
+    if (m === "search") { await run(text); return; }
+    if (m === "data") { await askData(text); return; }
+    if (m === "entity") { setPhase("resolving"); if (!(await askEntity(text))) { setPhase("idle"); notify("질문에서 업체·기번을 못 찾았습니다 — 업체명을 함께 넣어 주세요", "info"); } return; }
+    // 자동: 업체가 들리면 그 업체, 아니면 전체 데이터
+    setPhase("resolving");
+    const dataLike = DATA_RE.test(text);
+    if (!dataLike && await askEntity(text)) return;
     setPhase("idle");
-    notify(`질문에서 업체·기번을 못 찾았습니다 (${tokens.slice(0, 3).join(", ") || "후보 없음"}) — 먼저 검색하거나 업체명을 정확히 넣어 주세요`, "info");
+    if (!dataLike && entityTokensFromQuestion(text).length) setRouteNote("질문 속 이름이 거래처에 없어 전체 데이터에 물었습니다");
+    else setRouteNote("팀·기간·등급으로 추리는 질문으로 보여 전체 데이터에 물었습니다");
+    await askData(text);
   };
   const ask = async (q: string) => { const text = q.trim(); if (!text || !entity || asking) return; setQuestion(""); await askWith(text, entity, results); };
 
@@ -174,7 +206,7 @@ export default function Search360({ author }: { author: string }) {
     const dk = identKey(deviceOnly);
     return events.filter((ev) => {
       if (ev.loose && !showLoose) return false;
-      if (ev.source.table === "vendor_info") return false; // 임대리스트는 기기 카드로 보여 준다
+      if (ev.source.table === "vendor_info") return false;
       if (group !== "전체" && ev.source.group !== group) return false;
       if (sourceOnly && ev.source.label !== sourceOnly) return false;
       if (dk && identKey(ev.serial) !== dk && identKey(ev.asset) !== dk && !identKey(rawTextOf(ev.row)).includes(dk)) return false;
@@ -189,100 +221,115 @@ export default function Search360({ author }: { author: string }) {
   }, [filtered, limit]);
   const groupCounts = useMemo(() => { const c = new Map<string, number>(); events.filter((ev) => !ev.loose && ev.source.table !== "vendor_info").forEach((ev) => c.set(ev.source.group, (c.get(ev.source.group) || 0) + 1)); return c; }, [events]);
   const totalAll = Object.values(totals).reduce<number>((n, v) => n + (v || 0), 0);
-  const busy = phase === "resolving" || phase === "gathering";
+  const busy = phase === "resolving" || phase === "gathering" || dataAsking;
+  const landing = phase === "idle";
 
   const chip = (text: string, tone = "bg-slate-100 text-slate-700") => <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${tone}`}>{text}</span>;
+  const modePill = (m: Mode, label: string) => (
+    <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${mode === m ? "bg-white text-slate-900" : "bg-white/10 text-slate-300 hover:bg-white/20"}`}>{label}</button>
+  );
 
   return (
     <div className="space-y-3">
-      {/* 검색 — 첫 화면은 넉넉하게, 결과가 있으면 줄여서 */}
-      <section className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${phase === "done" || phase === "choose" ? "" : "bg-gradient-to-br from-white via-white to-blue-50/40"}`}>
-        <div className={phase === "done" || phase === "choose" ? "p-4" : "px-5 pb-5 pt-6 sm:px-8 sm:pt-8"}>
-          {phase !== "done" && phase !== "choose" && (
-            <div className="mb-4">
-              <div className="text-[11px] font-black tracking-wide text-blue-600">통합 검색 360</div>
-              <h3 className="mt-1 text-[22px] font-black leading-tight text-slate-900 sm:text-[26px]">자산기번, 시리얼, 업체명 — 하나만 넣으면 회사에 있는 기록을 전부 모읍니다</h3>
-              <p className="mt-1.5 text-[12.5px] font-semibold text-slate-500">임대·점검·AS·접수·일정·문자·사진·미수·재계약까지 {SOURCES.length}개 표. 현재 상태 한 장, 기기별 카드, 날짜순 타임라인으로 정리해 보여 줍니다.</p>
+      {/* ── 입력 하나 — 첫 화면은 크게, 결과가 있으면 한 줄로 ── */}
+      <section className="overflow-hidden rounded-2xl shadow-sm" style={{ background: "radial-gradient(900px 320px at 15% -20%, rgba(37,99,235,.45), transparent 60%), radial-gradient(700px 300px at 95% 110%, rgba(16,185,129,.22), transparent 60%), #1E252F" }}>
+        <div className={landing ? "px-5 pb-6 pt-8 sm:px-10 sm:pb-8 sm:pt-10" : "px-4 py-3 sm:px-5"}>
+          {landing && (
+            <div className="mb-5">
+              <div className="flex items-center gap-1.5 text-[11px] font-black tracking-widest text-blue-300"><Sparkles size={13} /> FIRSTOA 기록 비서</div>
+              <h3 className="mt-2 text-[26px] font-black leading-tight text-white sm:text-[32px]">무엇이든 물어보세요</h3>
+              <p className="mt-2 max-w-2xl text-[13px] font-semibold leading-6 text-slate-300">업체명이나 자산기번·시리얼을 치면 회사에 있는 기록을 전부 모아 한 장으로 보여 주고, 문장으로 물으면 그 기록을 근거로 답합니다. 팀·기간·등급으로 추리는 질문도 됩니다.</p>
             </div>
           )}
-          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void run(input); }}>
-            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="예: B7230 · ZPBLBJST8000GQV · 무암 · 잡플러스" autoCapitalize="off" disabled={busy}
-              className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 px-4 text-[15px] font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60" />
-            <button type="submit" disabled={busy} className="h-12 shrink-0 rounded-xl bg-blue-600 px-6 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-50">
-              {phase === "resolving" ? "찾는 중…" : phase === "gathering" ? "모으는 중…" : "검색"}
+          <form className="flex items-stretch gap-2" onSubmit={(e) => { e.preventDefault(); void submit(input); }}>
+            <label className={`flex min-w-0 flex-1 items-center gap-3 rounded-2xl bg-white px-4 shadow-[0_8px_30px_rgba(0,0,0,.25)] ring-2 ring-transparent transition focus-within:ring-blue-400 ${landing ? "h-14" : "h-11"}`}>
+              <SearchIcon size={landing ? 20 : 16} className="shrink-0 text-slate-400" />
+              <input value={input} onChange={(e) => setInput(e.target.value)} disabled={busy} autoCapitalize="off" placeholder={PLACEHOLDERS[phIndex]}
+                className={`min-w-0 flex-1 bg-transparent font-bold text-slate-900 outline-none placeholder:font-semibold placeholder:text-slate-400 disabled:opacity-60 ${landing ? "text-[16px] sm:text-[17px]" : "text-[14px]"}`} />
+              {input && !busy && <button type="button" onClick={() => setInput("")} className="text-[11px] font-black text-slate-400 hover:text-slate-600">지우기</button>}
+            </label>
+            <button type="submit" disabled={busy || !input.trim()} className={`inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-blue-600 px-5 font-black text-white shadow-[0_8px_24px_rgba(37,99,235,.45)] transition hover:bg-blue-500 disabled:opacity-50 ${landing ? "h-14 text-[15px]" : "h-11 text-[13px]"}`}>
+              {phase === "resolving" ? "찾는 중…" : phase === "gathering" ? "모으는 중…" : dataAsking ? "조회 중…" : <>검색·질문 <ArrowRight size={16} /></>}
             </button>
           </form>
-          {phase !== "done" && phase !== "choose" && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[10.5px] font-bold text-slate-400">방식</span>
+            {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터에 질문")}
+            {mode === "auto" && <span className="text-[10.5px] font-semibold text-slate-500">· 문장이면 질문, 아니면 검색으로 봅니다</span>}
+          </div>
+          {landing && (
             <>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-slate-400">
-                {recent.length ? <span>최근</span> : <span>예시</span>}
-                {(recent.length ? recent : EXAMPLES).map((q) => <button key={q} type="button" disabled={busy} onClick={() => void run(q)} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-black text-slate-600 hover:border-blue-400 hover:text-blue-700 disabled:opacity-50">{q}</button>)}
-              </div>
-              {/* 질문으로 바로 찾기(업체 하나) + 전체 데이터 질문(팀·달·등급으로 추리기) */}
-              <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 sm:p-4">
-                  <div className="text-[12px] font-black text-indigo-900">업체 하나에 대해 묻기 <span className="font-bold text-indigo-500">· 질문 속 업체명·기번으로 먼저 모으고 그 기록만 근거로</span></div>
-                  <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void askDirect(directQ); }}>
-                    <input value={directQ} onChange={(e) => setDirectQ(e.target.value)} disabled={busy} placeholder="예: 잡플러스 AS 몇 번 터졌어? / B6945 어디서 썼어?" className="h-11 min-w-0 flex-1 rounded-lg border border-indigo-200 bg-white px-3 text-[13px] font-semibold outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-60" />
-                    <button type="submit" disabled={busy || directQ.trim().length < 4} className="h-11 shrink-0 rounded-lg bg-indigo-600 px-4 text-[12px] font-black text-white hover:bg-indigo-700 disabled:opacity-40">{busy ? "찾는 중…" : "물어보기"}</button>
-                  </form>
-                </div>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 sm:p-4">
-                  <div className="text-[12px] font-black text-emerald-900">전체 데이터에 묻기 <span className="font-bold text-emerald-600">· 팀·달·등급으로 추리는 질문. 표를 직접 조회해 목록으로</span></div>
-                  <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void askData(dataQ); }}>
-                    <input value={dataQ} onChange={(e) => setDataQ(e.target.value)} disabled={dataAsking} placeholder="예: C팀 미수 중 CS가 체크할 곳 / 10월 초과료 업체 중 N등급만" className="h-11 min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-3 text-[13px] font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-60" />
-                    <button type="submit" disabled={dataAsking || dataQ.trim().length < 4} className="h-11 shrink-0 rounded-lg bg-emerald-600 px-4 text-[12px] font-black text-white hover:bg-emerald-700 disabled:opacity-40">{dataAsking ? "조회 중…" : "물어보기"}</button>
-                  </form>
-                  {dataAsking && <div className="mt-2 text-[11px] font-bold text-emerald-700">표를 조회하고 답을 쓰는 중입니다… (30초~1분, 조회 최대 8번)</div>}
+              <div className="mt-5">
+                <div className="text-[11px] font-black text-slate-400">이렇게 써 보세요</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {TRY_THESE.map((t) => (
+                    <button key={t.text} type="button" disabled={busy} onClick={() => void submit(t.text, "auto")} className="group inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5 text-[12px] font-bold text-slate-100 transition hover:border-blue-400 hover:bg-white/15 disabled:opacity-50">
+                      <span className={`rounded px-1 text-[9px] font-black ${t.kind === "검색" ? "bg-blue-500/40 text-blue-100" : t.kind === "업체 질문" ? "bg-indigo-500/40 text-indigo-100" : "bg-emerald-500/40 text-emerald-100"}`}>{t.kind}</span>{t.text}
+                    </button>
+                  ))}
                 </div>
               </div>
-              {dataAnswers.map((item, i) => (
-                <div key={`${item.q}-${i}`} className="mt-3 rounded-xl border border-emerald-200 bg-white p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[11px] font-black text-emerald-700">Q. {item.q}</div>
-                    <div className="flex gap-1.5">
-                      <button type="button" onClick={() => { void navigator.clipboard.writeText(item.a).then(() => notify("답을 복사했습니다", "success")); }} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-600 hover:bg-slate-50">복사</button>
-                      {i === 0 && <button type="button" onClick={() => setDataAnswers([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-500 hover:bg-slate-50">지우기</button>}
-                    </div>
-                  </div>
-                  <div className="mt-1.5 whitespace-pre-wrap text-[13px] font-semibold leading-6 text-slate-800">{item.a}</div>
-                  {item.rows.length > 0 && (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-[11px] font-black text-slate-500">근거로 쓴 마지막 조회 결과 {item.rows.length}행 ({item.table})</summary>
-                      <div className="mt-1.5 overflow-x-auto rounded-lg border border-slate-200">
-                        <table className="min-w-full text-[11px]">
-                          <thead className="bg-slate-50 text-left font-black text-slate-500">{(() => { const cols = Object.keys(item.rows[0]).slice(0, 8); return <tr>{cols.map((c) => <th key={c} className="px-2 py-1">{c}</th>)}</tr>; })()}</thead>
-                          <tbody>{item.rows.slice(0, 60).map((r, j) => <tr key={j} className="border-t border-slate-100">{Object.keys(item.rows[0]).slice(0, 8).map((c) => <td key={c} className="max-w-[220px] truncate px-2 py-1 font-semibold text-slate-700">{String(r[c] ?? "")}</td>)}</tr>)}</tbody>
-                        </table>
-                      </div>
-                    </details>
-                  )}
-                  {item.calls.length > 0 && <details className="mt-1"><summary className="cursor-pointer text-[10px] font-bold text-slate-400">어떻게 조회했나 ({item.calls.length}번)</summary><ul className="mt-1 space-y-0.5 font-mono text-[10px] text-slate-500">{item.calls.map((c, j) => <li key={j} className="break-all">{c}</li>)}</ul></details>}
-                  <div className="mt-1.5 text-[10px] font-bold text-slate-400">표를 직접 조회해 만든 답입니다. 미수·초과료는 팀 칸이 없어 일정·접수·점검 기록으로 팀을 붙였습니다. 중요한 판단은 원본 표를 확인하세요.</div>
+              {recent.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="font-black text-slate-500">최근</span>
+                  {recent.map((q) => <button key={q} type="button" disabled={busy} onClick={() => void submit(q, "auto")} className="rounded-full bg-white/[0.06] px-2.5 py-1 font-bold text-slate-300 hover:bg-white/15 hover:text-white disabled:opacity-50">{q.length > 28 ? `${q.slice(0, 28)}…` : q}</button>)}
                 </div>
-              ))}
+              )}
             </>
           )}
+          {dataAsking && <div className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-[12px] font-bold text-emerald-100">표를 조회하고 답을 쓰는 중입니다… 30초에서 1분 정도 걸립니다 (조회 최대 8번)</div>}
+          {routeNote && !dataAsking && <div className="mt-2 text-[11px] font-bold text-slate-400">{routeNote}</div>}
         </div>
-        {phase !== "done" && phase !== "choose" && (
-          <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3 sm:px-8">
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-500">
-              <span className="font-black text-slate-700">회사 기록 전체 {totalAll ? `${totalAll.toLocaleString()}건` : "세는 중…"}</span>
-              <span className="text-slate-400">· 검색 한 번에 이 모든 표를 뒤집니다</span>
+        {landing && (
+          <div className="border-t border-white/10 bg-black/20 px-5 py-3 sm:px-10">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
+              <span className="font-black text-white">회사 기록 전체 {totalAll ? `${totalAll.toLocaleString()}건` : "세는 중…"}</span>
+              <span className="font-bold text-slate-400">표 {SOURCES.length}개를 한 번에 뒤집니다</span>
+              <button type="button" onClick={() => setShowTotals((v) => !v)} className="ml-auto text-[11px] font-black text-blue-300 hover:text-blue-200">{showTotals ? "표별 건수 접기" : "표별 건수 보기"}</button>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {SOURCES.filter((s) => s.table !== "plan_memos").map((s) => (
-                <span key={s.table} className={`rounded border px-1.5 py-0.5 text-[10px] font-black ${s.tone}`}>{s.label} <span className="tabular-nums opacity-80">{totals[s.label] == null ? "…" : totals[s.label]!.toLocaleString()}</span></span>
-              ))}
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-4">
-              {[["① 현재 상태", "주소·키맨·등급·미수·재계약·불만·마지막 점검/AS를 한 장에"], ["② 기기", "기기별 계약 기간·임대료·마지막 점검/AS, 누르면 그 기기 기록만"], ["③ 어디에 몇 건", "표별 건수(0건도)와 이름이 비슷한 기록은 따로"], ["④ 타임라인", "월별로 묶어 날짜순, 종류·글자·기기로 걸러 보기, 원문 보기"]].map(([t, d]) => (
-                <div key={t} className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-[11px] font-black text-slate-800">{t}</div><div className="mt-0.5 text-[10.5px] font-semibold leading-4 text-slate-500">{d}</div></div>
-              ))}
-            </div>
+            {showTotals && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {SOURCES.filter((s) => s.table !== "plan_memos").map((s) => <span key={s.table} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-200">{s.label} <span className="tabular-nums text-slate-400">{totals[s.label] == null ? "…" : totals[s.label]!.toLocaleString()}</span></span>)}
+              </div>
+            )}
           </div>
         )}
       </section>
+
+      {/* 전체 데이터 질문의 답 */}
+      {dataAnswers.map((item, i) => (
+        <section key={`${item.q}-${i}`} className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-black text-emerald-700"><span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px]">전체 데이터</span>Q. {item.q}</div>
+            <div className="flex gap-1.5">
+              <button type="button" onClick={() => { void navigator.clipboard.writeText(item.a).then(() => notify("답을 복사했습니다", "success")); }} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-600 hover:bg-slate-50">복사</button>
+              <button type="button" onClick={() => setDataAnswers((cur) => cur.filter((_, j) => j !== i))} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-500 hover:bg-slate-50">지우기</button>
+            </div>
+          </div>
+          <div className="mt-2 whitespace-pre-wrap text-[13.5px] font-semibold leading-7 text-slate-800">{item.a}</div>
+          {item.rows.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-[11px] font-black text-slate-500">근거로 쓴 마지막 조회 결과 {item.rows.length}행 ({item.table})</summary>
+              <div className="mt-1.5 overflow-x-auto rounded-lg border border-slate-200">
+                <table className="min-w-full text-[11px]">
+                  <thead className="bg-slate-50 text-left font-black text-slate-500"><tr>{Object.keys(item.rows[0]).slice(0, 8).map((c) => <th key={c} className="px-2 py-1">{c}</th>)}</tr></thead>
+                  <tbody>{item.rows.slice(0, 60).map((r, j) => <tr key={j} className="border-t border-slate-100">{Object.keys(item.rows[0]).slice(0, 8).map((c) => <td key={c} className="max-w-[220px] truncate px-2 py-1 font-semibold text-slate-700">{String(r[c] ?? "")}</td>)}</tr>)}</tbody>
+                </table>
+              </div>
+            </details>
+          )}
+          {item.calls.length > 0 && <details className="mt-1"><summary className="cursor-pointer text-[10px] font-bold text-slate-400">어떻게 조회했나 ({item.calls.length}번)</summary><ul className="mt-1 space-y-0.5 font-mono text-[10px] text-slate-500">{item.calls.map((c, j) => <li key={j} className="break-all">{c}</li>)}</ul></details>}
+          <div className="mt-1.5 text-[10px] font-bold text-slate-400">표를 직접 조회해 만든 답입니다. 미수·초과료는 팀 칸이 없어 일정·접수·점검 기록으로 팀을 붙였습니다. 중요한 판단은 원본 표를 확인하세요.</div>
+        </section>
+      ))}
+
+      {landing && (
+        <section className="grid gap-2 sm:grid-cols-4">
+          {[["① 현재 상태", "주소·키맨·등급·미수·재계약·불만·현장 메모·마지막 점검/AS를 한 장에"], ["② 기기", "기기별 계약 기간·임대료·마지막 점검/AS, 누르면 그 기기 기록만"], ["③ 어디에 몇 건", "표별 건수(0건도)와 이름이 비슷한 기록은 따로"], ["④ 타임라인", "월별로 묶어 날짜순, 종류·글자·기기로 걸러 보기, 원문 보기"]].map(([t, d]) => (
+            <div key={t} className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 shadow-sm"><div className="text-[12px] font-black text-slate-800">{t}</div><div className="mt-0.5 text-[11px] font-semibold leading-4 text-slate-500">{d}</div></div>
+          ))}
+        </section>
+      )}
 
       {/* 후보 고르기 */}
       {phase === "choose" && (
@@ -320,7 +367,7 @@ export default function Search360({ author }: { author: string }) {
                 <div className="flex shrink-0 flex-wrap gap-1.5">
                   <button type="button" onClick={() => setHistVendor(entity.name)} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">통합이력 ↗</button>
                   <button type="button" onClick={() => { void navigator.clipboard.writeText(`${entity.name} (${entity.code || entity.leaseCode})\n주소 ${state.address}\n키맨 ${state.keyman}\n전화 ${state.tel}`).then(() => notify("복사했습니다", "success")); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">복사</button>
-                  <button type="button" onClick={() => { setPhase("idle"); setEntity(null); setResults([]); setInput(""); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">새 검색</button>
+                  <button type="button" onClick={() => { setPhase("idle"); setEntity(null); setResults([]); setInput(""); setRouteNote(""); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">새 검색</button>
                 </div>
               </div>
             </div>
@@ -427,7 +474,7 @@ export default function Search360({ author }: { author: string }) {
             ))}
           </section>
 
-          {/* ③-2 기종 참고 자료 — 업체 기록은 아니지만 현장에서 같이 본다 */}
+          {/* ③-2 기종 참고 자료 */}
           {modelRefs.some((m) => m.notes.count || m.docs.count || m.playbook.count) && (
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="text-[12px] font-black text-slate-700">이 업체 기종의 참고 자료 <span className="font-bold text-slate-400">· 처리이력·가이드·족보 (복합기 학습 탭)</span></div>

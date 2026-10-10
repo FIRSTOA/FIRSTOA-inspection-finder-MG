@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildExactQuery, buildLooseQuery, buildRawQuery, dateOf, daysSince, deriveState, entityTokensFromQuestion, identKey, inList, isOtherVendor, looksLikeDevice, matchesEntity, modelKey, phonesIn, SOURCES, toEvent, toEvents, withKeys, type Entity, type SourceResult } from "../src/entity360";
+import { buildExactQuery, buildLooseQuery, buildRawQuery, coreNameOf, dateOf, daysSince, deriveState, entityTokensFromQuestion, identKey, inList, isOtherVendor, looksLikeDevice, matchesEntity, modelKey, phonesIn, SOURCES, toEvent, toEvents, withKeys, type Entity, type SourceResult } from "../src/entity360";
 
 const src = (table: string) => SOURCES.find((s) => s.table === table)!;
 const entity: Entity = withKeys({ code: "23013", leaseCode: "21462", name: "주식회사 무암", names: ["주식회사 무암", "무암(주)"], serials: ["ZPBLBJST8000GQV", "B1"], assets: ["A5571"], core: "무암", query: "무암", leaseRows: [] });
@@ -36,6 +36,12 @@ describe("entity360 — 키·조건 조립", () => {
     expect(matchesEntity(src("jeomgeom"), { _업체명: "무암" }, entity)).toBe(true);
     expect(matchesEntity(src("jeomgeom"), { _업체명: "(주)무암 분기마감" }, entity)).toBe(true);
     expect(matchesEntity(src("jeomgeom"), { _업체명: "무암건설" }, entity)).toBe(false);
+    // 이름 키 앞부분 일치(짧은 쪽 5자 이상): 특이사항 "세무법인 건영" ↔ 마스터 "세무법인 건영 논현지점"
+    const gunyoung = withKeys({ ...entity, name: "세무법인 건영 논현지점", names: ["세무법인 건영 논현지점"], core: coreNameOf("세무법인 건영 논현지점") });
+    expect(gunyoung.core).toBe("건영");
+    expect(matchesEntity(src("vendor_notes"), { vendor: "세무법인 건영" }, gunyoung)).toBe(true);
+    expect(matchesEntity(src("vendor_notes"), { vendor: "주식회사 건영" }, gunyoung)).toBe(false);
+    expect(matchesEntity(src("vendor_notes"), { vendor: "세무법인" }, gunyoung)).toBe(false);
     expect(matchesEntity(src("jeomgeom"), { _업체명: "다른곳", 자산기번: "a-5571" }, entity)).toBe(true);
     expect(matchesEntity(src("jeomgeom"), { _업체명: "다른곳", _기번목록: ["x", "zpblbjst8000gqv"] }, entity)).toBe(true);
   });
