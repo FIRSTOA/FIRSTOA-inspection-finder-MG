@@ -126,11 +126,12 @@ Deno.serve(async (req) => {
       const dry = body.dry === true;
       const sbUrl2 = Deno.env.get("SUPABASE_URL") || ""; const sbKey2 = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
       const sbHeaders2 = { apikey: sbKey2, Authorization: `Bearer ${sbKey2}`, "Content-Type": "application/json" };
-      const { headers: solapiHeaders } = await solapiAuth();
       const start = new Date(Date.now() - days * 86400_000).toISOString();
-      let startKey = ""; let fetched = 0; let inserted = 0; let skipped = 0; const errors: string[] = []; const byType: Record<string, number> = {}; let sample: unknown = null;
-      for (let page = 0; page < 60; page += 1) {
+      let startKey = String(body.startKey || ""); let fetched = 0; let inserted = 0; let skipped = 0; const errors: string[] = []; const byType: Record<string, number> = {}; let sample: unknown = null;
+      // 한 호출에 15쪽(7,500건)까지 — 함수 시간 제한 안에서 끝내고 nextKey 를 돌려주면 앱이 이어서 부른다. 서명은 요청마다 새로(같은 서명 재사용은 400 DuplicatedSignature)
+      for (let page = 0; page < 15; page += 1) {
         const url = `https://api.solapi.com/messages/v4/list?limit=500&dateType=CREATED&startDate=${encodeURIComponent(start)}${startKey ? `&startKey=${encodeURIComponent(startKey)}` : ""}`;
+        const { headers: solapiHeaders } = await solapiAuth();
         const res = await fetch(url, { headers: solapiHeaders });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { errors.push(`솔라피 ${res.status}: ${JSON.stringify(data).slice(0, 300)}`); break; }
@@ -153,7 +154,7 @@ Deno.serve(async (req) => {
           const rows = ok.filter((m) => !existing.has(String(m.messageId))).map((m) => {
             const when = String(m.dateCreated || now);
             return {
-              source_type: "direct:import", source_id: null, channel: "sms", recipient: String(m.to || ""), message: String(m.text || "").slice(0, 2000),
+              source_type: "direct:import", source_id: null, channel: String(m.type || "") === "ATA" || String(m.type || "") === "CTA" ? "kakao" : "sms", recipient: String(m.to || ""), message: String(m.text || "").slice(0, 2000),
               payload: { type: "import", message_id: String(m.messageId), solapi_type: String(m.type || ""), mms: String(m.type || "") === "MMS", status: String(m.status || ""), statusCode: String(m.statusCode || "") },
               scheduled_at: when, status: "sent", created_by: "솔라피 가져오기", sent_at: when, error: "", created_at: when, updated_at: now,
             };
@@ -168,7 +169,7 @@ Deno.serve(async (req) => {
         startKey = String(data.nextKey || "");
         if (!startKey) break;
       }
-      return Response.json({ ok: true, dry, days, fetched, inserted, skipped, byType, sample, errors }, { headers: corsHeaders });
+      return Response.json({ ok: true, dry, days, fetched, inserted, skipped, byType, sample, errors, nextKey: startKey || "" }, { headers: corsHeaders });
     }
     if (body.action === "dispatch_due") {
       const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
