@@ -98,7 +98,7 @@ export default function Search360({ author }: { author: string }) {
   }, []);
   const fmtK = (n: number) => n.toLocaleString();
   const usageLine = (u?: Usage, c?: Cost) => (u
-    ? `토큰 입력 ${fmtK(u.input)}${u.cached ? `(캐시 ${fmtK(u.cached)})` : ""} · 출력 ${fmtK(u.output)}${u.reasoning ? `(추리 ${fmtK(u.reasoning)})` : ""} · 왕복 ${u.rounds}${c?.priced && c.usd != null ? ` · 약 $${c.usd.toFixed(4)}` : " · 단가 미설정(관리 app_config AI_PRICE_IN/OUT)"}${c?.model ? ` · ${c.model}` : ""}`
+    ? `토큰 입력 ${fmtK(u.input)}${u.cached ? `(캐시 ${fmtK(u.cached)})` : ""} · 출력 ${fmtK(u.output)}${u.reasoning ? `(추리 ${fmtK(u.reasoning)})` : ""} · 왕복 ${u.rounds}${c?.priced && c.usd != null ? ` · 약 $${c.usd.toFixed(4)}` : " · 금액 계산 불가(이 모델 가격 미등록)"}${c?.model ? ` · ${c.model}` : ""}`
     : "");
   const [foundBy, setFoundBy] = useState("");
   // 전체 질문(data-ask) — 표를 직접 조회

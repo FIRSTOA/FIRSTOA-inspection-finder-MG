@@ -63,9 +63,9 @@ export default function CostWidget() {
         {ai && ai !== "none" && (
           <>
             <span className="text-[12px] font-bold text-slate-700">AI 질문 <b className="text-slate-900">{total}건</b> · 토큰 {ai.tokens.toLocaleString()}</span>
-            {ai.priced
-              ? <span className="text-[12px] font-bold text-slate-700">지금까지 <b className="text-slate-900">${aiUsd.toFixed(2)}</b> ≈ {won(aiUsd * rate)} · 월말 예상 <b className="text-rose-700">${project(aiUsd).toFixed(2)}</b> ≈ {won(project(aiUsd) * rate)}</span>
-              : <span className="text-[11.5px] font-bold text-amber-700">단가 미설정 — 관리 app_config 에 AI_PRICE_IN·AI_PRICE_OUT(100만 토큰당 달러)을 넣으면 금액이 보입니다</span>}
+            {total === 0
+              ? <span className="text-[11.5px] font-bold text-slate-400">이번 달 아직 질문이 없습니다 — 통합검색에서 질문하면 여기에 금액이 쌓입니다</span>
+              : <span className="text-[12px] font-bold text-slate-700">지금까지 <b className="text-slate-900">${aiUsd.toFixed(2)}</b> ≈ {won(aiUsd * rate)} · 월말 예상 <b className="text-rose-700">${project(aiUsd).toFixed(2)}</b> ≈ {won(project(aiUsd) * rate)}{!ai.priced ? <span className="text-amber-700"> (단가 반영 전 기록)</span> : null}</span>}
           </>
         )}
         <span className="text-[12px] font-bold text-slate-700">문자 <b className="text-slate-900">{msg.sms + msg.lms + msg.mms}건</b>{msg.krw != null ? <> · <b className="text-slate-900">{won(msg.krw)}</b> · 월말 예상 <b className="text-rose-700">{won(project(msg.krw))}</b></> : <span className="text-slate-400"> (단가 미설정)</span>}</span>
