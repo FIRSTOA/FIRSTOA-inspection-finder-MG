@@ -83,7 +83,7 @@ async function logDirect(sbUrl: string, h: Record<string, string>, r: { channel:
   const now = new Date().toISOString();
   try {
     await fetch(`${sbUrl}/rest/v1/message_jobs`, { method: "POST", headers: { ...h, Prefer: "return=minimal" }, body: JSON.stringify({
-      source_type: `direct:${r.type}`, source_id: null, channel: r.channel, recipient: r.to, message: r.text.slice(0, 2000),
+      source_type: `direct:${r.type}`, source_id: crypto.randomUUID(), channel: r.channel, recipient: r.to, message: r.text.slice(0, 2000),
       payload: { type: r.type, vendor: r.vendor, author: r.author, mms: !!r.mms }, scheduled_at: now, status: r.status, created_by: r.author || "앱",
       sent_at: r.status === "sent" ? now : null, error: r.error || "", created_at: now, updated_at: now,
     }) });
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
           const rows = ok.filter((m) => !existing.has(String(m.messageId))).map((m) => {
             const when = String(m.dateCreated || now);
             return {
-              source_type: "direct:import", source_id: null, channel: String(m.type || "") === "ATA" || String(m.type || "") === "CTA" ? "kakao" : "sms", recipient: String(m.to || ""), message: String(m.text || "").slice(0, 2000),
+              source_type: "direct:import", source_id: crypto.randomUUID(), channel: String(m.type || "") === "ATA" || String(m.type || "") === "CTA" ? "kakao" : "sms", recipient: String(m.to || ""), message: String(m.text || "").slice(0, 2000),
               payload: { type: "import", message_id: String(m.messageId), solapi_type: String(m.type || ""), mms: String(m.type || "") === "MMS", status: String(m.status || ""), statusCode: String(m.statusCode || "") },
               scheduled_at: when, status: "sent", created_by: "솔라피 가져오기", sent_at: when, error: "", created_at: when, updated_at: now,
             };
