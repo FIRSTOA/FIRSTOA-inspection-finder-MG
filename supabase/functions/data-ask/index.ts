@@ -17,6 +17,8 @@ const ANON = Deno.env.get("SUPABASE_ANON_KEY") || "";
 // 허용 표·칸 — 모델은 이 밖을 볼 수 없다. desc 는 모델에게 주는 설명(값 형식·주의)
 type Cat = { desc: string; cols: string[]; hidden?: string; date?: string; team?: string; grade?: string; vendor: string };
 const CATALOG: Record<string, Cat> = {
+  vendor_notes: { desc: "업체 특이사항(현장 메모). work_start 출근시간은 '9시'·'9시반'·'11시 이후' 같은 글, lunch_time 점심시간도 글('12~1시'), note 는 주차·방문 요령 메모. 글이라 ilike 로 찾고(예: 9시대는 work_start=ilike.*9시* 뒤 사람이 읽어 거른다), 팀은 vendor_team 으로. '출근 시간이 X인 곳'·'점심시간'·'특이사항' 질문은 이 표.", vendor: "vendor", date: "updated_at",
+    cols: ["id", "vendor", "work_start", "lunch_time", "note", "author", "pinned", "created_at", "updated_at"] },
   misu: { desc: "미수(밀린 임대료). 입력일은 'YYYY-MM-DD 0:00' 텍스트. 지역 칸은 대부분 비어 있어 팀은 vendor_team 으로 찾는다. 등급 칸도 비거나 섞여 있다.", vendor: "_업체명", date: "입력일", team: "지역", grade: "등급", hidden: "_hidden=not.is.true",
     cols: ["id", "입력일", "_업체명", "등급", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "관리담당자", "업체담당자", "휴대폰번호", "입금약속일", "방문내용", "고객반응", "약속일", "후속담당자", "특이사항", "최종상태" ] },
   overage: { desc: "초과료(기본 매수 초과 청구). 날짜 'YYYY-MM-DD'. 팀 칸이 없다 → vendor_team. 등급 N/NN/S/SS/V. 마감방식 분기/매월/단순마감/반기/1년누적.", vendor: "_업체명", date: "날짜", grade: "등급", hidden: "_hidden=not.is.true",

@@ -35,6 +35,72 @@ async function solapiSend(to: string, text: string, opts: { imageId?: string; su
   if (failed.length) throw new Error(`솔라피 발송 실패: ${failed[0]?.statusMessage || "알 수 없는 오류"}`);
 }
 
+// ---- 발송 제한·기록 (2026-10-10) ----
+// 앱 화면이 보내는 종류만 받는다(해피콜·홍보·고객 리포트·점검 리포트 MMS·분기 안내 테스트). 모르는 종류는 거절.
+const KNOWN_TYPES = new Set(["happycall", "promotion", "report", "inspection_report", "quarter_notice_test"]);
+const kstDayStartIso = () => { const now = new Date(); const kst = new Date(now.getTime() + 9 * 3600_000); kst.setUTCHours(0, 0, 0, 0); return new Date(kst.getTime() - 9 * 3600_000).toISOString(); };
+async function countRows(sbUrl: string, h: Record<string, string>, query: string): Promise<number> {
+  try {
+    const res = await fetch(`${sbUrl}/rest/v1/message_jobs?select=id&${query}&limit=1`, { headers: { ...h, Prefer: "count=exact" } });
+    const range = res.headers.get("content-range") || "";                 // "0-0/123"
+    return Number(range.split("/")[1] || 0) || 0;
+  } catch { return 0; }
+}
+async function configNumber(sbUrl: string, h: Record<string, string>, key: string): Promise<number> {
+  try {
+    const res = await fetch(`${sbUrl}/rest/v1/app_config?select=value&key=eq.${encodeURIComponent(key)}&limit=1`, { headers: h });
+    const rows = await res.json();
+    return Number(rows?.[0]?.value || 0) || 0;
+  } catch { return 0; }
+}
+/** 시간당·하루·수신번호당 상한, 그리고 하루 건수가 30일 평균의 3배를 넘으면 차단. app_config SMS_HOURLY_CAP / SMS_DAILY_CAP 로 바꿀 수 있다 */
+async function checkSendLimits(sbUrl: string, h: Record<string, string>, p: { channel: string; to: string; type: string }): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (!sbUrl || !h.apikey) return { ok: true };
+  const nowMs = Date.now();
+  const hourAgo = new Date(nowMs - 3600_000).toISOString();
+  const dayStart = kstDayStartIso();
+  const d30 = new Date(nowMs - 30 * 86400_000).toISOString();
+  const base = `source_type=like.direct*&status=eq.sent&channel=eq.${encodeURIComponent(p.channel)}`;
+  const [hour, today, toToday, last30, hourlyCap, dailyCap] = await Promise.all([
+    countRows(sbUrl, h, `${base}&sent_at=gte.${encodeURIComponent(hourAgo)}`),
+    countRows(sbUrl, h, `${base}&sent_at=gte.${encodeURIComponent(dayStart)}`),
+    countRows(sbUrl, h, `${base}&recipient=eq.${encodeURIComponent(p.to)}&sent_at=gte.${encodeURIComponent(dayStart)}`),
+    countRows(sbUrl, h, `${base}&sent_at=gte.${encodeURIComponent(d30)}`),
+    configNumber(sbUrl, h, p.channel === "email" ? "EMAIL_HOURLY_CAP" : "SMS_HOURLY_CAP"),
+    configNumber(sbUrl, h, p.channel === "email" ? "EMAIL_DAILY_CAP" : "SMS_DAILY_CAP"),
+  ]);
+  const avgDaily = last30 / 30;
+  const hCap = hourlyCap || 40;
+  const dCap = dailyCap || Math.max(80, Math.ceil(avgDaily * 3));   // 평소(30일 평균)의 3배, 바닥 80
+  const perTo = 5;
+  if (toToday >= perTo) return { ok: false, reason: `같은 번호(${p.to})로 오늘 ${toToday}건 — 하루 ${perTo}건까지` };
+  if (hour >= hCap) return { ok: false, reason: `최근 1시간 ${hour}건 — 시간당 ${hCap}건까지(관리 탭 app_config SMS_HOURLY_CAP)` };
+  if (today >= dCap) return { ok: false, reason: `오늘 ${today}건 — 하루 ${dCap}건까지(30일 평균 ${avgDaily.toFixed(1)}건의 3배, SMS_DAILY_CAP 로 조정)` };
+  return { ok: true };
+}
+async function logDirect(sbUrl: string, h: Record<string, string>, r: { channel: string; to: string; text: string; type: string; vendor: string; author: string; status: "sent" | "failed" | "blocked"; error?: string; mms?: boolean }): Promise<void> {
+  if (!sbUrl || !h.apikey) return;
+  const now = new Date().toISOString();
+  try {
+    await fetch(`${sbUrl}/rest/v1/message_jobs`, { method: "POST", headers: { ...h, Prefer: "return=minimal" }, body: JSON.stringify({
+      source_type: `direct:${r.type}`, source_id: null, channel: r.channel, recipient: r.to, message: r.text.slice(0, 2000),
+      payload: { type: r.type, vendor: r.vendor, author: r.author, mms: !!r.mms }, scheduled_at: now, status: r.status, created_by: r.author || "앱",
+      sent_at: r.status === "sent" ? now : null, error: r.error || "", created_at: now, updated_at: now,
+    }) });
+  } catch { /* 기록 실패는 발송을 막지 않는다 */ }
+}
+/** 차단되면 담당자에게 웹푸시 — 1시간에 한 번만 */
+async function alertBlocked(sbUrl: string, h: Record<string, string>, reason: string, p: { to: string; type: string; author: string }): Promise<void> {
+  if (!sbUrl || !h.apikey) return;
+  const recent = await countRows(sbUrl, h, `source_type=like.direct*&status=eq.blocked&created_at=gte.${encodeURIComponent(new Date(Date.now() - 3600_000).toISOString())}`);
+  if (recent > 1) return;
+  try {
+    await fetch(`${sbUrl}/functions/v1/push-send`, { method: "POST", headers: h, body: JSON.stringify({
+      title: "고객 문자 발송이 제한에 걸렸어요", body: `${reason} · 종류 ${p.type} · 보낸이 ${p.author || "모름"} · 수신 ${p.to}`, tag: "sms-blocked", category: "admin", targets: ["이민구"], url: "/",
+    }) });
+  } catch { /* 알림 실패 무시 */ }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -48,6 +114,9 @@ Deno.serve(async (req) => {
   try {
     const webhookUrl = Deno.env.get("CUSTOMER_MESSAGE_WEBHOOK_URL");
     if (!webhookUrl) return Response.json({ error: "CUSTOMER_MESSAGE_WEBHOOK_URL secret이 없습니다." }, { status: 500, headers: corsHeaders });
+    const sbUrl = Deno.env.get("SUPABASE_URL") || "";
+    const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const sbHeaders = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, "Content-Type": "application/json" };
 
     const body = await req.json();
     if (body.action === "dispatch_due") {
@@ -106,11 +175,31 @@ Deno.serve(async (req) => {
     const validTarget = channel === "email" ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) : /^01\d{8,9}$/.test(to);
     if (!validTarget || !text) return Response.json({ error: "수신처 또는 메시지가 올바르지 않습니다." }, { status: 400, headers: corsHeaders });
 
+    // ── 발송 제한(2026-10-10 점검): 이 함수는 공개 anon 키로 누구나 부를 수 있다. 비밀값은 번들에 들어가면 공개라 의미가 없고,
+    //    대신 "평소보다 훨씬 많이 나가면 막는다"(사용자 결정) — 시간당·하루·수신번호당 건수 상한 + 30일 평균의 3배 넘으면 차단 + 담당자 푸시.
+    //    직접 발송은 전부 message_jobs 에 기록(source_type direct)해서 통합검색·집계·제한 계산의 근거로 쓴다.
+    const type = String(body.type || "").trim();
+    const author = String(body.author || "").trim();
+    const vendor = String(body.vendor || "").trim();
+    if (!KNOWN_TYPES.has(type)) return Response.json({ error: `알 수 없는 발송 종류(${type || "없음"}) — 앱 화면에서 보내 주세요` }, { status: 400, headers: corsHeaders });
+    const limit = await checkSendLimits(sbUrl, sbHeaders, { channel, to, type });
+    if (!limit.ok) {
+      await logDirect(sbUrl, sbHeaders, { channel, to, text, type, vendor, author, status: "blocked", error: limit.reason });
+      await alertBlocked(sbUrl, sbHeaders, limit.reason, { to, type, author });
+      return Response.json({ error: `발송 제한: ${limit.reason}` }, { status: 429, headers: corsHeaders });
+    }
+
     if (channel === "sms") {
       // imageBase64(JPG, ≤200KB)가 오면 MMS로 — 사진이 문자에 바로 뜬다
       const imageBase64 = typeof body.imageBase64 === "string" ? body.imageBase64.replace(/^data:image\/\w+;base64,/, "") : "";
       const imageId = imageBase64 ? await solapiUploadImage(imageBase64) : "";
-      await solapiSend(to, text, imageId ? { imageId, subject: String(body.subject || "") } : {}); // 실패 시 throw → 아래 catch가 오류로 응답
+      try {
+        await solapiSend(to, text, imageId ? { imageId, subject: String(body.subject || "") } : {}); // 실패 시 throw → 아래 catch가 오류로 응답
+      } catch (e) {
+        await logDirect(sbUrl, sbHeaders, { channel, to, text, type, vendor, author, status: "failed", error: (e as Error).message });
+        throw e;
+      }
+      await logDirect(sbUrl, sbHeaders, { channel, to, text, type, vendor, author, status: "sent", mms: !!imageId });
       return Response.json({ ok: true, provider: "solapi", mms: !!imageId }, { headers: corsHeaders });
     }
     const response = await fetch(webhookUrl, {
@@ -123,8 +212,9 @@ Deno.serve(async (req) => {
     // GAS 웹훅은 항상 HTTP 200을 주므로 본문의 ok 플래그로 실패를 감지한다
     try {
       const parsed = JSON.parse(detail);
-      if (parsed && parsed.ok === false) return Response.json({ error: `발송 실패: ${String(parsed.error || "").slice(0, 200)}` }, { status: 502, headers: corsHeaders });
+      if (parsed && parsed.ok === false) { await logDirect(sbUrl, sbHeaders, { channel, to, text, type, vendor, author, status: "failed", error: String(parsed.error || "").slice(0, 200) }); return Response.json({ error: `발송 실패: ${String(parsed.error || "").slice(0, 200)}` }, { status: 502, headers: corsHeaders }); }
     } catch { /* JSON이 아니면 성공으로 간주 */ }
+    await logDirect(sbUrl, sbHeaders, { channel, to, text, type, vendor, author, status: "sent" });
     return Response.json({ ok: true }, { headers: corsHeaders });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: corsHeaders });

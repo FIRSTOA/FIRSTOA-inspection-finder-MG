@@ -13,7 +13,7 @@ import { notify } from "./toast";
 import { invokeEdgeFunction } from "./supabase";
 import UnifiedHistory from "./UnifiedHistory";
 import {
-  buildEntity, countRows, daysSince, deriveState, entityTokensFromQuestion, gather, gatherModelRefs, identKey, isOtherVendor, rawTextOf, resolveCandidates, SOURCES, toEvents,
+  buildEntity, countRows, daysSince, deriveState, entityTokensFromQuestion, gather, gatherModelRefs, identKey, isOtherVendor, isStrongCandidate, rawTextOf, resolveCandidates, SOURCES, toEvents,
   type Candidate, type Entity, type EventItem, type Group, type ModelRef, type SourceResult, type State,
 } from "./entity360";
 
@@ -169,7 +169,8 @@ export default function Search360({ author }: { author: string }) {
   const askEntity = async (q: string): Promise<boolean> => {
     const tokens = entityTokensFromQuestion(q);
     for (const token of tokens) {
-      const list = await resolveCandidates(token).catch(() => [] as Candidate[]);
+      // 확실한 후보만 — "출근시간" 같은 조건 말이 별칭 부분 일치로 엉뚱한 업체에 붙어 "업체에 질문"으로 잘못 가던 것(2026-10-10)
+      const list = (await resolveCandidates(token).catch(() => [] as Candidate[])).filter((c) => isStrongCandidate(c, token));
       if (!list.length) continue;
       setFoundBy(`질문의 "${token}"으로 찾았습니다`);
       await run(token, q);
@@ -192,7 +193,7 @@ export default function Search360({ author }: { author: string }) {
     const dataLike = DATA_RE.test(text);
     if (!dataLike && await askEntity(text)) return;
     setPhase("idle");
-    if (!dataLike && entityTokensFromQuestion(text).length) setRouteNote("질문 속 이름이 거래처에 없어 전체 데이터에 물었습니다");
+    if (!dataLike && entityTokensFromQuestion(text).length) setRouteNote("질문에 확실한 업체·기번이 없어 전체 데이터에 물었습니다 — 특정 업체 질문이면 업체명을 함께 적어 주세요");
     else setRouteNote("팀·기간·등급으로 추리는 질문으로 보여 전체 데이터에 물었습니다");
     await askData(text);
   };
