@@ -376,7 +376,7 @@ export default function Search360({ author }: { author: string }) {
               <Field label="키맨" value={state.keyman} from={state.keymanFrom} />
               <Field label="전화" value={state.tel} />
               <Field label="마지막 점검" value={state.lastInspect ? `${state.lastInspect} (${fmtDays(state.lastInspect)})` : "기록 없음"} tone={state.lastInspect && (daysSince(state.lastInspect) || 0) > 90 ? "text-amber-700" : ""} />
-              <Field label="마지막 AS" value={state.lastAs ? `${state.lastAs} (${fmtDays(state.lastAs)})` : "기록 없음"} />
+              <Field label="마지막 AS" value={state.lastAs ? `${state.lastAs} (${fmtDays(state.lastAs)})` : "기록 없음"} from={state.lastAsFrom === "AS 보고" ? "" : state.lastAsFrom ? `${state.lastAsFrom} 기준 · AS 보고는 아직 없음` : ""} />
               <Field label="마지막 방문기록" value={state.lastVisit ? `${state.lastVisit} (${fmtDays(state.lastVisit)})` : "기록 없음"} />
             </div>
             {/* 현장 메모 — 특이사항(출근·점심·주의)·워킨맵 메모·임대 조건. 가기 전에 꼭 봐야 하는 것이라 상태 카드 안에 */}

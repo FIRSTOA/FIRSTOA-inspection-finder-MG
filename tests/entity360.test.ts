@@ -122,7 +122,11 @@ describe("entity360 — 날짜·사건·현재 상태", () => {
     expect(s.openReceptions).toBe(1);   // 느슨 일치는 세지 않는다
     expect(s.total).toBe(10);
     expect(s.notes[0]).toMatchObject({ kind: "특이사항", pinned: true, text: "출근 9시 · 점심 12~13시 · ★ 카드키 받을 것" });
-    expect(s.notes.filter((n) => n.kind === "워킨맵").map((n) => n.text)).toEqual(["D450 / 123", "방문주기 1개월", "엘베 없음"]);
+    expect(s.notes.filter((n) => n.kind === "워킨맵").map((n) => n.text)).toEqual(["D450 / 123 · 방문주기 1개월 · 엘베 없음"]); // 장소당 한 줄
+    // 마지막 AS: AS 보고(없음)보다 늦은 접수(복합기 AS)가 있으면 그 날짜 + 출처
+    const s2 = deriveState(e, [...results, { source: src("service_receptions"), exact: [{ id: 20, receipt_date: "2026-10-06", type: "복합기 AS", status: "접수" }], loose: [], ok: true }], new Date("2026-10-10T12:00:00+09:00"));
+    expect(s2.lastAs).toBe("2026-10-06");
+    expect(s2.lastAsFrom).toBe("접수");
     expect(toEvents(results).filter((ev) => ev.loose)).toHaveLength(1);
   });
 });
