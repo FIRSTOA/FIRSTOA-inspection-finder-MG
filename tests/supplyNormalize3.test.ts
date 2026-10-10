@@ -75,6 +75,8 @@ describe("자가: 색 토너·폐토너통 섞인 표기", () => {
     expect(run(self("토너3 폐", "2"), "K4250")).toEqual(["토너 K×3", "폐토너통×1"]);
     expect(run(self("L5700 토너", "1"), "L5700")).toEqual(["토너 K×1"]);
     expect(run(self("토너", "1"), "SL-X3220NR")).toEqual(["?토너×1"]);
+    expect(run(self("L5700 토너", "1"), "X3220")).toEqual(["토너 K×1"]);   // 글에 적은 기종(흑백 L5700)이 기기 칸보다 우선
+    expect(run(part("MX4 smps", "1"))).toEqual(["SMPS×1"]);
   });
   it("자가 칸에 적힌 부품·모르는 말", () => {
     expect(run(self("k현상기", "1"))).toEqual(["현상기 K×1"]);

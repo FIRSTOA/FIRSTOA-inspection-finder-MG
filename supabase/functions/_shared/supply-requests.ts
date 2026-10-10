@@ -145,6 +145,7 @@ export const BUILTIN: CatalogItem[] = [
   { id: "", kind: "부품", name: "IH보드", category: "보드", color: "", aliases: ["IH보드", "IH 보드"], models: [] },
   { id: "", kind: "부품", name: "고압보드", category: "보드", color: "", aliases: ["고압보드", "고압 보드", "HVPS"], models: [] },
   { id: "", kind: "부품", name: "메인보드", category: "보드", color: "", aliases: ["메인보드", "메인 보드", "보드"], models: [] },
+  { id: "", kind: "부품", name: "SMPS", category: "보드", color: "", aliases: ["SMPS", "파워", "파워보드", "전원보드"], models: [] },
   { id: "", kind: "부품", name: "기어", category: "기타", color: "", aliases: ["기어", "리프팅기어", "리프팅 기어", "엑시트기어", "엑시트 기어"], models: [] },
   { id: "", kind: "부품", name: "센서", category: "기타", color: "", aliases: ["센서", "아웃풋센서", "아웃풋 센서", "인센서"], models: [] },
   { id: "", kind: "부품", name: "모터", category: "모터", color: "", aliases: ["모터", "디스팬스모터", "디스팬스 모터", "디스펜스모터", "디스펜스 모터"], models: [] },
@@ -274,7 +275,7 @@ function piecesOf(item: string, qty: string, model: string, catalog: CatalogItem
   let pending: Piece[] = [];      // 아직 어디 붙을지 모르는 색 토큰(뒤에 색 붙는 부품이 오면 그 부품의 색, 아니면 토너)
   let open: Piece[] = [];         // 수량이 아직 없는 조각들 — 다음에 숫자가 오면 받는다
   let lastPart: Piece | null = null;
-  let tonerMark = false, tonerQty = "", pendingNum = "";
+  let tonerMark = false, tonerQty = "", pendingNum = "", mentioned = "";   // mentioned: 글 안에 적은 기종("L5700 토너") — 색 판단은 이걸 우선
   const flush = () => { for (const p of pending) pieces.push(p); pending = []; };
   const colorablePart = (p: Piece | null): p is Piece => !!p && p.kind === "part" && COLORABLE.has(p.cat?.category || "") && pieces[pieces.length - 1] === p;
   const pushColors = (units: Array<[string, string]>) => {
@@ -305,7 +306,7 @@ function piecesOf(item: string, qty: string, model: string, catalog: CatalogItem
     }
     const mc = w.match(/^\d{3,5}((?:[kcmyb]\d*)+)$/);                   // "806k1" · "808m" · "2271m" · "420k"
     if (mc) w = mc[1];
-    if (MODEL_WORD.test(w)) continue;                                   // 기종 표기(x3220nr · d450 · 804 …)
+    if (MODEL_WORD.test(w)) { if (!mentioned && /[a-z]/.test(w)) mentioned = w; continue; }   // 기종 표기(x3220nr · d450 · 804 …)
     const num = w.match(/^(?:각|각각)?(\d+)(?:개씩|개|ea|장|통|본|씩)?$/);
     if (num) {
       if (open.length) { for (const p of open) p.qty = num[1]; open = []; }
@@ -346,7 +347,7 @@ function piecesOf(item: string, qty: string, model: string, catalog: CatalogItem
   flush();
   // 색 없는 "토너"만 적힌 것("토너 3", "토너3 폐") — 흑백기면 K, 컬러기면 무슨 색인지 몰라 미정의
   if (tonerMark && !pieces.some((p) => p.kind === "toner" || p.kind === "set")) {
-    if (!isColorModel(model, catalog)) pieces.unshift({ kind: "toner", base: "토너", cat: null, color: "K", qty: tonerQty });
+    if (!isColorModel(mentioned || model, catalog)) pieces.unshift({ kind: "toner", base: "토너", cat: null, color: "K", qty: tonerQty });
     else if (!pieces.length) return null;
   }
   // "컬러"만 남은 보류는 버린다
