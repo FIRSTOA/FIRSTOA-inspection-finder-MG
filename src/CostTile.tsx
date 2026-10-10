@@ -13,7 +13,9 @@ import { notify } from "./toast";
 import { useScreenActive } from "./screenActive";
 
 type AiRow = { created_at: string; fn: string; author: string; question: string; input_tokens: number; cached_tokens: number; output_tokens: number; usd: number | null; ms: number };
-type MsgRow = { sent_at: string; message: string; payload: { mms?: boolean } | null };
+type MsgRow = { sent_at: string; message: string; channel: string; payload: { mms?: boolean; solapi_type?: string } | null };
+type MsgKind = "SMS" | "LMS" | "MMS" | "ATA";
+const ATA_DEFAULT_KRW = 13; // 솔라피 공개 요금 카카오 알림톡 13원(2026-10-11 조회, 부가세 별도). 다르면 app_config ATA_PRICE_KRW
 
 const KST = 9 * 3600_000;
 const kstDay = (iso: string) => new Date(new Date(iso).getTime() + KST).toISOString().slice(0, 10);
@@ -21,13 +23,14 @@ const kstHm = (iso: string) => new Date(new Date(iso).getTime() + KST).toISOStri
 const bytesKo = (s: string) => Array.from(s || "").reduce((n, ch) => n + (ch.charCodeAt(0) > 127 ? 2 : 1), 0);
 const won = (n: number) => `${Math.round(n).toLocaleString()}원`;
 const usdTxt = (n: number) => `$${n.toFixed(n >= 10 ? 1 : 2)}`;
+const msgKind = (r: MsgRow): MsgKind => { const t = String(r.payload?.solapi_type || "").toUpperCase(); if (t === "ATA" || t === "CTA" || r.channel === "kakao") return "ATA"; if (t === "MMS" || r.payload?.mms) return "MMS"; if (t === "LMS") return "LMS"; if (t === "SMS") return "SMS"; return bytesKo(r.message) > 90 ? "LMS" : "SMS"; };
 const fnLabel = (fn: string) => (fn === "entity-ask" ? "업체 질문" : fn === "data-ask" ? "전체 데이터" : fn);
 
 export default function CostTile() {
   const [rows, setRows] = useState<AiRow[] | null | "none">(null);
   const [msgs, setMsgs] = useState<MsgRow[]>([]);
   const [rate, setRate] = useState(1400);
-  const [price, setPrice] = useState({ sms: 18, lms: 45, mms: 110 });
+  const [price, setPrice] = useState({ sms: 18, lms: 45, mms: 110, ata: ATA_DEFAULT_KRW });
   const [open, setOpen] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState("");
   const [importing, setImporting] = useState(false);
@@ -37,13 +40,13 @@ export default function CostTile() {
     const cfg = await getConfig().catch(() => ({} as Record<string, string>));
     const num = (k: string) => Number(String(cfg[k] || "").replace(/[^\d.]/g, "")) || 0;
     if (num("AI_USD_KRW")) setRate(num("AI_USD_KRW"));
-    setPrice({ sms: num("SMS_PRICE_KRW") || 18, lms: num("LMS_PRICE_KRW") || 45, mms: num("MMS_PRICE_KRW") || 110 });
+    setPrice({ sms: num("SMS_PRICE_KRW") || 18, lms: num("LMS_PRICE_KRW") || 45, mms: num("MMS_PRICE_KRW") || 110, ata: num("ATA_PRICE_KRW") || ATA_DEFAULT_KRW });
     const monthStart = (() => { const k = new Date(Date.now() + KST); return `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, "0")}-01T00:00:00+09:00`; })();
     try {
       // 최근 3,000건 — 월 수백 건 수준이라 몇 달치. 그 전은 "지금까지" 합계에서 빠질 수 있다
       setRows(await selectRows<AiRow>("ai_usage", "select=created_at,fn,author,question,input_tokens,cached_tokens,output_tokens,usd,ms&order=id.desc&limit=3000"));
     } catch { setRows("none"); }
-    setMsgs(await selectRows<MsgRow>("message_jobs", `select=sent_at,message,payload&source_type=like.direct*&status=eq.sent&channel=eq.sms&sent_at=gte.${encodeURIComponent(monthStart)}&limit=3000`).catch(() => [] as MsgRow[]));
+    setMsgs(await selectRows<MsgRow>("message_jobs", `select=sent_at,message,channel,payload&source_type=like.direct*&status=eq.sent&sent_at=gte.${encodeURIComponent(monthStart)}&limit=5000`).catch(() => [] as MsgRow[]));
     setRefreshedAt(new Date(Date.now() + KST).toISOString().slice(11, 16));
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -71,9 +74,9 @@ export default function CostTile() {
   }, [rows, monthKey, today]);
 
   const msg = useMemo(() => {
-    let sms = 0, lms = 0, mms = 0, todayN = 0;
-    msgs.forEach((r) => { if (r.payload?.mms) mms += 1; else if (bytesKo(r.message) > 90) lms += 1; else sms += 1; if (kstDay(r.sent_at) === today) todayN += 1; });
-    return { sms, lms, mms, n: sms + lms + mms, todayN, krw: sms * price.sms + lms * price.lms + mms * price.mms };
+    let sms = 0, lms = 0, mms = 0, ata = 0, todayN = 0;
+    msgs.forEach((r) => { const k = msgKind(r); if (k === "ATA") ata += 1; else if (k === "MMS") mms += 1; else if (k === "LMS") lms += 1; else sms += 1; if (kstDay(r.sent_at) === today) todayN += 1; });
+    return { sms, lms, mms, ata, n: sms + lms + mms + ata, todayN, krw: sms * price.sms + lms * price.lms + mms * price.mms + ata * price.ata };
   }, [msgs, price, today]);
 
   const aiMonthUsd = ai?.month.usd ?? 0;
@@ -119,7 +122,7 @@ export default function CostTile() {
                   <div className="grid gap-2 sm:grid-cols-3">
                     {[
                       { t: "오늘 (실시간)", n: ai.today.n, tokens: ai.today.tokens, usd: ai.today.usd, extra: `문자 ${msg.todayN}건${ai.lastAt && kstDay(ai.lastAt) === today ? ` · 마지막 질문 ${kstHm(ai.lastAt)}` : ""}` },
-                      { t: `이번 달 (${now.getUTCMonth() + 1}월)`, n: ai.month.n, tokens: ai.month.tokens, usd: ai.month.usd, extra: `문자 ${msg.n}건 ${won(msg.krw)} · 합계 ${won(monthKrw)} · 월말 예상 ${won(project(monthKrw))}` },
+                      { t: `이번 달 (${now.getUTCMonth() + 1}월)`, n: ai.month.n, tokens: ai.month.tokens, usd: ai.month.usd, extra: `문자 ${msg.n}건(단문 ${msg.sms}·장문 ${msg.lms}·사진 ${msg.mms}·알림톡 ${msg.ata}) ${won(msg.krw)} · 합계 ${won(monthKrw)} · 월말 예상 ${won(project(monthKrw))}` },
                       { t: "지금까지 (최근 3,000건 기준)", n: ai.all.n, tokens: ai.all.tokens, usd: ai.all.usd, extra: `첫 기록부터 누적` },
                     ].map((c) => (
                       <div key={c.t} className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
@@ -174,14 +177,22 @@ export default function CostTile() {
                       if (!await askConfirm("솔라피에서 최근 12개월 발송 내역을 가져와 문자 건수·금액에 넣을까요? 같은 건은 두 번 넣지 않습니다.", { okLabel: "가져오기" })) return;
                       setImporting(true);
                       try {
-                        const out = await invokeEdgeFunction<{ fetched: number; inserted: number; skipped: number; errors: string[] }>("customer-message-send", { action: "import_history", days: 365 }, 180_000);
-                        notify(`솔라피 ${out.fetched}건 읽음 · 새로 ${out.inserted}건 추가 · 이미 있음 ${out.skipped}건${out.errors?.length ? ` · 오류 ${out.errors[0]}` : ""}`, out.errors?.length ? "error" : "success");
+                        // 한 호출에 7,500건까지 — nextKey 가 오면 이어서 부른다
+                        let startKey = ""; let fetched = 0, inserted = 0, skipped = 0; const errors: string[] = [];
+                        for (let round = 0; round < 20; round += 1) {
+                          const out = await invokeEdgeFunction<{ fetched: number; inserted: number; skipped: number; errors: string[]; nextKey?: string }>("customer-message-send", { action: "import_history", days: 365, startKey }, 180_000);
+                          fetched += out.fetched || 0; inserted += out.inserted || 0; skipped += out.skipped || 0; errors.push(...(out.errors || []));
+                          if (!out.nextKey || errors.length) break;
+                          startKey = out.nextKey;
+                          notify(`가져오는 중… 읽음 ${fetched.toLocaleString()}건 · 추가 ${inserted.toLocaleString()}건`, "info");
+                        }
+                        notify(`솔라피 ${fetched.toLocaleString()}건 읽음 · 새로 ${inserted.toLocaleString()}건 추가 · 이미 있음 ${skipped.toLocaleString()}건${errors.length ? ` · 오류 ${errors[0]}` : ""}`, errors.length ? "error" : "success");
                         await load();
                       } catch (e) { notify(`가져오기 실패: ${(e as Error).message}`, "error"); } finally { setImporting(false); }
                     })()} className="ml-auto rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-50">{importing ? "가져오는 중…" : "솔라피 12개월 가져오기"}</button>
                   </div>
                   <div className="mt-3 text-[10.5px] font-bold text-slate-400">
-                    단가: AI 는 공식 가격표(gpt-5.5 입력 $5 · 캐시 $0.5 · 출력 $30 / 100만 토큰) 기준, 문자는 솔라피 공개 요금(단문 {price.sms}·장문 {price.lms}·사진 {price.mms}원, 부가세 별도). 환율 {rate.toLocaleString()}원/달러{rate === 1400 ? " 가정" : ""}. 월말 예상은 지금까지 금액 ÷ 지난 날수 × 이 달 날수. 바꾸려면 관리 app_config(AI_PRICE_IN·AI_USD_KRW·SMS_PRICE_KRW 등).
+                    단가: AI 는 공식 가격표(gpt-5.5 입력 $5 · 캐시 $0.5 · 출력 $30 / 100만 토큰) 기준, 문자는 솔라피 공개 요금(단문 {price.sms}·장문 {price.lms}·사진 {price.mms}·알림톡 {price.ata}원, 부가세 별도). 환율 {rate.toLocaleString()}원/달러{rate === 1400 ? " 가정" : ""}. 월말 예상은 지금까지 금액 ÷ 지난 날수 × 이 달 날수. 바꾸려면 관리 app_config(AI_PRICE_IN·AI_USD_KRW·SMS_PRICE_KRW 등).
                   </div>
                 </>
               )}
