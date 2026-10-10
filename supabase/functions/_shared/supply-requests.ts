@@ -170,3 +170,15 @@ export function normalizeItems(items: SupplyItem[], catalog: CatalogItem[], mode
   }
   return out;
 }
+
+/**
+ * 신청의 성격(2026-10-11 사용자 사례): 현장에서 차량 재고를 바로 줬으면 "차량재고"(그 업체에 이미 지급, 출고는 차량 보충),
+ * 재고가 없어 다음에 가져다주면 "출고요청". 양식의 출고여부 줄로 가른다 — "선출고완료"·"지급완료"·"차량재고"·"교체완료" 는 차량재고,
+ * "출고부탁"·"출고요청"·빈값은 출고요청.
+ */
+export type SupplyMode = "차량재고" | "출고요청";
+export function modeOf(status: string, section = ""): SupplyMode {
+  const t = `${status || ""} ${section || ""}`.replace(/\s+/g, "");
+  if (/차량재고|차량|보충|선출고|지급완료|지급함|교체완료|장착완료|전달완료|기지급|드렸|줬|주고/.test(t)) return "차량재고";
+  return "출고요청";
+}

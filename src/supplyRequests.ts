@@ -7,7 +7,7 @@
  */
 import { md5 } from "./md5";
 import { insertRow, selectRows, updateRows } from "./supabase";
-import { firstDeviceOf, normalizeItems, parseSupplyRequests, supplyDupSource, type CatalogItem, type NormalizedItem } from "../supabase/functions/_shared/supply-requests.ts";
+import { firstDeviceOf, modeOf, normalizeItems, parseSupplyRequests, supplyDupSource, type CatalogItem, type NormalizedItem } from "../supabase/functions/_shared/supply-requests.ts";
 
 export type SupplyContext = {
   sourceTable: "jeomgeom" | "as_records";
@@ -43,6 +43,10 @@ export function rowsFor(ctx: SupplyContext, catalog: CatalogItem[] = []): Array<
     model: dev.model, serial: dev.serial, asset: dev.asset,
     item: s.item, qty: s.qty, status: s.status, warranty: s.warranty, counter: s.counter, expected: s.expected,
     item_std: s.itemStd, category: s.category, color: s.color, stock_item_id: s.stockItemId, set_label: s.setLabel,
+    // 차량 재고로 바로 줬으면 그 업체에 이미 지급된 것(출고는 차량 보충). 아니면 출고 뒤 [지급]·[반납]·[불량]
+    ...(modeOf(s.status, s.raw) === "차량재고"
+      ? { mode: "차량재고", stage: "지급", used_vendor: String(ctx.vendor || "").trim(), used_at: `${ctx.date.slice(0, 10)}T09:00:00+09:00`, used_by: String(ctx.author || "").trim() }
+      : { mode: "출고요청", stage: "신청" }),
     source_table: ctx.sourceTable, source_id: ctx.sourceId == null ? "" : String(ctx.sourceId), raw: s.raw.slice(0, 2000),
     _dupKey: md5(supplyDupSource(ctx.sourceTable, ctx.date.slice(0, 10), String(ctx.author || "").trim(), ctx.vendor, s)),
   }));
@@ -52,8 +56,8 @@ export function rowsFor(ctx: SupplyContext, catalog: CatalogItem[] = []): Array<
 async function insertSupplyRow(row: Record<string, unknown>): Promise<"new" | "dup"> {
   try { return await insertRow("supply_requests", row); }
   catch (e) {
-    if (!/item_std|category|color|stock_item_id|set_label|stage|PGRST204|42703/.test(String((e as Error).message))) throw e;
-    const slim = { ...row }; delete slim.item_std; delete slim.category; delete slim.color; delete slim.stock_item_id; delete slim.set_label;
+    if (!/item_std|category|color|stock_item_id|set_label|stage|mode|used_|issued_|PGRST204|42703/.test(String((e as Error).message))) throw e;
+    const slim = { ...row }; for (const k of ["item_std", "category", "color", "stock_item_id", "set_label", "stage", "mode", "used_vendor", "used_at", "used_by"]) delete slim[k];
     return insertRow("supply_requests", slim);
   }
 }

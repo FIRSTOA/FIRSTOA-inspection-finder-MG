@@ -5,12 +5,13 @@ import DataLookup from "./DataLookup";
 import OperationsDashboard from "./OperationsDashboard";
 import Search360 from "./Search360";
 import SupplyBoard from "./SupplyBoard";
+import StockBoard from "./StockBoard";
 
 /**
  * 조회 허브 — 관리 허브와 같은 [다크 상태줄 + 밑줄 탭] 구조.
  * 상태줄에는 "오늘 들어온 기록"을 띄운다: 조회에 들어온 사람이 가장 먼저 궁금한 숫자.
  */
-type Tab = "all" | "records" | "status" | "supply"; // 기기 검색 탭은 통합 검색이 품어서 뺐다(2026-10-10) · supply=자가·부품 신청(2026-10-11)
+type Tab = "all" | "records" | "status" | "self" | "parts" | "stock"; // 기기 검색 탭은 통합 검색이 품어서 뺐다(2026-10-10) · self/parts/stock=자가신청·부품신청·재고(2026-10-11)
 
 const TODAY_CHIPS: Array<{ label: string; table: string; dateField: string; extra?: string }> = [
   { label: "점검", table: "jeomgeom", dateField: "작성일" },
@@ -33,7 +34,7 @@ async function todayCount(table: string, dateField: string, extra?: string): Pro
 export default function LookupHub({ author }: { author: string }) {
   const [tab, setTab] = useState<Tab>(() => {
     const saved = window.localStorage.getItem("cs_lookup_tab_v1") as Tab;
-    return saved === "status" || saved === "records" || saved === "supply" ? saved : "all"; // 기본은 통합 검색(2026-10-10)
+    return saved === "status" || saved === "records" || saved === "self" || saved === "parts" || saved === "stock" ? saved : "all"; // 기본은 통합 검색(2026-10-10)
   });
   const [counts, setCounts] = useState<Record<string, number | null>>({});
 
@@ -67,14 +68,14 @@ export default function LookupHub({ author }: { author: string }) {
           <span className="ml-auto hidden text-[11px] font-semibold text-slate-500 sm:block">기록은 보기 전용 — 수정·삭제는 각 업무 화면과 관리 탭에서</span>
         </div>
         <div className="flex overflow-x-auto">
-          {([["all", "통합 검색"], ["records", "기록 조회"], ["supply", "자가·부품 신청"], ["status", "업무 현황판"]] as Array<[Tab, string]>).map(([key, label]) => (
+          {([["all", "통합 검색"], ["records", "기록 조회"], ["self", "자가신청"], ["parts", "부품신청"], ["stock", "기기·부품·자가 재고"], ["status", "업무 현황판"]] as Array<[Tab, string]>).map(([key, label]) => (
             <button key={key} type="button" onClick={() => setTab(key)}
               className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
           ))}
         </div>
       </section>
 
-      {tab === "all" ? <Search360 author={author} /> : tab === "records" ? <DataLookup author={author} /> : tab === "supply" ? <SupplyBoard author={author} /> : <OperationsDashboard author={author} />}
+      {tab === "all" ? <Search360 author={author} /> : tab === "records" ? <DataLookup author={author} /> : tab === "self" ? <SupplyBoard author={author} kind="자가" /> : tab === "parts" ? <SupplyBoard author={author} kind="부품" /> : tab === "stock" ? <StockBoard author={author} /> : <OperationsDashboard author={author} />}
     </div>
   );
 }
