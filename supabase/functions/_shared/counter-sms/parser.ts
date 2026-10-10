@@ -4,6 +4,7 @@
  * 블록 분리 → 업체명·등급 → 연락처(이름/직함) → 기종 매칭 → 번호 기준 그룹 병합 → 문구 생성.
  */
 import { EXCLUDE_FROM_LOOSE_MATCH, TXT_DEFAULT } from "./data.ts";
+import { contactVendorKey } from "./vendorKey.ts";
 
 const TITLE_LIST = [
   "회장", "부회장", "사장", "부사장", "대표이사", "대표", "전무이사", "전무",
@@ -77,6 +78,45 @@ export function detectDevices(block: string): { leaseCode: string; serials: stri
     }
   }
   return { leaseCode, serials, assets };
+}
+
+/**
+ * 기기 줄 읽기(2026-10-10) — 일반 목록 "23146 / SL-X3220NR / 0A6XBJMT90007HV / B8759"(임대리스트 순번 / 기종 / 시리얼 / 자산기번),
+ * CMS 목록 "SL-X3220NR / 0A6XBJLW900019N / C3636"(순번 없음). 전화 줄("010-… / 02-…")에도 '/'가 있으므로 시리얼(8자 이상 영숫자)이 있는 줄만 기기 줄로 본다.
+ */
+export function parseDeviceLine(block: string): { leaseCode: string; model: string; serial: string; asset: string } {
+  const squash = (t: string) => t.replace(/\s+/g, "");
+  const isSerial = (t: string) => /^[A-Za-z0-9]{8,}$/.test(squash(t)) && /\d/.test(t);
+  const isAsset = (t: string) => /^[A-Za-z]{1,2}\d{3,5}$/.test(squash(t)) || /^(미부착|없음|미상)$/.test(squash(t));
+  for (const line of block.split("\n")) {
+    const parts = line.split("/").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) continue;
+    const code = parts[0].match(/^(\d{4,6})#?$/);
+    const rest = code ? parts.slice(1) : parts;
+    const serialIdx = rest.findIndex(isSerial);
+    if (serialIdx < 0) continue;
+    const model = serialIdx > 0 ? rest[0] : "";
+    const asset = rest.slice(serialIdx + 1).find(isAsset) || "";
+    return { leaseCode: code ? code[1] : "", model, serial: squash(rest[serialIdx]), asset: squash(asset) };
+  }
+  return { leaseCode: "", model: "", serial: "", asset: "" };
+}
+
+/** 주소 줄 — 시·도로 시작하는 첫 줄(안내 꼬리 포함 그대로) */
+export function detectAddress(block: string): string {
+  const REGION = /^(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|충청|전북|전남|전라|경북|경남|경상|제주)/;
+  for (const line of block.split("\n").map((l) => l.trim())) if (REGION.test(line)) return line;
+  return "";
+}
+
+/** 원문에서 이 업체의 블록들 — 임대 코드 → 시리얼 → 업체명 비교키 순으로 찾는다(여러 대면 여러 블록) */
+export function findVendorBlocks(rawText: string, vendor: string, leaseCode = "", serial = ""): string[] {
+  const blocks = splitBlocks(String(rawText || ""));
+  if (leaseCode) { const hit = blocks.filter((b) => parseDeviceLine(b).leaseCode === leaseCode); if (hit.length) return hit; }
+  if (serial) { const hit = blocks.filter((b) => parseDeviceLine(b).serial === serial.replace(/\s+/g, "")); if (hit.length) return hit; }
+  const key = contactVendorKey(vendor);
+  if (!key) return [];
+  return blocks.filter((b) => contactVendorKey(parseCompanyAndGrade(b.split("\n")[0] || "").vendor) === key);
 }
 
 /** 블록의 목록 종류 — "CMS.15" / "CMS 15" / "CMS마감" 같은 줄이 있으면 CMS 마감 */

@@ -154,7 +154,7 @@ export default function CounterSms({ author }: { author: string }) {
     if (!file || !row) return;
     setPhotoBusyId(row.id);
     try {
-      const plan = await prepareCounterSend(row, author);
+      const plan = await prepareCounterSend(row, author, { raw: batch?.raw, batchId: batch?.id });   // 관리부 목록 원문에서 기종·시리얼·자산기번·주소를 읽는다
       setPhotoConfirm({ row, file, preview: URL.createObjectURL(file), plan, caption: plan.caption });
     } catch (e) {
       setNotice(`카운터 전송 준비 실패: ${(e as Error).message}`);
