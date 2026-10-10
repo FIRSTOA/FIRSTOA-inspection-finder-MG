@@ -72,11 +72,28 @@ def job_poster(payload: dict) -> str:
     return f"exit {run.returncode} · " + " / ".join(tail)
 
 
+def job_kakao_photo(payload: dict) -> str:
+    """마감 카운터 사진 — 카톡 PC의 그 방 창에 글(업체·기기·주소)+사진을 붙여 보낸다. 창이 없으면 봇이 글+링크로(유실 없음)."""
+    import urllib.request
+    room = str(payload.get("room") or "").strip(); url = str(payload.get("image_url") or ""); caption = str(payload.get("caption") or "")
+    if not room or not url:
+        raise RuntimeError("room·image_url 이 필요합니다")
+    try:
+        import poster_send  # pywin32·pillow·pyautogui
+    except ImportError as e:
+        raise RuntimeError(f"카톡 PC 모듈 없음: {e} (pip install pywin32 pillow pyautogui)")
+    data = urllib.request.urlopen(url, timeout=60).read()
+    if poster_send.send_to_room(room, caption, data):
+        return f"카톡 PC로 글+사진 전송 → {room}"
+    rest("/outbox", "POST", {"room": room, "text": caption + "\n사진: " + url}, prefer="return=minimal")
+    return f"카톡 PC 창 없음 → 봇으로 글+링크 전송 ({room})"
+
+
 def job_todo(payload: dict) -> str:
     raise RuntimeError("아직 만들지 않은 종류 — 2027 계획 P6(음성)·P9(OCR)")
 
 
-HANDLERS = {"ping": job_ping, "backup": job_backup, "relay": job_relay, "poster": job_poster, "whisper": job_todo, "ocr": job_todo}
+HANDLERS = {"ping": job_ping, "backup": job_backup, "relay": job_relay, "poster": job_poster, "kakao_photo": job_kakao_photo, "whisper": job_todo, "ocr": job_todo}
 
 
 def claim_and_run_jobs() -> int:

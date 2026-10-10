@@ -8,7 +8,7 @@
  * 팀원은 탭을 열자마자 자기 팀 목록을 보고 한 업체씩 보낸다. 보낸 건 ✓(누가·언제)로 전 직원에게
  * 공유돼 이중 발송이 없다. 문구 세트(counter_sms_settings)·직접 변환(개인용)은 그대로 남긴다.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { MessageSquare, RotateCcw, Save, Settings2, Upload, X } from "lucide-react";
 import { deleteRows, insertRow, selectRows, updateRows, upsertRow } from "./supabase";
@@ -16,6 +16,7 @@ import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
 import { buildMessage, formatPhone, mergeTargets, parseBlocks, parseListHeader, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
 import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
+import { COUNTER_ROOM_KEY, counterRoomName, sendCounterPhoto } from "./counterSmsPhoto";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
@@ -130,6 +131,33 @@ export default function CounterSms({ author }: { author: string }) {
     setInbox(await selectRows<InboxRow>("counter_sms_inbox", "select=id,room,sender,text,received_at&applied_at=is.null&order=received_at.desc&limit=5").catch(() => [] as InboxRow[]));
   }, []);
   useEffect(() => { void loadInbox(); }, [loadInbox]);
+  // 카운터 사진 한 장으로 마감방 전송 + 완료 — 사진 고르기 외엔 손이 안 간다(2026-10-10)
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoRow, setPhotoRow] = useState<TargetRow | null>(null);
+  const [photoBusyId, setPhotoBusyId] = useState("");
+  const [counterRoom, setCounterRoom] = useState("");
+  useEffect(() => { void counterRoomName().then(setCounterRoom); }, []);
+  const saveCounterRoom = async (value: string) => {
+    const room = value.trim();
+    const rows = await selectRows<{ key: string }>("app_config", `select=key&key=eq.${COUNTER_ROOM_KEY}`).catch(() => [] as { key: string }[]);
+    if (rows.length) await updateRows("app_config", `key=eq.${COUNTER_ROOM_KEY}`, { value: room });
+    else await insertRow("app_config", { key: COUNTER_ROOM_KEY, value: room });
+    setCounterRoom(room); setNotice(room ? `마감 카톡방을 "${room}"으로 저장했습니다.` : "마감 카톡방 이름을 비웠습니다.");
+  };
+  const pickCounterPhoto = (row: TargetRow) => { setPhotoRow(row); photoInputRef.current?.click(); };
+  const handleCounterPhoto = async (file: File | null) => {
+    const row = photoRow; setPhotoRow(null);
+    if (!file || !row) return;
+    setPhotoBusyId(row.id);
+    try {
+      const res = await sendCounterPhoto(row, file, author);
+      const patch = { done_at: new Date().toISOString(), done_by: `${author || "미지정"} · 카운터 사진` };
+      if (extended) { setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t))); void persistPatch(row, patch, "완료"); }
+      setNotice(res.channel === "pc" ? `${row.vendor} — 카톡 PC가 "${res.room}"에 글+사진을 올립니다 (노트북 실행기). 카드는 완료로 표시했습니다.` : `${row.vendor} — 봇이 "${res.room}"에 글+사진 링크를 올립니다. 카드는 완료로 표시했습니다.`);
+    } catch (e) {
+      setNotice(`카운터 사진 전송 실패: ${(e as Error).message}`);
+    } finally { setPhotoBusyId(""); }
+  };
   const markInbox = async (id: number, batchId: string, note = "") => {
     await updateRows("counter_sms_inbox", `id=eq.${id}`, { applied_at: new Date().toISOString(), applied_by: author || "미지정", batch_id: batchId || null, note }).catch(() => undefined);
     setInbox((cur) => cur.filter((r) => r.id !== id));
@@ -577,6 +605,8 @@ export default function CounterSms({ author }: { author: string }) {
                             <button type="button" onClick={() => markDone(row)} title="마감(카운터 회신·처리)까지 끝났으면 완료" className="rounded bg-indigo-600 px-1.5 py-0.5 text-[9px] font-black text-white">완료</button>
                             <button type="button" onClick={() => unmarkSent(row)} className="rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-emerald-600">전송 취소</button>
                           </>)}
+                        {/* 카운터 사진 한 장 → 마감방에 업체·기기·주소 글 + 사진 → 완료 */}
+                        {!row.done_at && <button type="button" disabled={busy || photoBusyId === row.id} onClick={() => pickCounterPhoto(row)} title="고객이 보낸 카운터 사진을 고르면 마감방에 업체명·기종·시리얼·자산기번·주소와 함께 올리고 이 카드를 완료로 표시합니다" className="rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-black text-white hover:bg-slate-700 disabled:opacity-40">{photoBusyId === row.id ? "전송 중…" : "📷 카운터 전송"}</button>}
                         {/* 이 업체만 삭제 — 통째 삭제 말고 */}
                         <button type="button" disabled={busy} onClick={() => void removeTarget(row)} title="이 업체 카드만 목록에서 지웁니다 (나머지는 그대로)" className="rounded border border-rose-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-rose-500 hover:bg-rose-50 disabled:opacity-40">삭제</button>
                       </span>
@@ -596,6 +626,14 @@ export default function CounterSms({ author }: { author: string }) {
         </>
       ) : (
         <>
+          <section className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-sm">
+            <div className="text-sm font-black text-slate-900">📷 마감 카톡방 <span className="text-[11px] font-bold text-slate-500">· 카드의 [카운터 전송]이 글+사진을 올릴 방 — 카톡 방 제목 그대로</span></div>
+            <form className="mt-2 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void saveCounterRoom((new FormData(e.currentTarget).get("room") as string) || ""); }}>
+              <input name="room" defaultValue={counterRoom} key={counterRoom} placeholder="예: 마감방" className={`w-64 ${field}`} />
+              <button type="submit" className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700">저장</button>
+              <span className="text-[11px] font-bold text-slate-500">{counterRoom ? `지금: "${counterRoom}"` : "아직 없음 — 적어야 전송이 됩니다"} · 노트북 실행기가 켜져 있으면 카톡 PC가 사진을 직접 올리고, 아니면 봇이 글+링크로 올립니다</span>
+            </form>
+          </section>
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-black text-slate-900">🌍 지역 프로필</div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -647,6 +685,7 @@ export default function CounterSms({ author }: { author: string }) {
         </>
       )}
 
+      <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0] || null; e.target.value = ""; void handleCounterPhoto(f); }} />
       {rulesOpen && <ContactRulesBook rules={contactRules} onClose={() => setRulesOpen(false)} onRemove={removeRuleFromBook} busy={ruleBusy} />}
       {uploadOpen && (
         <div className="fixed inset-0 z-[210] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setUploadOpen(false)}>

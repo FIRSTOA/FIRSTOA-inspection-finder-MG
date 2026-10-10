@@ -59,8 +59,10 @@ export const SOURCES: SourceDef[] = [
     dateKeys: ["작성일"], titleKeys: ["내용", "처리내용"], snippetKeys: ["처리내용", "특이사항"], authorKeys: ["작성자"], teamKeys: ["지역"], modelKeys: ["모델명"], serialKeys: ["시리얼넘버"], assetKeys: ["자산기번"] },
   { table: "service_receptions", label: "접수", group: "현장 기록", tone: T.recv, nameCols: ["vendor"], deviceCols: ["asset_no", "serial"], rawCols: ["symptom", "report_text"], hidden: "deleted=is.false",
     dateKeys: ["receipt_date", "created_at"], titleKeys: ["title", "symptom"], snippetKeys: ["status", "type", "field"], authorKeys: ["author"], teamKeys: ["region"], modelKeys: ["model"], serialKeys: ["serial"], assetKeys: ["asset_no"] },
+  // 일정의 note 에는 일정리스트 [완료]로 적은 처리내용(간단처리)이 들어 있다 — AS 보고 없이 여기서 끝난 건이 많다(2026-10-10 잡플러스 10/7)
   { table: "as_tickets", label: "일정", group: "현장 기록", tone: T.ticket, nameCols: ["vendor"], deviceCols: ["serial", "asset"], rawCols: ["issue"], codeCol: "vendor_code",
-    dateKeys: ["date"], titleKeys: ["scheduleType"], snippetKeys: ["issue", "status", "assignee"], authorKeys: ["assignee"], teamKeys: ["team"], modelKeys: ["model"], serialKeys: ["serial"], assetKeys: ["asset"] },
+    dateKeys: ["date"], titleKeys: ["scheduleType"], snippetKeys: ["issue", "status", "assignee", "note"], authorKeys: ["assignee"], teamKeys: ["team"], modelKeys: ["model"], serialKeys: ["serial"], assetKeys: ["asset"],
+    titleFn: (row) => `${str(row, "scheduleType") || "일정"}${/완료/.test(str(row, "status")) ? " 완료" : str(row, "status") ? ` · ${str(row, "status")}` : ""}` },
   { table: "visit_logs", label: "방문기록", group: "현장 기록", tone: T.visit, nameCols: ["vendor"], deviceCols: [], rawCols: ["source_text"], hidden: "status=neq.cancelled",
     dateKeys: ["work_date"], titleKeys: ["work_kinds"], snippetKeys: ["note", "machine_count"], authorKeys: ["author"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [] },
   { table: "activity_events", label: "활동", group: "현장 기록", tone: T.visit, nameCols: ["vendor"], deviceCols: [], rawCols: ["source_text"], hidden: "status=neq.cancelled",
@@ -442,7 +444,7 @@ export function toEvents(results: SourceResult[]): EventItem[] {
   }
   return list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 }
-export const rawTextOf = (row: Row): string => str(row, "_원문") || str(row, "원문") || str(row, "source_text") || str(row, "report_text") || str(row, "symptom") || str(row, "content") || "";
+export const rawTextOf = (row: Row): string => str(row, "_원문") || str(row, "원문") || str(row, "source_text") || str(row, "report_text") || str(row, "symptom") || str(row, "content") || str(row, "note") || "";
 
 // ── 4층: 현재 상태 ────────────────────────────────────────────
 export type Device = { model: string; asset: string; serial: string; start: string; end: string; monthsLeft: string; fee: string; status: string; grade: string; lastInspect: string; lastAs: string };
@@ -508,14 +510,22 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
     recontract: recon ? { status: str(recon.row, "진행상황") || str(recon.row, "갱신상태") || str(recon.row, "최종상태"), end: str(recon.row, "계약종료일"), date: recon.date } : null,
     bulman: bul ? { date: bul.date, status: str(bul.row, "최종상태"), text: (str(bul.row, "불만내용") || str(bul.row, "불편내용")).slice(0, 80) } : null,
     lastInspect: latest(events, "jeomgeom")?.date || "",
-    // 마지막 AS = AS 보고(as_records)만 보면 늦다 — 접수(복합기 AS)·일정(AS·익일AS)도 AS다. 가장 최근 것을 쓰고 출처를 붙인다(2026-10-10 잡플러스: 보고 1/20, 접수 10/6)
+    // 마지막 AS = AS 보고(as_records)만 보면 늦다 — 접수(복합기 AS)·일정(AS·익일AS)·일정 완료(간단처리, note 에 처리내용)·방문기록(AS)도 AS다.
+    // 가장 최근 것을 쓰고 출처를 붙인다(2026-10-10 잡플러스: 보고 1/20, 접수 10/6, 일정 완료 10/7)
     ...(() => {
+      const newest = (list: EventItem[]) => list.filter((ev) => ev.date && ev.date <= todayYmd).sort((a, b) => b.date.localeCompare(a.date))[0]?.date || "";
+      const asTickets = exact.filter((ev) => ev.source.table === "as_tickets" && /AS/i.test(str(ev.row, "scheduleType")));
+      const doneTickets = asTickets.filter((ev) => /완료/.test(str(ev.row, "status"))).map((ev) => ({ ...ev, date: [dateOf(ev.row, ["updated_at"]), ev.date].filter(Boolean).sort().pop() || ev.date }));
       const cands: Array<[string, string]> = [
         [latest(events, "as_records")?.date || "", "AS 보고"],
-        [exact.filter((ev) => ev.source.table === "service_receptions" && /AS|에이에스/i.test(str(ev.row, "type")) && ev.date).sort((a, b) => b.date.localeCompare(a.date))[0]?.date || "", "접수"],
-        [exact.filter((ev) => ev.source.table === "as_tickets" && /AS/i.test(str(ev.row, "scheduleType")) && ev.date && ev.date <= todayYmd).sort((a, b) => b.date.localeCompare(a.date))[0]?.date || "", "일정"],
+        [newest(exact.filter((ev) => ev.source.table === "service_receptions" && /AS|에이에스/i.test(str(ev.row, "type")))), "접수"],
+        [newest(doneTickets), "일정 완료(간단처리)"],
+        [newest(asTickets.filter((ev) => !/완료/.test(str(ev.row, "status")))), "일정"],
+        [newest(exact.filter((ev) => ev.source.table === "visit_logs" && Array.isArray(ev.row.work_kinds) && (ev.row.work_kinds as unknown[]).map(String).includes("as"))), "방문기록"],
       ].filter(([d]) => d) as Array<[string, string]>;
-      cands.sort((a, b) => b[0].localeCompare(a[0]));
+      // 같은 날이면 처리 사실이 담긴 쪽을 앞세운다: 일정 완료(처리내용) > 방문기록 > AS 보고 > 접수 > 일정(예정)
+      const prio = (from: string) => ["일정 완료(간단처리)", "방문기록", "AS 보고", "접수", "일정"].indexOf(from);
+      cands.sort((a, b) => b[0].localeCompare(a[0]) || prio(a[1]) - prio(b[1]));
       return { lastAs: cands[0]?.[0] || "", lastAsFrom: cands[0]?.[1] || "" };
     })(),
     lastVisit: latest(events, "visit_logs")?.date || "",
