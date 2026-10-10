@@ -42,6 +42,7 @@ const SHEET_ERROR = /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NULL!|ERROR!?)$/i;
 function text(row: Row, key: string) {
   const value = row[key];
   if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ");   // work_kinds 같은 배열은 쉼표로
   if (typeof value === "object") return JSON.stringify(value);
   const out = String(value);
   return SHEET_ERROR.test(out.trim()) ? "" : out;   // 시트 수식 에러값은 빈칸 취급
