@@ -47,7 +47,8 @@ describe("자가: 색 토너·폐토너통 섞인 표기", () => {
     expect(run(self("보탄 C", "1"))).toEqual(["토너 C×1"]);
     expect(run(self("마블토너 k", "1"))).toEqual(["토너 K×1"]);
     expect(run(self("베니 토너 k", "2"))).toEqual(["토너 K×2"]);
-    expect(run(self("정품토너", "1"), "N501")).toEqual(["토너 K×1"]);
+    expect(run(self("정품토너", "1"), "K4250")).toEqual(["토너 K×1"]);
+    expect(run(self("정품토너", "1"), "N501")).toEqual(["?정품토너×1"]);   // 신도 N5xx 는 컬러기 — 색 없는 토너는 미정의
     expect(run(self("검정토너", "2"))).toEqual(["토너 K×2"]);
   });
   it("'1개'·'1개씩'·'각1'은 앞 색들의 수량", () => {
@@ -105,6 +106,9 @@ describe("부품: 색 붙는 부품·여러 부품 한 줄", () => {
     expect(run(part("현상제(c", "1"))).toEqual(["현상제 C×1"]);
     expect(run(part("2060 드럼 K 1 C 1 M", "1"))).toEqual(["드럼 K×1", "드럼 C×1", "드럼 M×1"]);
     expect(run(part("현상제 k1y1", "1"))).toEqual(["현상제 K×1", "현상제 Y×1"]);
+    expect(run(part("현상제m", "1"))).toEqual(["현상제 M×1"]);          // 색이 뒤에 붙은 것
+    expect(run(part("드럼k", "2"))).toEqual(["드럼 K×2"]);
+    expect(run(part("현상제 1개씩", "1"))).toEqual(["현상제×1"]);
   });
   it("여러 부품이 한 줄에", () => {
     expect(run(part("현상기 2 현상제 k1y1 전사블레이드", "1"))).toEqual(["현상기×2", "현상제 K×1", "현상제 Y×1", "전사벨트 블레이드×1"]);
@@ -143,7 +147,7 @@ describe("부품: 색 붙는 부품·여러 부품 한 줄", () => {
 
 describe("컬러기 짐작(2026-10-11 실제 기종)", () => {
   it("숫자 약칭·교세라·신도·HP", () => {
-    for (const m of ["320", "D450", "3220", "7400", "2060", "ECOSYS-M5521CDN", "ma2100", "ES5473", "HP 9010(5층)", "ApeosPort-V C3375(세이토)", "APVIIC5573", "x4255", "M5526CDN"]) expect(isColorModel(m), m).toBe(true);
-    for (const m of ["SL-M3870FW", "K4250", "SL-K4305LX", "L5700", "MFC-L5700DN", "BIZHUB-128DN", "5700", "K7500", "N501"]) expect(isColorModel(m), m).toBe(false);
+    for (const m of ["320", "D450", "3220", "7400", "2060", "ECOSYS-M5521CDN", "ma2100", "ES5473", "HP 9010(5층)", "ApeosPort-V C3375(세이토)", "APVIIC5573", "x4255", "M5526CDN", "N501", "N502"]) expect(isColorModel(m), m).toBe(true);
+    for (const m of ["SL-M3870FW", "K4250", "SL-K4305LX", "L5700", "MFC-L5700DN", "BIZHUB-128DN", "5700", "K7500", "L5100"]) expect(isColorModel(m), m).toBe(false);
   });
 });

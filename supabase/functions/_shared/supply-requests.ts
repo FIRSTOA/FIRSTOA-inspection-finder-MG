@@ -170,7 +170,7 @@ export function isColorModel(model: string, catalog: CatalogItem[] = []): boolea
   // 흑백: 삼성 SL-K·SL-M(K4250·M3870…), 브라더 L5xxx, 교세라 P 계열, bizhub 숫자만, 흑백 기종 숫자 약칭
   if (/^(?:samsung)?(?:sl-?)?[km]\d{4}|^(?:mfc-?)?l5\d{3}|^ecosys-?p|^bizhub-?\d|^(?:128|3870|4080|4250|4255|4305|5100|5700)(?:[a-z]|$)/.test(key)) return false;
   // 컬러: 삼성 SL-X·CLX·CLP, 신도 D3xx·D4xx, OKI ES5473, 제록스 Apeos/DocuCentre/DocuPrint C, HP PageWide, 브라더 L8900CDW …
-  if (/^(?:samsung)?(?:sl-?)?x\d|clx|clp|^d[345]\d\d|^es\d|apeos|^ap(?:[iv]+)?-?c\d|^ac\d|docucentre|docuprint-?c|^c\d{4}|^hp|mfcl8|mfcl9|컬러/.test(key)) return true;
+  if (/^(?:samsung)?(?:sl-?)?x\d|clx|clp|^d[345]\d\d|^n[45]\d\d|^es\d|apeos|^ap(?:[iv]+)?-?c\d|^ac\d|docucentre|docuprint-?c|^c\d{4}|^hp|mfcl8|mfcl9|컬러/.test(key)) return true;
   // 숫자만 적은 기종(3220·4220·7400·2060·320·450…) — 이 회사 기기에서 숫자만 쓰는 것은 거의 컬러기
   if (/^(?:3220|3280|4220|4225|4300|7400|7500|7600|2060|2061|2263|2271|2273|2275|2276|2560|2567|3070|3373|3375|3376|4473|4570|5005|5570|5573|5575|5580|320|410|420|450|470|2100|2101|5473|5521|5526)(?:[a-z]+)?$/.test(key)) return true;
   return false;
@@ -263,6 +263,8 @@ function consumeParts(word: string, table: Array<[string, CatalogItem]>): Piece[
     if (qm) rest = rest.slice(qm[0].length);
     rest = rest.replace(/^(개씩|개|ea|씩|각)/, "");
     const c = hit[1];
+    // 색이 뒤에 붙은 것("현상제m"·"드럼k") — 남은 글자가 색 한 글자뿐이면 그 색
+    if (!colors.length && COLORABLE.has(c.category) && /^[kcmy]$/.test(rest)) { colors = [toColor(rest)]; rest = ""; }
     if (c.category === "토너") { for (const col of colors.length ? colors : [c.color || ""]) out.push({ kind: "toner", base: "토너", cat: c, color: col, qty }); continue; }
     if (c.category === "폐토너통") { out.push({ kind: "waste", base: "폐토너통", cat: c, color: "", qty }); continue; }
     const canColor = COLORABLE.has(c.category);
@@ -279,6 +281,7 @@ function piecesOf(item: string, qty: string, model: string, catalog: CatalogItem
     .replace(/(한|하나)\s*(세트|셋트|셋|set)/g, "1$2").replace(/두\s*(세트|셋트|셋|set)/g, "2$2").replace(/세\s*(세트|셋트|셋|set)/g, "3$2")
     .replace(NOISE, " ")
     .replace(/[().,/·\-_:;]+/g, " ")
+    .replace(/폐\s*토너\s*(?:통|박스)?|웨이스트\s*토너/g, "폐통")          // "폐토너통"은 토너가 아니다 — 토너 낱말 분리 전에 폐통으로
     .replace(/토너/g, " 토너 ");
   // 띄어 쓴 별칭("리타드 패드"·"2nd btr"·"드럼 칩")은 붙여서 한 낱말로
   for (const [k, c] of table) {

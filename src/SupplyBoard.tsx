@@ -90,13 +90,16 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
       if (await autoAssign(list)) list = await fetchRows();
       setRows(list); setReady(true);
       setEvents(await selectRows<Ev>("supply_events", `select=*&created_at=gte.${encodeURIComponent(new Date(Date.now() - (days + 30) * 86400_000).toISOString())}&order=created_at.asc&limit=5000`).catch(() => [] as Ev[]));
-      // 미정의 품목이 있으면 한 번(앱 켜고 처음) 저절로 다시 맞춘다 — 아는 표기(폐·K1 폐·토너1셋·k현상제…)는 사람이 누를 일 없이
-      if (!renormOnce && list.some((r) => !r.item_std)) {
+      // 표 어딘가에 미정의 품목이 있으면 한 번(앱 켜고 처음) 저절로 다시 맞춘다 — 기본 기간이 당일이라 화면 행만 보면 놓치므로 표 전체를 한 줄 확인
+      if (!renormOnce) {
         renormOnce = true;
-        setFixing("품목 이름 맞추는 중…");
-        renormalizeUndefined((d, t) => setFixing(`품목 이름 맞추는 중 ${d}/${t}`))
-          .then(async (r) => { setFixing(""); if (r.fixed) { notify(`미정의 품목 ${r.fixed}행을 표준 이름으로 맞췄습니다`, "success"); setRows(await fetchRows()); } })
-          .catch(() => setFixing(""));
+        const und = await selectRows<{ id: number }>("supply_requests", "select=id&item_std=eq.&limit=1").catch(() => [] as { id: number }[]);
+        if (und.length) {
+          setFixing("품목 이름 맞추는 중…");
+          renormalizeUndefined((d, t) => setFixing(`품목 이름 맞추는 중 ${d}/${t}`))
+            .then(async (r) => { setFixing(""); if (r.fixed) { notify(`미정의 품목 ${r.fixed}행을 표준 이름으로 맞췄습니다`, "success"); setRows(await fetchRows()); } })
+            .catch(() => setFixing(""));
+        }
       }
     } catch { setReady(false); }
     setMembers(await selectRows<Member>("cs_members", "select=name,dept,team&active=eq.true").catch(() => [] as Member[]));

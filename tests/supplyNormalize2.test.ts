@@ -6,6 +6,13 @@ const short = (rows: ReturnType<typeof normalizeItems>) => rows.map((r) => `${r.
 
 // 2026-10-11 지난 기록 채우기에서 실제로 나온 미정의 품목들 — 사전(재고 표)이 비어 있어도 기본 품목으로 맞아야 한다
 describe("미정의로 남았던 실제 표기", () => {
+  it("'폐토너통'만 적은 것은 토너가 아니다(흑백기·기종 미상에서도 K 가 생기면 안 된다)", () => {
+    expect(short(normalizeItems([self("폐토너통", "1")], [], ""))).toEqual(["폐토너통×1"]);
+    expect(short(normalizeItems([self("폐토너통", "2")], [], "SL-M4080FX"))).toEqual(["폐토너통×2"]);
+    expect(short(normalizeItems([self("폐토너박스", "")], [], "K4250"))).toEqual(["폐토너통×1"]);
+    expect(short(normalizeItems([self("폐 토너 통 2", "")], [], ""))).toEqual(["폐토너통×2"]);
+    expect(short(normalizeItems([self("k1 폐토너통", "1")], [], "K4250"))).toEqual(["토너 K×1", "폐토너통×1"]);
+  });
   it("'폐' → 폐토너통, '폐통' → 폐토너통", () => {
     expect(short(normalizeItems([self("폐", "1")], [], ""))).toEqual(["폐토너통×1"]);
     expect(short(normalizeItems([self("폐통", "1")], [], ""))).toEqual(["폐토너통×1"]);
