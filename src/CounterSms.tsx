@@ -394,7 +394,7 @@ export default function CounterSms({ author }: { author: string }) {
           await updateRows("counter_sms_targets", `id=in.(${ids})`, { done_at: stamp, done_by: `${by} · 목록에서 빠짐` });
         }
         if (extended) {
-          const entry: BatchLogEntry = { at: stamp, by, added: fresh.length, skipped: sync ? [] : dupes.map((t) => t.vendor), dropped: dropped.map((t) => t.vendor), kept, mode: sync ? "sync" : "merge" };
+          const entry: BatchLogEntry = { at: stamp, by, added: fresh.length, skipped: dupes.map((t) => t.vendor), dropped: dropped.map((t) => t.vendor), kept, mode: sync ? "sync" : "merge" }; // skipped = 이번 목록에도 있던(유지) 업체 — 카드의 "또 올라옴" 재료
           await updateRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`, { log: [...(batch.log || []), entry] }).catch(() => undefined);
         }
         if (uploadInboxId) { await markInbox(uploadInboxId, batch.id, sync ? "맞추기" : "추가"); setUploadInboxId(null); }
@@ -579,7 +579,21 @@ export default function CounterSms({ author }: { author: string }) {
             const sentCount = batchTargets.filter((t) => t.sent_at).length;
             const doneCount = batchTargets.filter((t) => t.done_at).length;
             const stage = (t: TargetRow) => (t.done_at ? 2 : t.sent_at ? 1 : 0); // 안 보낸 것 → 보냄 → 완료 순
-            const addedTag = (t: TargetRow) => (t.added_at && batch && new Date(t.added_at).getTime() - new Date(batch.created_at).getTime() > 5 * 60_000 ? `＋${Number(t.added_at.slice(5, 7))}/${Number(t.added_at.slice(8, 10))}` : "");
+            // 카드 이력(2026-10-10 "언제 리스트가 올라간 건지, 문자 보낸 날짜, 사진 보낸 날짜가 다 나와야 오해가 없다"):
+            //   목록에 오른 때 = added_at(없으면 목록 생성 시각), 다시 오른 때 = 배치 log 항목(자동·추가·맞추기)의 skipped 이름이 이 업체인 시각.
+            //   문자 보낸 뒤 또 오른 것은 주황, 완료된 뒤 또 오른 것은 빨강으로 따로 표시한다.
+            const md = (iso?: string | null) => (iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}` : "");
+            const mdt = (iso?: string | null) => (iso ? `${md(iso)} ${iso.slice(11, 16)}` : "");
+            const historyOf = (t: TargetRow) => {
+              const listedAt = t.added_at || batch?.created_at || "";
+              const key = contactVendorKey(t.vendor);
+              const again = (batch?.log || [])
+                .filter((e) => e.mode !== "remove" && (e.skipped || []).some((name) => contactVendorKey(name) === key) && (!listedAt || e.at > listedAt))
+                .map((e) => e.at);
+              const afterDone = t.done_at ? again.filter((at) => at > (t.done_at as string)) : [];
+              const afterSent = t.sent_at && !t.done_at ? again.filter((at) => at > (t.sent_at as string)) : [];
+              return { listedAt, again, afterDone, afterSent };
+            };
             const groupRows = batchTargets
               .filter((t) => t.grade_group === gradeTab)
               .sort((a, b) => stage(a) - stage(b));
@@ -601,7 +615,7 @@ export default function CounterSms({ author }: { author: string }) {
                     {(batch.log || []).length > 0 && (
                       <div className="mt-1 space-y-0.5 text-[10px] font-bold text-slate-500">
                         {(batch.log || []).slice(-3).reverse().map((entry, i) => (
-                          <div key={`${entry.at}-${i}`}>{entry.mode === "auto" ? "⚡" : entry.mode === "sync" ? "⇄" : entry.mode === "remove" ? "－" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "remove" ? `삭제 ${(entry.removed || []).join(", ")}` : entry.mode === "auto" ? `자동 반영 — 신규 ${entry.added}곳 · 중복 ${entry.skipped.length}곳${entry.missing?.length ? ` · 목록에 없는 열린 곳 ${entry.missing.length}곳(${entry.missing.join(", ")})` : ""}` : `${entry.mode === "sync" ? "목록 맞춤 — " : ""}${entry.added}곳 추가`}{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length && entry.mode !== "auto" ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
+                          <div key={`${entry.at}-${i}`}>{entry.mode === "auto" ? "⚡" : entry.mode === "sync" ? "⇄" : entry.mode === "remove" ? "－" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "remove" ? `삭제 ${(entry.removed || []).join(", ")}` : entry.mode === "auto" ? `자동 반영 — 신규 ${entry.added}곳 · 중복 ${entry.skipped.length}곳${entry.missing?.length ? ` · 목록에 없는 열린 곳 ${entry.missing.length}곳(${entry.missing.join(", ")})` : ""}` : `${entry.mode === "sync" ? "목록 맞춤 — " : ""}${entry.added}곳 추가`}{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length && entry.mode === "merge" ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
                         ))}
                       </div>
                     )}
@@ -623,7 +637,14 @@ export default function CounterSms({ author }: { author: string }) {
                           <span className="min-w-0 flex-1 basis-[60%] truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
                           {row.list_kind === "CMS" && <span title="CMS 마감 — 관리부가 따로 올리는 목록. 맞추기는 CMS끼리만" className="shrink-0 rounded bg-cyan-100 px-1 py-0.5 text-[9px] font-black text-cyan-800">CMS{row.cms_day ? ` ${row.cms_day}일` : ""}</span>}
                           {ruleBadges(row)}
-                          {addedTag(row) && <span title={`${row.added_at?.slice(0, 16).replace("T", " ")} ${row.added_by || ""} 추가`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black text-amber-800">{addedTag(row)}</span>}
+                          {(() => { const h = historyOf(row); return (<>
+                            {h.listedAt && <span title={`목록에 오른 때 ${h.listedAt.slice(0, 16).replace("T", " ")}${row.added_by ? ` · ${row.added_by}` : ""}`} className="shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[9px] font-black text-slate-600">목록 {md(h.listedAt)}</span>}
+                            {h.afterDone.length > 0
+                              ? <span title={`완료한 뒤 관리부 목록에 또 올라옴: ${h.afterDone.map(mdt).join(", ")} — 관리부에 완료 사실을 알리거나 사진을 다시 확인하세요`} className="shrink-0 rounded bg-rose-600 px-1 py-0.5 text-[9px] font-black text-white">완료 후 또 올라옴 {md(h.afterDone[h.afterDone.length - 1])}</span>
+                              : h.afterSent.length > 0
+                              ? <span title={`문자를 보낸 뒤 목록에 또 올라옴: ${h.afterSent.map(mdt).join(", ")} — 고객 회신이 아직이면 다시 보내지 말고 확인 전화`} className="shrink-0 rounded bg-amber-500 px-1 py-0.5 text-[9px] font-black text-white">문자 후 또 올라옴 {md(h.afterSent[h.afterSent.length - 1])}</span>
+                              : h.again.length > 0 && <span title={`목록에 다시 올라옴: ${h.again.map(mdt).join(", ")}`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black text-amber-800">🔁 또 올라옴 ×{h.again.length}</span>}
+                          </>); })()}
                           {row.done_at
                             ? <span className="shrink-0 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓✓ 완료</span>
                             : row.sent_at && <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓ 보냄</span>}
@@ -631,10 +652,11 @@ export default function CounterSms({ author }: { author: string }) {
                         <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
                           {row.machines.length}대 · {row.phones.length ? row.phones.map(formatPhone).join(", ") : "번호 없음"}
                         </div>
-                        {row.done_at
-                          ? <div className="mt-0.5 truncate text-[10px] font-black text-indigo-700">완료 {row.done_by} · {row.done_at.slice(5, 16).replace("T", " ")}{row.sent_at ? ` · 보냄 ${row.sent_at.slice(5, 10)}` : ""}</div>
-                          : row.sent_at
-                          ? <div className="mt-0.5 truncate text-[10px] font-black text-emerald-700">{row.sent_by} · {row.sent_at.slice(5, 16).replace("T", " ")}{row.sent_phone ? ` · ${formatPhone(row.sent_phone)}` : ""}</div>
+                        {(row.sent_at || row.done_at)
+                          ? <div className={`mt-0.5 truncate text-[10px] font-black ${row.done_at ? "text-indigo-700" : "text-emerald-700"}`} title={[row.sent_at && `문자 ${row.sent_at.slice(0, 16).replace("T", " ")} ${row.sent_by || ""}${row.sent_phone ? ` → ${formatPhone(row.sent_phone)}` : ""}`, row.done_at && `${/카운터 사진/.test(row.done_by || "") ? "카운터 사진 전송" : "완료"} ${row.done_at.slice(0, 16).replace("T", " ")} ${row.done_by || ""}`].filter(Boolean).join("\n")}>
+                              {row.sent_at ? `문자 ${mdt(row.sent_at)} ${row.sent_by || ""}` : "문자 안 보냄"}
+                              {row.done_at ? ` · ${/카운터 사진/.test(row.done_by || "") ? "📷 사진 전송" : "완료"} ${mdt(row.done_at)} ${(row.done_by || "").replace(/\s*·\s*카운터 사진$/, "")}` : ""}
+                            </div>
                           : row.vendor_names.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {row.vendor_names.length}곳 통합</div>}
                       </button>
                       <span className="mt-1.5 flex justify-end gap-1">
