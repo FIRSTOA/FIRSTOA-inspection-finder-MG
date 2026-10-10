@@ -50,6 +50,14 @@ export default function CostTile() {
     setRefreshedAt(new Date(Date.now() + KST).toISOString().slice(11, 16));
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // 앞으로는 단추 없이 쌓이게: 홈을 열 때 12시간에 한 번 최근 3일치를 솔라피에서 조용히 가져온다(같은 건은 안 겹침, 2026-10-11 "앞으로 들어오는 거만 쌓자")
+  useEffect(() => {
+    const key = "cs_solapi_import_at";
+    const last = Number(localStorage.getItem(key) || 0);
+    if (Date.now() - last < 12 * 3600_000) return;
+    try { localStorage.setItem(key, String(Date.now())); } catch { /* 무시 */ }
+    void invokeEdgeFunction("customer-message-send", { action: "import_history", days: 3 }, 120_000).then(() => load()).catch(() => undefined);
+  }, [load]);
   useEffect(() => {
     const t = window.setInterval(() => { if (document.visibilityState === "visible" && active) void load(); }, 60_000);
     return () => window.clearInterval(t);
@@ -172,15 +180,16 @@ export default function CostTile() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600">
-                    <span>예전 내역: AI 는 2026-10-10부터 기록(그 전은 OpenAI 사용량 화면에만). 문자는 솔라피에 남아 있는 발송 내역을 가져올 수 있습니다.</span>
+                    <span>AI 는 2026-10-10부터 기록(그 전은 OpenAI 사용량 화면에만). 문자는 홈을 열 때마다 최근 3일치를 솔라피에서 알아서 받아 쌓이고, 지난달치는 이 단추로 한 번 가져옵니다.</span>
                     <button type="button" disabled={importing} onClick={() => void (async () => {
-                      if (!await askConfirm("솔라피에서 최근 12개월 발송 내역을 가져와 문자 건수·금액에 넣을까요? 같은 건은 두 번 넣지 않습니다.", { okLabel: "가져오기" })) return;
+                      const k0 = new Date(Date.now() + KST); const sinceDays = Math.ceil((Date.now() - Date.UTC(k0.getUTCFullYear(), k0.getUTCMonth() - 1, 1)) / 86400_000) + 1;
+                      if (!await askConfirm(`솔라피에서 지난달 1일부터 지금까지(${sinceDays}일) 발송 내역을 가져와 문자 건수·금액에 넣을까요? 같은 건은 두 번 넣지 않습니다.`, { okLabel: "가져오기" })) return;
                       setImporting(true);
                       try {
                         // 한 호출에 7,500건까지 — nextKey 가 오면 이어서 부른다
                         let startKey = ""; let fetched = 0, inserted = 0, skipped = 0; const errors: string[] = [];
                         for (let round = 0; round < 20; round += 1) {
-                          const out = await invokeEdgeFunction<{ fetched: number; inserted: number; skipped: number; errors: string[]; nextKey?: string }>("customer-message-send", { action: "import_history", days: 365, startKey }, 180_000);
+                          const out = await invokeEdgeFunction<{ fetched: number; inserted: number; skipped: number; errors: string[]; nextKey?: string }>("customer-message-send", { action: "import_history", days: sinceDays, startKey }, 180_000);
                           fetched += out.fetched || 0; inserted += out.inserted || 0; skipped += out.skipped || 0; errors.push(...(out.errors || []));
                           if (!out.nextKey || errors.length) break;
                           startKey = out.nextKey;
@@ -189,7 +198,7 @@ export default function CostTile() {
                         notify(`솔라피 ${fetched.toLocaleString()}건 읽음 · 새로 ${inserted.toLocaleString()}건 추가 · 이미 있음 ${skipped.toLocaleString()}건${errors.length ? ` · 오류 ${errors[0]}` : ""}`, errors.length ? "error" : "success");
                         await load();
                       } catch (e) { notify(`가져오기 실패: ${(e as Error).message}`, "error"); } finally { setImporting(false); }
-                    })()} className="ml-auto rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-50">{importing ? "가져오는 중…" : "솔라피 12개월 가져오기"}</button>
+                    })()} className="ml-auto rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-50">{importing ? "가져오는 중…" : "지난달부터 가져오기"}</button>
                   </div>
                   <div className="mt-3 text-[10.5px] font-bold text-slate-400">
                     단가: AI 는 공식 가격표(gpt-5.5 입력 $5 · 캐시 $0.5 · 출력 $30 / 100만 토큰) 기준, 문자는 솔라피 공개 요금(단문 {price.sms}·장문 {price.lms}·사진 {price.mms}·알림톡 {price.ata}원, 부가세 별도). 환율 {rate.toLocaleString()}원/달러{rate === 1400 ? " 가정" : ""}. 월말 예상은 지금까지 금액 ÷ 지난 날수 × 이 달 날수. 바꾸려면 관리 app_config(AI_PRICE_IN·AI_USD_KRW·SMS_PRICE_KRW 등).

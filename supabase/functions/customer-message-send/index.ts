@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
           const rows = ok.filter((m) => !existing.has(String(m.messageId))).map((m) => {
             const when = String(m.dateCreated || now);
             return {
-              source_type: "direct:import", source_id: crypto.randomUUID(), channel: String(m.type || "") === "ATA" || String(m.type || "") === "CTA" ? "kakao" : "sms", recipient: String(m.to || ""), message: String(m.text || "").slice(0, 2000),
+              source_type: "direct:import", source_id: crypto.randomUUID(), channel: "sms" /* 표의 channel 제약이 sms·email 뿐(23514) — 종류는 payload.solapi_type 에 */, recipient: String(m.to || ""), message: String(m.text || "").slice(0, 2000),
               payload: { type: "import", message_id: String(m.messageId), solapi_type: String(m.type || ""), mms: String(m.type || "") === "MMS", status: String(m.status || ""), statusCode: String(m.statusCode || "") },
               scheduled_at: when, status: "sent", created_by: "솔라피 가져오기", sent_at: when, error: "", created_at: when, updated_at: now,
             };
