@@ -16,7 +16,7 @@ import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
 import { buildMessage, formatPhone, mergeTargets, parseBlocks, parseListHeader, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
 import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
-import { COUNTER_ROOM_KEY, counterRoomName, sendCounterPhoto } from "./counterSmsPhoto";
+import { counterRoomEntries, prepareCounterSend, sendCounterPhoto, type SendPlan } from "./counterSmsPhoto";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
@@ -124,7 +124,7 @@ export default function CounterSms({ author }: { author: string }) {
       .then(() => setIdentCols(true)).catch(() => setIdentCols(false));
   }, []);
   const ruleCtx = (row: TargetRow) => ({ phones: row.phones, leaseCodes: row.lease_code ? [row.lease_code] : [], serials: row.serials || [] });
-  // 관리부 목록 도착함 — 봇(gas-and-bot/counter-list-collector.js)이 마감방 글을 넣어 둔다. 표가 없으면 조용히 빈 목록
+  // 관리부 목록 도착함 — 봇 폰의 점검AS 스크립트(gas-and-bot/supabase-outbox-poller.js ⑧)가 마감방 글을 넣어 둔다. 표가 없으면 조용히 빈 목록
   const [inbox, setInbox] = useState<InboxRow[]>([]);
   const [uploadInboxId, setUploadInboxId] = useState<number | null>(null);
   const loadInbox = useCallback(async () => {
@@ -135,24 +135,33 @@ export default function CounterSms({ author }: { author: string }) {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoRow, setPhotoRow] = useState<TargetRow | null>(null);
   const [photoBusyId, setPhotoBusyId] = useState("");
-  const [counterRoom, setCounterRoom] = useState("");
-  useEffect(() => { void counterRoomName().then(setCounterRoom); }, []);
-  const saveCounterRoom = async (value: string) => {
-    const room = value.trim();
-    const rows = await selectRows<{ key: string }>("app_config", `select=key&key=eq.${COUNTER_ROOM_KEY}`).catch(() => [] as { key: string }[]);
-    if (rows.length) await updateRows("app_config", `key=eq.${COUNTER_ROOM_KEY}`, { value: room });
-    else await insertRow("app_config", { key: COUNTER_ROOM_KEY, value: room });
-    setCounterRoom(room); setNotice(room ? `마감 카톡방을 "${room}"으로 저장했습니다.` : "마감 카톡방 이름을 비웠습니다.");
-  };
+  // 마감방은 관리 탭 → 카톡방 매핑(업무 종류 "마감")에서 한 곳으로 관리 — 여기선 어디로 가는지 보여 주기만
+  const [counterRooms, setCounterRooms] = useState<Array<{ region: string; room: string }>>([]);
+  useEffect(() => { void counterRoomEntries().then(setCounterRooms); }, []);
   const pickCounterPhoto = (row: TargetRow) => { setPhotoRow(row); photoInputRef.current?.click(); };
+  // 사진을 고르면 바로 보내지 않는다 — 어느 방에 무슨 글과 함께 가는지 확인창에서 보고 [보내기]를 눌러야 나간다
+  const [photoConfirm, setPhotoConfirm] = useState<{ row: TargetRow; file: File; preview: string; plan: SendPlan; caption: string } | null>(null);
   const handleCounterPhoto = async (file: File | null) => {
     const row = photoRow; setPhotoRow(null);
     if (!file || !row) return;
     setPhotoBusyId(row.id);
     try {
-      const res = await sendCounterPhoto(row, file, author);
+      const plan = await prepareCounterSend(row, author);
+      setPhotoConfirm({ row, file, preview: URL.createObjectURL(file), plan, caption: plan.caption });
+    } catch (e) {
+      setNotice(`카운터 전송 준비 실패: ${(e as Error).message}`);
+    } finally { setPhotoBusyId(""); }
+  };
+  const closePhotoConfirm = () => { if (photoConfirm) URL.revokeObjectURL(photoConfirm.preview); setPhotoConfirm(null); };
+  const confirmCounterPhoto = async () => {
+    if (!photoConfirm) return;
+    const { row, file, plan, caption } = photoConfirm;
+    setPhotoBusyId(row.id);
+    try {
+      const res = await sendCounterPhoto(row, file, author, { ...plan, caption: caption.trim() || plan.caption });
       const patch = { done_at: new Date().toISOString(), done_by: `${author || "미지정"} · 카운터 사진` };
       if (extended) { setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t))); void persistPatch(row, patch, "완료"); }
+      closePhotoConfirm();
       setNotice(res.channel === "pc" ? `${row.vendor} — 카톡 PC가 "${res.room}"에 글+사진을 올립니다 (노트북 실행기). 카드는 완료로 표시했습니다.` : `${row.vendor} — 봇이 "${res.room}"에 글+사진 링크를 올립니다. 카드는 완료로 표시했습니다.`);
     } catch (e) {
       setNotice(`카운터 사진 전송 실패: ${(e as Error).message}`);
@@ -626,13 +635,14 @@ export default function CounterSms({ author }: { author: string }) {
         </>
       ) : (
         <>
-          <section className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-sm">
-            <div className="text-sm font-black text-slate-900">📷 마감 카톡방 <span className="text-[11px] font-bold text-slate-500">· 카드의 [카운터 전송]이 글+사진을 올릴 방 — 카톡 방 제목 그대로</span></div>
-            <form className="mt-2 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void saveCounterRoom((new FormData(e.currentTarget).get("room") as string) || ""); }}>
-              <input name="room" defaultValue={counterRoom} key={counterRoom} placeholder="예: 마감방" className={`w-64 ${field}`} />
-              <button type="submit" className="rounded-full bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700">저장</button>
-              <span className="text-[11px] font-bold text-slate-500">{counterRoom ? `지금: "${counterRoom}"` : "아직 없음 — 적어야 전송이 됩니다"} · 노트북 실행기가 켜져 있으면 카톡 PC가 사진을 직접 올리고, 아니면 봇이 글+링크로 올립니다</span>
-            </form>
+          <section className={`rounded-xl border p-4 shadow-sm ${counterRooms.length ? "border-emerald-200 bg-emerald-50/50" : "border-amber-300 bg-amber-50"}`}>
+            <div className="text-sm font-black text-slate-900">📷 마감 카톡방 <span className="text-[11px] font-bold text-slate-500">· 카드의 [카운터 전송]이 글+사진을 올리고, 봇이 관리부 목록을 읽어 오는 방</span></div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px] font-bold text-slate-700">
+              {counterRooms.length ? counterRooms.map((r) => (
+                <span key={r.region} className="rounded-full border border-emerald-200 bg-white px-2.5 py-1"><span className="mr-1 text-[10px] font-black text-emerald-700">{r.region === "*" ? "공통" : `${r.region}팀`}</span>{r.room}</span>
+              )) : <span className="text-amber-800">아직 등록된 방이 없어 카운터 전송이 막혀 있습니다.</span>}
+            </div>
+            <div className="mt-2 text-[11px] font-bold text-slate-500">방 이름은 다른 카톡방과 같이 <b className="text-slate-800">관리 탭 → 카톡방 매핑 → 업무 종류 "마감"</b>에서 바꿉니다(지역 * 공통이면 모든 팀, 팀을 고르면 그 팀만). 노트북 실행기가 켜져 있으면 카톡 PC가 사진을 직접 올리고, 아니면 봇이 글+링크로 올립니다.</div>
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-black text-slate-900">🌍 지역 프로필</div>
@@ -686,6 +696,40 @@ export default function CounterSms({ author }: { author: string }) {
       )}
 
       <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0] || null; e.target.value = ""; void handleCounterPhoto(f); }} />
+      {photoConfirm && (
+        <div className="fixed inset-0 z-[230] flex items-end bg-black/50 sm:items-center sm:justify-center sm:p-4" onMouseDown={closePhotoConfirm}>
+          <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 bg-[#1E252F] px-5 py-4">
+              <div className="min-w-0">
+                <div className="text-[11px] font-black text-slate-400">마감 카운터 전송 확인 — 아직 보내지 않았습니다</div>
+                <div className="truncate text-[15px] font-black text-white">{photoConfirm.row.vendor}</div>
+              </div>
+              <button type="button" onClick={closePhotoConfirm} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"><X size={17} /></button>
+            </div>
+            <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-4 sm:grid-cols-[220px_minmax(0,1fr)]">
+              <div>
+                <img src={photoConfirm.preview} alt="카운터 사진" className="w-full rounded-lg border border-slate-200 object-contain" />
+                <div className="mt-1 text-[10px] font-bold text-slate-400">{photoConfirm.file.name} · {(photoConfirm.file.size / 1024).toFixed(0)}KB</div>
+              </div>
+              <div className="min-w-0 space-y-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] font-bold text-slate-700">
+                  보낼 방: <span className="font-black text-slate-900">{photoConfirm.plan.room}</span>
+                  <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-black ${photoConfirm.plan.channel === "pc" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{photoConfirm.plan.channel === "pc" ? "카톡 PC가 글+사진 직접 전송" : "봇이 글+사진 링크 전송 (노트북 실행기 꺼짐)"}</span>
+                </div>
+                <label className="block text-[11px] font-black text-slate-500">함께 보낼 글 <span className="font-bold text-slate-400">· 고쳐도 됩니다</span>
+                  <textarea value={photoConfirm.caption} onChange={(e) => setPhotoConfirm((cur) => (cur ? { ...cur, caption: e.target.value } : cur))} rows={8}
+                    className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-[13px] font-semibold leading-6 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                </label>
+                <div className="text-[11px] font-bold text-slate-500">보내면 이 카드는 <b className="text-indigo-700">완료 · 카운터 사진</b>으로 표시됩니다. 잘못 보냈으면 카드의 [완료 취소]로 표시만 되돌릴 수 있고, 카톡방 글은 직접 지워야 합니다.</div>
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+              <button type="button" onClick={closePhotoConfirm} disabled={!!photoBusyId} className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">취소</button>
+              <button type="button" onClick={() => void confirmCounterPhoto()} disabled={!!photoBusyId} className="flex-1 rounded-full bg-emerald-600 py-2.5 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-50">{photoBusyId ? "보내는 중…" : `"${photoConfirm.plan.room}"에 보내기`}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {rulesOpen && <ContactRulesBook rules={contactRules} onClose={() => setRulesOpen(false)} onRemove={removeRuleFromBook} busy={ruleBusy} />}
       {uploadOpen && (
         <div className="fixed inset-0 z-[210] flex items-end bg-black/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setUploadOpen(false)}>

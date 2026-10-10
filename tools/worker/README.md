@@ -11,7 +11,25 @@
 | 월요 키맨 포스터 | 월 08시 | `tools/kakao-pc/poster_send.py --weekly` |
 | 일감 처리 | 들어올 때 | `worker_jobs` 의 queued 행을 잡아 실행 — `ping` `backup` `relay` `poster` (음성·OCR 은 자리만) |
 
-## 설치 (노트북에서 한 번)
+## 처음부터 (아무것도 안 깔린 새 노트북) — 한 줄
+
+노트북에서 24시간 로그인해 둘 계정으로 로그인한 뒤, **일반 PowerShell**(관리자 아님)을 열고 아래 한 줄을 붙여 넣는다.
+
+```
+[Net.ServicePointManager]::SecurityProtocol='Tls12'; irm https://raw.githubusercontent.com/FIRSTOA/FIRSTOA-inspection-finder-MG/main/tools/worker/bootstrap.ps1 | iex
+```
+
+`bootstrap.ps1` 이 순서대로 한다 — ① winget 으로 Git·Python 3.12 설치(없을 때만) ② 저장소를 `사용자 폴더\FIRSTOA-inspection-finder-MG` 에 받음(있으면 pull)
+③ 전원: 전원 연결 시 절전 안 함·덮개 닫아도 유지 ④ `install.ps1`(pip 패키지 · 한 바퀴 시험 · 로그온 시 자동 시작 작업 'FIRSTOA Worker').
+끝나면 1분 안에 `worker_heartbeat` 에 심박이 찍히고, FIELD 카운터 문자 탭의 카운터 전송이 "카톡 PC가 직접 전송" 으로 바뀐다.
+**다시 실행하면 업데이트**(pull + 재등록)다. `winget` 이 없다는 말이 나오면 Microsoft Store 에서 "앱 설치 관리자"를 설치하고 다시.
+
+그 다음 손으로 할 것 세 가지:
+1. **카톡 PC** 설치 → 업무폰(봇) 계정으로 로그인(폰에서 인증번호) → 자동 로그인 체크. 로그인 뒤 **마감방·지역 운영방을 더블클릭해 별도 창으로 열어 둔다**(실행기는 열린 창에만 붙여 넣는다). 창은 최소화해도 되지만 닫으면 안 된다.
+2. **윈도우 자동 로그인**: `netplwiz` → "사용자 이름과 암호를 입력해야…" 체크 해제. 정전 뒤 재부팅돼도 로그온 작업이 다시 뜨게.
+3. **백업 위치**: OneDrive 에 로그인하면 `OneDrive\Desktop\FIRSTOA-백업` 에, 아니면 `사용자 폴더\FIRSTOA-백업` 에 쌓인다(환경 변수 `FIRSTOA_BACKUP_ROOT` 로 바꿀 수 있다).
+
+## 설치 (손으로 할 때)
 
 1. 노트북 설정: 덮개 닫아도 동작 · 절전 끄기 · 자동 로그인 · 업데이트 사용 시간 지정 · 원격 접속 켜기.
 2. Python 3.11 이상 설치(python.org, "Add to PATH" 체크).
@@ -22,7 +40,8 @@
    powershell -ExecutionPolicy Bypass -File <저장소>\tools\worker\install.ps1
    ```
    한 바퀴 시험 → 로그온 시 자동 시작·자동 재시작 작업 등록 → 바로 시작.
-6. 카톡 PC 에 봇 계정으로 로그인하고, 지역 운영방을 더블클릭해 **별도 창으로 열어 둔다**(중계·포스터는 열린 창에만 붙여 넣는다).
+6. 카톡 PC 에 봇 계정으로 로그인하고, 마감방·지역 운영방을 더블클릭해 **별도 창으로 열어 둔다**(중계·포스터·카운터 사진은 열린 창에만 붙여 넣는다).
+   마감방 이름은 FIELD 관리 탭 → 카톡방 매핑 → 업무 종류 "마감" 에 등록한 것을 쓴다(앱·봇·실행기 모두 같은 곳을 읽는다).
 
 ## 확인·운영
 

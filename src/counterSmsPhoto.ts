@@ -5,12 +5,14 @@
  *   → ① 노트북 작업 실행기가 살아 있으면 worker_jobs(kakao_photo)에 넣어 카톡 PC가 마감방에 글+사진을 올린다
  *     ② 아니면 발신 큐(outbox)에 글+사진 링크를 넣어 봇이 올린다(봇은 글자만 보낼 수 있다)
  *   → 카드를 "완료 · 카운터 사진"으로 표시. 사람이 하는 일은 사진 한 장 고르기뿐.
- * 마감방 이름은 app_config.COUNTER_KAKAO_ROOM(문구 설정 탭에서 적는다).
+ * 마감방 이름은 다른 방들과 같이 관리 탭 → 카톡방 매핑(room_map)에서 — 업무 종류 "마감", 지역은 팀 또는 * 공통.
+ * (옛 app_config.COUNTER_KAKAO_ROOM 은 매핑이 없을 때만 읽는다 — 한 곳에서 관리, 2026-10-10 사용자 지적)
  */
 import { prepareImageForUpload } from "./imageUpload";
-import { getConfig, insertRow, selectRows, uploadPhoto } from "./supabase";
+import { getConfig, getRoomMap, insertRow, selectRows, uploadPhoto } from "./supabase";
 
 export const COUNTER_ROOM_KEY = "COUNTER_KAKAO_ROOM";
+export const COUNTER_ROOM_CATEGORY = "마감";
 
 export type CounterTargetLike = {
   id: string; vendor: string; team: string; machines: string[];
@@ -50,7 +52,24 @@ export async function lookupLeaseInfo(t: CounterTargetLike): Promise<Partial<Lea
   return { address: pick("주소상세주소") || pick("시/구"), model: pick("모델명") || pick("기종"), serial: pick("기번") || pick("시리얼번호(기번)"), asset: pick("자산번호") };
 }
 
-export async function counterRoomName(): Promise<string> {
+/** room_map(카테고리|지역 → 방)에서 마감방 고르기 — 팀 방이 있으면 팀 방, 없으면 * 공통 */
+export function pickCounterRoom(map: Record<string, string>, team: string): string {
+  const t = str(team).toUpperCase();
+  return str((t && map[`${COUNTER_ROOM_CATEGORY}|${t}`]) || map[`${COUNTER_ROOM_CATEGORY}|*`]);
+}
+
+/** 관리 탭에 등록된 마감방들(표시용) — 지역 순 */
+export async function counterRoomEntries(): Promise<Array<{ region: string; room: string }>> {
+  const map = await getRoomMap().catch(() => ({} as Record<string, string>));
+  const prefix = `${COUNTER_ROOM_CATEGORY}|`;
+  return Object.entries(map).filter(([k, v]) => k.startsWith(prefix) && str(v)).map(([k, v]) => ({ region: k.slice(prefix.length), room: str(v) }))
+    .sort((a, b) => (a.region === "*" ? -1 : b.region === "*" ? 1 : a.region.localeCompare(b.region)));
+}
+
+export async function counterRoomName(team = ""): Promise<string> {
+  const map = await getRoomMap().catch(() => ({} as Record<string, string>));
+  const fromMap = pickCounterRoom(map, team);
+  if (fromMap) return fromMap;
   const cfg = await getConfig().catch(() => ({} as Record<string, string>));
   return str(cfg[COUNTER_ROOM_KEY]);
 }
@@ -62,21 +81,29 @@ export async function workerAlive(): Promise<boolean> {
   return Date.now() - t < 5 * 60_000;
 }
 
+export type SendPlan = { room: string; channel: "pc" | "bot"; caption: string; info: Partial<LeaseInfo> };
 export type SendResult = { channel: "pc" | "bot"; url: string; caption: string; room: string };
 
-export async function sendCounterPhoto(t: CounterTargetLike, file: File, author: string): Promise<SendResult> {
-  const room = await counterRoomName();
-  if (!room) throw new Error("마감 카톡방 이름이 아직 없습니다 — [문구 설정] 탭의 '마감 카톡방'에 방 제목을 적어 주세요");
+/** 보내기 전에 보여 줄 것 — 방·경로·글. 사람이 확인창에서 글을 고칠 수 있다(2026-10-10 "확인 버튼이 꼭 나오게") */
+export async function prepareCounterSend(t: CounterTargetLike, author: string): Promise<SendPlan> {
+  const room = await counterRoomName(t.team);
+  if (!room) throw new Error("마감 카톡방이 아직 없습니다 — 관리 탭 → 카톡방 매핑에서 업무 종류 '마감'(지역 * 공통 또는 팀)에 카톡 방 제목을 등록해 주세요");
+  const [info, alive] = await Promise.all([lookupLeaseInfo(t), workerAlive()]);
+  const channel = alive ? "pc" : "bot";
+  // 봇 경로는 사진 링크 줄이 붙는데 링크는 올린 뒤에 생긴다 → 확인창엔 "사진 링크 첨부"로 보여 주고 보낼 때 실제 주소로 바꾼다
+  return { room, channel, info, caption: buildCounterCaption(t, { author, info, withLink: channel === "bot" ? "(올린 뒤 주소가 들어갑니다)" : undefined }) };
+}
+
+export async function sendCounterPhoto(t: CounterTargetLike, file: File, author: string, plan: SendPlan): Promise<SendResult> {
   // 카운터 숫자가 읽혀야 한다 — 4MB 아래 원본은 그대로, 그보다 크면 2400px·0.9
   const prepared = await prepareImageForUpload(file, 2400, { quality: 0.9, keepOriginalUnderBytes: 4_000_000 });
   const url = await uploadPhoto(`counter/${t.team || "X"}/${Date.now()}-${t.id}.${prepared.ext}`, prepared.blob, prepared.contentType);
-  const info = await lookupLeaseInfo(t);
-  if (await workerAlive()) {
-    const caption = buildCounterCaption(t, { author, info });
-    await insertRow("worker_jobs", { kind: "kakao_photo", payload: { room, image_url: url, caption, target_id: t.id, vendor: t.vendor }, created_by: author || "미지정" });
-    return { channel: "pc", url, caption, room };
+  if (plan.channel === "pc") {
+    await insertRow("worker_jobs", { kind: "kakao_photo", payload: { room: plan.room, image_url: url, caption: plan.caption, target_id: t.id, vendor: t.vendor }, created_by: author || "미지정" });
+    return { channel: "pc", url, caption: plan.caption, room: plan.room };
   }
-  const caption = buildCounterCaption(t, { author, info, withLink: url });
-  await insertRow("outbox", { room, text: caption });
-  return { channel: "bot", url, caption, room };
+  // 확인창에서 글을 고쳤어도 "사진:" 줄은 실제 주소로 바꾼다. 줄을 지웠으면 끝에 붙인다
+  const caption = /^사진: .*$/m.test(plan.caption) ? plan.caption.replace(/^사진: .*$/m, `사진: ${url}`) : `${plan.caption.trim()}\n사진: ${url}`;
+  await insertRow("outbox", { room: plan.room, text: caption });
+  return { channel: "bot", url, caption, room: plan.room };
 }

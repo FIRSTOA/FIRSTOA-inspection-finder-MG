@@ -23,7 +23,7 @@ $py = $null
 foreach ($cand in @("$env:LOCALAPPDATA\Programs\Python\Python313\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe")) {
   if (Test-Path $cand) { $py = $cand; break }
 }
-if (-not $py) { $cmd = Get-Command python -ErrorAction SilentlyContinue; if ($cmd) { $py = $cmd.Source } }
+if (-not $py) { $cmd = Get-Command python -ErrorAction SilentlyContinue; if ($cmd -and $cmd.Source -notmatch 'WindowsApps') { $py = $cmd.Source } }  # skip the Store stub
 if (-not $py) { Write-Host "python.exe not found. Install Python 3.11+ from python.org (check 'Add to PATH')."; exit 1 }
 Write-Host "python: $py"
 

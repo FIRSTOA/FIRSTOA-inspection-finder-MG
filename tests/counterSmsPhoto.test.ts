@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { buildCounterCaption } from "../src/counterSmsPhoto";
+import { buildCounterCaption, pickCounterRoom } from "../src/counterSmsPhoto";
 
 const target = { id: "csb-1-003", vendor: "V (주)잡플러스4층백업", team: "C", machines: ["X7-시리즈"], lease_code: "21638", serials: ["ZPBLBJST8000GQV"], assets: ["A5571"], list_kind: "", cms_day: null };
+
+describe("마감 카운터 사진 — 방 고르기(관리 탭 카톡방 매핑 '마감')", () => {
+  it("팀 방이 있으면 팀 방, 없으면 * 공통, 둘 다 없으면 빈 값", () => {
+    const map = { "마감|*": "마감방", "마감|C": "수도권C 마감", "AS|C": "C AS방" };
+    expect(pickCounterRoom(map, "C")).toBe("수도권C 마감");
+    expect(pickCounterRoom(map, "c")).toBe("수도권C 마감");
+    expect(pickCounterRoom(map, "A")).toBe("마감방");
+    expect(pickCounterRoom({ "AS|C": "C AS방" }, "C")).toBe("");
+  });
+});
 
 describe("마감 카운터 사진 — 글 만들기", () => {
   it("업체·기종·시리얼·자산·임대코드·주소·전송자 순으로, 등급 접두는 뗀다", () => {
