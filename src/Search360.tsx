@@ -12,6 +12,8 @@ import { ArrowRight, Search as SearchIcon, Sparkles } from "lucide-react";
 import { notify } from "./toast";
 import { invokeEdgeFunction } from "./supabase";
 import UnifiedHistory from "./UnifiedHistory";
+import AnswerImage from "./AnswerImage";
+import { extractSvg, mobilePhonesIn } from "./answerSvg";
 import {
   buildEntity, countRows, daysSince, deriveState, entityTokensFromQuestion, gather, gatherModelRefs, identKey, isOtherVendor, isStrongCandidate, rawTextOf, resolveCandidates, SOURCES, toEvents,
   type Candidate, type Entity, type EventItem, type Group, type ModelRef, type SourceResult, type State,
@@ -307,7 +309,10 @@ export default function Search360({ author }: { author: string }) {
               <button type="button" onClick={() => setDataAnswers((cur) => cur.filter((_, j) => j !== i))} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-500 hover:bg-slate-50">지우기</button>
             </div>
           </div>
-          <div className="mt-2 whitespace-pre-wrap text-[13.5px] font-semibold leading-7 text-slate-800">{item.a}</div>
+          {(() => { const img = extractSvg(item.a); return (<>
+            <div className="mt-2 whitespace-pre-wrap text-[13.5px] font-semibold leading-7 text-slate-800">{img ? img.rest : item.a}</div>
+            {img && <AnswerImage item={img} vendor="" phones={[]} author={author} />}
+          </>); })()}
           {item.rows.length > 0 && (
             <details className="mt-2">
               <summary className="cursor-pointer text-[11px] font-black text-slate-500">근거로 쓴 마지막 조회 결과 {item.rows.length}행 ({item.table})</summary>
@@ -470,7 +475,10 @@ export default function Search360({ author }: { author: string }) {
             {answers.map((item, i) => (
               <div key={`${item.q}-${i}`} className="mt-3 rounded-lg border border-indigo-100 bg-white p-3">
                 <div className="text-[11px] font-black text-indigo-600">Q. {item.q}</div>
-                <div className="mt-1.5 whitespace-pre-wrap text-[13px] font-semibold leading-6 text-slate-800">{item.a}</div>
+                {(() => { const img = extractSvg(item.a); return (<>
+                  <div className="mt-1.5 whitespace-pre-wrap text-[13px] font-semibold leading-6 text-slate-800">{img ? img.rest : item.a}</div>
+                  {img && <AnswerImage item={img} vendor={entity?.name || ""} phones={mobilePhonesIn(state.keyman, state.tel, ...(entity?.phones || []))} author={author} />}
+                </>); })()}
                 <div className="mt-1.5 text-[10px] font-bold text-slate-400">근거로 넘긴 기록 {item.used}건 · 기록에 없는 내용은 답하지 않도록 되어 있습니다. 중요한 판단은 원문을 확인하세요.</div>
               </div>
             ))}
