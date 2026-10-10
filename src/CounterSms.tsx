@@ -725,7 +725,8 @@ export default function CounterSms({ author }: { author: string }) {
         </>
       )}
 
-      <input ref={photoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0] || null; e.target.value = ""; void handleCounterPhoto(f); }} />
+      {/* capture 를 두면 폰에서 곧장 카메라가 열린다 — 고객에게 받은 사진을 골라야 하므로 사진첩·파일 선택이 뜨게 둔다(2026-10-10) */}
+      <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] || null; e.target.value = ""; void handleCounterPhoto(f); }} />
       {photoConfirm && (
         <div className="fixed inset-0 z-[230] flex items-end bg-black/50 sm:items-center sm:justify-center sm:p-4" onMouseDown={closePhotoConfirm}>
           <div className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-2xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
