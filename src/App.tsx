@@ -1,4 +1,4 @@
-import { createElement, lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type PointerEvent } from "react";
+import { createElement, lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type ComponentType, type PointerEvent } from "react";
 import { askConfirm } from "./confirmModal";
 import { parseQuickVendorInput } from "./quickInput";
 import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, Target, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
@@ -75,9 +75,11 @@ const CounterSms = lazyScreen(() => import("./CounterSms"), "카운터 문자");
 const AutoSchedule = lazyScreen(() => import("./AutoSchedule"), "자동 일정");
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
 // 일정리스트·캘린더·홍보물 발송은 이름 있는 export 라 default 로 감싸서 lazy — 일정리스트 모듈(2,700줄)이 첫 로딩에 끼어 있던 것(2026-10-10 속도 2차)
-const AsReception = lazyScreen(() => import("./CsAsWorkspace").then((m) => ({ default: m.AsReception })), "일정리스트");
-const CsCalendar = lazyScreen(() => import("./CsAsWorkspace").then((m) => ({ default: m.CsCalendar })), "캘린더");
-const PromoWorkspace = lazyScreen(() => import("./CustomerEngagement").then((m) => ({ default: m.PromoWorkspace })), "홍보물 발송");
+type CsAsModule = typeof import("./CsAsWorkspace");
+type EngagementModule = typeof import("./CustomerEngagement");
+const AsReception = lazyScreen<ComponentProps<CsAsModule["AsReception"]>>(() => import("./CsAsWorkspace").then((m) => ({ default: m.AsReception })), "일정리스트");
+const CsCalendar = lazyScreen<object>(() => import("./CsAsWorkspace").then((m) => ({ default: m.CsCalendar })), "캘린더");
+const PromoWorkspace = lazyScreen<ComponentProps<EngagementModule["PromoWorkspace"]>>(() => import("./CustomerEngagement").then((m) => ({ default: m.PromoWorkspace })), "홍보물 발송");
 // 통합이력 팝업은 열 때만 받는다(77KB) — 다른 화면(일정리스트·서비스접수·조회…)과 같은 조각을 나눠 쓴다(2026-10-10 속도)
 const UnifiedHistoryLazy = lazy(() => import("./UnifiedHistory"));
 
