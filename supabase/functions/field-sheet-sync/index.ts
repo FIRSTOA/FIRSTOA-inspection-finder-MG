@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 import { appendViaSheetsApi, peekSheet, sheetsApiConfigured } from "./sheets-api.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -74,7 +75,9 @@ async function enrichCopierPayload(input: { sourceText: string; data: Record<str
       }),
     });
     if (!response.ok) return {};
-    const raw = parseObject(textFromResponse(await response.json()));
+    const data = await response.json();
+    void recordOpenAiUsage("field-sheet-sync", Deno.env.get("FIELD_SHEET_AI_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini", data);
+    const raw = parseObject(textFromResponse(data));
     return Object.fromEntries(COPIER_HEADERS.map((header) => [
       header,
       header === "등록자" ? (raw[header] || input.author || "미기재") : (raw[header] || "미기재"),
@@ -122,7 +125,9 @@ async function enrichComplaintPayload(input: { sourceText: string; data: Record<
       }),
     });
     if (!response.ok) return {};
-    const raw = parseObject(textFromResponse(await response.json()));
+    const data = await response.json();
+    void recordOpenAiUsage("field-sheet-sync", Deno.env.get("FIELD_SHEET_AI_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini", data);
+    const raw = parseObject(textFromResponse(data));
     return Object.fromEntries(COMPLAINT_AI_HEADERS.map((header) => [header, raw[header] || "미기재"]));
   } catch {
     return {};

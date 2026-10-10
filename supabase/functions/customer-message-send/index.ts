@@ -119,6 +119,57 @@ Deno.serve(async (req) => {
     const sbHeaders = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, "Content-Type": "application/json" };
 
     const body = await req.json();
+    if (body.action === "import_history") {
+      // 솔라피에 남아 있는 과거 발송 내역 → message_jobs(direct:import). 비용 현황의 "지금까지"가 앱 기록(2026-10-10) 이전까지 보이게(2026-10-11).
+      // 홈 비용 창의 단추로만 부른다. dry 면 세기만 하고 넣지 않는다. 같은 messageId 는 두 번 넣지 않는다(payload.message_id).
+      const days = Math.min(730, Math.max(1, Number(body.days) || 365));
+      const dry = body.dry === true;
+      const sbUrl2 = Deno.env.get("SUPABASE_URL") || ""; const sbKey2 = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      const sbHeaders2 = { apikey: sbKey2, Authorization: `Bearer ${sbKey2}`, "Content-Type": "application/json" };
+      const { headers: solapiHeaders } = await solapiAuth();
+      const start = new Date(Date.now() - days * 86400_000).toISOString();
+      let startKey = ""; let fetched = 0; let inserted = 0; let skipped = 0; const errors: string[] = []; const byType: Record<string, number> = {}; let sample: unknown = null;
+      for (let page = 0; page < 60; page += 1) {
+        const url = `https://api.solapi.com/messages/v4/list?limit=500&dateType=CREATED&startDate=${encodeURIComponent(start)}${startKey ? `&startKey=${encodeURIComponent(startKey)}` : ""}`;
+        const res = await fetch(url, { headers: solapiHeaders });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { errors.push(`솔라피 ${res.status}: ${JSON.stringify(data).slice(0, 300)}`); break; }
+        const raw = data.messageList;
+        const list = (Array.isArray(raw) ? raw : Object.values(raw || {})) as Array<Record<string, unknown>>;
+        if (!list.length) break;
+        if (!sample) sample = { keys: Object.keys(list[0]), type: list[0].type, status: list[0].status, statusCode: list[0].statusCode, dateCreated: list[0].dateCreated };
+        fetched += list.length;
+        list.forEach((m) => { const t = String(m.type || "?"); byType[t] = (byType[t] || 0) + 1; });
+        const ok = list.filter((m) => m.messageId && /^4/.test(String(m.statusCode || "")));
+        if (!dry) {
+          const ids = ok.map((m) => String(m.messageId));
+          const existing = new Set<string>();
+          for (let i = 0; i < ids.length; i += 100) {
+            const chunk = ids.slice(i, i + 100).map((v) => `"${v}"`).join(",");
+            const ex = await fetch(`${sbUrl2}/rest/v1/message_jobs?select=payload&source_type=eq.direct:import&payload->>message_id=in.(${encodeURIComponent(chunk)})`, { headers: sbHeaders2 }).then((r) => r.json()).catch(() => []);
+            (Array.isArray(ex) ? ex : []).forEach((r: { payload?: { message_id?: string } }) => { if (r.payload?.message_id) existing.add(String(r.payload.message_id)); });
+          }
+          const now = new Date().toISOString();
+          const rows = ok.filter((m) => !existing.has(String(m.messageId))).map((m) => {
+            const when = String(m.dateCreated || now);
+            return {
+              source_type: "direct:import", source_id: null, channel: "sms", recipient: String(m.to || ""), message: String(m.text || "").slice(0, 2000),
+              payload: { type: "import", message_id: String(m.messageId), solapi_type: String(m.type || ""), mms: String(m.type || "") === "MMS", status: String(m.status || ""), statusCode: String(m.statusCode || "") },
+              scheduled_at: when, status: "sent", created_by: "솔라피 가져오기", sent_at: when, error: "", created_at: when, updated_at: now,
+            };
+          });
+          if (rows.length) {
+            const ins = await fetch(`${sbUrl2}/rest/v1/message_jobs`, { method: "POST", headers: { ...sbHeaders2, Prefer: "return=minimal" }, body: JSON.stringify(rows) });
+            if (!ins.ok) { errors.push(`저장 ${ins.status}: ${(await ins.text().catch(() => "")).slice(0, 200)}`); break; }
+            inserted += rows.length;
+          }
+          skipped += list.length - rows.length;
+        }
+        startKey = String(data.nextKey || "");
+        if (!startKey) break;
+      }
+      return Response.json({ ok: true, dry, days, fetched, inserted, skipped, byType, sample, errors }, { headers: corsHeaders });
+    }
     if (body.action === "dispatch_due") {
       const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";

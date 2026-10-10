@@ -1,3 +1,4 @@
+import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 /**
  * 맛집 자동 채우기 (2026-08-27) — 맛동여지도에서 이름만 치면 나머지가 알아서 들어오게.
  *
@@ -192,6 +193,7 @@ async function menuFromImage(imageUrl: string): Promise<{ menus: unknown[]; mode
   });
   if (!res.ok) return { error: (await res.text().catch(() => "")).slice(0, 300) };
   const data = await res.json();
+  void recordOpenAiUsage("place-search", model, data);
   const outputText = data.output_text
     || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
     || "";
@@ -259,6 +261,7 @@ async function pickPhotos(name: string, category: string, urls: string[]): Promi
   });
   if (!res.ok) return [];
   const data = await res.json().catch(() => ({}));
+  void recordOpenAiUsage("place-search", model, data);
   const outputText = data.output_text
     || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
     || "";
@@ -297,6 +300,7 @@ async function pickPlace(hint: string, candidates: Array<{ name: string; categor
   });
   if (!res.ok) return { index: -1, why: "" };
   const data = await res.json().catch(() => ({}));
+  void recordOpenAiUsage("place-search", model, data);
   const outputText = data.output_text
     || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n") || "";
   try {

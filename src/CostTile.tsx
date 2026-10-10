@@ -7,7 +7,9 @@
  * - 단가: AI 는 서버가 기록한 usd(공식 가격표 기본값), 문자는 솔라피 공개 요금(단문 18·장문 45·사진 110원, 부가세 별도) — app_config 로 덮어쓸 수 있다
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getConfig, selectRows } from "./supabase";
+import { getConfig, invokeEdgeFunction, selectRows } from "./supabase";
+import { askConfirm } from "./confirmModal";
+import { notify } from "./toast";
 import { useScreenActive } from "./screenActive";
 
 type AiRow = { created_at: string; fn: string; author: string; question: string; input_tokens: number; cached_tokens: number; output_tokens: number; usd: number | null; ms: number };
@@ -28,6 +30,7 @@ export default function CostTile() {
   const [price, setPrice] = useState({ sms: 18, lms: 45, mms: 110 });
   const [open, setOpen] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState("");
+  const [importing, setImporting] = useState(false);
   const active = useScreenActive();
 
   const load = useCallback(async () => {
@@ -165,6 +168,18 @@ export default function CostTile() {
                     ))}
                   </div>
 
+                  <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-bold text-slate-600">
+                    <span>예전 내역: AI 는 2026-10-10부터 기록(그 전은 OpenAI 사용량 화면에만). 문자는 솔라피에 남아 있는 발송 내역을 가져올 수 있습니다.</span>
+                    <button type="button" disabled={importing} onClick={() => void (async () => {
+                      if (!await askConfirm("솔라피에서 최근 12개월 발송 내역을 가져와 문자 건수·금액에 넣을까요? 같은 건은 두 번 넣지 않습니다.", { okLabel: "가져오기" })) return;
+                      setImporting(true);
+                      try {
+                        const out = await invokeEdgeFunction<{ fetched: number; inserted: number; skipped: number; errors: string[] }>("customer-message-send", { action: "import_history", days: 365 }, 180_000);
+                        notify(`솔라피 ${out.fetched}건 읽음 · 새로 ${out.inserted}건 추가 · 이미 있음 ${out.skipped}건${out.errors?.length ? ` · 오류 ${out.errors[0]}` : ""}`, out.errors?.length ? "error" : "success");
+                        await load();
+                      } catch (e) { notify(`가져오기 실패: ${(e as Error).message}`, "error"); } finally { setImporting(false); }
+                    })()} className="ml-auto rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white disabled:opacity-50">{importing ? "가져오는 중…" : "솔라피 12개월 가져오기"}</button>
+                  </div>
                   <div className="mt-3 text-[10.5px] font-bold text-slate-400">
                     단가: AI 는 공식 가격표(gpt-5.5 입력 $5 · 캐시 $0.5 · 출력 $30 / 100만 토큰) 기준, 문자는 솔라피 공개 요금(단문 {price.sms}·장문 {price.lms}·사진 {price.mms}원, 부가세 별도). 환율 {rate.toLocaleString()}원/달러{rate === 1400 ? " 가정" : ""}. 월말 예상은 지금까지 금액 ÷ 지난 날수 × 이 달 날수. 바꾸려면 관리 app_config(AI_PRICE_IN·AI_USD_KRW·SMS_PRICE_KRW 등).
                   </div>
