@@ -27,6 +27,7 @@ export type SourceDef = {
   table: string; label: string; group: Group; tone: string;
   nameCols: string[];       // 업체명 정확 일치(in) 칸
   deviceCols: string[];     // 기번·자산번호 정확 일치(in) 칸
+  phoneCols?: string[];     // 전화번호(숫자만) 정확 일치 칸 — 문자·해피콜처럼 업체명 없이 번호로만 남는 기록
   rawCols: string[];        // 원문 — 기번이 글 속에 있는 경우 ilike
   looseCols?: string[];     // 이름 "비슷한" 기록을 찾을 칸(ilike core) — 기본은 nameCols
   codeCol?: string;         // 거래처 코드가 직접 든 칸
@@ -83,10 +84,26 @@ export const SOURCES: SourceDef[] = [
     dateKeys: ["날짜"], titleKeys: ["렌탈or구매or유지보수", "세부사양"], snippetKeys: ["어필 OR 추가영업", "포인트"], authorKeys: ["작성자"], teamKeys: ["지역"], modelKeys: [], serialKeys: [], assetKeys: [] },
   { table: "mfp_expansion", label: "복합기 확장성", group: "영업·관리", tone: T.exp, nameCols: ["_업체명", "상호"], deviceCols: [], rawCols: ["_원문"], hidden: "_hidden=not.is.true",
     dateKeys: ["등록일", "체크일"], titleKeys: ["품목(원문)", "프로젝트"], snippetKeys: ["영업진행상황", "최종결과(대기 등)"], authorKeys: ["등록자", "전략영업담당자"], teamKeys: ["미팅지역"], modelKeys: [], serialKeys: [], assetKeys: [] },
+  // churn_defense(해지방어)·mgmt_support(관리지원)는 아직 빈 표라 칸 이름을 모른다 — 데이터가 생기면 칸을 확인해 넣는다(2026-10-10)
   { table: "counter_sms_targets", label: "마감 문자", group: "고객 소통", tone: T.msg, nameCols: [], deviceCols: [], rawCols: [], looseCols: ["vendor"],
     dateKeys: ["sent_at", "added_at"], titleKeys: ["vendor"], snippetKeys: ["team", "sent_by", "done_by"], authorKeys: ["sent_by"], teamKeys: ["team"], modelKeys: [], serialKeys: [], assetKeys: [] },
+  { table: "counter_sms_contact_rules", label: "연락처 규칙", group: "고객 소통", tone: T.msg, nameCols: ["vendor"], deviceCols: [], rawCols: [], looseCols: ["vendor"],
+    dateKeys: ["updated_at", "created_at"], titleKeys: ["kind"], snippetKeys: ["name", "memo"], authorKeys: ["updated_by"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [],
+    titleFn: (row) => (str(row, "kind") === "block" ? "🚫 보내지 말 것" : str(row, "kind") === "prefer" ? "⭐ 새 담당" : str(row, "kind")) },
+  { table: "happycall_messages", label: "해피콜", group: "고객 소통", tone: T.msg, nameCols: [], deviceCols: [], rawCols: [], phoneCols: ["recipient"],
+    dateKeys: ["sent_at", "scheduled_at", "created_at"], titleKeys: ["status"], snippetKeys: ["keyman", "message"], authorKeys: ["author"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [],
+    titleFn: (row) => `해피콜 ${str(row, "status") || ""}`.trim() },
+  { table: "message_jobs", label: "예약 문자", group: "고객 소통", tone: T.msg, nameCols: ["payload->>vendor"], deviceCols: [], rawCols: [], phoneCols: ["recipient"],
+    dateKeys: ["sent_at", "scheduled_at", "created_at"], titleKeys: ["source_type"], snippetKeys: ["status", "channel", "message"], authorKeys: ["created_by"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [],
+    titleFn: (row) => ({ happycall: "해피콜 문자", report: "리포트 문자", quarter: "분기 안내", promo: "홍보물" } as Record<string, string>)[str(row, "source_type")] || `문자 ${str(row, "source_type")}` },
+  { table: "report_recipients", label: "리포트 수신자", group: "고객 소통", tone: T.msg, nameCols: ["vendor"], deviceCols: [], rawCols: [],
+    dateKeys: ["created_at"], titleKeys: ["name"], snippetKeys: ["memo", "active"], authorKeys: [], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [],
+    titleFn: (row) => `수신자 ${str(row, "name") || "(이름 없음)"}${str(row, "active") === "false" ? " · 해제" : ""}` },
   { table: "report_send_log", label: "리포트 발송", group: "고객 소통", tone: T.msg, nameCols: ["vendor"], deviceCols: [], rawCols: [],
     dateKeys: ["created_at"], titleKeys: ["period"], snippetKeys: ["channel", "recipient_name", "status"], authorKeys: ["sender"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [] },
+  // field_sheet_sync_jobs(시트 기입 큐)는 접수·점검 기록의 기술적 사본이라 뺐다 — 무암 한 곳에 2026-07~08 접수 큐가 186건 쌓여 있어 넣으면 기록 수를 왜곡한다(원인 확인 필요)
+  { table: "plan_memos", label: "일정 메모", group: "현장 기록", tone: T.ticket, nameCols: [], deviceCols: [], rawCols: [],
+    dateKeys: ["updated_at"], titleKeys: ["memo"], snippetKeys: [], authorKeys: ["author"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [] },
   { table: "photo_albums", label: "사진", group: "고객 소통", tone: T.photo, nameCols: ["vendor"], deviceCols: [], rawCols: [],
     dateKeys: ["created_at"], titleKeys: ["category", "source_type"], snippetKeys: [], authorKeys: ["author"], teamKeys: ["region"], modelKeys: [], serialKeys: [], assetKeys: [] },
   { table: "vendor_notes", label: "특이사항", group: "기타", tone: T.note, nameCols: ["vendor"], deviceCols: [], rawCols: [],
@@ -117,7 +134,11 @@ export const daysSince = (ymd: string, today = new Date()): number | null => {
 };
 
 // ── PostgREST 조건 조립 ───────────────────────────────────────
-const col = (c: string) => encodeURIComponent(/[^A-Za-z0-9_]/.test(c) ? `"${c}"` : c);
+// 칸 이름: 한글·괄호는 따옴표로 감싸고, JSON 경로(payload->>vendor)는 그대로 둔다
+const col = (c: string) => (c.includes("->") ? c.replace(/[^A-Za-z0-9_>-]/g, "") : encodeURIComponent(/[^A-Za-z0-9_]/.test(c) ? `"${c}"` : c));
+export const digitsOnly = (s: string) => String(s || "").replace(/\D/g, "");
+/** 글 속 전화번호(휴대폰·일반) → 숫자만. "010-4481-6440 현해리대표님 / 02-123-4567" → ["01044816440","021234567"] */
+export const phonesIn = (s: string): string[] => Array.from(new Set((String(s || "").match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/g) || []).map(digitsOnly).filter((d) => d.length >= 9 && d.length <= 11)));
 const enc = (v: string) => encodeURIComponent(v);
 /** in.("a","b") — 값에 쉼표·괄호·공백이 있어도 안전하게 */
 export const inList = (values: string[]) => `in.(${values.map((v) => `"${enc(v.replace(/"/g, ""))}"`).join(",")})`;
@@ -181,11 +202,13 @@ export async function resolveCandidates(query: string): Promise<Candidate[]> {
 // ── 2층: 코드 → 키 묶음(이름 변형·기번·자산번호) ──────────────────
 export type Entity = {
   code: string; leaseCode: string; name: string; names: string[]; serials: string[]; assets: string[]; core: string; query: string; leaseRows: Row[];
+  phones: string[];     // 임대리스트 일반전화·키맨 + 리포트 수신자 번호(숫자만) — 번호로만 남는 문자·해피콜 기록을 잇는다
   nameKeys: string[];   // names 의 vendorMatchKey — "무암"·"주식회사 무암"·"주식회사 무암 (Mooam)" 이 같은 키로 모인다(느슨 일치를 정확으로 승격하는 기준)
   deviceKeys: string[]; // serials+assets 의 identKey
 };
-export const withKeys = (e: Omit<Entity, "nameKeys" | "deviceKeys">): Entity => ({
+export const withKeys = (e: Omit<Entity, "nameKeys" | "deviceKeys" | "phones"> & { phones?: string[] }): Entity => ({
   ...e,
+  phones: uniq(e.phones || []),
   nameKeys: uniq([...e.names, e.name].map((n) => vendorMatchKey(n)).filter((k) => k.length >= 2)),
   deviceKeys: uniq([...e.serials, ...e.assets].map(identKey).filter((k) => k.length >= 3)),
 });
@@ -197,7 +220,7 @@ export async function buildEntity(candidate: Candidate | null, query: string): P
   if (!candidate) {
     // 코드를 못 찾은 검색어 — 그래도 이름·번호 그대로 모든 표를 뒤진다(임대리스트에 없는 업체·옛 기기)
     const device = looksLikeDevice(raw);
-    return withKeys({ code: "", leaseCode: "", name: raw, names: device ? [] : [raw], serials: device ? [raw] : [], assets: device ? [raw] : [], core: device ? "" : (historyCoreName(raw) || raw), query: raw, leaseRows: [] });
+    return withKeys({ code: "", leaseCode: "", name: raw, names: device ? [] : [raw], serials: device ? [raw] : [], assets: device ? [raw] : [], phones: phonesIn(raw), core: device ? "" : (historyCoreName(raw) || raw), query: raw, leaseRows: [] });
   }
   const safeRows = (p: Promise<Row[]>) => p.catch(() => [] as Row[]);
   const master = candidate.code ? (await selectRows<MasterRow>("vendor_master", `select=code,name,aliases&code=eq.${enc(candidate.code)}&limit=1`).catch(() => [] as MasterRow[]))[0] : undefined;
@@ -222,7 +245,23 @@ export async function buildEntity(candidate: Candidate | null, query: string): P
   const assets = uniq(leaseRows.map((r) => str(r, "자산번호")).filter((v) => v.length >= 3 && !/^미부착|^없음/.test(v))).slice(0, 15);
   if (looksLikeDevice(raw) && !serials.some((s) => identKey(s) === identKey(raw)) && !assets.some((a) => identKey(a) === identKey(raw))) serials.push(raw);
   const name = master?.name || candidate.name || firstName;
-  return withKeys({ code, leaseCode, name, names, serials, assets, core: historyCoreName(name) || vendorMatchKey(name).slice(0, 6) || name, query: raw, leaseRows });
+  // 전화번호 — 임대리스트(일반전화·키맨 글) + 리포트 수신자. 번호로만 남는 해피콜·예약 문자를 이 업체에 붙이는 열쇠
+  const recipients = names.length ? await safeRows(selectRows<Row>("report_recipients", `select=phone&vendor=${inList(names.slice(0, 25))}&limit=50`)) : [];
+  const phones = uniq([...leaseRows.flatMap((r) => [...phonesIn(str(r, "일반전화")), ...phonesIn(str(r, "키맨"))]), ...recipients.map((r) => digitsOnly(str(r, "phone")))]).filter((p) => p.length >= 9).slice(0, 20);
+  return withKeys({ code, leaseCode, name, names, serials, assets, phones, core: historyCoreName(name) || vendorMatchKey(name).slice(0, 6) || name, query: raw, leaseRows });
+}
+
+/** 질문 문장에서 업체·기기 번호로 보이는 말을 뽑는다 — "잡플러스 AS 몇 번 터졌어?" → ["잡플러스"]. 긴 말·기기 번호 우선 */
+const QUESTION_STOP = new Set(["몇번", "언제", "어디", "무슨", "어떤", "얼마", "얼마나", "있어", "있었", "있나", "터졌", "알려", "정리", "요약", "임대", "점검", "미수", "초과료", "초과", "재계약", "불만", "접수", "일정", "기기", "복합기", "문제", "처리", "이력", "업체", "회사", "사용", "이동", "그전", "주로", "최근", "지금", "현재", "계약", "시작", "토너", "용지", "담당자", "키맨", "주소", "전화", "번호", "리포트", "해피콜", "방문", "횟수", "이번", "지난", "달에", "년에", "해줘", "줄래", "알아", "말해", "설명", "여긴", "여기", "거긴", "거기", "이곳", "그곳", "우리", "이건", "그건", "뭐야", "뭐지", "어때", "어떻게", "경우", "상태", "기록", "내용", "전체", "모두", "전부", "첫", "마지막", "정도"]);
+export function entityTokensFromQuestion(question: string): string[] {
+  const q = String(question || "");
+  const codes = (q.match(/[A-Za-z0-9][A-Za-z0-9\-/.]{2,}/g) || []).filter(looksLikeDevice);
+  const words = (q.match(/[가-힣]{2,}/g) || [])
+    .map((w) => w.replace(/(에서는|에서|에게|한테|이랑|부터|까지|으로|께서|은|는|이|가|을|를|의|에|도|만|요|로)$/, ""))
+    // 서술어("터졌어"·"있었나요"·"알려줘")는 업체명이 아니다 — 흔한 어미를 떼고 멈춤말 목록과 다시 비교
+    .map((w) => w.replace(/(했었어요|했어요|했었어|했어|했나|했지|했니|됐어|됐나|되나|되지|였어|이었어|있었어|있어요|있나요|었어요|았어요|었어|았어|어요|나요|는지|던데|는데|습니까|습니다|세요|어|나|지|니|죠|네|죠)$/, ""))
+    .filter((w) => w.length >= 2 && !QUESTION_STOP.has(w) && !/^(몇|언제|어디|무슨|어떤|얼마)/.test(w) && !/(터졌|있었|했|됐|알려|말해|보여|찾아|정리|요약|설명)$/.test(w));
+  return uniq([...codes, ...words.sort((a, b) => b.length - a.length)]).slice(0, 6);
 }
 
 // ── 3층: 표마다 모으기 ────────────────────────────────────────
@@ -238,6 +277,7 @@ export function buildExactQuery(src: SourceDef, e: Entity): string | null {
   if (e.names.length) src.nameCols.forEach((c) => parts.push(`${col(c)}.${inList(e.names)}`));
   const devices = uniq([...e.serials, ...e.assets]);
   if (devices.length) src.deviceCols.forEach((c) => parts.push(`${col(c)}.${inList(devices)}`));
+  if (e.phones.length && src.phoneCols) src.phoneCols.forEach((c) => parts.push(`${col(c)}.${inList(e.phones)}`));
   if (!parts.length) return null;
   return `select=${src.select || "*"}&or=(${parts.join(",")})${tail(src)}`;
 }
@@ -279,7 +319,7 @@ async function gatherWorkin(e: Entity): Promise<Row[]> {
 }
 
 export async function gather(e: Entity): Promise<SourceResult[]> {
-  return Promise.all(SOURCES.map(async (src): Promise<SourceResult> => {
+  const results = await Promise.all(SOURCES.filter((s) => s.table !== "plan_memos").map(async (src): Promise<SourceResult> => {
     try {
       let exact: Row[] = src.table === "vendor_info" ? e.leaseRows : [];
       if (src.table === "workin_map_places") exact = await gatherWorkin(e);
@@ -311,6 +351,50 @@ export async function gather(e: Entity): Promise<SourceResult[]> {
       return { source: src, exact: [], loose: [], ok: false, error: (err as Error).message.slice(0, 120) };
     }
   }));
+  // 일정 메모는 일정(as_tickets) id 로만 이어진다 — 일정 결과가 나온 뒤 2차로
+  const memoSrc = SOURCES.find((s) => s.table === "plan_memos")!;
+  const ticketIds = (results.find((r) => r.source.table === "as_tickets")?.exact || []).map((r) => String(r.id)).filter(Boolean).slice(0, 100);
+  let memos: SourceResult = { source: memoSrc, exact: [], loose: [], ok: true };
+  if (ticketIds.length) {
+    try {
+      const rows = await selectRows<Row>("plan_memos", `select=*&ticket_id=${inList(ticketIds)}&limit=200`);
+      memos = { source: memoSrc, exact: rows.filter((r) => str(r, "memo")).map((r) => ({ ...r, id: `${str(r, "ticket_id")}|${str(r, "author")}` })), loose: [], ok: true };
+    } catch (err) { memos = { source: memoSrc, exact: [], loose: [], ok: false, error: (err as Error).message.slice(0, 120) }; }
+  }
+  return [...results, memos];
+}
+
+// ── 기종 참고 자료 — 이 업체 기기의 기종으로 처리이력·가이드·족보를 찾는다(업체 기록은 아니지만 현장에서 같이 본다) ──
+export type ModelRef = { model: string; key: string; notes: { count: number; titles: string[] }; docs: { count: number; titles: string[] }; playbook: { count: number; titles: string[] } };
+/** "SL-X3220NR" → "3220", "DOCUCENTRE-V C2263(마블)" → "2263", "MFC-L5700DN" → "5700" — 기종 표에 공통으로 들어가는 숫자 핵심 */
+export const modelKey = (model: string): string => {
+  const m = String(model || "").toUpperCase().match(/[A-Z]{0,2}(\d{3,4})[A-Z]{0,3}/g) || [];
+  const core = m.map((x) => x.replace(/^[A-Z]*/, "").replace(/[A-Z]*$/, "")).find((d) => d.length >= 3 && d.length <= 4) || "";
+  return core;
+};
+export async function gatherModelRefs(e: Entity): Promise<ModelRef[]> {
+  const models = uniq(e.leaseRows.map((r) => str(r, "모델명") || str(r, "기종")));
+  const keys = new Map<string, string>();
+  models.forEach((m) => { const k = modelKey(m); if (k && !keys.has(k)) keys.set(k, m); });
+  const safe = (p: Promise<Row[]>) => p.catch(() => [] as Row[]);
+  return Promise.all(Array.from(keys.entries()).slice(0, 6).map(async ([key, model]) => {
+    const [notes, docs, play] = await Promise.all([
+      safe(selectRows<Row>("copier_notes", `select=id,title,model&model=ilike.*${enc(key)}*&order=created_at.desc&limit=60`)),
+      safe(selectRows<Row>("knowledge_docs", `select=id,title&title=ilike.*${enc(key)}*&order=created_at.desc&limit=60`)),
+      safe(selectRows<Row>("copier_playbook", `select=id,title,series&or=(series.ilike.*${enc(key)}*,title.ilike.*${enc(key)}*)&limit=60`)),
+    ]);
+    const pick = (rows: Row[]) => ({ count: rows.length, titles: rows.slice(0, 4).map((r) => str(r, "title")).filter(Boolean) });
+    return { model, key, notes: pick(notes), docs: pick(docs), playbook: pick(play) };
+  }));
+}
+
+// ── 첫 화면용: 표별 전체 건수(HEAD count) ─────────────────────
+export async function countRows(table: string, hidden?: string): Promise<number | null> {
+  const { SUPABASE_ANON, SUPABASE_URL } = await import("./supabase");
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=id${hidden ? `&${hidden}` : ""}&limit=1`, { method: "HEAD", headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}`, Prefer: "count=exact" } }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const total = Number((res.headers.get("content-range") || "").split("/")[1]);
+  return Number.isFinite(total) ? total : null;
 }
 
 // ── 사건(타임라인 한 줄) ───────────────────────────────────────

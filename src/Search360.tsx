@@ -1,18 +1,26 @@
 /**
  * 통합 검색 360 — 자산기번·시리얼·업체명 중 하나로 "이 업체(기기)에 대해 회사가 가진 모든 기록"을 한 화면에.
  *
- * 화면 순서: 검색 → (후보가 여럿이면 고르기) → ① 현재 상태 카드(주소·키맨·등급·미수·재계약·불만·마지막 점검/AS·열린 접수)
- *   → ② 기기 카드 → ③ 어디에 몇 건이 있는지(표별 집계, 0건도 보여 "빠짐없이"를 확인) → ④ 타임라인(월별 묶음, 종류·기기·글자 필터)
- *   → ⑤ 이름이 비슷하기만 한 기록(확인 필요, 접어 둠). 로직은 entity360.ts.
+ * 첫 화면: 큰 검색창 + "질문으로 바로 찾기"(질문에서 업체·기번을 뽑아 모은 뒤 답) + 최근 검색 + 회사 기록 전체 건수(표별).
+ * 결과: ① 현재 상태 카드 → ② 기기 카드 → ③ 표별 건수(0건도 표시) → ③-1 질문하기 → ③-2 기종 참고 자료 → ④ 월별 타임라인 → 느슨 일치는 접어 둠.
+ * 로직은 entity360.ts.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { notify } from "./toast";
-import UnifiedHistory from "./UnifiedHistory";
 import { invokeEdgeFunction } from "./supabase";
+import UnifiedHistory from "./UnifiedHistory";
 import {
-  buildEntity, daysSince, deriveState, gather, identKey, isOtherVendor, rawTextOf, resolveCandidates, SOURCES, toEvents,
-  type Candidate, type Entity, type EventItem, type Group, type SourceResult, type State,
+  buildEntity, countRows, daysSince, deriveState, entityTokensFromQuestion, gather, gatherModelRefs, identKey, isOtherVendor, rawTextOf, resolveCandidates, SOURCES, toEvents,
+  type Candidate, type Entity, type EventItem, type Group, type ModelRef, type SourceResult, type State,
 } from "./entity360";
+
+type Phase = "idle" | "resolving" | "choose" | "gathering" | "done";
+const GROUPS: Group[] = ["기기·계약", "현장 기록", "영업·관리", "고객 소통", "기타"];
+const EXACT_HOW = new Set(["기번·자산번호 일치", "임대리스트 기기 번호 일치", "업체명 일치"]);
+const RECENT_KEY = "cs_search360_recent_v1";
+const TOTALS_KEY = "cs_search360_totals_v1";
+const fmtDays = (ymd: string) => { const d = daysSince(ymd); return d === null ? "" : d === 0 ? "오늘" : `${d}일 전`; };
+const loadRecent = (): string[] => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); return Array.isArray(v) ? v.map(String).slice(0, 8) : []; } catch { return []; } };
 
 /** 에이전트에게 넘길 압축 기록 — 정확 일치만, 최신순 350건, 글자 수 제한(토큰 절약) */
 function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
@@ -32,11 +40,7 @@ function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
   };
 }
 const ASK_SUGGESTIONS = ["AS가 몇 번 있었고 주로 무슨 문제였어?", "언제부터 임대했고 기기는 어떻게 바뀌었어?", "이 기기 이전 사용처가 있어?", "초과료·미수 흐름을 정리해 줘", "이 업체를 처음 가는 사람에게 한 문단으로 요약해 줘"];
-
-type Phase = "idle" | "resolving" | "choose" | "gathering" | "done";
-const GROUPS: Group[] = ["기기·계약", "현장 기록", "영업·관리", "고객 소통", "기타"];
-const EXACT_HOW = new Set(["기번·자산번호 일치", "임대리스트 기기 번호 일치", "업체명 일치"]);
-const fmtDays = (ymd: string) => { const d = daysSince(ymd); return d === null ? "" : d === 0 ? "오늘" : `${d}일 전`; };
+const EXAMPLES = ["잡플러스", "무암", "B6945", "ZPBLBJST8000GQV"];
 
 export default function Search360({ author }: { author: string }) {
   const [input, setInput] = useState("");
@@ -45,6 +49,7 @@ export default function Search360({ author }: { author: string }) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [entity, setEntity] = useState<Entity | null>(null);
   const [results, setResults] = useState<SourceResult[]>([]);
+  const [modelRefs, setModelRefs] = useState<ModelRef[]>([]);
   const [group, setGroup] = useState<"전체" | Group>("전체");
   const [sourceOnly, setSourceOnly] = useState("");
   const [within, setWithin] = useState("");
@@ -53,35 +58,97 @@ export default function Search360({ author }: { author: string }) {
   const [openRaw, setOpenRaw] = useState<string | null>(null);
   const [limit, setLimit] = useState(120);
   const [histVendor, setHistVendor] = useState("");
+  const [recent, setRecent] = useState<string[]>(loadRecent);
+  const [totals, setTotals] = useState<Record<string, number | null>>({});
   // 질문하기 — 모인 기록을 그대로 넘겨 답을 받는다(entity-ask 엣지 함수). 기록에 없는 건 없다고 답하게 돼 있다
   const [question, setQuestion] = useState("");
+  const [directQ, setDirectQ] = useState("");
+  const [pendingQ, setPendingQ] = useState("");     // 후보를 고른 뒤 이어서 물을 질문
   const [asking, setAsking] = useState(false);
   const [answers, setAnswers] = useState<Array<{ q: string; a: string; used: number }>>([]);
+  const [foundBy, setFoundBy] = useState("");       // "질문의 '잡플러스'로 찾았습니다"
 
-  const resetFilters = () => { setGroup("전체"); setSourceOnly(""); setWithin(""); setDeviceOnly(""); setShowLoose(false); setLimit(120); setOpenRaw(null); setAnswers([]); setQuestion(""); };
+  // 첫 화면의 "회사 기록 전체" — 표별 건수. 10분 캐시(세션)
+  useEffect(() => {
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(TOTALS_KEY) || "null");
+      if (cached && Date.now() - cached.at < 10 * 60_000) { setTotals(cached.totals); return; }
+    } catch { /* 무시 */ }
+    let alive = true;
+    void Promise.all(SOURCES.filter((s) => s.table !== "plan_memos").map(async (s) => [s.label, await countRows(s.table, s.hidden)] as const)).then((pairs) => {
+      if (!alive) return;
+      const next = Object.fromEntries(pairs);
+      setTotals(next);
+      try { sessionStorage.setItem(TOTALS_KEY, JSON.stringify({ at: Date.now(), totals: next })); } catch { /* 무시 */ }
+    });
+    return () => { alive = false; };
+  }, []);
 
-  const pick = async (c: Candidate | null, q: string) => {
+  const remember = (q: string) => { const next = [q, ...recent.filter((x) => x !== q)].slice(0, 8); setRecent(next); try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch { /* 무시 */ } };
+  const resetFilters = () => { setGroup("전체"); setSourceOnly(""); setWithin(""); setDeviceOnly(""); setShowLoose(false); setLimit(120); setOpenRaw(null); setAnswers([]); setQuestion(""); setFoundBy(""); setModelRefs([]); };
+
+  const gatherFor = async (c: Candidate | null, q: string): Promise<{ e: Entity; r: SourceResult[] } | null> => {
     setPhase("gathering");
     try {
       const e = await buildEntity(c, q);
       const r = await gather(e);
       setEntity(e); setResults(r); setPhase("done");
+      void gatherModelRefs(e).then(setModelRefs).catch(() => setModelRefs([]));
+      return { e, r };
     } catch (err) {
-      notify(`모으기 실패: ${(err as Error).message}`, "error"); setPhase("idle");
+      notify(`모으기 실패: ${(err as Error).message}`, "error"); setPhase("idle"); return null;
     }
   };
-  const run = async () => {
-    const q = input.trim();
+  const askWith = async (text: string, e: Entity, r: SourceResult[]) => {
+    const evs = toEvents(r); const st = deriveState(e, r);
+    setAsking(true);
+    try {
+      const body = { question: text, author, ...compactForAsk(e, st, evs) };
+      const res = await invokeEdgeFunction<{ answer?: string; error?: string }>("entity-ask", body, 90_000);
+      if (res.error) throw new Error(res.error);
+      setAnswers((cur) => [{ q: text, a: String(res.answer || "").trim(), used: body.events.length }, ...cur].slice(0, 6));
+    } catch (err) {
+      notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
+    } finally { setAsking(false); }
+  };
+  const pick = async (c: Candidate | null, q: string) => {
+    const got = await gatherFor(c, q);
+    if (got && pendingQ) { const text = pendingQ; setPendingQ(""); await askWith(text, got.e, got.r); }
+  };
+  const run = async (raw: string, followUp = "") => {
+    const q = raw.trim();
     if (q.length < 2) { notify("두 글자 이상 넣어 주세요 — 자산기번·시리얼·업체명 아무거나", "info"); return; }
-    setQuery(q); resetFilters(); setEntity(null); setResults([]); setPhase("resolving");
+    setInput(q); setQuery(q); resetFilters(); setEntity(null); setResults([]); setPhase("resolving"); setPendingQ(followUp);
     const list = await resolveCandidates(q).catch(() => [] as Candidate[]);
     setCandidates(list);
+    remember(q);
     // 하나뿐이거나, 정확 일치가 딱 하나면 바로 모은다. 애매하면 고르게 한다(엉뚱한 업체를 모으지 않게)
     const exactOnes = list.filter((c) => EXACT_HOW.has(c.how));
-    if (list.length === 1 || exactOnes.length === 1) { await pick(exactOnes[0] || list[0], q); return; }
-    if (!list.length) { await pick(null, q); return; }
+    const chosen = list.length === 1 ? list[0] : exactOnes.length === 1 ? exactOnes[0] : null;
+    if (chosen || !list.length) {
+      const got = await gatherFor(chosen, q);
+      if (got && followUp) { setPendingQ(""); await askWith(followUp, got.e, got.r); }
+      return;
+    }
     setPhase("choose");
   };
+  /** 질문만 치면 — 질문에서 업체·기번을 뽑아 먼저 찾고, 모은 뒤 바로 답한다 */
+  const askDirect = async (text: string) => {
+    const q = text.trim();
+    if (q.length < 4) { notify("질문에 업체명이나 기번을 함께 넣어 주세요 — 예: 잡플러스 AS 몇 번?", "info"); return; }
+    const tokens = entityTokensFromQuestion(q);
+    setPhase("resolving"); setDirectQ("");
+    for (const token of tokens) {
+      const list = await resolveCandidates(token).catch(() => [] as Candidate[]);
+      if (!list.length) continue;
+      setFoundBy(`질문의 "${token}"으로 찾았습니다`);
+      await run(token, q);
+      return;
+    }
+    setPhase("idle");
+    notify(`질문에서 업체·기번을 못 찾았습니다 (${tokens.slice(0, 3).join(", ") || "후보 없음"}) — 먼저 검색하거나 업체명을 정확히 넣어 주세요`, "info");
+  };
+  const ask = async (q: string) => { const text = q.trim(); if (!text || !entity || asking) return; setQuestion(""); await askWith(text, entity, results); };
 
   const events = useMemo(() => (entity ? toEvents(results) : []), [entity, results]);
   const state = useMemo(() => (entity ? deriveState(entity, results) : null), [entity, results]);
@@ -105,47 +172,76 @@ export default function Search360({ author }: { author: string }) {
     return Array.from(m.entries());
   }, [filtered, limit]);
   const groupCounts = useMemo(() => { const c = new Map<string, number>(); events.filter((ev) => !ev.loose && ev.source.table !== "vendor_info").forEach((ev) => c.set(ev.source.group, (c.get(ev.source.group) || 0) + 1)); return c; }, [events]);
+  const totalAll = Object.values(totals).reduce<number>((n, v) => n + (v || 0), 0);
+  const busy = phase === "resolving" || phase === "gathering";
 
   const chip = (text: string, tone = "bg-slate-100 text-slate-700") => <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${tone}`}>{text}</span>;
 
-  const ask = async (q: string) => {
-    const text = q.trim();
-    if (!text || !entity || !state || asking) return;
-    setAsking(true); setQuestion("");
-    try {
-      const body = { question: text, author, ...compactForAsk(entity, state, events) };
-      const res = await invokeEdgeFunction<{ answer?: string; error?: string }>("entity-ask", body, 90_000);
-      if (res.error) throw new Error(res.error);
-      setAnswers((cur) => [{ q: text, a: String(res.answer || "").trim(), used: body.events.length }, ...cur].slice(0, 6));
-    } catch (err) {
-      notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
-    } finally { setAsking(false); }
-  };
-
   return (
     <div className="space-y-3">
-      {/* 검색 */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="text-[11px] font-black text-slate-500">자산기번 · 시리얼(기번) · 업체명 — 아무거나 하나로 회사에 있는 모든 기록을 모읍니다</div>
-        <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void run(); }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="예: B7230 · ZPBLBJST8000GQV · 무암 · 잡플러스" autoCapitalize="off"
-            className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 px-4 text-[15px] font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          <button type="submit" disabled={phase === "resolving" || phase === "gathering"} className="h-12 shrink-0 rounded-xl bg-blue-600 px-5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-50">
-            {phase === "resolving" ? "찾는 중…" : phase === "gathering" ? "모으는 중…" : "모두 모으기"}
-          </button>
-        </form>
-        <p className="mt-2 text-[11px] font-semibold text-slate-400">{SOURCES.length}개 표를 한 번에 뒤집니다 — {SOURCES.map((s) => s.label).join(" · ")}</p>
+      {/* 검색 — 첫 화면은 넉넉하게, 결과가 있으면 줄여서 */}
+      <section className={`overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm ${phase === "done" || phase === "choose" ? "" : "bg-gradient-to-br from-white via-white to-blue-50/40"}`}>
+        <div className={phase === "done" || phase === "choose" ? "p-4" : "px-5 pb-5 pt-6 sm:px-8 sm:pt-8"}>
+          {phase !== "done" && phase !== "choose" && (
+            <div className="mb-4">
+              <div className="text-[11px] font-black tracking-wide text-blue-600">통합 검색 360</div>
+              <h3 className="mt-1 text-[22px] font-black leading-tight text-slate-900 sm:text-[26px]">자산기번, 시리얼, 업체명 — 하나만 넣으면 회사에 있는 기록을 전부 모읍니다</h3>
+              <p className="mt-1.5 text-[12.5px] font-semibold text-slate-500">임대·점검·AS·접수·일정·문자·사진·미수·재계약까지 {SOURCES.length}개 표. 현재 상태 한 장, 기기별 카드, 날짜순 타임라인으로 정리해 보여 줍니다.</p>
+            </div>
+          )}
+          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void run(input); }}>
+            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="예: B7230 · ZPBLBJST8000GQV · 무암 · 잡플러스" autoCapitalize="off" disabled={busy}
+              className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 px-4 text-[15px] font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60" />
+            <button type="submit" disabled={busy} className="h-12 shrink-0 rounded-xl bg-blue-600 px-6 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-50">
+              {phase === "resolving" ? "찾는 중…" : phase === "gathering" ? "모으는 중…" : "검색"}
+            </button>
+          </form>
+          {phase !== "done" && phase !== "choose" && (
+            <>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                {recent.length ? <span>최근</span> : <span>예시</span>}
+                {(recent.length ? recent : EXAMPLES).map((q) => <button key={q} type="button" disabled={busy} onClick={() => void run(q)} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-black text-slate-600 hover:border-blue-400 hover:text-blue-700 disabled:opacity-50">{q}</button>)}
+              </div>
+              {/* 질문으로 바로 찾기 */}
+              <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 sm:p-4">
+                <div className="text-[12px] font-black text-indigo-900">질문으로 바로 찾기 <span className="font-bold text-indigo-500">· 질문에 든 업체명·기번으로 먼저 모으고, 그 기록만 근거로 답합니다</span></div>
+                <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void askDirect(directQ); }}>
+                  <input value={directQ} onChange={(e) => setDirectQ(e.target.value)} disabled={busy} placeholder="예: 잡플러스 AS 몇 번 터졌어? / B6945 언제부터 어디서 썼어?" className="h-11 min-w-0 flex-1 rounded-lg border border-indigo-200 bg-white px-3 text-[13px] font-semibold outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-60" />
+                  <button type="submit" disabled={busy || directQ.trim().length < 4} className="h-11 shrink-0 rounded-lg bg-indigo-600 px-4 text-[12px] font-black text-white hover:bg-indigo-700 disabled:opacity-40">{busy ? "찾는 중…" : "물어보기"}</button>
+                </form>
+              </div>
+            </>
+          )}
+        </div>
+        {phase !== "done" && phase !== "choose" && (
+          <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3 sm:px-8">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-500">
+              <span className="font-black text-slate-700">회사 기록 전체 {totalAll ? `${totalAll.toLocaleString()}건` : "세는 중…"}</span>
+              <span className="text-slate-400">· 검색 한 번에 이 모든 표를 뒤집니다</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {SOURCES.filter((s) => s.table !== "plan_memos").map((s) => (
+                <span key={s.table} className={`rounded border px-1.5 py-0.5 text-[10px] font-black ${s.tone}`}>{s.label} <span className="tabular-nums opacity-80">{totals[s.label] == null ? "…" : totals[s.label]!.toLocaleString()}</span></span>
+              ))}
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              {[["① 현재 상태", "주소·키맨·등급·미수·재계약·불만·마지막 점검/AS를 한 장에"], ["② 기기", "기기별 계약 기간·임대료·마지막 점검/AS, 누르면 그 기기 기록만"], ["③ 어디에 몇 건", "표별 건수(0건도)와 이름이 비슷한 기록은 따로"], ["④ 타임라인", "월별로 묶어 날짜순, 종류·글자·기기로 걸러 보기, 원문 보기"]].map(([t, d]) => (
+                <div key={t} className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="text-[11px] font-black text-slate-800">{t}</div><div className="mt-0.5 text-[10.5px] font-semibold leading-4 text-slate-500">{d}</div></div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 후보 고르기 */}
       {phase === "choose" && (
         <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-          <div className="text-[12px] font-black text-amber-800">"{query}" 에 해당하는 거래처가 여럿입니다 — 하나를 고르세요</div>
+          <div className="text-[12px] font-black text-amber-800">"{query}" 에 해당하는 거래처가 여럿입니다 — 하나를 고르세요{pendingQ && <span className="ml-2 font-bold text-amber-600">(고르면 "{pendingQ.slice(0, 30)}" 에 바로 답합니다)</span>}</div>
           <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {candidates.map((c) => (
-              <button key={c.code} type="button" onClick={() => void pick(c, query)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-blue-400">
+              <button key={`${c.code}|${c.leaseCode}`} type="button" onClick={() => void pick(c, query)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-blue-400">
                 <div className="truncate text-[13px] font-black text-slate-900">{c.name}</div>
-                <div className="mt-0.5 text-[10.5px] font-bold text-slate-500">코드 {c.code} · 기기 {c.deviceCount}대 · <span className={EXACT_HOW.has(c.how) ? "text-emerald-700" : "text-amber-700"}>{c.how}</span></div>
+                <div className="mt-0.5 text-[10.5px] font-bold text-slate-500">{c.code ? `코드 ${c.code}` : `임대 코드 ${c.leaseCode}`} · 기기 {c.deviceCount}대 · <span className={EXACT_HOW.has(c.how) ? "text-emerald-700" : "text-amber-700"}>{c.how}</span></div>
               </button>
             ))}
             <button type="button" onClick={() => void pick(null, query)} className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-[12px] font-bold text-slate-500 hover:border-slate-500">코드 없이 "{query}" 글자 그대로 모으기</button>
@@ -160,18 +256,20 @@ export default function Search360({ author }: { author: string }) {
             <div className="bg-[#1E252F] px-5 py-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-black text-slate-400">"{entity.query}" → {entity.code ? `거래처 코드 ${entity.code}` : "코드 없음 · 글자 그대로"}{candidates.length > 1 && <button type="button" onClick={() => setPhase("choose")} className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-white hover:bg-white/20">다른 후보 {candidates.length - 1}</button>}</div>
+                  <div className="text-[11px] font-black text-slate-400">"{entity.query}" → {entity.code ? `거래처 코드 ${entity.code}` : entity.leaseCode ? `임대 코드 ${entity.leaseCode}` : "코드 없음 · 글자 그대로"}{entity.leaseCode && entity.code ? ` · 임대 코드 ${entity.leaseCode}` : ""}{foundBy && <span className="ml-2 text-indigo-300">{foundBy}</span>}{candidates.length > 1 && <button type="button" onClick={() => setPhase("choose")} className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-white hover:bg-white/20">다른 후보 {candidates.length - 1}</button>}</div>
                   <div className="mt-0.5 text-[20px] font-black leading-tight text-white">{entity.name}</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {state.grade && chip(`${state.grade}등급`, "bg-white/15 text-white")}
                     {state.leaseStatus && chip(state.leaseStatus, "bg-white/15 text-white")}
                     {state.workin.map((w, i) => <span key={i}>{chip(`워킨맵 ${w.team}팀 ${w.quarter}Q ${w.kind || ""} ${w.label || ""}`.replace(/\s+/g, " ").trim(), "bg-cyan-500/25 text-cyan-100")}</span>)}
                     {entity.names.length > 1 && chip(`이름 표기 ${entity.names.length}가지`, "bg-white/10 text-slate-300")}
+                    {entity.phones.length > 0 && chip(`연락처 ${entity.phones.length}개로 문자·해피콜 연결`, "bg-white/10 text-slate-300")}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
                   <button type="button" onClick={() => setHistVendor(entity.name)} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">통합이력 ↗</button>
-                  <button type="button" onClick={() => { void navigator.clipboard.writeText(`${entity.name} (${entity.code})\n주소 ${state.address}\n키맨 ${state.keyman}\n전화 ${state.tel}`).then(() => notify("복사했습니다", "success")); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">복사</button>
+                  <button type="button" onClick={() => { void navigator.clipboard.writeText(`${entity.name} (${entity.code || entity.leaseCode})\n주소 ${state.address}\n키맨 ${state.keyman}\n전화 ${state.tel}`).then(() => notify("복사했습니다", "success")); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">복사</button>
+                  <button type="button" onClick={() => { setPhase("idle"); setEntity(null); setResults([]); setInput(""); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">새 검색</button>
                 </div>
               </div>
             </div>
@@ -199,17 +297,16 @@ export default function Search360({ author }: { author: string }) {
           {/* ② 기기 */}
           {state.devices.length > 0 && (
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between"><div className="text-[12px] font-black text-slate-700">기기 {state.devices.length}대 <span className="font-bold text-slate-400">· 임대리스트 기준</span></div>{deviceOnly && <button type="button" onClick={() => setDeviceOnly("")} className="text-[11px] font-black text-blue-600">기기 필터 해제</button>}</div>
+              <div className="flex items-center justify-between"><div className="text-[12px] font-black text-slate-700">기기 {state.devices.length}대 <span className="font-bold text-slate-400">· 임대리스트 기준 · 누르면 그 기기 기록만</span></div>{deviceOnly && <button type="button" onClick={() => setDeviceOnly("")} className="text-[11px] font-black text-blue-600">기기 필터 해제</button>}</div>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {state.devices.map((d, i) => {
                   const key = d.serial || d.asset; const active = key && identKey(deviceOnly) === identKey(key);
                   return (
-                    <button key={i} type="button" onClick={() => setDeviceOnly(active ? "" : key)} title="누르면 이 기기 기록만" className={`rounded-lg border p-3 text-left transition ${active ? "border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20" : "border-emerald-200 bg-emerald-50/40 hover:border-blue-400"}`}>
-                      <div className="flex items-start justify-between gap-2"><div className="truncate text-[13px] font-black text-slate-900">{d.model || "기종 미기재"}</div>{d.status && <span className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[10px] font-black text-slate-600">{d.status}</span>}</div>
+                    <button key={i} type="button" onClick={() => setDeviceOnly(active ? "" : key)} className={`rounded-lg border p-3 text-left transition ${active ? "border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20" : "border-emerald-200 bg-emerald-50/40 hover:border-blue-400"}`}>
+                      <div className="flex items-start justify-between gap-2"><div className="truncate text-[13px] font-black text-slate-900">{d.model || "기종 미기재"}</div>{d.status && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${/종료|철수/.test(d.status) ? "bg-slate-200 text-slate-500" : "bg-white text-emerald-700"}`}>{d.status}</span>}</div>
                       <div className="mt-1 font-mono text-[11px] font-bold text-slate-700">{[d.asset && `자산 ${d.asset}`, d.serial && `기번 ${d.serial}`].filter(Boolean).join(" · ")}</div>
                       <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
-                        {d.start && <div><span className="font-black text-slate-400">계약 </span>{d.start}{d.end ? ` ~ ${d.end}` : ""}</div>}
-                        {d.monthsLeft && <div><span className="font-black text-slate-400">남은 </span>{d.monthsLeft}개월</div>}
+                        {d.start && <div className="col-span-2"><span className="font-black text-slate-400">계약 </span>{d.start}{d.end ? ` ~ ${d.end}` : ""}{d.monthsLeft ? ` (남은 ${d.monthsLeft}개월)` : ""}</div>}
                         {d.fee && <div><span className="font-black text-slate-400">기본 </span>{d.fee}</div>}
                         {d.grade && <div><span className="font-black text-slate-400">등급 </span>{d.grade}</div>}
                         <div><span className="font-black text-slate-400">점검 </span>{d.lastInspect || "없음"}</div>
@@ -254,6 +351,7 @@ export default function Search360({ author }: { author: string }) {
             <div className="mt-2 flex flex-wrap gap-1">
               {ASK_SUGGESTIONS.map((s) => <button key={s} type="button" disabled={asking} onClick={() => void ask(s)} className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-[10.5px] font-bold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">{s}</button>)}
             </div>
+            {asking && <div className="mt-3 rounded-lg border border-indigo-100 bg-white p-3 text-[12px] font-bold text-indigo-500">기록 {state.total}건을 읽고 답을 쓰는 중입니다… (20~30초)</div>}
             {answers.map((item, i) => (
               <div key={`${item.q}-${i}`} className="mt-3 rounded-lg border border-indigo-100 bg-white p-3">
                 <div className="text-[11px] font-black text-indigo-600">Q. {item.q}</div>
@@ -262,6 +360,22 @@ export default function Search360({ author }: { author: string }) {
               </div>
             ))}
           </section>
+
+          {/* ③-2 기종 참고 자료 — 업체 기록은 아니지만 현장에서 같이 본다 */}
+          {modelRefs.some((m) => m.notes.count || m.docs.count || m.playbook.count) && (
+            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-[12px] font-black text-slate-700">이 업체 기종의 참고 자료 <span className="font-bold text-slate-400">· 처리이력·가이드·족보 (복합기 학습 탭)</span></div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {modelRefs.filter((m) => m.notes.count || m.docs.count || m.playbook.count).map((m) => (
+                  <div key={m.key} className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                    <div className="text-[12.5px] font-black text-slate-900">{m.model}</div>
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px] font-black">{m.notes.count > 0 && chip(`처리이력 ${m.notes.count}`, "bg-blue-100 text-blue-800")}{m.docs.count > 0 && chip(`가이드 ${m.docs.count}`, "bg-emerald-100 text-emerald-800")}{m.playbook.count > 0 && chip(`족보 ${m.playbook.count}`, "bg-amber-100 text-amber-800")}</div>
+                    <ul className="mt-1.5 space-y-0.5 text-[11px] font-semibold text-slate-600">{[...m.playbook.titles, ...m.notes.titles, ...m.docs.titles].slice(0, 4).map((t, i) => <li key={i} className="truncate">· {t}</li>)}</ul>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* ④ 타임라인 */}
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

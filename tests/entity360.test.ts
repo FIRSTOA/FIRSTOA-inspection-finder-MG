@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildExactQuery, buildLooseQuery, buildRawQuery, dateOf, daysSince, deriveState, identKey, inList, isOtherVendor, looksLikeDevice, matchesEntity, SOURCES, toEvent, toEvents, withKeys, type Entity, type SourceResult } from "../src/entity360";
+import { buildExactQuery, buildLooseQuery, buildRawQuery, dateOf, daysSince, deriveState, entityTokensFromQuestion, identKey, inList, isOtherVendor, looksLikeDevice, matchesEntity, modelKey, phonesIn, SOURCES, toEvent, toEvents, withKeys, type Entity, type SourceResult } from "../src/entity360";
 
 const src = (table: string) => SOURCES.find((s) => s.table === table)!;
 const entity: Entity = withKeys({ code: "23013", leaseCode: "21462", name: "주식회사 무암", names: ["주식회사 무암", "무암(주)"], serials: ["ZPBLBJST8000GQV", "B1"], assets: ["A5571"], core: "무암", query: "무암", leaseRows: [] });
@@ -58,6 +58,24 @@ describe("entity360 — 키·조건 조립", () => {
   });
   it("이름·기기가 하나도 없으면 정확 조건도 null (빈 or 로 전체를 끌어오지 않게)", () => {
     expect(buildExactQuery(src("jeomgeom"), { ...entity, code: "", names: [], serials: [], assets: [] })).toBeNull();
+  });
+  it("전화번호 칸(해피콜·예약 문자)은 숫자만 번호로, JSON 경로 칸은 따옴표 없이", () => {
+    const e = withKeys({ ...entity, phones: ["01044816440"] });
+    expect(buildExactQuery(src("happycall_messages"), e)).toContain('recipient.in.("01044816440")');
+    expect(buildExactQuery(src("message_jobs"), e)).toContain("payload->>vendor.in.(");
+    expect(buildExactQuery(src("happycall_messages"), withKeys({ ...entity, phones: [] }))).toBeNull();
+    expect(phonesIn("010-4481-6440 현해리대표님\n02-123-4567 사무실 / 010.9868.3268")).toEqual(["01044816440", "021234567", "01098683268"]);
+  });
+  it("질문에서 업체·기번 후보를 뽑는다 — 조사·흔한 말 제외, 기기 번호 우선", () => {
+    expect(entityTokensFromQuestion("잡플러스는 AS가 몇 번 터졌어?")).toEqual(["잡플러스"]);
+    expect(entityTokensFromQuestion("B6945 언제부터 어디서 썼어?")[0]).toBe("B6945");
+    expect(entityTokensFromQuestion("여긴 미수가 얼마나 있어?")).toEqual([]);
+  });
+  it("modelKey: 기종 표기에서 공통 숫자 핵심", () => {
+    expect(modelKey("SL-X3220NR")).toBe("3220");
+    expect(modelKey("DOCUCENTRE-V C2263(마블)")).toBe("2263");
+    expect(modelKey("MFC-L5700DN")).toBe("5700");
+    expect(modelKey("4단트레이")).toBe("");
   });
 });
 

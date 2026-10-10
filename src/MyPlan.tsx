@@ -93,13 +93,13 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   };
 
   // 워킨맵 좌표 사전 — 업체명 정규화 키로 매칭 (팀 무관 전체, 한 번만)
-  const [workinMeta, setWorkinMeta] = useState<Map<string, { comment: string; phone: string; memos: string[] }>>(new Map());
+  const [workinMeta, setWorkinMeta] = useState<Map<string, { comment: string; phone: string; memos: string[]; address: string }>>(new Map());
   useEffect(() => {
-    void selectAllRows<{ name: string; latitude: number | null; longitude: number | null; comment: string | null; phone: string | null; memos: unknown }>(
-      "workin_map_places", "select=name,latitude,longitude,comment,phone,memos",
+    void selectAllRows<{ name: string; latitude: number | null; longitude: number | null; comment: string | null; phone: string | null; memos: unknown; address: string | null; address_detail: string | null }>(
+      "workin_map_places", "select=name,latitude,longitude,comment,phone,memos,address,address_detail",
     ).then((rows) => {
       const map = new Map<string, Geo>();
-      const meta = new Map<string, { comment: string; phone: string; memos: string[] }>();
+      const meta = new Map<string, { comment: string; phone: string; memos: string[]; address: string }>();
       for (const row of rows) {
         const key = vendorMatchKey(row.name || "");
         if (!key) continue;
@@ -108,6 +108,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           comment: String(row.comment || ""),
           phone: String(row.phone || ""),
           memos: Array.isArray(row.memos) ? (row.memos as unknown[]).map(String) : [],
+          // 워킨맵 주소(+상세) — 없으면 메모 줄 중 주소처럼 생긴 것. 내 일정의 빈 주소 칸에 "이 주소로 저장" 제안으로 쓴다(2026-10-10 웍스피어 사례)
+          address: [String(row.address || "").trim(), String(row.address_detail || "").trim()].filter(Boolean).join(" ")
+            || (Array.isArray(row.memos) ? (row.memos as unknown[]).map(String).find((m) => ADDRESS_LIKE.test(m)) || "" : ""),
         });
       }
       setGeoByKey(map);
@@ -132,6 +135,15 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
 
   // 워킨맵에 없는 업체(AS 일정 등)는 일정의 주소를 지오코딩해 좌표를 채운다 (카카오)
   const [geoFallback, setGeoFallback] = useState<Map<string, Geo>>(new Map());
+  // 주소 없는 일정에 제안할 주소 — 임대리스트에서 찾은 것(지오코딩 때 같이 기억)
+  const [leaseAddr, setLeaseAddr] = useState<Map<string, string>>(new Map());
+  const suggestAddress = useCallback((t: MyPlanTicket): { address: string; from: string } | null => {
+    if (t.address?.trim()) return null;
+    const w = lookupMeta(t.vendor)?.address;
+    if (w) return { address: w, from: "워킨맵" };
+    const l = leaseAddr.get(t.id);
+    return l ? { address: l, from: "임대리스트" } : null;
+  }, [lookupMeta, leaseAddr]);
   const lookupGeo = useCallback((vendor: string): Geo | null => {
     const key = vendorMatchKey(vendor);
     if (!key) return null;
@@ -181,6 +193,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         // 주소가 비어 있으면 임대리스트에서 실납품 주소를 끌어온다 — 전엔 그냥 건너뛰어 지도에 안 올랐다
         const address = t.address?.trim() || await leaseAddressOf(t.vendor);
         if (stop) return;
+        if (!t.address?.trim() && address) setLeaseAddr((cur) => new Map(cur).set(t.id, address)); // 주소 칸 제안용
         if (!address) { setGeoFallback((cur) => new Map(cur).set(t.id, { lat: NaN, lng: NaN })); continue; }
         const hit = await geocodeKR(addressCore(address)); // 층·건물·메모를 뗀 핵심 주소로(2026-09-29: 통째로 보내면 엉뚱한 곳)
         if (stop) return;
@@ -520,7 +533,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 })()}
                 {/* 주소도 메모처럼 줄에서 바로 고친다 — 상세를 열어야 했던 불편(2026-10-10). 주소 없는 일정은 여기서 바로 적는다 */}
                 {onAddress
-                  ? <InlineAddress key={`${t.id}|${t.address || ""}`} value={t.address || ""} onSave={(next) => saveAddress(t, next)} />
+                  ? <InlineAddress key={`${t.id}|${t.address || ""}`} value={t.address || ""} suggestion={suggestAddress(t)} onSave={(next) => saveAddress(t, next)} />
                   : <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>}
                 {/* 메모는 일정 밑에서 바로 적는다 — 상세를 열어야 했던 불편(2026-09-24). 저장은 버튼(모바일 blur 불안정) */}
                 <InlineMemo key={`${t.id}|${memos.get(t.id) || ""}`} ticketId={t.id} value={memos.get(t.id) || ""} onSave={saveMemo} />
@@ -833,21 +846,33 @@ function InlineMemo({ ticketId, value, onSave }: { ticketId: string; value: stri
 
 /** 주소 줄 인라인 편집 — InlineMemo와 같은 방식(저장 버튼: 모바일 blur 불안정). Enter 저장 · Esc 되돌리기.
  *  주소가 비어 있으면 점선 칸으로 "여기 적으세요"가 보이게 — 상세를 열지 않고 줄에서 바로 채운다(2026-10-10) */
-function InlineAddress({ value, onSave }: { value: string; onSave: (address: string) => void }) {
+// 주소처럼 생긴 글(시·도 + 시/구/군) — 워킨맵 메모 줄에서 주소를 고를 때
+const ADDRESS_LIKE = /(서울|경기|인천|부산|대구|대전|광주|울산|세종|강원|충북|충남|충청|전북|전남|전라|경북|경남|경상|제주)\s*[가-힣]*(시|구|군|도)\b/;
+
+function InlineAddress({ value, suggestion, onSave }: { value: string; suggestion?: { address: string; from: string } | null; onSave: (address: string) => void }) {
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }, [draft]);
   const dirty = draft.trim() !== value.trim();
   return (
-    <span className="mt-0.5 flex items-start gap-1.5" onClick={(e) => e.stopPropagation()}>
-      <span className="shrink-0 pt-1 text-[10px] font-black text-slate-300">📍</span>
-      <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (dirty) onSave(draft); } if (e.key === "Escape") setDraft(value); }}
-        placeholder="주소 없음 — 여기에 적고 저장 (지도 핀도 이 주소로 옮깁니다)"
-        className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-1 text-[11px] font-semibold leading-4 outline-none transition placeholder:font-semibold ${value.trim()
-          ? "border-transparent bg-transparent text-slate-500 hover:border-slate-200 focus:border-blue-300 focus:bg-blue-50/40 focus:text-slate-800"
-          : "border-dashed border-amber-300 bg-amber-50/50 text-slate-700 placeholder:text-amber-600 focus:border-blue-300 focus:bg-blue-50/40"}`} />
-      {dirty && <button type="button" onClick={() => onSave(draft)} className="shrink-0 rounded bg-blue-600 px-2 py-1 text-[10.5px] font-black text-white hover:bg-blue-700">저장</button>}
+    <span className="mt-0.5 block" onClick={(e) => e.stopPropagation()}>
+      <span className="flex items-start gap-1.5">
+        <span className="shrink-0 pt-1 text-[10px] font-black text-slate-300">📍</span>
+        <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (dirty) onSave(draft); } if (e.key === "Escape") setDraft(value); }}
+          placeholder="주소 없음 — 여기에 적고 저장 (지도 핀도 이 주소로 옮깁니다)"
+          className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-1 text-[11px] font-semibold leading-4 outline-none transition placeholder:font-semibold ${value.trim()
+            ? "border-transparent bg-transparent text-slate-500 hover:border-slate-200 focus:border-blue-300 focus:bg-blue-50/40 focus:text-slate-800"
+            : "border-dashed border-amber-300 bg-amber-50/50 text-slate-700 placeholder:text-amber-600 focus:border-blue-300 focus:bg-blue-50/40"}`} />
+        {dirty && <button type="button" onClick={() => onSave(draft)} className="shrink-0 rounded bg-blue-600 px-2 py-1 text-[10.5px] font-black text-white hover:bg-blue-700">저장</button>}
+      </span>
+      {/* 주소가 비어 있는데 회사가 이미 아는 주소(워킨맵·임대리스트)가 있으면 — 찾으러 가지 말고 한 번에 저장 */}
+      {!value.trim() && !draft.trim() && suggestion && (
+        <span className="mt-1 flex flex-wrap items-center gap-1.5 pl-5 text-[10.5px] font-bold text-slate-500">
+          <span className="min-w-0 truncate"><span className="text-emerald-700">{suggestion.from}에 있는 주소</span> · {suggestion.address}</span>
+          <button type="button" onClick={() => onSave(suggestion.address)} className="shrink-0 rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white hover:bg-emerald-700">이 주소로 저장</button>
+        </span>
+      )}
     </span>
   );
 }
