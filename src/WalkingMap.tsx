@@ -139,6 +139,7 @@ type MapPreferences = {
   monthlyOrder?: "default" | "closing";
   quarterHas?: { renewal: boolean; misu: boolean; overage: boolean; bulman: boolean };
   quarterGrades?: string[];
+  inspectDays?: number; // 점검 경과 N일 초과만 보기(0=전체) — 2026-10-10
 };
 const GRADE_CODES = ["N", "NN", "S", "SS", "V"];
 
@@ -157,6 +158,7 @@ function loadMapPreferences(key: string): MapPreferences {
       monthlyOrder: stored?.monthlyOrder === "closing" ? "closing" : "default",
       quarterHas: { renewal: !!stored?.quarterHas?.renewal, misu: !!stored?.quarterHas?.misu, overage: !!stored?.quarterHas?.overage, bulman: !!stored?.quarterHas?.bulman },
       quarterGrades: Array.isArray(stored?.quarterGrades) ? stored.quarterGrades.map(String).filter((g) => GRADE_CODES.includes(g)) : [],
+      inspectDays: Number.isFinite(Number(stored?.inspectDays)) ? Math.min(180, Math.max(0, Math.round(Number(stored?.inspectDays) / 5) * 5)) : 0,
     };
   } catch {
     return { team: "C", quarter: currentQuarter, kind: "ALL", labels: [] };
@@ -1316,6 +1318,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const [renewalGradeFilter, setRenewalGradeFilter] = useState(initialPreferences.renewalGrade || "ALL");
   const [quarterHasRenewal, setQuarterHasRenewal] = useState(!!initialPreferences.quarterHas?.renewal);
   const [quarterHasMisu, setQuarterHasMisu] = useState(!!initialPreferences.quarterHas?.misu);
+  const [inspectDaysFilter, setInspectDaysFilter] = useState<number>(initialPreferences.inspectDays || 0); // 점검 경과 N일 초과만(0=전체) — 자동 일정의 슬라이더와 같은 기준(2026-10-10)
   const [quarterHasOverage, setQuarterHasOverage] = useState(!!initialPreferences.quarterHas?.overage);
   const [quarterHasBulman, setQuarterHasBulman] = useState(!!initialPreferences.quarterHas?.bulman);
   const [quarterGrades, setQuarterGrades] = useState<string[]>(initialPreferences.quarterGrades || []);
@@ -1816,9 +1819,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         team: teamFilter, quarter: quarterFilter, kind: kindFilter, labels: labelFilters,
         renewalGrade: renewalGradeFilter, renewalOrder, monthlyOrder,
         quarterHas: { renewal: quarterHasRenewal, misu: quarterHasMisu, overage: quarterHasOverage, bulman: quarterHasBulman }, quarterGrades,
+        inspectDays: inspectDaysFilter,
       } satisfies MapPreferences));
     } catch { /* 저장 공간 부족·차단 환경 — 취향 저장은 없어도 동작한다 */ }
-  }, [preferenceStorageKey, teamFilter, quarterFilter, kindFilter, labelFilters, renewalGradeFilter, renewalOrder, monthlyOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades]);
+  }, [preferenceStorageKey, teamFilter, quarterFilter, kindFilter, labelFilters, renewalGradeFilter, renewalOrder, monthlyOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, inspectDaysFilter]);
 
   useEffect(() => {
     if (selectedId === null) return;
@@ -2024,11 +2028,18 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
 
   // 색상 필터를 뺀 범위(팀·분기·업무만) — 검색은 이 안에서 한다. 색상 체크 때문에 못 찾는 일이 없게.
   const scopedAllColors = useMemo(() => {
+    const today = kstDate();
     const rows = places.filter((place) => {
       if (place.team !== teamFilter) return false;
       if (place.quarter !== quarterFilter) return false;
       if (kindFilter !== "ALL" && place.kind !== kindFilter) return false;
       if (kindFilter === "renewal" && renewalGradeFilter !== "ALL" && renewalGrade(place) !== renewalGradeFilter) return false;
+      // 점검 경과 필터(2026-10-10): 마지막 점검이 N일 이내인 곳은 뺀다. 기록이 없는 곳은 "N일 넘은 곳"으로 보고 남긴다(자동 일정 후보와 같은 기준).
+      // 마지막 점검일은 방문기록+점검 원본(최근 370일)에서 찾으므로, 그보다 오래된 곳은 기록 없음으로 잡혀 역시 남는다.
+      if (inspectDaysFilter > 0) {
+        const last = latestInspectionByPlace.get(place.id);
+        if (last && daysBetween(last, today) <= inspectDaysFilter) return false;
+      }
       // 분기점검 필터: 재계약 유무 / 미수 유무 / 등급(다중) — 모두 AND 조합.
       // 업무 '전체'에서 이 필터를 켜면 분기점검 건만 남긴다(2026-10-02: 폰은 보통 '전체'로 두는데 특성·등급이 안 보였다)
       const quarterFilterOn = quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman || quarterGrades.length > 0;
@@ -2064,7 +2075,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
       });
     }
     return rows;
-  }, [places, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, misuByCode, overageByCode, bulmanByCode, flagFor, lookupVendor]);
+  }, [places, teamFilter, quarterFilter, kindFilter, renewalGradeFilter, renewalOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, monthlyOrder, renewalMatchByPlaceId, misuByVendor, overageByVendor, bulmanByVendor, misuByCode, overageByCode, bulmanByCode, flagFor, lookupVendor, inspectDaysFilter, latestInspectionByPlace]);
 
   const scopedPlaces = useMemo(
     () => (labelFilters.length ? scopedAllColors.filter((place) => labelFilters.includes(place.label)) : scopedAllColors),
@@ -2126,7 +2137,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
     } catch (e) { notify(`등록 실패: ${(e as Error).message}`, "error"); }
     finally { setPlanBusy(false); }
   };
-  useEffect(() => { setListLimit(LIST_PAGE); }, [deferredQuery, teamFilter, quarterFilter, kindFilter, labelFilters]);
+  useEffect(() => { setListLimit(LIST_PAGE); }, [deferredQuery, teamFilter, quarterFilter, kindFilter, labelFilters, inspectDaysFilter]);
   const listRows = filtered.slice(0, listLimit);
   const filteredRef = useRef(filtered); // 지도 선택 시 "그 줄이 몇 번째인지"만 보면 되므로 ref로 들고 간다
   filteredRef.current = filtered;
@@ -2235,7 +2246,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
   const progressStart = new Date() > progressDates.start ? new Date() : progressDates.start;
   const daysToQuarterEnd = businessDaysBetween(progressStart, progressDates.end);
   const daysToEarlyEnd = businessDaysBetween(progressStart, progressDates.earlyEnd);
-  const conditionTitle = `${teamFilter}팀 · ${quarterFilter}분기 · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}`;
+  const conditionTitle = `${teamFilter}팀 · ${quarterFilter}분기 · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}${inspectDaysFilter > 0 ? ` · 점검 ${inspectDaysFilter}일 초과` : ""}`;
   const teamProgress = useMemo(() => teams.map((team) => {
     const rows = places.filter((place) => place.team === team && place.quarter === progressQuarter);
     const quarterlyInspections = rows.filter((place) => place.kind === "quarter");
@@ -2889,7 +2900,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
             <LocateFixed size={16} strokeWidth={2.4} />
           </button>
           <div className="flex gap-1">
-          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" || quarterGrades.length > 0 || renewalGradeFilter !== "ALL" || quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건{quarterGrades.length > 0 ? ` · ${quarterGrades.join("/")}` : renewalGradeFilter !== "ALL" ? ` · ${renewalGradeFilter}` : ""}</button>
+          <button type="button" onClick={() => { setConditionMenuOpen((current) => !current); setColorMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${conditionMenuOpen || kindFilter !== "ALL" || quarterGrades.length > 0 || renewalGradeFilter !== "ALL" || quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman || inspectDaysFilter > 0 ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>조건{quarterGrades.length > 0 ? ` · ${quarterGrades.join("/")}` : renewalGradeFilter !== "ALL" ? ` · ${renewalGradeFilter}` : ""}{inspectDaysFilter > 0 ? ` · ${inspectDaysFilter}일↑` : ""}</button>
           <button type="button" onClick={() => { setColorMenuOpen((current) => !current); setConditionMenuOpen(false); setProgressMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${colorMenuOpen || labelFilters.length ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}>색상{labelFilters.length ? ` ${labelFilters.length}` : ""}</button>
           <button type="button" onClick={() => { setProgressMenuOpen((current) => !current); setConditionMenuOpen(false); setColorMenuOpen(false); }} className={`h-9 rounded-full border px-3 text-[11.5px] font-black shadow-lg sm:text-xs ${progressMenuOpen ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>진행률</button>
           </div>
@@ -2909,6 +2920,15 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 <button type="button" onClick={() => { setKindFilter("ALL"); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === "ALL" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>전체</button>
                 {workKinds.map((item) => <button key={item.value} type="button" onClick={() => { setKindFilter(item.value); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1.5 text-xs font-black ${kindFilter === item.value ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>{item.label}</button>)}
               </div>
+              {/* 점검 경과 — 자동 일정의 "마지막 점검 경과 N일 초과" 슬라이더와 같은 기준. 마지막 점검일(방문기록+점검 원본)로 판정, 기록 없는 곳은 남긴다(2026-10-10) */}
+              <div className="mt-3 flex items-center justify-between text-[11px] font-black text-slate-400"><span>점검 경과 <span className="font-bold text-slate-300">(마지막 점검일 기준)</span></span>{inspectDaysFilter > 0 && <button type="button" onClick={() => { setInspectDaysFilter(0); setSelectedId(null); setExpandedId(null); }} className="text-[10px] font-black text-blue-600">해제</button>}</div>
+              <label className="mt-1 block text-xs font-black text-slate-700">{inspectDaysFilter > 0 ? `${inspectDaysFilter}일 초과만 보기` : "전체 (제한 없음)"}
+                <input type="range" min={0} max={180} step={5} value={inspectDaysFilter} onChange={(event) => { setInspectDaysFilter(Number(event.target.value)); setSelectedId(null); setExpandedId(null); }} className="mt-1 w-full accent-blue-600" />
+              </label>
+              <div className="mt-1 grid grid-cols-4 gap-1">
+                {[30, 60, 90, 120].map((days) => <button key={days} type="button" onClick={() => { setInspectDaysFilter(inspectDaysFilter === days ? 0 : days); setSelectedId(null); setExpandedId(null); }} className={`rounded px-2 py-1 text-[11px] font-black ${inspectDaysFilter === days ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{days}일↑</button>)}
+              </div>
+              {inspectDaysFilter > 0 && <div className="mt-1 text-[10px] font-bold text-slate-400">마지막 점검이 {inspectDaysFilter}일 안쪽인 곳은 숨깁니다 · 점검 기록이 없는 곳은 보입니다</div>}
               {(kindFilter === "quarter" || kindFilter === "ALL") && (<>
                 <div className="mt-3 flex items-center justify-between text-[11px] font-black text-slate-400"><span>특성 <span className="font-bold text-slate-300">(있는 곳만)</span></span>{(quarterHasRenewal || quarterHasMisu || quarterHasOverage || quarterHasBulman) && <button type="button" onClick={() => { setQuarterHasRenewal(false); setQuarterHasMisu(false); setQuarterHasOverage(false); setQuarterHasBulman(false); }} className="text-[10px] font-black text-blue-600">해제</button>}</div>
                 <div className="mt-1.5 grid grid-cols-2 gap-1">

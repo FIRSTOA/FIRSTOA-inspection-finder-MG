@@ -518,7 +518,10 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   const parts = [t.team && `${t.team}지역`, t.model, t.serial && `S/N ${t.serial}`, t.asset && `자산 ${t.asset}`, eq].filter(Boolean);
                   return parts.length ? <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{parts.join(" · ")}</span> : null;
                 })()}
-                <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>
+                {/* 주소도 메모처럼 줄에서 바로 고친다 — 상세를 열어야 했던 불편(2026-10-10). 주소 없는 일정은 여기서 바로 적는다 */}
+                {onAddress
+                  ? <InlineAddress key={`${t.id}|${t.address || ""}`} value={t.address || ""} onSave={(next) => saveAddress(t, next)} />
+                  : <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>}
                 {/* 메모는 일정 밑에서 바로 적는다 — 상세를 열어야 했던 불편(2026-09-24). 저장은 버튼(모바일 blur 불안정) */}
                 <InlineMemo key={`${t.id}|${memos.get(t.id) || ""}`} ticketId={t.id} value={memos.get(t.id) || ""} onSave={saveMemo} />
                 {onRemove && (
@@ -824,6 +827,27 @@ function InlineMemo({ ticketId, value, onSave }: { ticketId: string; value: stri
       <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder="📝 메모 — 잊으면 안 되는 것"
         className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-1 text-[11.5px] font-bold leading-4 outline-none transition placeholder:font-semibold placeholder:text-slate-300 ${draft.trim() ? "border-amber-200 bg-amber-50 text-amber-900" : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 focus:border-amber-300 focus:bg-amber-50"}`} />
       {dirty && <button type="button" onClick={() => onSave(ticketId, draft)} className="shrink-0 rounded bg-amber-500 px-2 py-1 text-[10.5px] font-black text-white hover:bg-amber-600">저장</button>}
+    </span>
+  );
+}
+
+/** 주소 줄 인라인 편집 — InlineMemo와 같은 방식(저장 버튼: 모바일 blur 불안정). Enter 저장 · Esc 되돌리기.
+ *  주소가 비어 있으면 점선 칸으로 "여기 적으세요"가 보이게 — 상세를 열지 않고 줄에서 바로 채운다(2026-10-10) */
+function InlineAddress({ value, onSave }: { value: string; onSave: (address: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }, [draft]);
+  const dirty = draft.trim() !== value.trim();
+  return (
+    <span className="mt-0.5 flex items-start gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <span className="shrink-0 pt-1 text-[10px] font-black text-slate-300">📍</span>
+      <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (dirty) onSave(draft); } if (e.key === "Escape") setDraft(value); }}
+        placeholder="주소 없음 — 여기에 적고 저장 (지도 핀도 이 주소로 옮깁니다)"
+        className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-1 text-[11px] font-semibold leading-4 outline-none transition placeholder:font-semibold ${value.trim()
+          ? "border-transparent bg-transparent text-slate-500 hover:border-slate-200 focus:border-blue-300 focus:bg-blue-50/40 focus:text-slate-800"
+          : "border-dashed border-amber-300 bg-amber-50/50 text-slate-700 placeholder:text-amber-600 focus:border-blue-300 focus:bg-blue-50/40"}`} />
+      {dirty && <button type="button" onClick={() => onSave(draft)} className="shrink-0 rounded bg-blue-600 px-2 py-1 text-[10.5px] font-black text-white hover:bg-blue-700">저장</button>}
     </span>
   );
 }
