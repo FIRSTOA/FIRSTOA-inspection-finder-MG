@@ -40,8 +40,9 @@ export default function CostWidget() {
         const rows = await selectRows<MsgRow>("message_jobs", `select=message,payload,channel&source_type=like.direct*&status=eq.sent&channel=eq.sms&sent_at=gte.${from}&limit=3000`);
         let sms = 0, lms = 0, mms = 0;
         rows.forEach((r) => { if (r.payload?.mms) mms += 1; else if (bytesKo(r.message) > 90) lms += 1; else sms += 1; });
-        const p = { sms: num("SMS_PRICE_KRW"), lms: num("LMS_PRICE_KRW"), mms: num("MMS_PRICE_KRW") };
-        setMsg({ sms, lms, mms, krw: p.sms || p.lms || p.mms ? sms * p.sms + lms * p.lms + mms * p.mms : null });
+        // 솔라피 공개 요금(2026-10-10 조회, 부가세 별도): 단문 18원 · 장문 45원 · 사진 110원. app_config 에 넣으면 그 값이 우선(월 발송량 할인 반영용)
+        const p = { sms: num("SMS_PRICE_KRW") || 18, lms: num("LMS_PRICE_KRW") || 45, mms: num("MMS_PRICE_KRW") || 110 };
+        setMsg({ sms, lms, mms, krw: sms * p.sms + lms * p.lms + mms * p.mms });
       } catch { /* 표가 없으면 0 */ }
       void d;
     })();
@@ -67,7 +68,7 @@ export default function CostWidget() {
               : <span className="text-[11.5px] font-bold text-amber-700">단가 미설정 — 관리 app_config 에 AI_PRICE_IN·AI_PRICE_OUT(100만 토큰당 달러)을 넣으면 금액이 보입니다</span>}
           </>
         )}
-        <span className="text-[12px] font-bold text-slate-700">문자 <b className="text-slate-900">{msg.sms + msg.lms + msg.mms}건</b>{msg.krw != null ? <> · <b className="text-slate-900">{won(msg.krw)}</b> · 월말 예상 <b className="text-rose-700">{won(project(msg.krw))}</b></> : <span className="text-slate-400"> (단가 SMS_PRICE_KRW 등 미설정)</span>}</span>
+        <span className="text-[12px] font-bold text-slate-700">문자 <b className="text-slate-900">{msg.sms + msg.lms + msg.mms}건</b>{msg.krw != null ? <> · <b className="text-slate-900">{won(msg.krw)}</b> · 월말 예상 <b className="text-rose-700">{won(project(msg.krw))}</b></> : <span className="text-slate-400"> (단가 미설정)</span>}</span>
         <button type="button" onClick={() => setOpen((v) => !v)} className="ml-auto text-[10.5px] font-black text-blue-600">{open ? "접기" : "자세히"}</button>
       </div>
       {open && (
@@ -75,7 +76,7 @@ export default function CostWidget() {
           <div>AI 종류별: {ai && ai !== "none" ? Object.entries(ai.byFn).map(([k, v]) => `${k === "entity-ask" ? "업체 질문" : k === "data-ask" ? "전체 데이터 질문" : k} ${v}건`).join(" · ") || "없음" : "—"}</div>
           <div>문자 종류별: 단문 {msg.sms} · 장문 {msg.lms} · 사진 {msg.mms} (90바이트 넘으면 장문, 사진 있으면 MMS 로 센 추정)</div>
           <div>월말 예상 = 지금까지 금액 ÷ 지난 날수 × 이 달 날수(단순 비례). 환율 {rate.toLocaleString()}원/달러{rate === 1400 ? " 가정(AI_USD_KRW 로 바꿀 수 있음)" : ""}.</div>
-          <div>단가는 OpenAI 가격표·솔라피 요금표의 숫자를 관리 탭 app_config 에 넣습니다. 바뀌면 거기서만 고치면 됩니다.</div>
+          <div>문자 단가는 솔라피 공개 요금(부가세 별도, 단문 18·장문 45·사진 110원) 기준이고, AI 단가는 OpenAI 가격표 기준으로 서버 설정에 넣어 두었습니다. 요금이 바뀌면 관리 탭 app_config(SMS_PRICE_KRW·AI_PRICE_IN 등)에서 덮어쓸 수 있습니다.</div>
         </div>
       )}
     </section>
