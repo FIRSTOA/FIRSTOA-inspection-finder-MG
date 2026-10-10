@@ -6,7 +6,6 @@ import { GAS_GET_URL } from "./api";
 import { notify } from "./toast";
 import PortalSelect from "./PortalSelect";
 import VendorCodeAdmin from "./VendorCodeAdmin";
-import SupplyBackfill from "./SupplyBackfill";
 
 /**
  * 카톡방·전송 설정 관리.
@@ -261,9 +260,6 @@ export default function SystemAdmin() {
           </div>
         </div>
       </section>
-
-      {/* 부품·자가 신청 기록 — 지난 점검·AS 원문에서 채우기(2026-10-11) */}
-      <SupplyBackfill />
 
       {/* 카톡방 매핑 */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

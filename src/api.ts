@@ -933,19 +933,21 @@ export async function sendForm(payload: SavePayload, kind: SendKind = "normal", 
     if (!built.inspect && !built.as) return { ok: false, error: "업체명을 찾지 못했습니다." };
 
     let anyNew = false;
-    // 부품·자가 신청 칸은 품목 단위로 따로 쌓는다(supply_requests, 2026-10-11) — 중복키가 있어 재전송이어도 한 번만
+    // 부품·자가 신청은 "자가방·부품방으로 보낸 건"만 신청으로 본다(2026-10-11 사용자) — 그 방으로 보낼 때(kind 자가|부품) 그 칸만 품목 단위로 쌓는다. 중복키가 있어 재전송이어도 한 번만
     const supplyOf = (table: "jeomgeom" | "as_records", row: Record<string, unknown>) => ({
       sourceTable: table, date: String(row["작성일"] || ""), author: String(row["작성자"] || ""), team: String(row["지역"] || ""), vendor: String(row["_업체명"] || ""), text: String(row["_원문"] || ""),
+      only: [kind as "부품" | "자가"],
     });
+    const supplyKind = kind === "자가" || kind === "부품";
     if (built.inspect) {
       const r = await insertRecord("jeomgeom", built.inspect);
       if (r === "new") anyNew = true;
-      void saveSupplyRequests(supplyOf("jeomgeom", built.inspect as Record<string, unknown>));
+      if (supplyKind) void saveSupplyRequests(supplyOf("jeomgeom", built.inspect as Record<string, unknown>));
     }
     if (built.as) {
       const r = await insertRecord("as_records", built.as);
       if (r === "new") { anyNew = true; void addCopierNoteFromAs(built.as); }
-      void saveSupplyRequests(supplyOf("as_records", built.as as Record<string, unknown>));
+      if (supplyKind) void saveSupplyRequests(supplyOf("as_records", built.as as Record<string, unknown>));
     }
 
     const isExtra = kind === "자가" || kind === "부품";

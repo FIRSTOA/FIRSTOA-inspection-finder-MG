@@ -31,7 +31,7 @@ export type LookupCategory = {
   note?: string;                // 화면에 띄우는 한 줄 안내
   teamField?: string;           // 팀(A~D) 필터에 쓸 컬럼 — 값에 팀 글자가 포함되면 매칭 (수도권C 등)
   teamSourceParen?: boolean;    // 출처 라벨의 괄호에서도 팀 매칭 ("카톡:재계약(A)") — 지역 칸이 빈 시트분 보완
-  custom?: "misu" | "overage" | "stock";  // 범용 표 대신 전용 보드를 렌더 (CS체크·정렬·수량조절 등 기능이 더 풍부)
+  custom?: "misu" | "overage" | "stock" | "self" | "parts";  // 범용 표 대신 전용 보드를 렌더 (CS체크·정렬·수량조절 등 기능이 더 풍부). self/parts=자가신청·부품신청(2026-10-11)
   chipFilter?: { field: string; options: Array<[value: string, label: string]> }; // 카테고리 안 유형 칩 (접수: 복합기/IT/원격)
 };
 
@@ -243,7 +243,19 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     ],
   },
   {
-    key: "stock", label: "기기·부품 재고", group: "접수·자산", custom: "stock", table: "stock_items",
+    key: "self_request", label: "자가신청", group: "접수·자산", custom: "self", table: "supply_requests",
+    dateField: "request_date", orderField: "request_date", vendorField: "vendor", searchFields: ["vendor", "item", "item_std", "model", "author"],
+    columns: [{ key: "item", label: "품목", width: "minmax(0,1fr)", strong: true }],
+    note: "FIELD 양식을 자가방으로 보낸 건이 품목 단위로 쌓입니다. 출고는 운영지원, 반납·불량은 단추로. 지난 기록은 아래 [지난 기록 채우기]",
+  },
+  {
+    key: "parts_request", label: "부품신청", group: "접수·자산", custom: "parts", table: "supply_requests",
+    dateField: "request_date", orderField: "request_date", vendorField: "vendor", searchFields: ["vendor", "item", "item_std", "model", "author"],
+    columns: [{ key: "item", label: "품목", width: "minmax(0,1fr)", strong: true }],
+    note: "FIELD 양식을 부품방으로 보낸 건이 품목 단위로 쌓입니다. 출고는 운영지원, 불량은 단추로.",
+  },
+  {
+    key: "stock", label: "기기·부품·자가 재고", group: "접수·자산", custom: "stock", table: "stock_items",
     dateField: "updated_at", orderField: "updated_at", vendorField: "name",
     searchFields: ["name", "brand", "note", "condition"],
     columns: [

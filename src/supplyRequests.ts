@@ -17,6 +17,7 @@ export type SupplyContext = {
   team: string;
   vendor: string;
   text: string;            // 보고 원문(※부품신청※·※자가신청※ 칸 포함)
+  only?: Array<"부품" | "자가">; // 이 종류만 저장 — 전송 때는 보낸 방(자가방·부품방)에 맞춰 그 칸만 신청으로 본다
 };
 
 const KOR_CONT = /[가-힣]/;
@@ -34,7 +35,7 @@ export function loadSupplyCatalog(force = false): Promise<CatalogItem[]> {
 }
 
 export function rowsFor(ctx: SupplyContext, catalog: CatalogItem[] = []): Array<Record<string, unknown>> {
-  const parsed = parseSupplyRequests(ctx.text);
+  const parsed = parseSupplyRequests(ctx.text).filter((s) => !ctx.only || ctx.only.includes(s.kind));
   if (!parsed.length) return [];
   const dev = firstDeviceOf(ctx.text);
   const items = normalizeItems(parsed, catalog, dev.model);

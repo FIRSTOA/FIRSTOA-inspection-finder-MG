@@ -15,6 +15,7 @@ import { notify } from "./toast";
 import { getRoomMap, insertRow, invokeEdgeFunction, selectRows, updateRows, uploadPhoto } from "./supabase";
 import { prepareImageForUpload } from "./imageUpload";
 import { workerAlive } from "./counterSmsPhoto";
+import SupplyBackfill from "./SupplyBackfill";
 
 type Req = {
   id: number; request_date: string; kind: "부품" | "자가"; vendor: string; team: string; author: string; model: string; serial: string; asset: string;
@@ -32,7 +33,7 @@ const kstDay = (iso: string) => new Date(new Date(iso).getTime() + KST).toISOStr
 const md = (d: string) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "");
 const num = (v: string | number) => { const n = parseInt(String(v || "").replace(/[^\d]/g, ""), 10); return Number.isFinite(n) && n > 0 ? n : 1; };
 
-export default function SupplyBoard({ author, kind }: { author: string; kind: "자가" | "부품" }) {
+export default function SupplyBoard({ author, kind, withTools = false }: { author: string; kind: "자가" | "부품"; withTools?: boolean }) {
   const [days, setDays] = useState(60);
   const [team, setTeam] = useState("전체");
   const [view, setView] = useState<"전체" | "미출고" | "미지급" | "불량" | "미정의" | "내것">("전체");
@@ -231,6 +232,7 @@ export default function SupplyBoard({ author, kind }: { author: string; kind: "�
       {ready === null && <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-[12px] font-bold text-slate-400">불러오는 중…</div>}
       {ready && groups.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-[12px] font-bold text-slate-400">해당하는 {kind}신청이 없습니다. FIELD 양식의 ※{kind}신청※ 칸에 적으면 여기에 쌓이고, 지난 기록은 관리 탭 [지난 기록 채우기]로 넣습니다.</div>}
 
+      {withTools && <SupplyBackfill />}
       {groups.map((g) => {
         const h = g[0];
         return (

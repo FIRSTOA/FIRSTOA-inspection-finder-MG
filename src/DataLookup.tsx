@@ -9,6 +9,7 @@ import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
 import StockBoard from "./StockBoard";
+import SupplyBoard from "./SupplyBoard";
 import { kstDate } from "./visits";
 import { okrWeeksInMonth } from "./okr";
 
@@ -254,6 +255,8 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {category.custom === "misu" && <MisuBoard />}
       {category.custom === "overage" && <OverageBoard />}
       {category.custom === "stock" && <StockBoard author={author} />}
+      {category.custom === "self" && <SupplyBoard author={author} kind="자가" withTools />}
+      {category.custom === "parts" && <SupplyBoard author={author} kind="부품" withTools />}
 
       {/* KPI — 미수 보드와 같은 요약 카드 (필터가 그대로 반영된 정확한 수) */}
       {!category.custom && (
