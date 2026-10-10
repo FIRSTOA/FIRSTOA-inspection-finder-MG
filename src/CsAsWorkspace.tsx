@@ -431,7 +431,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     void migrateLocalOnce().then(refreshTickets);
     const onFocus = () => { void refreshTickets(); };
     window.addEventListener("focus", onFocus);
-    const timer = window.setInterval(() => { void refreshTickets(); }, 60_000);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refreshTickets(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
   }, [refreshTickets]);
 
@@ -2240,7 +2240,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
                 {view === "as" && !!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
-                  <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></a>)}</div>
+                  <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img loading="lazy" src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></a>)}</div>
                 </div>}
                 {view === "as" && !!(ticket.issue || "").trim() && <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
                   <textarea key={`issue-${ticket.id}`} defaultValue={ticket.issue || ""} rows={Math.min(5, Math.max(2, (ticket.issue || "").split("\n").length))}

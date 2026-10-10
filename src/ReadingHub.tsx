@@ -494,7 +494,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
             <div className="text-xs font-black text-slate-400">{labels.writeHint} <span className="font-bold text-slate-300">— 익명으로 공유됩니다</span></div>
             <div className="mt-2 flex gap-1.5">
               {kind === "reading" && cover && <span className="relative shrink-0">
-                <img src={cover} alt="선택한 책 표지" className="h-[38px] w-7 rounded object-cover shadow" />
+                <img loading="lazy" src={cover} alt="선택한 책 표지" className="h-[38px] w-7 rounded object-cover shadow" />
                 <button type="button" onClick={() => setCover("")} aria-label="표지 제거" className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[9px] font-black text-white">×</button>
               </span>}
               <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && kind === "reading") void runBookSearch(); }} placeholder={labels.titlePlaceholder} className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
@@ -512,7 +512,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
                   {bookResults.map((book, index) => (
                     <button key={`${book.title}-${index}`} type="button" onClick={() => { setTitle(book.title); setCover(book.thumbnail); setBookOpen(false); }}
                       className="flex items-center gap-2 rounded-lg bg-white p-2 text-left ring-1 ring-slate-200 transition hover:ring-blue-300">
-                      {book.thumbnail ? <img src={book.thumbnail} alt="" className="h-12 w-8 shrink-0 rounded object-cover shadow-sm" /> : <span className="flex h-12 w-8 shrink-0 items-center justify-center rounded bg-slate-100 text-[9px] font-black text-slate-400">표지<br />없음</span>}
+                      {book.thumbnail ? <img loading="lazy" src={book.thumbnail} alt="" className="h-12 w-8 shrink-0 rounded object-cover shadow-sm" /> : <span className="flex h-12 w-8 shrink-0 items-center justify-center rounded bg-slate-100 text-[9px] font-black text-slate-400">표지<br />없음</span>}
                       <span className="min-w-0">
                         <span className="block truncate text-xs font-black text-slate-800">{book.title}</span>
                         {book.authors && <span className="block truncate text-[10px] font-bold text-slate-400">{book.authors}</span>}
@@ -529,7 +529,7 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
                   className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40">{photoBusy ? "올리는 중…" : "📷 사진 첨부"}</button>
                 <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void attachPhoto(e.target.files?.[0] || null); e.target.value = ""; }} />
                 {photo && <span className="relative">
-                  <img src={photo} alt="첨부한 사진" className="h-9 w-9 rounded-lg object-cover shadow-sm" />
+                  <img loading="lazy" src={photo} alt="첨부한 사진" className="h-9 w-9 rounded-lg object-cover shadow-sm" />
                   <button type="button" onClick={() => setPhoto("")} aria-label="사진 제거" className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[9px] font-black text-white">×</button>
                 </span>}
                 <span className="text-[11px] font-bold text-slate-300">{content.trim().length ? `${content.trim().length}자` : ""}</span>

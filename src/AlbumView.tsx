@@ -158,8 +158,7 @@ export default function AlbumView({ id }: { id: string }) {
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <img
-              src={urls[idx]}
+            <img loading="lazy"               src={urls[idx]}
               alt=""
               className="max-h-full max-w-full object-contain"
               onClick={(e) => e.stopPropagation()}

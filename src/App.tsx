@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
+import { createElement, lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type PointerEvent } from "react";
 import { askConfirm } from "./confirmModal";
 import { parseQuickVendorInput } from "./quickInput";
 import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, Target, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
@@ -8,44 +8,25 @@ import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
 import CopierExpansionForm, { EMPTY_COPIER_EXPANSION_FORM, buildCopierExpansionText, type CopierExpansionFormState } from "./CopierExpansionForm";
 import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
-import Home from "./Home";
 import UnifiedHistory from "./UnifiedHistory";
 import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey , extractCompanyForTemplate} from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
-import WorkDashboard from "./WorkDashboard";
-import AdminHub from "./AdminHub";
-import LookupHub from "./LookupHub";
 import { ToastHost, notify } from "./toast";
 import { clearSsoSession, getSsoSession, logoutToGroupware, ssoLoginVisible, ssoRequiredCached, startGroupwareLogin } from "./sso";
 import { extractVendorFromText, pickLabelValue } from "./vendorLine";
 import { ConfirmHost } from "./confirmModal";
 import { syncPush } from "./push";
-import SelfDevHub from "./SelfDev";
-import CopierNotes from "./CopierNotes";
-import StockBoard from "./StockBoard";
-import InboxHub from "./InboxHub";
 import { useInboxBadge } from "./useInboxBadge";
-import GrowthHub from "./GrowthHub";
-import OkrHub from "./OkrHub";
-import WalkingMap from "./WalkingMap";
-import FoodMap from "./FoodMap";
-import HelpCenter from "./HelpCenter";
 import InspectionChecklist from "./InspectionChecklist";
 import KeymanCard from "./KeymanCard";
-import ServiceReception from "./ServiceReception";
 import { PromoWorkspace } from "./CustomerEngagement";
-import CustomerReport from "./CustomerReport";
-import CustomerCallHub from "./QuarterNotice";
 import { AsReception, CsCalendar, buildMonthlyCloneRow } from "./CsAsWorkspace";
-import ItLearningHistory from "./ItLearningHistory";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
 import { EMPTY_REPLACEMENT_FORM, buildReplacementText, type ReplacementFormState } from "./replacement";
 import ContactChangeForm from "./ContactChangeForm";
 import PraiseForm from "./PraiseForm";
-import CounterSms from "./CounterSms";
-import AutoSchedule from "./AutoSchedule";
 import { photoStoreClearMode, photoStoreDelete, photoStoreLoadAll, photoStorePut } from "./photoStore";
 import { EMPTY_CONTACT_CHANGE_FORM, buildContactChangeText, type ContactChangeFormState } from "./contactChange";
 import ReportTypeSelector from "./ReportTypeSelector";
@@ -68,6 +49,33 @@ import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags, sp
 import type { AuthorTeam, MemberRow } from "./authors";
 import { regionLetter } from "./region";
 // 재계약 준비 — 별도 chunk로 떼어 둔다. 이 탭을 열지 않는 사람은 코드를 받지 않는다
+/** 화면 단위 코드 분할(2026-10-10 속도): 처음 열 때 2.2MB 번들을 통째로 받던 것을, FIELD 화면만 먼저 받고 나머지 화면은 눌렀을 때 받는다 */
+function ScreenLoading({ label }: { label: string }) {
+  return <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm font-bold text-slate-400">{label} 화면을 불러오는 중…</div>;
+}
+function lazyScreen<P extends object>(loader: () => Promise<{ default: ComponentType<P> }>, label: string) {
+  const C = lazy(loader);
+  return function LazyScreen(props: P) { return <Suspense fallback={<ScreenLoading label={label} />}>{createElement(C as unknown as ComponentType<P>, props)}</Suspense>; };
+}
+const Home = lazyScreen(() => import("./Home"), "홈");
+const WorkDashboard = lazyScreen(() => import("./WorkDashboard"), "주간 현황");
+const AdminHub = lazyScreen(() => import("./AdminHub"), "관리");
+const LookupHub = lazyScreen(() => import("./LookupHub"), "조회");
+const SelfDevHub = lazyScreen(() => import("./SelfDev"), "자기개발");
+const CopierNotes = lazyScreen(() => import("./CopierNotes"), "복합기 학습");
+const StockBoard = lazyScreen(() => import("./StockBoard"), "재고");
+const InboxHub = lazyScreen(() => import("./InboxHub"), "수신함");
+const GrowthHub = lazyScreen(() => import("./GrowthHub"), "성장 기록");
+const OkrHub = lazyScreen(() => import("./OkrHub"), "OKR");
+const WalkingMap = lazyScreen(() => import("./WalkingMap"), "워킨맵");
+const FoodMap = lazyScreen(() => import("./FoodMap"), "맛집 지도");
+const HelpCenter = lazyScreen(() => import("./HelpCenter"), "사용설명서");
+const ServiceReception = lazyScreen(() => import("./ServiceReception"), "서비스접수");
+const CustomerReport = lazyScreen(() => import("./CustomerReport"), "고객 리포트");
+const CustomerCallHub = lazyScreen(() => import("./QuarterNotice"), "해피콜");
+const ItLearningHistory = lazyScreen(() => import("./ItLearningHistory"), "IT 학습");
+const CounterSms = lazyScreen(() => import("./CounterSms"), "카운터 문자");
+const AutoSchedule = lazyScreen(() => import("./AutoSchedule"), "자동 일정");
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
@@ -6836,7 +6844,7 @@ export default function App() {
               <div className="flex items-center gap-2 overflow-x-auto">
                 {photos.map((p, i) => (
                   <div key={p.url} className="relative shrink-0">
-                    {p.file.type.startsWith("video/") ? <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-white">영상</div> : <img src={p.url} alt="" className="h-12 w-12 rounded-lg object-cover" />}
+                    {p.file.type.startsWith("video/") ? <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-white">영상</div> : <img loading="lazy" src={p.url} alt="" className="h-12 w-12 rounded-lg object-cover" />}
                     <button type="button" onClick={() => removePhoto(i)} className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white" aria-label="사진 제거">×</button>
                   </div>
                 ))}
@@ -6943,7 +6951,7 @@ export default function App() {
                   {p.file.type.startsWith("video/") ? (
                     <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-800 text-lg text-white">🎥</div>
                   ) : (
-                    <img src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                    <img loading="lazy" src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover" />
                   )}
                   <button type="button" onClick={() => removePhoto(i)}
                     className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-white" aria-label="사진 제거">✕</button>

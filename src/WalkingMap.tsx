@@ -1802,7 +1802,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
         if (active) setSyncState("error");
       });
     };
-    const timer = window.setInterval(refresh, PLACES_POLL_MS);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, PLACES_POLL_MS); // 숨은 탭은 쉰다(2026-10-10 속도)
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {

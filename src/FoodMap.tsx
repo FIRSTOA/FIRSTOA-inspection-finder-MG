@@ -534,7 +534,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
                 <div className="grid h-40 grid-cols-3 gap-1 overflow-hidden bg-white sm:h-48" style={{ maxHeight: 200 }}>
                   <button type="button" onClick={() => setViewer({ urls: focused.photos, at: 0 })}
                     className={`relative min-h-0 overflow-hidden ${focused.photos.length > 1 ? "col-span-2" : "col-span-3"}`}>
-                    <img src={focused.photos[0]} alt="" referrerPolicy="no-referrer" className="block h-full w-full object-cover transition duration-300 hover:scale-[1.03]" />
+                    <img loading="lazy" src={focused.photos[0]} alt="" referrerPolicy="no-referrer" className="block h-full w-full object-cover transition duration-300 hover:scale-[1.03]" />
                   </button>
                   {focused.photos.length > 1 && (
                     <div className="grid min-h-0 grid-rows-2 gap-1 overflow-hidden">
@@ -646,7 +646,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
 
       {viewer && (
         <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/80 p-3" onMouseDown={() => setViewer(null)}>
-          <img src={viewer.urls[viewer.at]} alt="" className="max-h-[86vh] max-w-full rounded-xl object-contain" onMouseDown={(e) => e.stopPropagation()} />
+          <img loading="lazy" src={viewer.urls[viewer.at]} alt="" className="max-h-[86vh] max-w-full rounded-xl object-contain" onMouseDown={(e) => e.stopPropagation()} />
           {viewer.urls.length > 1 && (
             <div className="absolute bottom-5 flex gap-2" onMouseDown={(e) => e.stopPropagation()}>
               {viewer.urls.map((u, i) => (
@@ -791,7 +791,7 @@ export default function FoodMap({ author, team }: { author: string; team: string
                   <div className="mt-2 flex gap-1.5 overflow-x-auto">
                     {form.photos.map((url, i) => (
                       <div key={url} className="relative shrink-0">
-                        <img src={url} alt="" className="block rounded-lg object-cover" style={{ width: 80, height: 80 }} />
+                        <img loading="lazy" src={url} alt="" className="block rounded-lg object-cover" style={{ width: 80, height: 80 }} />
                         {i === 0 && <span className="absolute left-1 top-1 rounded bg-blue-600 px-1 py-0.5 text-[9px] font-black text-white">대표</span>}
                         <button type="button" onClick={() => setForm({ ...form, photos: form.photos.filter((_, j) => j !== i) })} className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-slate-900 text-[11px] font-black text-white">✕</button>
                       </div>

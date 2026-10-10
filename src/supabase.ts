@@ -64,6 +64,7 @@ export async function insertRecord(table: "jeomgeom" | "as_records", row: Row): 
 // 범용 단일행 insert. 먼저 _dupKey를 조회해 중복을 막는다.
 // 일부 기존 테이블은 _dupKey 고유 제약이 없으므로 PostgREST on_conflict에는 의존하지 않는다.
 export async function insertRow(table: string, row: Record<string, unknown>): Promise<InsertResult> {
+  touchesSmallTables(table);
   const dupKey = String(row._dupKey || "").trim();
   if (dupKey) {
     const duplicateRes = await fetch(
@@ -94,6 +95,7 @@ export function isTestModeValue(value: unknown) {
 }
 
 export async function upsertRow(table: string, row: Record<string, unknown>, onConflict: string): Promise<void> {
+  touchesSmallTables(table);
   const res = await fetch(`${REST}/${table}?on_conflict=${encodeURIComponent(onConflict)}`, {
     method: "POST",
     headers: { ...BASE_HEADERS, Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -105,22 +107,41 @@ export async function upsertRow(table: string, row: Record<string, unknown>, onC
   }
 }
 
+// 설정·방 매핑은 화면마다 다시 읽어 같은 요청이 겹쳤다 — 60초 캐시 + 진행 중 요청 공유. 이 표에 쓰면(아래 writer) 바로 비운다(2026-10-10 속도)
+const SMALL_CACHE_MS = 60_000;
+let configCache: { at: number; p: Promise<Record<string, string>> } | null = null;
+let roomMapCache: { at: number; p: Promise<Record<string, string>> } | null = null;
+export function invalidateConfigCaches() { configCache = null; roomMapCache = null; }
+const touchesSmallTables = (table: string) => { if (table === "app_config" || table === "room_map") invalidateConfigCaches(); };
+
 export async function getConfig(): Promise<Record<string, string>> {
-  const res = await fetch(`${REST}/app_config?select=key,value`, { headers: BASE_HEADERS });
-  if (!res.ok) throw new Error(`설정 조회 실패(${res.status})`);
-  const rows = (await res.json()) as Array<{ key: string; value: string }>;
-  const cfg: Record<string, string> = {};
-  rows.forEach((r) => { cfg[r.key] = r.value; });
-  return cfg;
+  if (configCache && Date.now() - configCache.at < SMALL_CACHE_MS) return configCache.p;
+  const p = (async () => {
+    const res = await fetch(`${REST}/app_config?select=key,value`, { headers: BASE_HEADERS });
+    if (!res.ok) throw new Error(`설정 조회 실패(${res.status})`);
+    const rows = (await res.json()) as Array<{ key: string; value: string }>;
+    const cfg: Record<string, string> = {};
+    rows.forEach((r) => { cfg[r.key] = r.value; });
+    return cfg;
+  })();
+  configCache = { at: Date.now(), p };
+  p.catch(() => { configCache = null; });
+  return p;
 }
 
 export async function getRoomMap(): Promise<Record<string, string>> {
-  const res = await fetch(`${REST}/room_map?select=category,region,room`, { headers: BASE_HEADERS });
-  if (!res.ok) throw new Error(`방매핑 조회 실패(${res.status})`);
-  const rows = (await res.json()) as Array<{ category: string; region: string; room: string }>;
-  const m: Record<string, string> = {};
-  rows.forEach((r) => { m[`${r.category}|${String(r.region).trim().toUpperCase()}`] = r.room; });
-  return m;
+  if (roomMapCache && Date.now() - roomMapCache.at < SMALL_CACHE_MS) return roomMapCache.p;
+  const p = (async () => {
+    const res = await fetch(`${REST}/room_map?select=category,region,room`, { headers: BASE_HEADERS });
+    if (!res.ok) throw new Error(`방매핑 조회 실패(${res.status})`);
+    const rows = (await res.json()) as Array<{ category: string; region: string; room: string }>;
+    const m: Record<string, string> = {};
+    rows.forEach((r) => { m[`${r.category}|${String(r.region).trim().toUpperCase()}`] = r.room; });
+    return m;
+  })();
+  roomMapCache = { at: Date.now(), p };
+  p.catch(() => { roomMapCache = null; });
+  return p;
 }
 
 // 사진 → Supabase Storage(photos 버킷) 업로드 후 공개 URL 반환. (버킷/정책은 SQL로 1회 생성)
@@ -158,13 +179,8 @@ export async function uploadPhoto(path: string, file: Blob, contentType = "image
 
 // PostgREST의 기본 1,000행 제한을 넘는 공용 목록을 끝까지 조회한다.
 export async function selectAllRows<T>(table: string, query: string, pageSize = 1000): Promise<T[]> {
-  const rows: T[] = [];
-  for (let offset = 0; ; offset += pageSize) {
-    const separator = query ? "&" : "";
-    const page = await selectRows<T>(table, `${query}${separator}limit=${pageSize}&offset=${offset}`);
-    rows.push(...page);
-    if (page.length < pageSize) return rows;
-  }
+  // 2026-10-10 속도: 순차 페이징(미수 8천 행 = 왕복 9번)을 병렬 4장으로 — 호출부 30곳이 그대로 빨라진다. 순서는 페이지 순서 그대로
+  return selectAllRowsFast<T>(table, query, pageSize, 4);
 }
 
 // 대용량 전체 조회의 병렬판 — 페이지를 동시(concurrency)로 받아 순차 왕복 지연을 줄인다.
@@ -208,6 +224,7 @@ export async function countRows(table: string, query = ""): Promise<number> {
 }
 
 export async function deleteRows(table: string, query: string): Promise<void> {
+  touchesSmallTables(table);
   const res = await fetch(`${REST}/${table}?${query}`, {
     method: "DELETE",
     headers: { ...BASE_HEADERS, Prefer: "return=minimal" },
@@ -234,6 +251,7 @@ export async function insertRowReturning<T = Record<string, unknown>>(table: str
 }
 
 export async function updateRows(table: string, query: string, patch: Record<string, unknown>): Promise<void> {
+  touchesSmallTables(table);
   const res = await fetch(`${REST}/${table}?${query}`, {
     method: "PATCH",
     headers: { ...BASE_HEADERS, Prefer: "return=minimal" },

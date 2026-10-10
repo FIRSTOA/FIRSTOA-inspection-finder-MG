@@ -36,7 +36,7 @@ export default function TeamCalendar({ team, author }: { team: string; author: s
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     // 팀원이 방금 넣은 것도 보이게 — 60초 주기 + 창 복귀
-    const timer = window.setInterval(() => { void load(); }, 60_000);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     const onFocus = () => { void load(); };
     window.addEventListener("focus", onFocus);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", onFocus); };

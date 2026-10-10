@@ -293,7 +293,7 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
               className="rounded-full bg-slate-900 px-6 py-2 text-xs font-black text-white transition hover:bg-slate-800">확인</button>
           </>}>
           <div className="flex gap-4">
-            {bookView.cover_url && <img src={bookView.cover_url} alt={bookView.title} className="h-44 w-32 shrink-0 rounded-lg object-cover shadow-md" />}
+            {bookView.cover_url && <img loading="lazy" src={bookView.cover_url} alt={bookView.title} className="h-44 w-32 shrink-0 rounded-lg object-cover shadow-md" />}
             <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm font-medium leading-7 text-slate-800">{bookView.content}</p>
           </div>
         </FormModal>

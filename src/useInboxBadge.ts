@@ -40,7 +40,7 @@ export function useInboxBadge(author: string): number {
       } catch { /* 배지는 실패해도 조용히 */ }
     };
     void refresh();
-    const timer = window.setInterval(refresh, 120_000);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 120_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     const onWake = () => { void refresh(); };
     window.addEventListener("focus", onWake);
     window.addEventListener(INBOX_EVENT, onWake);

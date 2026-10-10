@@ -616,7 +616,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       void loadList(listDate, listPeriod, true);
       void loadRemoteQueue();
     };
-    const timer = window.setInterval(refresh, 60_000);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
@@ -1445,7 +1445,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                     </div>}
                   </div>}
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
-                  {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img src={url} alt="증상 사진" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" /></a>)}</div>}
+                  {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img loading="lazy" src={url} alt="증상 사진" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" /></a>)}</div>}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   {(row.type === "IT" || row.type === "원격이관") && (() => {
                     const meta = handlingOf(row);
@@ -1804,7 +1804,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                       const grade = !long ? "" : long < PHOTO_LOW_RES ? "low" : long < PHOTO_SMALL ? "small" : "";
                       return (
                         <span key={photo.url} className="relative" title={long ? `${photo.width}×${photo.height}` : undefined}>
-                          <a href={photo.url} target="_blank" rel="noreferrer"><img src={photo.url} alt={photo.name} className={`h-16 w-16 rounded-lg border object-cover ${grade === "low" ? "border-rose-400" : grade === "small" ? "border-amber-300" : "border-slate-200"}`} /></a>
+                          <a href={photo.url} target="_blank" rel="noreferrer"><img loading="lazy" src={photo.url} alt={photo.name} className={`h-16 w-16 rounded-lg border object-cover ${grade === "low" ? "border-rose-400" : grade === "small" ? "border-amber-300" : "border-slate-200"}`} /></a>
                           {grade && <span className={`absolute inset-x-0 bottom-0 rounded-b-lg px-0.5 text-center text-[9px] font-black leading-4 text-white ${grade === "low" ? "bg-rose-600" : "bg-amber-500"}`}>{grade === "low" ? "저화질" : "작음"} {photo.width}×{photo.height}</span>}
                           <button type="button" onClick={() => setPhotos((prev) => prev.filter((_, i) => i !== index))} className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white">×</button>
                         </span>

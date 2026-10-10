@@ -106,14 +106,17 @@ async function loadSources(): Promise<Sources> {
   const misuSelect = encodeURIComponent("_업체명,미수개월,미수잔액,실제 잔액,실제 개월수,입력일");
   const sourceCol = encodeURIComponent("_출처");
   const bulmanCutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  // 2026-10-10 속도: 미수 8천·초과 3천 행을 통째로 받던 것 → 배지에 쓰는 범위(미수 최신·상습 2년, 초과 최신·12개월 횟수)만. 입력일은 'YYYY-MM-DD …' 글이라 gte 비교가 된다
+  const misuCutoff = new Date(Date.now() - 730 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const overageFetchCutoff = new Date(Date.now() - 548 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   // 담당자·키맨 변경: 배지는 최근 것만 보여주지만 "인사 미완료"는 오래된 것도 상기시켜야 해서 1년치를 읽는다
   const changeCutoff = new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   const [misuRows, renewalRows, quarterRows, overageRows, bulmanRows, alias, placeCodes, noteRows, changeRows] = await Promise.all([
     // 미수는 시트 출처만(카톡 유입은 과거 이력) — WalkingMap loadMisu와 동일 기준
-    selectAllRows<Record<string, unknown>>("misu", `select=${misuSelect}&${sourceCol}=like.${encodeURIComponent("시트")}*&order=id.asc`),
+    selectAllRows<Record<string, unknown>>("misu", `select=${misuSelect}&${sourceCol}=like.${encodeURIComponent("시트")}*&${encodeURIComponent("입력일")}=gte.${misuCutoff}&order=id.asc`),
     selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind,memos&kind=eq.renewal&quarter=in.(${quarter},${prevQuarter},${nextQuarter})&order=id.asc`),
     selectAllRows<PlaceRow>("workin_map_places", `select=id,name,label,quarter,kind&kind=eq.quarter&quarter=eq.${quarter}&order=id.asc`),
-    selectAllRows<Record<string, unknown>>("overage", `select=${encodeURIComponent("_업체명,합계,날짜")}&order=id.asc`),
+    selectAllRows<Record<string, unknown>>("overage", `select=${encodeURIComponent("_업체명,합계,날짜")}&${encodeURIComponent("날짜")}=gte.${overageFetchCutoff}&order=id.asc`),
     selectAllRows<Record<string, unknown>>("bulman", `select=${encodeURIComponent("_업체명,방문일,날짜,불만내용,불편내용")}&order=id.desc&limit=600`),
     getAliasCodeMap().catch(() => new Map<string, string | null>()),
     getWorkinCodeMap().catch(() => new Map<number, string>()),

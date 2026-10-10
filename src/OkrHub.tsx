@@ -394,7 +394,7 @@ export default function OkrHub({ author }: { author: string }) {
         setSyncedAt(kstClock());
       } catch { /* 다음 틱에 다시 */ }
     };
-    const iv = window.setInterval(() => void tick(), 15_000);
+    const iv = window.setInterval(() => { if (document.visibilityState === "visible") void tick(); }, 15_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     const onShow = () => { if (document.visibilityState === "visible") void tick(); };
     document.addEventListener("visibilitychange", onShow); window.addEventListener("focus", onShow);
     return () => { stopped = true; window.clearInterval(iv); document.removeEventListener("visibilitychange", onShow); window.removeEventListener("focus", onShow); };
