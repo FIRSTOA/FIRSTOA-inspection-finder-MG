@@ -27,3 +27,10 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# 노트북 작업 실행기 — 로그·상태·백업은 기기에만
+tools/worker/logs/
+tools/worker/state.json
+tools/worker/__pycache__/
+tools/kakao-pc/__pycache__/
+tools/kakao-pc/poster_log.txt
