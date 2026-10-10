@@ -1,4 +1,5 @@
 import { teamLabel } from "./authors";
+import CostWidget from "./CostWidget";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -343,6 +344,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
 
   return (
     <div className="pb-8">
+      {/* 이번 달 비용(AI 질문·문자) — 2026-10-10 "홈 상단에 API 비용·지출 예상" */}
+      <div className="mb-3"><CostWidget /></div>
       <div className="relative overflow-hidden rounded-3xl bg-[#0B0F17] text-white shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
         {/* 배경 결 — 격자 + 광원 셋 */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(rgba(148,163,184,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.7) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />

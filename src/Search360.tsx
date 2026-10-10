@@ -10,7 +10,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Search as SearchIcon, Sparkles } from "lucide-react";
 import { notify } from "./toast";
-import { invokeEdgeFunction } from "./supabase";
+import { invokeEdgeFunction, selectRows } from "./supabase";
+import type { Cost, Usage } from "../supabase/functions/_shared/ai-usage.ts";
 import UnifiedHistory from "./UnifiedHistory";
 import AnswerImage from "./AnswerImage";
 import { extractSvg, mobilePhonesIn } from "./answerSvg";
@@ -85,11 +86,24 @@ export default function Search360({ author }: { author: string }) {
   const [question, setQuestion] = useState("");
   const [pendingQ, setPendingQ] = useState("");
   const [asking, setAsking] = useState(false);
-  const [answers, setAnswers] = useState<Array<{ q: string; a: string; used: number }>>([]);
+  const [answers, setAnswers] = useState<Array<{ q: string; a: string; used: number; usage?: Usage; cost?: Cost }>>([]);
+  // 이번 달 AI 사용 합계(ai_usage 표가 있을 때만) — 2026-10-10 "API 비용이 나갈 텐데"
+  const [aiMonth, setAiMonth] = useState<{ count: number; tokens: number; usd: number; priced: boolean } | null>(null);
+  useEffect(() => {
+    const kst = new Date(Date.now() + 9 * 3600_000);
+    const from = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, "0")}-01T00:00:00+09:00`;
+    selectRows<{ input_tokens: number; output_tokens: number; usd: number | null }>("ai_usage", `select=input_tokens,output_tokens,usd&created_at=gte.${encodeURIComponent(from)}&limit=2000`)
+      .then((rows) => setAiMonth({ count: rows.length, tokens: rows.reduce((n, r) => n + (r.input_tokens || 0) + (r.output_tokens || 0), 0), usd: rows.reduce((n, r) => n + (Number(r.usd) || 0), 0), priced: rows.some((r) => r.usd != null) }))
+      .catch(() => setAiMonth(null));
+  }, []);
+  const fmtK = (n: number) => n.toLocaleString();
+  const usageLine = (u?: Usage, c?: Cost) => (u
+    ? `토큰 입력 ${fmtK(u.input)}${u.cached ? `(캐시 ${fmtK(u.cached)})` : ""} · 출력 ${fmtK(u.output)}${u.reasoning ? `(추리 ${fmtK(u.reasoning)})` : ""} · 왕복 ${u.rounds}${c?.priced && c.usd != null ? ` · 약 $${c.usd.toFixed(4)}` : " · 단가 미설정(관리 app_config AI_PRICE_IN/OUT)"}${c?.model ? ` · ${c.model}` : ""}`
+    : "");
   const [foundBy, setFoundBy] = useState("");
   // 전체 질문(data-ask) — 표를 직접 조회
   const [dataAsking, setDataAsking] = useState(false);
-  const [dataAnswers, setDataAnswers] = useState<Array<{ q: string; a: string; rows: Record<string, unknown>[]; table: string; calls: string[] }>>([]);
+  const [dataAnswers, setDataAnswers] = useState<Array<{ q: string; a: string; rows: Record<string, unknown>[]; table: string; calls: string[]; usage?: Usage; cost?: Cost }>>([]);
   const [routeNote, setRouteNote] = useState(""); // "문장으로 보여 전체 데이터에 물었습니다"
 
   useEffect(() => { const t = window.setInterval(() => setPhIndex((i) => (i + 1) % PLACEHOLDERS.length), 3200); return () => window.clearInterval(t); }, []);
@@ -128,9 +142,9 @@ export default function Search360({ author }: { author: string }) {
     setAsking(true);
     try {
       const body = { question: text, author, ...compactForAsk(e, st, evs) };
-      const res = await invokeEdgeFunction<{ answer?: string; error?: string }>("entity-ask", body, 90_000);
+      const res = await invokeEdgeFunction<{ answer?: string; error?: string; usage?: Usage; cost?: Cost }>("entity-ask", body, 90_000);
       if (res.error) throw new Error(res.error);
-      setAnswers((cur) => [{ q: text, a: String(res.answer || "").trim(), used: body.events.length }, ...cur].slice(0, 6));
+      setAnswers((cur) => [{ q: text, a: String(res.answer || "").trim(), used: body.events.length, usage: res.usage, cost: res.cost }, ...cur].slice(0, 6));
     } catch (err) {
       notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
     } finally { setAsking(false); }
@@ -160,9 +174,9 @@ export default function Search360({ author }: { author: string }) {
     if (q.length < 4 || dataAsking) return;
     setDataAsking(true); remember(q);
     try {
-      const res = await invokeEdgeFunction<{ answer?: string; rows?: Record<string, unknown>[]; table?: string; calls?: string[]; error?: string }>("data-ask", { question: q, author }, 180_000);
+      const res = await invokeEdgeFunction<{ answer?: string; rows?: Record<string, unknown>[]; table?: string; calls?: string[]; error?: string; usage?: Usage; cost?: Cost }>("data-ask", { question: q, author }, 180_000);
       if (res.error) throw new Error(res.error);
-      setDataAnswers((cur) => [{ q, a: String(res.answer || "").trim(), rows: res.rows || [], table: res.table || "", calls: res.calls || [] }, ...cur].slice(0, 5));
+      setDataAnswers((cur) => [{ q, a: String(res.answer || "").trim(), rows: res.rows || [], table: res.table || "", calls: res.calls || [], usage: res.usage, cost: res.cost }, ...cur].slice(0, 5));
     } catch (err) {
       notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
     } finally { setDataAsking(false); }
@@ -259,6 +273,7 @@ export default function Search360({ author }: { author: string }) {
             <span className="mr-1 text-[10.5px] font-bold text-slate-400">방식</span>
             {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터에 질문")}
             {mode === "auto" && <span className="text-[10.5px] font-semibold text-slate-500">· 문장이면 질문, 아니면 검색으로 봅니다</span>}
+            {aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표). 단가를 넣으면 금액도 보입니다" className="ml-auto text-[10.5px] font-bold text-slate-400">이번 달 AI 질문 {aiMonth.count}건 · 토큰 {fmtK(aiMonth.tokens)}{aiMonth.priced ? ` · 약 $${aiMonth.usd.toFixed(2)}` : ""}</span>}
           </div>
           {landing && (
             <>
@@ -313,6 +328,7 @@ export default function Search360({ author }: { author: string }) {
             <div className="mt-2 whitespace-pre-wrap text-[13.5px] font-semibold leading-7 text-slate-800">{img ? img.rest : item.a}</div>
             {img && <AnswerImage item={img} vendor="" phones={[]} author={author} />}
           </>); })()}
+          {item.usage && <div className="mt-1.5 text-[10px] font-bold text-slate-400">{usageLine(item.usage, item.cost)}</div>}
           {item.rows.length > 0 && (
             <details className="mt-2">
               <summary className="cursor-pointer text-[11px] font-black text-slate-500">근거로 쓴 마지막 조회 결과 {item.rows.length}행 ({item.table})</summary>
@@ -479,7 +495,7 @@ export default function Search360({ author }: { author: string }) {
                   <div className="mt-1.5 whitespace-pre-wrap text-[13px] font-semibold leading-6 text-slate-800">{img ? img.rest : item.a}</div>
                   {img && <AnswerImage item={img} vendor={entity?.name || ""} phones={mobilePhonesIn(state.keyman, state.tel, ...(entity?.phones || []))} author={author} />}
                 </>); })()}
-                <div className="mt-1.5 text-[10px] font-bold text-slate-400">근거로 넘긴 기록 {item.used}건 · 기록에 없는 내용은 답하지 않도록 되어 있습니다. 중요한 판단은 원문을 확인하세요.</div>
+                <div className="mt-1.5 text-[10px] font-bold text-slate-400">근거로 넘긴 기록 {item.used}건{item.usage ? ` · ${usageLine(item.usage, item.cost)}` : ""} · 기록에 없는 내용은 답하지 않도록 되어 있습니다. 중요한 판단은 원문을 확인하세요.</div>
               </div>
             ))}
           </section>

@@ -1,3 +1,4 @@
+import { addUsage, emptyUsage, loadPrices, logUsage, priceUsage } from "../_shared/ai-usage.ts";
 /**
  * 전체 데이터에 물어보기 — "C팀 미수 중 CS가 체크할 곳", "10월 초과 업체 중 N등급" 같은 묶음 질문 (2026-10-10)
  *
@@ -176,15 +177,22 @@ Deno.serve(async (req) => {
     let input: unknown[] = [{ role: "system", content: INSTRUCTION }, { role: "user", content: question }];
     let previous: string | undefined;
     let lastRows: Record<string, unknown>[] = []; let lastTable = ""; const calls: string[] = [];
+    const t0 = Date.now(); let usage = emptyUsage();   // 왕복마다 누적(2026-10-10)
     for (let round = 0; round < 9; round += 1) {
       const res = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers, body: JSON.stringify({ model, reasoning: { effort: "medium" }, tools: TOOLS, input, ...(previous ? { previous_response_id: previous } : {}) }) });
       if (!res.ok) return Response.json({ error: (await res.text()).slice(0, 300), model }, { status: 502, headers: jsonHeaders });
       const data = await res.json();
       previous = data.id;
+      usage = addUsage(usage, data.usage);
       const fnCalls = (data.output || []).filter((o: { type: string }) => o.type === "function_call");
       if (!fnCalls.length) {
         const answer = data.output_text || (data.output || []).flatMap((o: { content?: Array<{ text?: string }> }) => o.content || []).map((c: { text?: string }) => c.text || "").join("\n") || "";
-        return Response.json({ answer: String(answer).trim().slice(0, 6000), rows: lastRows.slice(0, 120), table: lastTable, calls, model }, { headers: jsonHeaders });
+        const sbUrl = Deno.env.get("SUPABASE_URL") || ""; const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+        const sbHeaders = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, "Content-Type": "application/json" };
+        const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k));
+        const usd = priceUsage(usage, prices);
+        await logUsage(sbUrl, sbHeaders, { fn: "data-ask", model, question, author: String(body.author || ""), usage, usd, ms: Date.now() - t0 });
+        return Response.json({ answer: String(answer).trim().slice(0, 6000), rows: lastRows.slice(0, 120), table: lastTable, calls, model, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });
       }
       input = [];
       for (const call of fnCalls) {

@@ -1,3 +1,4 @@
+import { addUsage, emptyUsage, loadPrices, logUsage, priceUsage } from "../_shared/ai-usage.ts";
 /**
  * 통합 검색 360 — "이 업체에 대해 물어보기" (2026-10-10)
  *
@@ -32,6 +33,7 @@ function kstToday(): string { return new Intl.DateTimeFormat("ko-KR", { timeZone
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    const t0 = Date.now();
     const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
     if (!apiKey) return Response.json({ error: "OPENAI_API_KEY missing" }, { status: 500, headers: jsonHeaders });
     const body = await req.json().catch(() => ({}));
@@ -70,7 +72,14 @@ Deno.serve(async (req) => {
       || data.output?.flatMap((item: { content?: Array<{ text?: string }> }) => item.content || []).map((item: { text?: string }) => item.text || "").join("\n")
       || "";
     if (!String(answer).trim()) return Response.json({ error: "빈 응답", model }, { status: 502, headers: jsonHeaders });
-    return Response.json({ answer: String(answer).trim().slice(0, 4000), model, used: payload.events.length }, { headers: jsonHeaders });
+    // 사용량·추정 비용(2026-10-10 "질문마다 쓴 토큰과 비용을 답 아래에") — 단가는 app_config AI_PRICE_IN/OUT/CACHED, 기록은 ai_usage(표 없으면 건너뜀)
+    const usage = addUsage(emptyUsage(), data.usage);
+    const sbUrl = Deno.env.get("SUPABASE_URL") || ""; const sbKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const sbHeaders = { apikey: sbKey, Authorization: `Bearer ${sbKey}`, "Content-Type": "application/json" };
+    const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k));
+    const usd = priceUsage(usage, prices);
+    await logUsage(sbUrl, sbHeaders, { fn: "entity-ask", model, question, author: String(body.author || ""), usage, usd, ms: Date.now() - t0 });
+    return Response.json({ answer: String(answer).trim().slice(0, 4000), model, used: payload.events.length, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
   }
