@@ -7,7 +7,8 @@
  *  - toDataURL(base64)은 메모리를 크게 먹어 모바일에서 실패 → toBlob 사용
  *  - 전부 실패하면 원본을 "실제 MIME/확장자"로 올린다 (jpeg로 잘못 표기하면 나중에 안 열린다)
  */
-export type PreparedImage = { blob: Blob; contentType: string; ext: string };
+/** width/height: 올라가는 사진의 실제 픽셀 크기(디코딩 못 하면 없음) — 호출부가 썸네일 크기 사진을 걸러 내는 데 쓴다 */
+export type PreparedImage = { blob: Blob; contentType: string; ext: string; width?: number; height?: number };
 
 const MAX_PIXELS = 6_000_000; // 모바일 캔버스 안전선 (약 3000x2000 — iOS 캔버스 한계 4096²의 1/3 아래)
 
@@ -59,6 +60,8 @@ export async function prepareImageForUpload(file: File, maxDim = 1600, opts: Pre
   if (!decoded) return original;   // 디코딩 불가 — 원본 그대로 (형식 표기는 정확히)
 
   const { source, width, height } = decoded;
+  original.width = width;
+  original.height = height;
   // 작은 원본은 손대지 않는다 — 폰이 이미 압축한 사진을 다시 압축하면 글자가 뭉개진다.
   // 긴 변이 maxDim보다 커도 용량이 기준 아래면 그대로 둔다(2026-10-02: 4000px 폰 사진 3MB를 3000px로 줄여 봐야 화질만 잃는다)
   if (opts.keepOriginalUnderBytes && file.size <= opts.keepOriginalUnderBytes && /^image\/(jpeg|webp|png)$/i.test(file.type)) {
@@ -94,7 +97,7 @@ export async function prepareImageForUpload(file: File, maxDim = 1600, opts: Pre
     if (!blob || !blob.size) return original;
     // 이미 최적화된 파일을 다시 압축해 더 커지는 경우엔 원본이 낫다 (열리는 형식일 때만)
     if (blob.size >= file.size && /^image\/(jpeg|webp|png)$/i.test(file.type)) return original;
-    return { blob, contentType, ext };
+    return { blob, contentType, ext, width: targetWidth, height: targetHeight };
   } catch {
     return original;
   }
