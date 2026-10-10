@@ -20,7 +20,7 @@ import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pic
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
 // dropped·kept·mode 는 2026-10-10 "목록 맞추기"부터 — 관리부가 완료분을 빼고 다시 올린 목록에 맞춰 빠진 업체를 자동 완료한 기록
-type BatchLogEntry = { at: string; by: string; added: number; skipped: string[]; dropped?: string[]; kept?: number; mode?: "sync" | "merge" };
+type BatchLogEntry = { at: string; by: string; added: number; skipped: string[]; dropped?: string[]; kept?: number; mode?: "sync" | "merge" | "remove"; removed?: string[] };
 type BatchRow = { id: string; team: string; title: string; raw: string; created_by: string; created_at: string; log?: BatchLogEntry[] | null };
 type TargetRow = {
   id: string; batch_id: string; team: string; vendor: string; grade_group: "s_group" | "v_group";
@@ -202,6 +202,26 @@ export default function CounterSms({ author }: { author: string }) {
     setBatchTargets((cur) => cur.map((t) => (t.id === row.id ? { ...t, ...patch } : t)));
     void persistPatch(row, patch, "완료 취소");
   };
+  // 카드 하나만 삭제 — 잘못 올라온 업체·중복을 정리할 때. 예전엔 [목록 삭제]로 통째로 지우는 길뿐이었다(2026-10-10 실수 삭제 뒤 요청).
+  // 누가 언제 무엇을 지웠는지 목록 머리 이력에 남긴다.
+  const removeTarget = async (row: TargetRow) => {
+    if (!batch) return;
+    if (!await askConfirm(`${row.vendor} 카드를 목록에서 삭제할까요?${row.sent_at ? "\n(보냄·완료 표시도 함께 지워집니다)" : ""}\n\n나머지 업체는 그대로 둡니다.`, { danger: true, okLabel: "이 업체만 삭제" })) return;
+    setBusy(true);
+    try {
+      await deleteRows("counter_sms_targets", `id=eq.${encodeURIComponent(row.id)}`);
+      setBatchTargets((cur) => cur.filter((t) => t.id !== row.id));
+      if (extended) {
+        const entry: BatchLogEntry = { at: new Date().toISOString(), by: author || "미지정", added: 0, skipped: [], mode: "remove", removed: [row.vendor] };
+        const nextLog = [...(batch.log || []), entry];
+        await updateRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`, { log: nextLog }).catch(() => undefined);
+        setBatch((cur) => (cur && cur.id === batch.id ? { ...cur, log: nextLog } : cur));
+      }
+      setNotice(`${row.vendor} 카드를 삭제했습니다.`);
+    } catch (e) {
+      setNotice(`삭제 실패: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  };
 
   // 마감 목록 올리기 — 붙여넣기 → 변환 미리보기(수정 가능) → 팀에 등록
   const uploadConvert = () => {
@@ -330,8 +350,8 @@ export default function CounterSms({ author }: { author: string }) {
   };
   const removeBatch = async () => {
     if (!batch) return;
-    if (!await askConfirm(`[${batch.team}팀] ${batch.title} 목록을 삭제할까요?
-전송 기록도 함께 지워집니다.`)) return;
+    // 통째 삭제는 되돌릴 수 없다(2026-10-10 실수 삭제) — 몇 곳이 지워지는지와 "한 업체만 지우려면 카드의 삭제"를 확인창에 적는다
+    if (!await askConfirm(`[${batch.team}팀] ${batch.title} 목록 전체(${batchTargets.length}곳)를 삭제할까요?\n보냄·완료 표시까지 모두 지워지고 되돌릴 수 없습니다.\n\n한 업체만 지우려면 취소하고 그 카드의 [삭제]를 누르세요.`, { danger: true, okLabel: `전체 ${batchTargets.length}곳 삭제` })) return;
     await deleteRows("counter_sms_targets", `batch_id=eq.${encodeURIComponent(batch.id)}`).catch(() => undefined);
     await deleteRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`).catch(() => undefined);
     await loadBatch(team);
@@ -461,7 +481,7 @@ export default function CounterSms({ author }: { author: string }) {
                     {(batch.log || []).length > 0 && (
                       <div className="mt-1 space-y-0.5 text-[10px] font-bold text-slate-500">
                         {(batch.log || []).slice(-3).reverse().map((entry, i) => (
-                          <div key={`${entry.at}-${i}`}>{entry.mode === "sync" ? "⇄" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "sync" ? "목록 맞춤 — " : ""}{entry.added}곳 추가{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
+                          <div key={`${entry.at}-${i}`}>{entry.mode === "sync" ? "⇄" : entry.mode === "remove" ? "－" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "remove" ? `삭제 ${(entry.removed || []).join(", ")}` : `${entry.mode === "sync" ? "목록 맞춤 — " : ""}${entry.added}곳 추가`}{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
                         ))}
                       </div>
                     )}
@@ -497,16 +517,16 @@ export default function CounterSms({ author }: { author: string }) {
                           ? <div className="mt-0.5 truncate text-[10px] font-black text-emerald-700">{row.sent_by} · {row.sent_at.slice(5, 16).replace("T", " ")}{row.sent_phone ? ` · ${formatPhone(row.sent_phone)}` : ""}</div>
                           : row.vendor_names.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {row.vendor_names.length}곳 통합</div>}
                       </button>
-                      {row.sent_at && (
-                        <span className="mt-1.5 flex justify-end gap-1">
-                          {row.done_at
-                            ? <button type="button" onClick={() => unmarkDone(row)} className="rounded border border-indigo-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-indigo-600">완료 취소</button>
-                            : <>
-                              <button type="button" onClick={() => markDone(row)} title="마감(카운터 회신·처리)까지 끝났으면 완료" className="rounded bg-indigo-600 px-1.5 py-0.5 text-[9px] font-black text-white">완료</button>
-                              <button type="button" onClick={() => unmarkSent(row)} className="rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-emerald-600">전송 취소</button>
-                            </>}
-                        </span>
-                      )}
+                      <span className="mt-1.5 flex justify-end gap-1">
+                        {row.sent_at && (row.done_at
+                          ? <button type="button" onClick={() => unmarkDone(row)} className="rounded border border-indigo-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-indigo-600">완료 취소</button>
+                          : <>
+                            <button type="button" onClick={() => markDone(row)} title="마감(카운터 회신·처리)까지 끝났으면 완료" className="rounded bg-indigo-600 px-1.5 py-0.5 text-[9px] font-black text-white">완료</button>
+                            <button type="button" onClick={() => unmarkSent(row)} className="rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-emerald-600">전송 취소</button>
+                          </>)}
+                        {/* 이 업체만 삭제 — 통째 삭제 말고 */}
+                        <button type="button" disabled={busy} onClick={() => void removeTarget(row)} title="이 업체 카드만 목록에서 지웁니다 (나머지는 그대로)" className="rounded border border-rose-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-rose-500 hover:bg-rose-50 disabled:opacity-40">삭제</button>
+                      </span>
                     </div>
                   ))}
                   {!shownRows.length && <div className="col-span-full py-6 text-center text-xs font-bold text-slate-400">{doneRows.length ? "열린 업체가 없습니다 — 이 등급군은 모두 완료" : "이 등급군에 업체가 없습니다."}</div>}
