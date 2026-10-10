@@ -101,6 +101,8 @@ describe("entity360 — 날짜·사건·현재 상태", () => {
       { source: src("contact_changes"), exact: [{ id: 4, change_date: "2026-09-20", category: "주소 변경", after_text: "서울 서초구 2" }, { id: 9, change_date: "2026-09-25", category: "결제 담당자 변경", after_text: "박부장 010-1" }], loose: [], ok: true },
       { source: src("misu"), exact: [{ id: 5, 입력일: "2026-10-01", 미수개월: "2", 미수잔액: "110,000" }], loose: [], ok: true },
       { source: src("service_receptions"), exact: [{ id: 6, receipt_date: "2026-10-02", status: "접수" }, { id: 7, receipt_date: "2026-09-02", status: "완료" }], loose: [{ id: 8, receipt_date: "2026-09-03", status: "접수" }], ok: true },
+      { source: src("vendor_notes"), exact: [{ id: 10, vendor: "무암", work_start: "9시", lunch_time: "12~13시", note: "★ 카드키 받을 것", author: "이민구", pinned: true, updated_at: "2026-09-01" }], loose: [], ok: true },
+      { source: src("workin_map_places"), exact: [{ id: 11, team: "C", quarter: 4, kind: "quarter", label: "G1", comment: "D450 / 123", memos: ["방문주기 1개월", "엘베 없음"] }], loose: [], ok: true },
     ];
     const s = deriveState(e, results, new Date("2026-10-10T12:00:00+09:00"));
     expect(s.address).toBe("서울 서초구 2");
@@ -112,7 +114,9 @@ describe("entity360 — 날짜·사건·현재 상태", () => {
     expect(s.misu).toEqual({ months: "2", amount: "110,000", date: "2026-10-01" });
     expect(s.lastInspect).toBe("2026-09-01");
     expect(s.openReceptions).toBe(1);   // 느슨 일치는 세지 않는다
-    expect(s.total).toBe(8);
+    expect(s.total).toBe(10);
+    expect(s.notes[0]).toMatchObject({ kind: "특이사항", pinned: true, text: "출근 9시 · 점심 12~13시 · ★ 카드키 받을 것" });
+    expect(s.notes.filter((n) => n.kind === "워킨맵").map((n) => n.text)).toEqual(["D450 / 123", "방문주기 1개월", "엘베 없음"]);
     expect(toEvents(results).filter((ev) => ev.loose)).toHaveLength(1);
   });
 });

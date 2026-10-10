@@ -439,6 +439,8 @@ export type State = {
   lastInspect: string; lastAs: string; lastVisit: string;
   openReceptions: number; upcomingTickets: number; changes: number; photos: number;
   workin: { team: string; quarter: string; kind: string; label: string }[];
+  /** 현장 메모 — 특이사항(출근·점심·주의), 워킨맵 메모 줄, 임대리스트 추가조건. 상태 카드에 바로 보인다(2026-10-10 "출근시간·특이사항 안 나오나") */
+  notes: { kind: "특이사항" | "워킨맵" | "임대조건"; text: string; from: string; pinned: boolean }[];
   counts: { label: string; group: Group; exact: number; loose: number; ok: boolean; rawSkipped: boolean }[];
   total: number; oldest: string; newest: string;
 };
@@ -494,6 +496,18 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
     changes: changes.length,
     photos: exact.filter((ev) => ev.source.table === "photo_albums").reduce((n, ev) => n + (Array.isArray(ev.row.urls) ? (ev.row.urls as unknown[]).length : 0), 0),
     workin: exact.filter((ev) => ev.source.table === "workin_map_places").map((ev) => ({ team: str(ev.row, "team"), quarter: str(ev.row, "quarter"), kind: str(ev.row, "kind"), label: str(ev.row, "label") })),
+    notes: [
+      ...exact.filter((ev) => ev.source.table === "vendor_notes").sort((a, b) => Number(!!b.row.pinned) - Number(!!a.row.pinned) || b.date.localeCompare(a.date)).map((ev) => ({
+        kind: "특이사항" as const, pinned: !!ev.row.pinned, from: `${str(ev.row, "author")}${ev.date ? ` ${ev.date}` : ""}`.trim(),
+        text: [str(ev.row, "work_start") && `출근 ${str(ev.row, "work_start")}`, str(ev.row, "lunch_time") && `점심 ${str(ev.row, "lunch_time")}`, str(ev.row, "note")].filter(Boolean).join(" · "),
+      })),
+      ...exact.filter((ev) => ev.source.table === "workin_map_places").flatMap((ev) => {
+        const memos = Array.isArray(ev.row.memos) ? (ev.row.memos as unknown[]).map(String).map((m) => m.trim()).filter(Boolean) : [];
+        const comment = str(ev.row, "comment");
+        return [...(comment ? [comment] : []), ...memos].map((text) => ({ kind: "워킨맵" as const, pinned: false, from: `${str(ev.row, "team")}팀 ${str(ev.row, "quarter")}Q`, text }));
+      }),
+      ...lease.map((r) => str(r, "추가조건")).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).map((text) => ({ kind: "임대조건" as const, pinned: false, from: "임대리스트", text })),
+    ].filter((n) => n.text),
     counts, total: exact.length, oldest: dated[0] || "", newest: dated[dated.length - 1] || "",
   };
 }

@@ -67,6 +67,22 @@ export default function Search360({ author }: { author: string }) {
   const [asking, setAsking] = useState(false);
   const [answers, setAnswers] = useState<Array<{ q: string; a: string; used: number }>>([]);
   const [foundBy, setFoundBy] = useState("");       // "질문의 '잡플러스'로 찾았습니다"
+  // 전체 데이터 질문 — 한 업체가 아니라 표 전체를 팀·달·등급으로 추리는 질문(data-ask 엣지 함수, 모델이 직접 조회)
+  const [dataQ, setDataQ] = useState("");
+  const [dataAsking, setDataAsking] = useState(false);
+  const [dataAnswers, setDataAnswers] = useState<Array<{ q: string; a: string; rows: Record<string, unknown>[]; table: string; calls: string[] }>>([]);
+  const askData = async (text: string) => {
+    const q = text.trim();
+    if (q.length < 4 || dataAsking) return;
+    setDataAsking(true); setDataQ("");
+    try {
+      const res = await invokeEdgeFunction<{ answer?: string; rows?: Record<string, unknown>[]; table?: string; calls?: string[]; error?: string }>("data-ask", { question: q, author }, 180_000);
+      if (res.error) throw new Error(res.error);
+      setDataAnswers((cur) => [{ q, a: String(res.answer || "").trim(), rows: res.rows || [], table: res.table || "", calls: res.calls || [] }, ...cur].slice(0, 5));
+    } catch (err) {
+      notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
+    } finally { setDataAsking(false); }
+  };
 
   // 첫 화면의 "회사 기록 전체" — 표별 건수. 10분 캐시(세션)
   useEffect(() => {
@@ -202,14 +218,49 @@ export default function Search360({ author }: { author: string }) {
                 {recent.length ? <span>최근</span> : <span>예시</span>}
                 {(recent.length ? recent : EXAMPLES).map((q) => <button key={q} type="button" disabled={busy} onClick={() => void run(q)} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-black text-slate-600 hover:border-blue-400 hover:text-blue-700 disabled:opacity-50">{q}</button>)}
               </div>
-              {/* 질문으로 바로 찾기 */}
-              <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 sm:p-4">
-                <div className="text-[12px] font-black text-indigo-900">질문으로 바로 찾기 <span className="font-bold text-indigo-500">· 질문에 든 업체명·기번으로 먼저 모으고, 그 기록만 근거로 답합니다</span></div>
-                <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void askDirect(directQ); }}>
-                  <input value={directQ} onChange={(e) => setDirectQ(e.target.value)} disabled={busy} placeholder="예: 잡플러스 AS 몇 번 터졌어? / B6945 언제부터 어디서 썼어?" className="h-11 min-w-0 flex-1 rounded-lg border border-indigo-200 bg-white px-3 text-[13px] font-semibold outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-60" />
-                  <button type="submit" disabled={busy || directQ.trim().length < 4} className="h-11 shrink-0 rounded-lg bg-indigo-600 px-4 text-[12px] font-black text-white hover:bg-indigo-700 disabled:opacity-40">{busy ? "찾는 중…" : "물어보기"}</button>
-                </form>
+              {/* 질문으로 바로 찾기(업체 하나) + 전체 데이터 질문(팀·달·등급으로 추리기) */}
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3 sm:p-4">
+                  <div className="text-[12px] font-black text-indigo-900">업체 하나에 대해 묻기 <span className="font-bold text-indigo-500">· 질문 속 업체명·기번으로 먼저 모으고 그 기록만 근거로</span></div>
+                  <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void askDirect(directQ); }}>
+                    <input value={directQ} onChange={(e) => setDirectQ(e.target.value)} disabled={busy} placeholder="예: 잡플러스 AS 몇 번 터졌어? / B6945 어디서 썼어?" className="h-11 min-w-0 flex-1 rounded-lg border border-indigo-200 bg-white px-3 text-[13px] font-semibold outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-60" />
+                    <button type="submit" disabled={busy || directQ.trim().length < 4} className="h-11 shrink-0 rounded-lg bg-indigo-600 px-4 text-[12px] font-black text-white hover:bg-indigo-700 disabled:opacity-40">{busy ? "찾는 중…" : "물어보기"}</button>
+                  </form>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 sm:p-4">
+                  <div className="text-[12px] font-black text-emerald-900">전체 데이터에 묻기 <span className="font-bold text-emerald-600">· 팀·달·등급으로 추리는 질문. 표를 직접 조회해 목록으로</span></div>
+                  <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void askData(dataQ); }}>
+                    <input value={dataQ} onChange={(e) => setDataQ(e.target.value)} disabled={dataAsking} placeholder="예: C팀 미수 중 CS가 체크할 곳 / 10월 초과료 업체 중 N등급만" className="h-11 min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-3 text-[13px] font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-60" />
+                    <button type="submit" disabled={dataAsking || dataQ.trim().length < 4} className="h-11 shrink-0 rounded-lg bg-emerald-600 px-4 text-[12px] font-black text-white hover:bg-emerald-700 disabled:opacity-40">{dataAsking ? "조회 중…" : "물어보기"}</button>
+                  </form>
+                  {dataAsking && <div className="mt-2 text-[11px] font-bold text-emerald-700">표를 조회하고 답을 쓰는 중입니다… (30초~1분, 조회 최대 8번)</div>}
+                </div>
               </div>
+              {dataAnswers.map((item, i) => (
+                <div key={`${item.q}-${i}`} className="mt-3 rounded-xl border border-emerald-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[11px] font-black text-emerald-700">Q. {item.q}</div>
+                    <div className="flex gap-1.5">
+                      <button type="button" onClick={() => { void navigator.clipboard.writeText(item.a).then(() => notify("답을 복사했습니다", "success")); }} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-600 hover:bg-slate-50">복사</button>
+                      {i === 0 && <button type="button" onClick={() => setDataAnswers([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-500 hover:bg-slate-50">지우기</button>}
+                    </div>
+                  </div>
+                  <div className="mt-1.5 whitespace-pre-wrap text-[13px] font-semibold leading-6 text-slate-800">{item.a}</div>
+                  {item.rows.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-[11px] font-black text-slate-500">근거로 쓴 마지막 조회 결과 {item.rows.length}행 ({item.table})</summary>
+                      <div className="mt-1.5 overflow-x-auto rounded-lg border border-slate-200">
+                        <table className="min-w-full text-[11px]">
+                          <thead className="bg-slate-50 text-left font-black text-slate-500">{(() => { const cols = Object.keys(item.rows[0]).slice(0, 8); return <tr>{cols.map((c) => <th key={c} className="px-2 py-1">{c}</th>)}</tr>; })()}</thead>
+                          <tbody>{item.rows.slice(0, 60).map((r, j) => <tr key={j} className="border-t border-slate-100">{Object.keys(item.rows[0]).slice(0, 8).map((c) => <td key={c} className="max-w-[220px] truncate px-2 py-1 font-semibold text-slate-700">{String(r[c] ?? "")}</td>)}</tr>)}</tbody>
+                        </table>
+                      </div>
+                    </details>
+                  )}
+                  {item.calls.length > 0 && <details className="mt-1"><summary className="cursor-pointer text-[10px] font-bold text-slate-400">어떻게 조회했나 ({item.calls.length}번)</summary><ul className="mt-1 space-y-0.5 font-mono text-[10px] text-slate-500">{item.calls.map((c, j) => <li key={j} className="break-all">{c}</li>)}</ul></details>}
+                  <div className="mt-1.5 text-[10px] font-bold text-slate-400">표를 직접 조회해 만든 답입니다. 미수·초과료는 팀 칸이 없어 일정·접수·점검 기록으로 팀을 붙였습니다. 중요한 판단은 원본 표를 확인하세요.</div>
+                </div>
+              ))}
             </>
           )}
         </div>
@@ -281,6 +332,21 @@ export default function Search360({ author }: { author: string }) {
               <Field label="마지막 AS" value={state.lastAs ? `${state.lastAs} (${fmtDays(state.lastAs)})` : "기록 없음"} />
               <Field label="마지막 방문기록" value={state.lastVisit ? `${state.lastVisit} (${fmtDays(state.lastVisit)})` : "기록 없음"} />
             </div>
+            {/* 현장 메모 — 특이사항(출근·점심·주의)·워킨맵 메모·임대 조건. 가기 전에 꼭 봐야 하는 것이라 상태 카드 안에 */}
+            {state.notes.length > 0 && (
+              <div className="border-t border-amber-100 bg-amber-50/60 px-5 py-3">
+                <div className="text-[10.5px] font-black text-amber-800">현장 메모 <span className="font-bold text-amber-600">· 특이사항 {state.notes.filter((n) => n.kind === "특이사항").length} · 워킨맵 {state.notes.filter((n) => n.kind === "워킨맵").length} · 임대 조건 {state.notes.filter((n) => n.kind === "임대조건").length}</span></div>
+                <ul className="mt-1 grid gap-x-6 gap-y-0.5 sm:grid-cols-2">
+                  {state.notes.slice(0, 14).map((n, i) => (
+                    <li key={i} className={`flex min-w-0 items-start gap-1.5 text-[12px] leading-5 ${n.kind === "특이사항" ? "font-black text-slate-900" : "font-semibold text-slate-700"}`}>
+                      <span className={`mt-1 shrink-0 rounded px-1 text-[9px] font-black ${n.kind === "특이사항" ? "bg-amber-500 text-white" : n.kind === "워킨맵" ? "bg-cyan-100 text-cyan-800" : "bg-emerald-100 text-emerald-800"}`}>{n.kind}</span>
+                      <span className="min-w-0 whitespace-pre-line break-words">{n.pinned ? "📌 " : ""}{n.text}{n.from ? <span className="ml-1 text-[10px] font-bold text-slate-400">· {n.from}</span> : null}</span>
+                    </li>
+                  ))}
+                  {state.notes.length > 14 && <li className="text-[11px] font-bold text-slate-400">외 {state.notes.length - 14}건 — 타임라인의 기타 묶음에서</li>}
+                </ul>
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5 border-t border-slate-100 px-5 py-3">
               {state.misu && state.misu.months && chip(`미수 ${state.misu.months}개월 ${state.misu.amount ? `· ${state.misu.amount}원` : ""} (${state.misu.date})`, "bg-orange-100 text-orange-800")}
               {state.overage && state.overage.amount && chip(`초과료 ${state.overage.amount} (${state.overage.date})`, "bg-purple-100 text-purple-800")}
