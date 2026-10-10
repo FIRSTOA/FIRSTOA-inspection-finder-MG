@@ -4,12 +4,13 @@ import { kstDate } from "./visits";
 import DataLookup from "./DataLookup";
 import DeviceLookup from "./DeviceLookup";
 import OperationsDashboard from "./OperationsDashboard";
+import Search360 from "./Search360";
 
 /**
  * 조회 허브 — 관리 허브와 같은 [다크 상태줄 + 밑줄 탭] 구조.
  * 상태줄에는 "오늘 들어온 기록"을 띄운다: 조회에 들어온 사람이 가장 먼저 궁금한 숫자.
  */
-type Tab = "records" | "device" | "status";
+type Tab = "all" | "records" | "device" | "status";
 
 const TODAY_CHIPS: Array<{ label: string; table: string; dateField: string; extra?: string }> = [
   { label: "점검", table: "jeomgeom", dateField: "작성일" },
@@ -32,7 +33,7 @@ async function todayCount(table: string, dateField: string, extra?: string): Pro
 export default function LookupHub({ author }: { author: string }) {
   const [tab, setTab] = useState<Tab>(() => {
     const saved = window.localStorage.getItem("cs_lookup_tab_v1") as Tab;
-    return saved === "status" || saved === "device" ? saved : "records";
+    return saved === "status" || saved === "device" || saved === "records" ? saved : "all"; // 기본은 통합 검색(2026-10-10)
   });
   const [counts, setCounts] = useState<Record<string, number | null>>({});
 
@@ -66,14 +67,14 @@ export default function LookupHub({ author }: { author: string }) {
           <span className="ml-auto hidden text-[11px] font-semibold text-slate-500 sm:block">기록은 보기 전용 — 수정·삭제는 각 업무 화면과 관리 탭에서</span>
         </div>
         <div className="flex overflow-x-auto">
-          {([["records", "기록 조회"], ["device", "기기 검색"], ["status", "업무 현황판"]] as Array<[Tab, string]>).map(([key, label]) => (
+          {([["all", "통합 검색"], ["records", "기록 조회"], ["device", "기기 검색"], ["status", "업무 현황판"]] as Array<[Tab, string]>).map(([key, label]) => (
             <button key={key} type="button" onClick={() => setTab(key)}
               className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
           ))}
         </div>
       </section>
 
-      {tab === "records" ? <DataLookup author={author} /> : tab === "device" ? <DeviceLookup author={author} /> : <OperationsDashboard author={author} />}
+      {tab === "all" ? <Search360 author={author} /> : tab === "records" ? <DataLookup author={author} /> : tab === "device" ? <DeviceLookup author={author} /> : <OperationsDashboard author={author} />}
     </div>
   );
 }
