@@ -43,7 +43,7 @@ const CATALOG: Record<string, Cat> = {
     cols: ["id", "코드", "_업체명", "등급", "임대여부", "모델명", "자산번호", "기번", "계약일", "종료일", "남은개월", "기본금액", "연평균", "시/구", "주소상세주소", "키맨", "일반전화", "미수금액"] },
   lease_status: { desc: "납품·교체·철수 현황. 납품일·년월·구분·지역·기종·수량·담당자.", vendor: "_업체명", date: "납품일", team: "지역", hidden: "_hidden=not.is.true",
     cols: ["id", "납품일", "년월", "구분", "분류", "지역", "_업체명", "기종", "수량", "담당자", "납품여부", "교체전기종"] },
-  pc_expansion: { desc: "PC 확장성(영업 기회). 날짜·지역·등급·세부사양·금액·시기.", vendor: "_업체명", date: "날짜", team: "지역", grade: "등급", hidden: "_hidden=not.is.true",
+  pc_expansion: { desc: "PC 확장성(영업 기회, 직원이 올린 건). 날짜는 ISO 타임스탬프('2026-10-08T06:23…') — gte/lt 'YYYY-MM-DD' 로 자르면 된다. 지역 A~E = 팀, 작성자 = 올린 직원. 사람별 건수는 작성자로 센다.", vendor: "_업체명", date: "날짜", team: "지역", grade: "등급", hidden: "_hidden=not.is.true",
     cols: ["id", "날짜", "작성자", "_업체명", "지역", "등급", "세부사양", "렌탈or구매or유지보수", "수량", "금액", "시기", "어필 OR 추가영업"] },
   mfp_expansion: { desc: "복합기 확장성(영업 기회). 등록일·미팅지역·거래처등급·영업진행상황·예상 발주금액.", vendor: "_업체명", date: "등록일", team: "미팅지역", grade: "거래처등급", hidden: "_hidden=not.is.true",
     cols: ["id", "등록일", "등록자", "_업체명", "미팅지역", "거래처등급", "품목(원문)", "영업진행상황", "예상 발주금액(만원)", "예상 발주시기(YYYY-MM)", "최종결과(대기 등)", "체크일"] },
@@ -59,6 +59,14 @@ const TEAM_LETTER = (v: string) => { const m = String(v || "").match(/[A-E]/i); 
 const vendorKey = (v: string) => String(v || "").replace(/㈜|\(주\)|\(유\)/g, "").replace(/\([^)]*\)?/g, " ").replace(/^(?:\d{4}\/)?\d+[#/\-\s]*(?:SS|NN|S|N|V)?/i, "").replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, "").replace(/주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase().slice(0, 12);
 
 const col = (c: string) => (/[^A-Za-z0-9_]/.test(c) ? `"${c}"` : c);
+const KST = 9 * 3600_000;
+const kstToday = () => new Date(Date.now() + KST).toISOString().slice(0, 10);
+/** 이번 주 월요일~일요일(KST) */
+function weekRange() {
+  const now = new Date(Date.now() + KST); const dow = (now.getUTCDay() + 6) % 7; // 월=0
+  const mon = new Date(now.getTime() - dow * 86_400_000); const sun = new Date(mon.getTime() + 6 * 86_400_000);
+  return `${mon.toISOString().slice(0, 10)} ~ ${sun.toISOString().slice(0, 10)} (다음 주 월요일 ${new Date(sun.getTime() + 86_400_000).toISOString().slice(0, 10)} 미만)`;
+}
 async function rest(path: string) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: { apikey: ANON, Authorization: `Bearer ${ANON}` } });
   if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 160)}`);
@@ -116,7 +124,20 @@ async function vendorTeam(args: Record<string, unknown>) {
   return { teams: out, unresolved: vendors.filter((v) => !out[v]) };
 }
 
+/** 팀 인원 명단(cs_members) — 사람별 집계 때 0건인 사람도 빠지지 않게 */
+async function teamMembers(args: Record<string, unknown>) {
+  const team = String(args.team || "").trim().toUpperCase();
+  try {
+    const rows = await rest(`cs_members?select=name,team,title,active&active=is.true&order=team.asc,sort.asc&limit=200`) as Array<{ name: string; team: string; title?: string }>;
+    const norm = (t: string) => (/^CSS$/i.test(t) ? "E" : String(t || "").toUpperCase());
+    const list = rows.filter((r) => !team || norm(r.team) === team || norm(r.team) === (team === "E" ? "CSS" : team)).map((r) => ({ name: r.name, team: norm(r.team), title: r.title || "" }));
+    return { team: team || "전체", members: list };
+  } catch (e) { return { error: String((e as Error).message) }; }
+}
+
 const TOOLS = [
+  { type: "function", name: "team_members", description: "팀(A~E, E=CSS·지방)의 현재 인원 명단. '팀원별로 몇 건씩' 같은 사람별 집계를 할 때 먼저 불러 0건인 사람도 넣는다. team 을 비우면 전체.",
+    parameters: { type: "object", properties: { team: { type: "string" } } } },
   { type: "function", name: "query_rows", description: "허용된 표에서 조건으로 행을 읽는다(읽기 전용). 날짜 칸은 텍스트라 gte/lt 로 'YYYY-MM-01' ~ 다음 달 1일로 자른다. ilike 는 부분 일치.",
     parameters: { type: "object", properties: {
       table: { type: "string", enum: Object.keys(CATALOG) },
@@ -131,7 +152,9 @@ const INSTRUCTION = `너는 복합기 렌탈·IT 유지보수 회사 "퍼스트�
 도구로 직접 조회해서 답한다. 지어내지 않는다. 조회 결과에 없으면 없다고 말한다.
 요령:
 - 팀(A~E): as_tickets.team / service_receptions.region('수도권C'→C, '지방'→E) / jeomgeom.지역 은 믿을 만하다. misu.지역·overage(팀 없음)·vendor_info·recontract 는 팀이 없거나 비어 있으니 먼저 조건(달·등급 등)으로 추린 뒤 vendor_team 으로 팀을 붙여 걸러라.
-- 달: 날짜 칸 gte 'YYYY-MM-01' 과 lt '다음달-01'. 올해는 ${new Date().getFullYear()}년, 오늘은 ${new Date().toISOString().slice(0, 10)}.
+- 달: 날짜 칸 gte 'YYYY-MM-01' 과 lt '다음달-01'. 올해는 ${new Date().getFullYear()}년, 오늘(KST)은 ${kstToday()}, 이번 주는 ${weekRange()} (월~일). "이번 주"는 그 범위, "지난주"는 그 전 7일.
+- 사람별 집계("팀원별 몇 건씩"): team_members 로 명단을 받고, 표의 작성자/author/등록자/입력자/assignee 칸으로 세어 명단의 모든 사람을 0건까지 적는다. 명단에 없는 작성자가 있으면 "그 외"로 따로 적는다.
+- 조회 결과가 limit 에 걸려 잘렸으면(truncated) 조건을 더 좁혀 다시 조회한다(사람별·달별로 나눠서). 잘린 채로 세지 않는다.
 - "CS가 체크할 곳" 같은 말은 미수 개월·금액이 크거나 약속일이 지난 곳, 최종상태가 비어 있거나 미완료인 곳으로 해석하고, 해석 기준을 답에 적어라.
 - 같은 업체가 여러 행이면 업체 단위로 묶어 최신 행 기준으로 말한다.
 - 답 형식: 첫 줄 결론(몇 곳, 기준). 그 아래 목록을 "· 업체명 — 핵심 숫자/상태 [출처 날짜]"로 최대 40줄. 마지막에 기준과 빠졌을 수 있는 것 한 줄. 존댓말. 전화번호는 질문이 연락처를 물을 때만.
@@ -164,7 +187,7 @@ Deno.serve(async (req) => {
       for (const call of fnCalls) {
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(call.arguments || "{}"); } catch { /* 빈 인자 */ }
-        const result = call.name === "query_rows" ? await queryRows(args) : call.name === "vendor_team" ? await vendorTeam(args) : { error: "모르는 도구" };
+        const result = call.name === "query_rows" ? await queryRows(args) : call.name === "vendor_team" ? await vendorTeam(args) : call.name === "team_members" ? await teamMembers(args) : { error: "모르는 도구" };
         calls.push(`${call.name}(${JSON.stringify(args).slice(0, 160)}) → ${"error" in result ? result.error : "count" in result ? `${result.count}행` : "ok"}`);
         if ("rows" in result && Array.isArray(result.rows) && result.rows.length) { lastRows = result.rows as Record<string, unknown>[]; lastTable = String(result.table || ""); }
         input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result).slice(0, 60000) });
