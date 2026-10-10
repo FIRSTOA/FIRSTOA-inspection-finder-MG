@@ -243,46 +243,46 @@ export default function Search360({ author }: { author: string }) {
 
   const chip = (text: string, tone = "bg-slate-100 text-slate-700") => <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${tone}`}>{text}</span>;
   const modePill = (m: Mode, label: string) => (
-    <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${mode === m ? "bg-white text-slate-900" : "bg-white/10 text-slate-300 hover:bg-white/20"}`}>{label}</button>
+    <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${mode === m ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{label}</button>
   );
 
   return (
     <div className="space-y-3">
       {/* ── 입력 하나 — 첫 화면은 크게, 결과가 있으면 한 줄로 ── */}
-      <section className="overflow-hidden rounded-2xl shadow-sm" style={{ background: "radial-gradient(900px 320px at 15% -20%, rgba(37,99,235,.45), transparent 60%), radial-gradient(700px 300px at 95% 110%, rgba(16,185,129,.22), transparent 60%), #1E252F" }}>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className={landing ? "px-5 pb-6 pt-8 sm:px-10 sm:pb-8 sm:pt-10" : "px-4 py-3 sm:px-5"}>
           {landing && (
             <div className="mb-5">
-              <div className="flex items-center gap-1.5 text-[11px] font-black tracking-widest text-blue-300"><Sparkles size={13} /> FIRSTOA 기록 비서</div>
-              <h3 className="mt-2 text-[26px] font-black leading-tight text-white sm:text-[32px]">무엇이든 물어보세요</h3>
-              <p className="mt-2 max-w-2xl text-[13px] font-semibold leading-6 text-slate-300">업체명이나 자산기번·시리얼을 치면 회사에 있는 기록을 전부 모아 한 장으로 보여 주고, 문장으로 물으면 그 기록을 근거로 답합니다. 팀·기간·등급으로 추리는 질문도 됩니다.</p>
+              <div className="flex items-center gap-1.5 text-[11px] font-black tracking-widest text-blue-600"><Sparkles size={13} /> FIRSTOA 기록 비서</div>
+              <h3 className="mt-2 text-[26px] font-black leading-tight text-slate-900 sm:text-[32px]">무엇이든 물어보세요</h3>
+              <p className="mt-2 max-w-2xl text-[13px] font-semibold leading-6 text-slate-600">업체명이나 자산기번·시리얼을 치면 회사에 있는 기록을 전부 모아 한 장으로 보여 주고, 문장으로 물으면 그 기록을 근거로 답합니다. 팀·기간·등급으로 추리는 질문도 됩니다.</p>
             </div>
           )}
           <form className="flex items-stretch gap-2" onSubmit={(e) => { e.preventDefault(); void submit(input); }}>
-            <label className={`flex min-w-0 flex-1 items-center gap-3 rounded-2xl bg-white px-4 shadow-[0_8px_30px_rgba(0,0,0,.25)] ring-2 ring-transparent transition focus-within:ring-blue-400 ${landing ? "h-14" : "h-11"}`}>
-              <SearchIcon size={landing ? 20 : 16} className="shrink-0 text-slate-400" />
+            <label className={`flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 shadow-sm ring-2 ring-transparent transition focus-within:border-blue-500 focus-within:ring-blue-500/15 ${landing ? "h-14" : "h-11"}`}>
+              <SearchIcon size={landing ? 20 : 16} className="shrink-0 text-slate-500" />
               <input value={input} onChange={(e) => setInput(e.target.value)} disabled={busy} autoCapitalize="off" placeholder={PLACEHOLDERS[phIndex]}
-                className={`min-w-0 flex-1 bg-transparent font-bold text-slate-900 outline-none placeholder:font-semibold placeholder:text-slate-400 disabled:opacity-60 ${landing ? "text-[16px] sm:text-[17px]" : "text-[14px]"}`} />
-              {input && !busy && <button type="button" onClick={() => setInput("")} className="text-[11px] font-black text-slate-400 hover:text-slate-600">지우기</button>}
+                className={`min-w-0 flex-1 bg-transparent font-bold text-slate-900 outline-none placeholder:font-semibold placeholder:text-slate-500 disabled:opacity-60 ${landing ? "text-[16px] sm:text-[17px]" : "text-[14px]"}`} />
+              {input && !busy && <button type="button" onClick={() => setInput("")} className="text-[11px] font-black text-slate-500 hover:text-slate-600">지우기</button>}
             </label>
-            <button type="submit" disabled={busy || !input.trim()} className={`inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-blue-600 px-5 font-black text-white shadow-[0_8px_24px_rgba(37,99,235,.45)] transition hover:bg-blue-500 disabled:opacity-50 ${landing ? "h-14 text-[15px]" : "h-11 text-[13px]"}`}>
+            <button type="submit" disabled={busy || !input.trim()} className={`inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-blue-600 px-5 font-black text-white shadow-sm transition hover:bg-blue-500 disabled:opacity-50 ${landing ? "h-14 text-[15px]" : "h-11 text-[13px]"}`}>
               {phase === "resolving" ? "찾는 중…" : phase === "gathering" ? "모으는 중…" : dataAsking ? "조회 중…" : <>검색·질문 <ArrowRight size={16} /></>}
             </button>
           </form>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[10.5px] font-bold text-slate-400">방식</span>
+            <span className="mr-1 text-[10.5px] font-bold text-slate-500">방식</span>
             {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터에 질문")}
             {mode === "auto" && <span className="text-[10.5px] font-semibold text-slate-500">· 문장이면 질문, 아니면 검색으로 봅니다</span>}
-            {aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표). 단가를 넣으면 금액도 보입니다" className="ml-auto text-[10.5px] font-bold text-slate-400">이번 달 AI 질문 {aiMonth.count}건 · 토큰 {fmtK(aiMonth.tokens)}{aiMonth.priced ? ` · 약 $${aiMonth.usd.toFixed(2)}` : ""}</span>}
+            {aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표). 단가를 넣으면 금액도 보입니다" className="ml-auto text-[10.5px] font-bold text-slate-500">이번 달 AI 질문 {aiMonth.count}건 · 토큰 {fmtK(aiMonth.tokens)}{aiMonth.priced ? ` · 약 $${aiMonth.usd.toFixed(2)}` : ""}</span>}
           </div>
           {landing && (
             <>
               <div className="mt-5">
-                <div className="text-[11px] font-black text-slate-400">이렇게 써 보세요</div>
+                <div className="text-[11px] font-black text-slate-500">이렇게 써 보세요</div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {TRY_THESE.map((t) => (
-                    <button key={t.text} type="button" disabled={busy} onClick={() => void submit(t.text, "auto")} className="group inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5 text-[12px] font-bold text-slate-100 transition hover:border-blue-400 hover:bg-white/15 disabled:opacity-50">
-                      <span className={`rounded px-1 text-[9px] font-black ${t.kind === "검색" ? "bg-blue-500/40 text-blue-100" : t.kind === "업체 질문" ? "bg-indigo-500/40 text-indigo-100" : "bg-emerald-500/40 text-emerald-100"}`}>{t.kind}</span>{t.text}
+                    <button key={t.text} type="button" disabled={busy} onClick={() => void submit(t.text, "auto")} className="group inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[12px] font-bold text-slate-100 transition hover:border-blue-400 hover:bg-slate-200 disabled:opacity-50">
+                      <span className={`rounded px-1 text-[9px] font-black ${t.kind === "검색" ? "bg-blue-100 text-blue-700" : t.kind === "업체 질문" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}`}>{t.kind}</span>{t.text}
                     </button>
                   ))}
                 </div>
@@ -290,24 +290,24 @@ export default function Search360({ author }: { author: string }) {
               {recent.length > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
                   <span className="font-black text-slate-500">최근</span>
-                  {recent.map((q) => <button key={q} type="button" disabled={busy} onClick={() => void submit(q, "auto")} className="rounded-full bg-white/[0.06] px-2.5 py-1 font-bold text-slate-300 hover:bg-white/15 hover:text-white disabled:opacity-50">{q.length > 28 ? `${q.slice(0, 28)}…` : q}</button>)}
+                  {recent.map((q) => <button key={q} type="button" disabled={busy} onClick={() => void submit(q, "auto")} className="rounded-full bg-slate-100 px-2.5 py-1 font-bold text-slate-600 hover:bg-slate-200 hover:text-slate-900 disabled:opacity-50">{q.length > 28 ? `${q.slice(0, 28)}…` : q}</button>)}
                 </div>
               )}
             </>
           )}
-          {dataAsking && <div className="mt-3 rounded-xl bg-white/10 px-3 py-2 text-[12px] font-bold text-emerald-100">표를 조회하고 답을 쓰는 중입니다… 30초에서 1분 정도 걸립니다 (조회 최대 8번)</div>}
-          {routeNote && !dataAsking && <div className="mt-2 text-[11px] font-bold text-slate-400">{routeNote}</div>}
+          {dataAsking && <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-[12px] font-bold text-emerald-800">표를 조회하고 답을 쓰는 중입니다… 30초에서 1분 정도 걸립니다 (조회 최대 8번)</div>}
+          {routeNote && !dataAsking && <div className="mt-2 text-[11px] font-bold text-slate-500">{routeNote}</div>}
         </div>
         {landing && (
-          <div className="border-t border-white/10 bg-black/20 px-5 py-3 sm:px-10">
+          <div className="border-t border-slate-100 bg-slate-50 px-5 py-3 sm:px-10">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
-              <span className="font-black text-white">회사 기록 전체 {totalAll ? `${totalAll.toLocaleString()}건` : "세는 중…"}</span>
-              <span className="font-bold text-slate-400">표 {SOURCES.length}개를 한 번에 뒤집니다</span>
-              <button type="button" onClick={() => setShowTotals((v) => !v)} className="ml-auto text-[11px] font-black text-blue-300 hover:text-blue-200">{showTotals ? "표별 건수 접기" : "표별 건수 보기"}</button>
+              <span className="font-black text-slate-900">회사 기록 전체 {totalAll ? `${totalAll.toLocaleString()}건` : "세는 중…"}</span>
+              <span className="font-bold text-slate-500">표 {SOURCES.length}개를 한 번에 뒤집니다</span>
+              <button type="button" onClick={() => setShowTotals((v) => !v)} className="ml-auto text-[11px] font-black text-blue-600 hover:text-blue-700">{showTotals ? "표별 건수 접기" : "표별 건수 보기"}</button>
             </div>
             {showTotals && (
               <div className="mt-2 flex flex-wrap gap-1">
-                {SOURCES.filter((s) => s.table !== "plan_memos").map((s) => <span key={s.table} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-200">{s.label} <span className="tabular-nums text-slate-400">{totals[s.label] == null ? "…" : totals[s.label]!.toLocaleString()}</span></span>)}
+                {SOURCES.filter((s) => s.table !== "plan_memos").map((s) => <span key={s.table} className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-700">{s.label} <span className="tabular-nums text-slate-500">{totals[s.label] == null ? "…" : totals[s.label]!.toLocaleString()}</span></span>)}
               </div>
             )}
           </div>
@@ -328,7 +328,7 @@ export default function Search360({ author }: { author: string }) {
             <div className="mt-2 whitespace-pre-wrap text-[13.5px] font-semibold leading-7 text-slate-800">{img ? img.rest : item.a}</div>
             {img && <AnswerImage item={img} vendor="" phones={[]} author={author} />}
           </>); })()}
-          {item.usage && <div className="mt-1.5 text-[10px] font-bold text-slate-400">{usageLine(item.usage, item.cost)}</div>}
+          {item.usage && <div className="mt-1.5 text-[10px] font-bold text-slate-500">{usageLine(item.usage, item.cost)}</div>}
           {item.rows.length > 0 && (
             <details className="mt-2">
               <summary className="cursor-pointer text-[11px] font-black text-slate-500">근거로 쓴 마지막 조회 결과 {item.rows.length}행 ({item.table})</summary>
@@ -340,8 +340,8 @@ export default function Search360({ author }: { author: string }) {
               </div>
             </details>
           )}
-          {item.calls.length > 0 && <details className="mt-1"><summary className="cursor-pointer text-[10px] font-bold text-slate-400">어떻게 조회했나 ({item.calls.length}번)</summary><ul className="mt-1 space-y-0.5 font-mono text-[10px] text-slate-500">{item.calls.map((c, j) => <li key={j} className="break-all">{c}</li>)}</ul></details>}
-          <div className="mt-1.5 text-[10px] font-bold text-slate-400">표를 직접 조회해 만든 답입니다. 미수·초과료는 팀 칸이 없어 일정·접수·점검 기록으로 팀을 붙였습니다. 중요한 판단은 원본 표를 확인하세요.</div>
+          {item.calls.length > 0 && <details className="mt-1"><summary className="cursor-pointer text-[10px] font-bold text-slate-500">어떻게 조회했나 ({item.calls.length}번)</summary><ul className="mt-1 space-y-0.5 font-mono text-[10px] text-slate-500">{item.calls.map((c, j) => <li key={j} className="break-all">{c}</li>)}</ul></details>}
+          <div className="mt-1.5 text-[10px] font-bold text-slate-500">표를 직접 조회해 만든 답입니다. 미수·초과료는 팀 칸이 없어 일정·접수·점검 기록으로 팀을 붙였습니다. 중요한 판단은 원본 표를 확인하세요.</div>
         </section>
       ))}
 
@@ -373,24 +373,24 @@ export default function Search360({ author }: { author: string }) {
         <>
           {/* ① 현재 상태 */}
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="bg-[#1E252F] px-5 py-4">
+            <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-black text-slate-400">"{entity.query}" → {entity.code ? `거래처 코드 ${entity.code}` : entity.leaseCode ? `임대 코드 ${entity.leaseCode}` : "코드 없음 · 글자 그대로"}{entity.leaseCode && entity.code ? ` · 임대 코드 ${entity.leaseCode}` : ""}{foundBy && <span className="ml-2 text-indigo-300">{foundBy}</span>}{candidates.length > 1 && <button type="button" onClick={() => setPhase("choose")} className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-white hover:bg-white/20">다른 후보 {candidates.length - 1}</button>}</div>
-                  <div className="mt-0.5 text-[20px] font-black leading-tight text-white">{entity.name}</div>
+                  <div className="text-[11px] font-black text-slate-500">"{entity.query}" → {entity.code ? `거래처 코드 ${entity.code}` : entity.leaseCode ? `임대 코드 ${entity.leaseCode}` : "코드 없음 · 글자 그대로"}{entity.leaseCode && entity.code ? ` · 임대 코드 ${entity.leaseCode}` : ""}{foundBy && <span className="ml-2 text-indigo-300">{foundBy}</span>}{candidates.length > 1 && <button type="button" onClick={() => setPhase("choose")} className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-slate-900 hover:bg-slate-100">다른 후보 {candidates.length - 1}</button>}</div>
+                  <div className="mt-0.5 text-[20px] font-black leading-tight text-slate-900">{entity.name}</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {state.grade && chip(`${state.grade}등급`, "bg-white/15 text-white")}
-                    {state.leaseStatus && chip(state.leaseStatus, "bg-white/15 text-white")}
-                    {state.workin.slice(0, 4).map((w, i) => <span key={i}>{chip(`워킨맵 ${w.team}팀 ${w.quarter}Q ${w.kind || ""}${w.count > 1 ? ` ${w.count}대` : ""}${w.label ? ` · ${w.label}${w.label === "G5" ? " 완료" : ""}` : ""}`.replace(/\s+/g, " ").trim(), i === 0 ? "bg-cyan-500/25 text-cyan-100" : "bg-white/10 text-slate-300")}</span>)}
-                    {state.workin.length > 4 && chip(`워킨맵 외 ${state.workin.length - 4}묶음`, "bg-white/10 text-slate-300")}
-                    {entity.names.length > 1 && chip(`이름 표기 ${entity.names.length}가지`, "bg-white/10 text-slate-300")}
-                    {entity.phones.length > 0 && chip(`연락처 ${entity.phones.length}개로 문자·해피콜 연결`, "bg-white/10 text-slate-300")}
+                    {state.grade && chip(`${state.grade}등급`, "bg-slate-900 text-white")}
+                    {state.leaseStatus && chip(state.leaseStatus, "bg-slate-900 text-white")}
+                    {state.workin.slice(0, 4).map((w, i) => <span key={i}>{chip(`워킨맵 ${w.team}팀 ${w.quarter}Q ${w.kind || ""}${w.count > 1 ? ` ${w.count}대` : ""}${w.label ? ` · ${w.label}${w.label === "G5" ? " 완료" : ""}` : ""}`.replace(/\s+/g, " ").trim(), i === 0 ? "bg-cyan-500/25 text-cyan-100" : "bg-slate-200 text-slate-700")}</span>)}
+                    {state.workin.length > 4 && chip(`워킨맵 외 ${state.workin.length - 4}묶음`, "bg-slate-200 text-slate-700")}
+                    {entity.names.length > 1 && chip(`이름 표기 ${entity.names.length}가지`, "bg-slate-200 text-slate-700")}
+                    {entity.phones.length > 0 && chip(`연락처 ${entity.phones.length}개로 문자·해피콜 연결`, "bg-slate-200 text-slate-700")}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
-                  <button type="button" onClick={() => setHistVendor(entity.name)} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">통합이력 ↗</button>
-                  <button type="button" onClick={() => { void navigator.clipboard.writeText(`${entity.name} (${entity.code || entity.leaseCode})\n주소 ${state.address}\n키맨 ${state.keyman}\n전화 ${state.tel}`).then(() => notify("복사했습니다", "success")); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">복사</button>
-                  <button type="button" onClick={() => { setPhase("idle"); setEntity(null); setResults([]); setInput(""); setRouteNote(""); }} className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/20">새 검색</button>
+                  <button type="button" onClick={() => setHistVendor(entity.name)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-900 hover:bg-slate-100">통합이력 ↗</button>
+                  <button type="button" onClick={() => { void navigator.clipboard.writeText(`${entity.name} (${entity.code || entity.leaseCode})\n주소 ${state.address}\n키맨 ${state.keyman}\n전화 ${state.tel}`).then(() => notify("복사했습니다", "success")); }} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-900 hover:bg-slate-100">복사</button>
+                  <button type="button" onClick={() => { setPhase("idle"); setEntity(null); setResults([]); setInput(""); setRouteNote(""); }} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-900 hover:bg-slate-100">새 검색</button>
                 </div>
               </div>
             </div>

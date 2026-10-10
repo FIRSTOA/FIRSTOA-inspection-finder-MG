@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useScreenActive } from "./screenActive";
 import { askConfirm } from "./confirmModal";
 import { getTeamVisits, kstDate, WORK_LABELS, type VisitRow } from "./visits";
 import { insertRow, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile, upsertRow } from "./supabase";
@@ -121,9 +122,10 @@ function useMessageTemplates(context: "happycall" | "promotion" | "quarter_notic
   const reload = useCallback(() => selectRows<MessageTemplate>("message_templates", `select=*&context=eq.${context}&active=eq.true&order=created_at.asc`)
     .then((rows) => { setCustom(rows); setLoaded(true); try { localStorage.setItem(cacheKey, JSON.stringify(rows)); } catch { /* 캐시 실패 무시 */ } })
     .catch(() => setLoaded(true)), [cacheKey, context]);
+  const screenActive = useScreenActive(); const screenActiveRef = useRef(true); useEffect(() => { screenActiveRef.current = screenActive; }, [screenActive]); // 화면 유지 중 숨어 있으면 쉰다(2026-10-11)
   useEffect(() => {
     void reload();
-    const refresh = () => { if (document.visibilityState === "visible") void reload(); };
+    const refresh = () => { if (document.visibilityState === "visible" && screenActiveRef.current) void reload(); };
     const timer = window.setInterval(refresh, 30_000);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { MessageSquare, RotateCcw, Save, Settings2, Upload, X } from "lucide-react";
-import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows, upsertRow } from "./supabase";
+import { deleteRows, getConfig, insertRow, invokeEdgeFunction, selectRows, updateRows, upsertRow } from "./supabase";
 import { teamForAuthor } from "./operations";
 import { DEFAULT_FORMATS, DEFAULT_REGIONS, DEFAULT_TEMPLATES, MACHINE_GROUPS, mergeFormats, mergeTemplates } from "./counterSmsData";
 import { buildMessage, formatPhone, mergeTargets, parseBlocks, parseListHeader, type MergedTarget, type ParsedBlock } from "./counterSmsParser";
@@ -146,6 +146,11 @@ export default function CounterSms({ author }: { author: string }) {
   // 마감방은 관리 탭 → 카톡방 매핑(업무 종류 "마감")에서 한 곳으로 관리 — 여기선 어디로 가는지 보여 주기만
   const [counterRooms, setCounterRooms] = useState<Array<{ region: string; room: string }>>([]);
   useEffect(() => { void counterRoomEntries().then(setCounterRooms); }, []);
+  // 카운터 사진 전송 단추는 시험 중인 팀만(2026-10-11 "C팀 제외 숨기기, 테스트 후 활성화") — 관리 app_config COUNTER_PHOTO_TEAMS 예 "C,D,E"
+  const [photoTeams, setPhotoTeams] = useState<string[]>(["C"]);
+  useEffect(() => {
+    void getConfig().then((cfg) => { const v = String(cfg.COUNTER_PHOTO_TEAMS || "").trim(); if (v) setPhotoTeams(v.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean)); }).catch(() => undefined);
+  }, []);
   const pickCounterPhoto = (row: TargetRow) => { setPhotoRow(row); photoInputRef.current?.click(); };
   // 사진을 고르면 바로 보내지 않는다 — 어느 방에 무슨 글과 함께 가는지 확인창에서 보고 [보내기]를 눌러야 나간다
   const [photoConfirm, setPhotoConfirm] = useState<{ row: TargetRow; file: File; preview: string; plan: SendPlan; caption: string } | null>(null);
@@ -667,7 +672,7 @@ export default function CounterSms({ author }: { author: string }) {
                             <button type="button" onClick={() => unmarkSent(row)} className="rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-emerald-600">전송 취소</button>
                           </>)}
                         {/* 카운터 사진 한 장 → 마감방에 업체·기기·주소 글 + 사진 → 완료 */}
-                        {!row.done_at && <button type="button" disabled={busy || photoBusyId === row.id} onClick={() => pickCounterPhoto(row)} title="고객이 보낸 카운터 사진을 고르면 마감방에 업체명·기종·시리얼·자산기번·주소와 함께 올리고 이 카드를 완료로 표시합니다" className="rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-black text-white hover:bg-slate-700 disabled:opacity-40">{photoBusyId === row.id ? "전송 중…" : "📷 카운터 전송"}</button>}
+                        {!row.done_at && photoTeams.includes(row.team) && <button type="button" disabled={busy || photoBusyId === row.id} onClick={() => pickCounterPhoto(row)} title="고객이 보낸 카운터 사진을 고르면 마감방에 업체명·기종·시리얼·자산기번·주소와 함께 올리고 이 카드를 완료로 표시합니다" className="rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-black text-white hover:bg-slate-700 disabled:opacity-40">{photoBusyId === row.id ? "전송 중…" : "📷 카운터 전송"}</button>}
                         {/* 이 업체만 삭제 — 통째 삭제 말고 */}
                         <button type="button" disabled={busy} onClick={() => void removeTarget(row)} title="이 업체 카드만 목록에서 지웁니다 (나머지는 그대로)" className="rounded border border-rose-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-rose-500 hover:bg-rose-50 disabled:opacity-40">삭제</button>
                       </span>
@@ -694,6 +699,7 @@ export default function CounterSms({ author }: { author: string }) {
                 <span key={r.region} className="rounded-full border border-emerald-200 bg-white px-2.5 py-1"><span className="mr-1 text-[10px] font-black text-emerald-700">{r.region === "*" ? "공통" : `${r.region}팀`}</span>{r.room}</span>
               )) : <span className="text-amber-800">아직 등록된 방이 없어 카운터 전송이 막혀 있습니다.</span>}
             </div>
+            <div className="mt-2 text-[11px] font-bold text-slate-700">📷 사진 전송 단추는 지금 <b>{photoTeams.join(", ")}팀</b> 카드에만 보입니다(시험 뒤 확대 — 관리 app_config <b>COUNTER_PHOTO_TEAMS</b>, 예 C,D,E).</div>
             <div className="mt-2 text-[11px] font-bold text-slate-500">방 이름은 다른 카톡방과 같이 <b className="text-slate-800">관리 탭 → 카톡방 매핑 → 업무 종류 "마감"</b>에서 바꿉니다(지역 * 공통이면 모든 팀, 팀을 고르면 그 팀만). 노트북 실행기가 켜져 있으면 카톡 PC가 사진을 직접 올리고, 아니면 봇이 글+링크로 올립니다.</div>
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

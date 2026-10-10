@@ -3,7 +3,8 @@
  * 팀원이 만든 일정은 같은 팀 전원에게 보이고 다른 팀에는 안 보인다(작성자의 팀으로 걸러 표시).
  * 회식·교육·휴무 공지·팀 내부 약속처럼 고객 일정이 아닌 것을 여기에 둔다.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useScreenActive } from "./screenActive";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
@@ -34,9 +35,10 @@ export default function TeamCalendar({ team, author }: { team: string; author: s
     } catch (e) { notify(`팀 캘린더를 못 읽었습니다: ${(e as Error).message}`, "error"); }
   }, [team, month]);
   useEffect(() => { void load(); }, [load]);
+  const screenActive = useScreenActive(); const screenActiveRef = useRef(true); useEffect(() => { screenActiveRef.current = screenActive; }, [screenActive]); // 화면 유지 중 숨어 있으면 쉰다(2026-10-11)
   useEffect(() => {
     // 팀원이 방금 넣은 것도 보이게 — 60초 주기 + 창 복귀
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible" && screenActiveRef.current) void load(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     const onFocus = () => { void load(); };
     window.addEventListener("focus", onFocus);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", onFocus); };

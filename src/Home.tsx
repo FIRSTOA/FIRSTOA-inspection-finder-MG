@@ -1,5 +1,5 @@
 import { teamLabel } from "./authors";
-import CostWidget from "./CostWidget";
+import CostTile from "./CostTile";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -344,8 +344,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
 
   return (
     <div className="pb-8">
-      {/* 이번 달 비용(AI 질문·문자) — 2026-10-10 "홈 상단에 API 비용·지출 예상" */}
-      <div className="mb-3"><CostWidget /></div>
       <div className="relative overflow-hidden rounded-3xl bg-[#0B0F17] text-white shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
         {/* 배경 결 — 격자 + 광원 셋 */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(rgba(148,163,184,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.7) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
@@ -377,6 +375,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             <StatusPill tone={bot.tone} icon={Bot} label="카톡 전송 봇" value={bot.value} />
             <StatusPill tone={sheet.tone} icon={ShieldCheck} label="시트 동기화" value={sheet.value} />
             <StatusPill tone="ok" icon={Zap} label="최근 배포" value={patchGroups[0] ? `${patchGroups[0][0]} · ${patchGroups[0][1].length}건 반영` : "-"} />
+            {/* 비용(AI 질문·문자) — 관제 덱 안에(2026-10-11), 누르면 일별·실시간·지금까지 내역 */}
+            <CostTile />
           </div>
         </div>
 

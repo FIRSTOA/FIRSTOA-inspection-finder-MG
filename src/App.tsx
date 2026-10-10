@@ -1,4 +1,5 @@
-import { createElement, lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type ComponentType, type PointerEvent } from "react";
+import { createElement, lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type ComponentType, type PointerEvent, type ReactNode } from "react";
+import { ScreenActiveContext } from "./screenActive";
 import { askConfirm } from "./confirmModal";
 import { parseQuickVendorInput } from "./quickInput";
 import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, Target, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
@@ -74,6 +75,16 @@ const ItLearningHistory = lazyScreen(() => import("./ItLearningHistory"), "IT �
 const CounterSms = lazyScreen(() => import("./CounterSms"), "카운터 문자");
 const AutoSchedule = lazyScreen(() => import("./AutoSchedule"), "자동 일정");
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
+/**
+ * 화면 유지(keep-alive, 2026-10-11 속도): 자주 오가는 화면은 한 번 열면 숨겨 두기만 한다 — 다시 누르면 있던 값이 즉시 보이고,
+ * 창 복귀와 같은 신호(focus)를 쏴서 뒤에서 조용히 새로 읽는다. 숨은 동안엔 ScreenActiveContext 로 주기 조회를 쉰다.
+ */
+const VISITED_SCREENS = new Set<string>(["field"]);
+function KeepAlive({ active, children }: { active: boolean; children: ReactNode }) {
+  const was = useRef(active);
+  useEffect(() => { if (active && !was.current) window.dispatchEvent(new Event("focus")); was.current = active; }, [active]);
+  return <ScreenActiveContext.Provider value={active}><div hidden={!active}>{children}</div></ScreenActiveContext.Provider>;
+}
 // 일정리스트·캘린더·홍보물 발송은 이름 있는 export 라 default 로 감싸서 lazy — 일정리스트 모듈(2,700줄)이 첫 로딩에 끼어 있던 것(2026-10-10 속도 2차)
 type CsAsModule = typeof import("./CsAsWorkspace");
 type EngagementModule = typeof import("./CustomerEngagement");
@@ -4937,6 +4948,14 @@ export default function App() {
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false); // 탭 "더보기" 드롭다운
   const [screen, setScreen] = useState<"home" | "calendar" | "field" | "itHistory" | "counterSms" | "happycall" | "promoSend" | "customerReport" | "walkingMap" | "autoSchedule" | "foodMap" | "help" | "asReception" | "serviceReception" | "reading" | "okr" | "weekly" | "growth" | "operations" | "lookup" | "inbox" | "contactChanges" | "selfdev" | "copierNotes" | "stock" | "deptRequests" | "recontract">("field"); // 좌측 메뉴 화면
+  // 한 번 열었던 화면 목록(keep-alive 대상만 유지) — 모듈 집합에 렌더 중 add(멱등). 앱은 하나뿐이라 ref 대신 모듈 변수로 둔다
+  VISITED_SCREENS.add(screen);
+  const visited = VISITED_SCREENS;
+  // 자주 쓰는 화면 조각은 첫 로딩 뒤 한가할 때 미리 받아 둔다 — 처음 누를 때도 기다리지 않게
+  useEffect(() => {
+    const t = window.setTimeout(() => { void import("./CsAsWorkspace"); void import("./ServiceReception"); void import("./LookupHub"); }, 4000);
+    return () => window.clearTimeout(t);
+  }, []);
   const [weeklyFocus, setWeeklyFocus] = useState<string | null>(null); // 성장기록 → 주간현황판 이동용
   // 일정리스트에서 FIELD AS로 넘어온 티켓 — 전송 성공 시 완료/익일 처리 팝업을 띄운다
   // FIELD [네이버] 정리 버튼 노출 여부 — 완료 표시 이슈 해결 전까지 숨김 (전송 후 자동 팝업은 유지)
@@ -6392,18 +6411,18 @@ export default function App() {
         </header>
 
         {/* 홈 / 업무 화면 */}
-        {screen === "home" && <Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} />}
+        {visited.has("home") && <KeepAlive active={screen === "home"}><Home onGoField={() => setScreen("field")} onNavigate={(next) => setScreen(next)} /></KeepAlive>}
         {screen === "operations" && <AdminHub author={author} />}
-        {screen === "lookup" && <LookupHub author={author} />}
-        {screen === "weekly" && <WorkDashboard author={author} focusDate={weeklyFocus} />}
+        {visited.has("lookup") && <KeepAlive active={screen === "lookup"}><LookupHub author={author} /></KeepAlive>}
+        {visited.has("weekly") && <KeepAlive active={screen === "weekly"}><WorkDashboard author={author} focusDate={weeklyFocus} /></KeepAlive>}
         {screen === "okr" && <OkrHub author={author} />}
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
         {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
         {screen === "help" && <HelpCenter />}
         {screen === "foodMap" && <FoodMap author={author} team={(() => { const t = teamForAuthor(author); return /^[A-E]$/.test(t) ? t : ""; })()} />}
-        {screen === "calendar" && <CsCalendar />}
-        {screen === "asReception" && <AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} onLogistics={openLogisticsTicketInField} />}
-        {screen === "serviceReception" && <ServiceReception author={author} />}
+        {visited.has("calendar") && <KeepAlive active={screen === "calendar"}><CsCalendar /></KeepAlive>}
+        {visited.has("asReception") && <KeepAlive active={screen === "asReception"}><AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} onLogistics={openLogisticsTicketInField} /></KeepAlive>}
+        {visited.has("serviceReception") && <KeepAlive active={screen === "serviceReception"}><ServiceReception author={author} /></KeepAlive>}
         {screen === "recontract" && (
           <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm font-bold text-slate-400">재계약 준비를 불러오는 중…</div>}>
             <RecontractPrep author={author} />
@@ -6521,13 +6540,13 @@ export default function App() {
         {screen === "selfdev" && <SelfDevHub author={author} />}
         {screen === "copierNotes" && <CopierNotes author={author} />}
         {screen === "stock" && <StockBoard author={author} />}
-        {(screen === "inbox" || screen === "deptRequests") && <InboxHub author={author} />}
-        {screen === "customerReport" && <CustomerReport author={author} />}
-        {screen === "happycall" && <CustomerCallHub author={author} />}
+        {(visited.has("inbox") || visited.has("deptRequests")) && <KeepAlive active={screen === "inbox" || screen === "deptRequests"}><InboxHub author={author} /></KeepAlive>}
+        {visited.has("customerReport") && <KeepAlive active={screen === "customerReport"}><CustomerReport author={author} /></KeepAlive>}
+        {visited.has("happycall") && <KeepAlive active={screen === "happycall"}><CustomerCallHub author={author} /></KeepAlive>}
         {screen === "promoSend" && <PromoWorkspace author={author} />}
-        {screen === "itHistory" && <ItLearningHistory author={author} />}
-        {screen === "counterSms" && <CounterSms author={author} />}
-        {screen === "autoSchedule" && <AutoSchedule author={author} />}
+        {visited.has("itHistory") && <KeepAlive active={screen === "itHistory"}><ItLearningHistory author={author} /></KeepAlive>}
+        {visited.has("counterSms") && <KeepAlive active={screen === "counterSms"}><CounterSms author={author} /></KeepAlive>}
+        {visited.has("autoSchedule") && <KeepAlive active={screen === "autoSchedule"}><AutoSchedule author={author} /></KeepAlive>}
 
         {screen === "field" && (<>
         {/* ===== FIELD 화면 ===== */}

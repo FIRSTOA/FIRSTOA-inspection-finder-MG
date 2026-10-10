@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useScreenActive } from "./screenActive";
 import { Search } from "lucide-react";
 import { askConfirm } from "./confirmModal";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, upsertRows } from "./supabase";
@@ -427,11 +428,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       setSyncError("일정 서버에 연결하지 못해 이 기기에 저장된 사본을 보여주는 중입니다.");
     }
   }, []);
+  // 화면 유지(keep-alive) 중 숨어 있으면 주기 조회를 쉰다(2026-10-11)
+  const screenActive = useScreenActive(); const screenActiveRef = useRef(true); useEffect(() => { screenActiveRef.current = screenActive; }, [screenActive]);
   useEffect(() => {
     void migrateLocalOnce().then(refreshTickets);
     const onFocus = () => { void refreshTickets(); };
     window.addEventListener("focus", onFocus);
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refreshTickets(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible" && screenActiveRef.current) void refreshTickets(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
   }, [refreshTickets]);
 
@@ -569,7 +572,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       lastPull = Date.now();
       void invokeEdgeFunction("naver-calendar-sync", { action: "sync" }).catch(() => undefined).finally(() => window.setTimeout(bump, 1500));
     };
-    const timer = window.setInterval(bump, 45_000);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible" && screenActiveRef.current) bump(); }, 45_000);
     window.addEventListener("focus", pullNow);
     pullNow(); // 첫 진입 시 즉시 1회
     return () => { window.clearInterval(timer); window.removeEventListener("focus", pullNow); };

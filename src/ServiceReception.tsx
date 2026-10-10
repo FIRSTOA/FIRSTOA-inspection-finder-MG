@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useScreenActive } from "./screenActive";
 import { askConfirm } from "./confirmModal";
 import { Building2, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, Search, Send } from "lucide-react";
 import {
@@ -610,9 +611,10 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   useEffect(() => { void loadRemoteQueue(); }, [page, loadRemoteQueue]);
   // 여러 명이 동시에 접수·처리하므로 다른 사람의 변경이 화면에 따라오게 60초마다·탭 복귀 때 조용히 갱신
   // (처리 입력 초안은 행별 로컬 보관이라 갱신에 지워지지 않는다)
+  const screenActive = useScreenActive(); const screenActiveRef = useRef(true); useEffect(() => { screenActiveRef.current = screenActive; }, [screenActive]); // 화면 유지 중 숨어 있으면 쉰다(2026-10-11)
   useEffect(() => {
     const refresh = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible" || !screenActiveRef.current) return;
       void loadList(listDate, listPeriod, true);
       void loadRemoteQueue();
     };
