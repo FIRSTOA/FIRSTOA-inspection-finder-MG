@@ -6,7 +6,7 @@
  *  같은 보고·같은 품목은 _dupKey(유니크)로 한 번만 들어간다(insertRow 가 409 를 dup 으로 돌려준다).
  */
 import { md5 } from "./md5";
-import { insertRow, selectRows, updateRows } from "./supabase";
+import { insertRow, selectAllRowsFast, selectRows, updateRows } from "./supabase";
 import { firstDeviceOf, modeOf, normalizeItems, parseSupplyRequests, supplyDupSource, type CatalogItem, type NormalizedItem } from "../supabase/functions/_shared/supply-requests.ts";
 
 export type SupplyContext = {
@@ -100,14 +100,20 @@ export async function backfillSupplyMonth(ym: string): Promise<{ read: number; i
   return { read, inserted, skipped };
 }
 
-/** 미정의 품목(item_std 가 빈 행)을 사전으로 다시 맞춘다 — 관리 탭에서 별칭을 추가한 뒤 누른다 */
-export async function renormalizeUndefined(): Promise<{ checked: number; fixed: number }> {
+type UndefRow = Record<string, unknown> & { id: number; kind: "부품" | "자가"; item: string; qty: string; model: string };
+
+/**
+ * 미정의 품목(item_std 가 빈 행)을 사전·기본 품목으로 다시 맞춘다.
+ * 자가신청·부품신청 화면을 열면 자동으로 한 번 돌고(2026-10-11, "가져오기를 다시 해도 미정의"라는 사용자 말), 재고 탭에서 별칭을 더한 뒤 [다시 맞추기]로도 돈다.
+ * 1,000행 한계를 넘겨 전부 읽고, 6행씩 동시에 고친다. 맞출 수 없는 것(모르는 말)은 그대로 미정의.
+ */
+export async function renormalizeUndefined(onProgress?: (done: number, total: number) => void): Promise<{ checked: number; fixed: number }> {
   const catalog = await loadSupplyCatalog(true);
-  const rows = await selectRows<Record<string, unknown> & { id: number; kind: "부품" | "자가"; item: string; qty: string; model: string }>("supply_requests", "select=*&item_std=eq.&order=id.desc&limit=2000");
-  let fixed = 0;
-  for (const r of rows) {
-    const list = normalizeItems([{ kind: r.kind, item: r.item, qty: r.qty, status: String(r.status || ""), warranty: "", counter: "", expected: "", raw: String(r.raw || "") }], catalog, r.model);
-    if (!list.length || !list[0].itemStd) continue;
+  const rows = await selectAllRowsFast<UndefRow>("supply_requests", "select=*&item_std=eq.&order=id.asc", 1000, 2);
+  const todo = rows.map((r) => ({ r, list: normalizeItems([{ kind: r.kind, item: r.item, qty: r.qty, status: String(r.status || ""), warranty: "", counter: "", expected: "", raw: String(r.raw || "") }], catalog, r.model) }))
+    .filter((x) => x.list.length && x.list[0].itemStd);
+  let fixed = 0, done = 0;
+  const one = async ({ r, list }: { r: UndefRow; list: NormalizedItem[] }) => {
     const [first, ...rest] = list;
     await updateRows("supply_requests", `id=eq.${r.id}`, { item: first.item, qty: first.qty, item_std: first.itemStd, category: first.category, color: first.color, stock_item_id: first.stockItemId, set_label: first.setLabel });
     // "토너 1셋" → K·C·M·Y 처럼 여러 행으로 풀리면 나머지는 같은 보고의 새 행으로(중복키는 품목·수량이 달라 새로 생긴다)
@@ -119,7 +125,10 @@ export async function renormalizeUndefined(): Promise<{ checked: number; fixed: 
         _dupKey: md5(supplyDupSource(String(r.source_table || ""), String(r.request_date || "").slice(0, 10), String(r.author || ""), String(r.vendor || ""), s)) }).catch(() => undefined);
     }
     fixed += 1;
-  }
+  };
+  const queue = [...todo];
+  const worker = async () => { for (let x = queue.shift(); x; x = queue.shift()) { try { await one(x); } catch { /* 한 행 실패는 넘어간다 */ } done += 1; onProgress?.(done, todo.length); } };
+  await Promise.all(Array.from({ length: Math.min(6, todo.length) }, worker));
   return { checked: rows.length, fixed };
 }
 

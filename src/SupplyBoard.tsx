@@ -1,13 +1,16 @@
 /**
- * 조회 탭 — 자가신청 / 부품신청 (2026-10-11, 사용자 사례로 다듬음)
+ * 조회 탭 → 기록 조회 — 자가신청 / 부품신청 (2026-10-11, 사용자 사례로 다듬음)
  *
  * 신청 한 줄(품목 단위)에는 두 축이 있다.
  *  · 출고(운영지원): issued_at — 운영지원이 [출고]를 누르면 줄이 그어지고 신청자에게 푸시. 재고 탭 수량도 그만큼 준다.
  *  · 단계(고객 쪽): 신청 → 지급 / 반납 / 불량
- *      - 차량재고 건("선출고완료" 등): 현장에서 바로 줬으니 신청 즉시 '지급'. 출고는 차량 보충.
- *      - 출고요청 건: 출고 뒤 엔지니어가 [지급](실제로 준 업체를 고를 수 있다 — 1번 업체에 신청했다가 2번 업체에 준 경우) / [반납](안 썼음) / [불량].
+ *      - 차량재고 건: 현장에서 바로 줬으니 신청 즉시 '지급'. 출고는 차량 보충.
+ *      - 출고요청 건: 출고 뒤 엔지니어가 [지급](실제로 준 업체를 고를 수 있다) / [반납](안 썼음) / [불량].
  *        아무것도 안 누르면 "차량 보유"로 남아 재고 추정에 들어간다. 수령·사용완료 단추는 없다(출고하면 다 가져가고, 반납 안 하면 쓴 것).
+ *  · 지난 기록(이 화면이 생기기 전, 2026-10-11 이전 신청): 운영지원이 카톡 체크로 처리했으니 "미출고"로 세지 않고, 반납·불량만 적을 수 있다.
  * 운영지원은 카톡 체크 대신 이 화면의 [출고]를 쓴다. 숫자 줄이 "미출고·출고 후 미지급·불량"을 보여 준다.
+ * 모아보기: 품목·기종·업체·작성자·월로 묶어 건수·수량을 보고, 줄을 누르면 그 조건으로 걸러진다(2026-10-11 사용자 제안).
+ * 미정의 품목은 화면을 열 때 한 번 저절로 다시 맞춘다("가져오기를 다시 해도 여전히 미정의" 사용자 말).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
@@ -15,6 +18,7 @@ import { notify } from "./toast";
 import { getRoomMap, insertRow, invokeEdgeFunction, selectRows, updateRows, uploadPhoto } from "./supabase";
 import { prepareImageForUpload } from "./imageUpload";
 import { workerAlive } from "./counterSmsPhoto";
+import { renormalizeUndefined } from "./supplyRequests";
 import SupplyBackfill from "./SupplyBackfill";
 
 type Req = {
@@ -26,22 +30,30 @@ type Req = {
 type Ev = { id: number; created_at: string; request_id: number; type: string; qty: number; note: string; author: string; dept: string };
 type Member = { name: string; dept: string; team: string };
 type Act = "출고" | "지급" | "반납" | "불량";
+type Dim = "item" | "model" | "vendor" | "author" | "month";
 
 const STAGE_TONE: Record<string, string> = { 신청: "bg-amber-100 text-amber-800", 지급: "bg-emerald-100 text-emerald-800", 반납: "bg-sky-100 text-sky-800", 불량: "bg-rose-100 text-rose-800" };
+const DIM_LABEL: Record<Dim, string> = { item: "품목", model: "기종", vendor: "업체", author: "작성자", month: "월" };
 const KST = 9 * 3600_000;
 const kstDay = (iso: string) => new Date(new Date(iso).getTime() + KST).toISOString().slice(0, 10);
 const md = (d: string) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "");
 const num = (v: string | number) => { const n = parseInt(String(v || "").replace(/[^\d]/g, ""), 10); return Number.isFinite(n) && n > 0 ? n : 1; };
+/** 이 화면([출고] 단추)이 생긴 날 — 그 전 신청은 카톡 체크로 처리된 "지난 기록" */
+const LEGACY_BEFORE = "2026-10-11";
+let renormOnce = false;
 
 export default function SupplyBoard({ author, kind, withTools = false }: { author: string; kind: "자가" | "부품"; withTools?: boolean }) {
   const [days, setDays] = useState(60);
   const [team, setTeam] = useState("전체");
   const [view, setView] = useState<"전체" | "미출고" | "미지급" | "불량" | "미정의" | "내것">("전체");
   const [q, setQ] = useState("");
+  const [filters, setFilters] = useState<Partial<Record<Dim, string>>>({});
+  const [pivot, setPivot] = useState<Dim | "">("");
   const [rows, setRows] = useState<Req[]>([]);
   const [events, setEvents] = useState<Ev[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [ready, setReady] = useState<boolean | null>(null);
+  const [fixing, setFixing] = useState("");
   const [act, setAct] = useState<{ id: number; type: Act; qty: string; note: string; vendor: string; photo: File | null; preview: string; genuine: "정품" | "재생"; retest: "유" | "무" | ""; report: "유" | "무" | ""; symptom: string; siblings: number[] } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -62,11 +74,20 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
   };
   const load = useCallback(async () => {
     const from = new Date(Date.now() - days * 86400_000 + KST).toISOString().slice(0, 10);
+    const fetchRows = () => selectRows<Req>("supply_requests", `select=*&kind=eq.${encodeURIComponent(kind)}&request_date=gte.${from}&order=request_date.desc,id.desc&limit=3000`);
     try {
-      let list = await selectRows<Req>("supply_requests", `select=*&kind=eq.${encodeURIComponent(kind)}&request_date=gte.${from}&order=request_date.desc,id.desc&limit=3000`);
-      if (await autoAssign(list)) list = await selectRows<Req>("supply_requests", `select=*&kind=eq.${encodeURIComponent(kind)}&request_date=gte.${from}&order=request_date.desc,id.desc&limit=3000`);
+      let list = await fetchRows();
+      if (await autoAssign(list)) list = await fetchRows();
       setRows(list); setReady(true);
       setEvents(await selectRows<Ev>("supply_events", `select=*&created_at=gte.${encodeURIComponent(new Date(Date.now() - (days + 30) * 86400_000).toISOString())}&order=created_at.asc&limit=5000`).catch(() => [] as Ev[]));
+      // 미정의 품목이 있으면 한 번(앱 켜고 처음) 저절로 다시 맞춘다 — 아는 표기(폐·K1 폐·토너1셋·k현상제…)는 사람이 누를 일 없이
+      if (!renormOnce && list.some((r) => !r.item_std)) {
+        renormOnce = true;
+        setFixing("품목 이름 맞추는 중…");
+        renormalizeUndefined((d, t) => setFixing(`품목 이름 맞추는 중 ${d}/${t}`))
+          .then(async (r) => { setFixing(""); if (r.fixed) { notify(`미정의 품목 ${r.fixed}행을 표준 이름으로 맞췄습니다`, "success"); setRows(await fetchRows()); } })
+          .catch(() => setFixing(""));
+      }
     } catch { setReady(false); }
     setMembers(await selectRows<Member>("cs_members", "select=name,dept,team&active=eq.true").catch(() => [] as Member[]));
   }, [days, kind]);
@@ -76,18 +97,25 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
   const evsOf = useMemo(() => { const m = new Map<number, Ev[]>(); events.forEach((e) => m.set(e.request_id, [...(m.get(e.request_id) || []), e])); return m; }, [events]);
   const stageOf = (r: Req) => (["신청", "지급", "반납", "불량"].includes(r.stage || "") ? (r.stage as string) : "신청");
   const issued = (r: Req) => !!r.issued_at;
+  const legacy = (r: Req) => !r.issued_at && r.mode !== "차량재고" && (r.request_date || "") < LEGACY_BEFORE;   // 이 화면 전 신청 = 카톡 체크로 처리된 것
   const holding = (r: Req) => issued(r) && stageOf(r) === "신청" && r.mode !== "차량재고";   // 출고됐는데 아직 지급·반납·불량 없음 = 차량 보유
+  const dimOf = (r: Req, d: Dim): string => d === "item" ? (r.item_std || r.item || "(품목 없음)") : d === "model" ? (r.model || "(기종 없음)") : d === "vendor" ? (r.vendor || "(업체 없음)") : d === "author" ? (r.author || "(작성자 없음)") : (r.request_date || "").slice(0, 7);
 
-  const filtered = useMemo(() => rows.filter((r) => {
+  /** 걸러내기 — skip 차원의 필터만 빼고 적용(모아보기 표가 그 차원의 모든 값을 보여 주도록) */
+  const passes = useCallback((r: Req, skip?: Dim): boolean => {
     if (team !== "전체" && r.team !== team) return false;
-    if (view === "미출고" && issued(r)) return false;
+    if (view === "미출고" && (issued(r) || legacy(r))) return false;
     if (view === "미지급" && !holding(r)) return false;
     if (view === "불량" && stageOf(r) !== "불량") return false;
     if (view === "미정의" && r.item_std) return false;
     if (view === "내것" && r.author !== author) return false;
+    for (const d of Object.keys(filters) as Dim[]) { if (d === skip || !filters[d]) continue; if (dimOf(r, d) !== filters[d]) return false; }
     if (q.trim()) { const k = q.trim().toLowerCase(); if (![r.vendor, r.used_vendor, r.item, r.item_std, r.model, r.author, r.serial, r.asset].some((v) => String(v || "").toLowerCase().includes(k))) return false; }
     return true;
-  }), [rows, team, view, q, author]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [team, view, author, filters, q]);
+
+  const filtered = useMemo(() => rows.filter((r) => passes(r)), [rows, passes]);
 
   const groups = useMemo(() => {
     const m = new Map<string, Req[]>();
@@ -95,11 +123,28 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
     return Array.from(m.values());
   }, [filtered]);
 
+  // 모아보기 — 고른 차원으로 묶어 건수·수량·업체 수·최근. 그 차원의 필터는 빼고 센다
+  const pivotRows = useMemo(() => {
+    if (!pivot) return [];
+    const m = new Map<string, { key: string; count: number; qty: number; vendors: Set<string>; last: string }>();
+    for (const r of rows) {
+      if (!passes(r, pivot)) continue;
+      const key = dimOf(r, pivot);
+      const cur = m.get(key) || { key, count: 0, qty: 0, vendors: new Set<string>(), last: "" };
+      cur.count += 1; cur.qty += num(r.qty); cur.vendors.add(r.vendor); if (r.request_date > cur.last) cur.last = r.request_date;
+      m.set(key, cur);
+    }
+    return Array.from(m.values()).sort((a, b) => (pivot === "month" ? b.key.localeCompare(a.key) : b.qty - a.qty || b.count - a.count));
+  }, [rows, pivot, passes]);
+  const toggleFilter = (d: Dim, v: string) => setFilters((cur) => (cur[d] === v ? { ...cur, [d]: "" } : { ...cur, [d]: v }));
+  const activeFilters = (Object.keys(filters) as Dim[]).filter((d) => filters[d]);
+
   const counts = useMemo(() => ({
-    미출고: rows.filter((r) => !issued(r)).length,
+    미출고: rows.filter((r) => !issued(r) && !legacy(r)).length,
     미지급: rows.filter(holding).length,
     불량: rows.filter((r) => stageOf(r) === "불량").length,
     미정의: rows.filter((r) => !r.item_std).length,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [rows]);
 
   // 내 차량 보유(추정) — 출고된 것 중 아직 지급·반납·불량이 없는 내 신청. 표준 품목별 수량
@@ -107,6 +152,7 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
     const m = new Map<string, number>();
     rows.filter((r) => r.author === author && holding(r)).forEach((r) => { const k = r.item_std || r.item; m.set(k, (m.get(k) || 0) + num(r.qty)); });
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, author]);
 
   // 카톡 글 — 반납은 업체·기종·품목·수량·사유, 불량은 운영지원이 쓰는 ※불량/반품요청※ 양식 그대로(2026-10-11 사용자 제공)
@@ -203,6 +249,8 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
 
   if (ready === false) return <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-center text-[13px] font-bold text-amber-800">{kind}신청 표가 아직 없습니다 — supabase/supply-requests.sql, supply-v2.sql, supply-v3.sql 을 실행하면 보입니다.</div>;
 
+  const roleNote = !author ? "작성자를 고르면 권한에 맞는 단추가 보입니다" : !me ? `'${author}'는 구성원 명부에 없어 CS 권한으로 봅니다` : isOps ? "운영지원 권한 — [출고]" : "CS 권한 — 출고된 것에 [지급·반납·불량]";
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -214,6 +262,8 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
         ))}
       </div>
 
+      {fixing && <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2 text-[11.5px] font-bold text-blue-900">{fixing} <span className="font-semibold text-blue-700">· 폐→폐토너통, K1 폐→토너 K+폐토너통, 토너1셋→색별, k현상제→현상제 K 처럼 표준 이름으로</span></div>}
+
       {myHolding.length > 0 && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-3 py-2 text-[11.5px] font-bold text-blue-900">
           내 차량 보유(추정) · 출고됐는데 아직 지급·반납 처리 안 한 것: {myHolding.map(([k, n]) => `${k} ${n}`).join(" · ")}
@@ -224,13 +274,45 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
         <div className="flex rounded-full bg-slate-100 p-0.5">{["전체", "A", "B", "C", "D", "E"].map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${team === t ? "bg-slate-900 text-white" : "text-slate-600"}`}>{t === "전체" ? "전체 팀" : `${t}팀`}</button>)}</div>
         <button type="button" onClick={() => setView(view === "내것" ? "전체" : "내것")} className={`rounded-full px-3 py-1 text-[11px] font-black ${view === "내것" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>내 신청만</button>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-1 text-[11px] font-bold">{[30, 60, 90, 180, 365].map((d) => <option key={d} value={d}>최근 {d}일</option>)}</select>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-lg border border-slate-300 px-2 py-1 text-[11px] font-bold">{[30, 60, 90, 180, 365, 730].map((d) => <option key={d} value={d}>최근 {d}일</option>)}</select>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="업체·품목·기종·작성자" className="min-w-40 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-[12px] font-semibold outline-none focus:border-blue-500" />
-        <span className="text-[10.5px] font-bold text-slate-400">{filtered.length}행 · {isOps ? "운영지원 권한(출고)" : "CS 권한(지급·반납·불량)"}</span>
+        <span className="text-[10.5px] font-bold text-slate-400">{filtered.length}행 · {roleNote}</span>
+      </div>
+
+      {/* 모아보기 — 품목·기종·업체·작성자·월로 묶어 보고, 줄을 누르면 그 조건으로 거른다 */}
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+          <span className="text-[10.5px] font-black text-slate-500">모아보기</span>
+          {(Object.keys(DIM_LABEL) as Dim[]).map((d) => <button key={d} type="button" onClick={() => setPivot(pivot === d ? "" : d)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${pivot === d ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{DIM_LABEL[d]}별</button>)}
+          {activeFilters.map((d) => <button key={d} type="button" onClick={() => toggleFilter(d, filters[d] as string)} className="rounded-full border border-blue-300 bg-blue-50 px-2.5 py-1 text-[11px] font-black text-blue-800" title="누르면 이 조건을 뺍니다">{DIM_LABEL[d]}: {filters[d]} ×</button>)}
+          {activeFilters.length > 1 && <button type="button" onClick={() => setFilters({})} className="text-[11px] font-black text-slate-500">모두 지우기</button>}
+        </div>
+        {pivot && (
+          <div className="border-t border-slate-100">
+            {pivotRows.length === 0 ? <div className="px-3 py-3 text-[11.5px] font-bold text-slate-400">묶을 게 없습니다</div> : (
+              <div className="max-h-80 overflow-auto">
+                <table className="w-full text-[11.5px]">
+                  <thead className="sticky top-0 bg-slate-50 text-[10.5px] font-black text-slate-500"><tr><th className="px-3 py-1.5 text-left">{DIM_LABEL[pivot]}</th><th className="px-2 py-1.5 text-right">건수</th><th className="px-2 py-1.5 text-right">수량</th>{pivot !== "vendor" && <th className="px-2 py-1.5 text-right">업체</th>}<th className="px-3 py-1.5 text-right">최근</th></tr></thead>
+                  <tbody>
+                    {pivotRows.map((p) => (
+                      <tr key={p.key} onClick={() => toggleFilter(pivot, p.key)} className={`cursor-pointer border-t border-slate-100 ${filters[pivot] === p.key ? "bg-blue-50" : "hover:bg-slate-50"}`}>
+                        <td className="px-3 py-1.5 font-black text-slate-800">{p.key}</td>
+                        <td className="px-2 py-1.5 text-right font-bold tabular-nums text-slate-600">{p.count}</td>
+                        <td className="px-2 py-1.5 text-right font-black tabular-nums text-slate-900">{p.qty}</td>
+                        {pivot !== "vendor" && <td className="px-2 py-1.5 text-right font-bold tabular-nums text-slate-500">{p.vendors.size}</td>}
+                        <td className="px-3 py-1.5 text-right font-bold tabular-nums text-slate-500">{md(p.last)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {ready === null && <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-[12px] font-bold text-slate-400">불러오는 중…</div>}
-      {ready && groups.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-[12px] font-bold text-slate-400">해당하는 {kind}신청이 없습니다. FIELD 양식의 ※{kind}신청※ 칸에 적으면 여기에 쌓이고, 지난 기록은 관리 탭 [지난 기록 채우기]로 넣습니다.</div>}
+      {ready && groups.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-[12px] font-bold text-slate-400">해당하는 {kind}신청이 없습니다. FIELD 양식의 ※{kind}신청※ 칸에 적으면 여기에 쌓이고, 지난 기록은 아래 [지난 기록 채우기]로 넣습니다.</div>}
 
       {withTools && <SupplyBackfill />}
       {groups.map((g) => {
@@ -240,7 +322,7 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[12px]">
               <span className="font-black text-slate-900">{h.vendor || "(업체 없음)"}</span>
               <span className="font-bold text-slate-500">{md(h.request_date)} · {h.team ? `${h.team}팀 ` : ""}{h.author}</span>
-              {h.model && <span className="font-bold text-slate-500">{h.model}{h.asset ? ` · ${h.asset}` : ""}</span>}
+              <span className={`font-bold ${h.model ? "text-slate-700" : "text-slate-400"}`}>기종 {h.model || "미기재"}{h.asset ? ` · ${h.asset}` : ""}</span>
               {h.mode === "차량재고" && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-800">차량재고로 지급 → 보충</span>}
               <span className="ml-auto text-[10.5px] font-bold text-slate-400">{h.source_table === "as_records" ? "AS 보고" : "점검 보고"}{h.source_id ? ` #${h.source_id}` : ""}</span>
             </div>
@@ -249,23 +331,27 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
                 const st = stageOf(r);
                 const evs = (evsOf.get(r.id) || []).filter((e) => e.type !== "메모");
                 const done = issued(r);
+                const old = legacy(r);
                 return (
                   <div key={r.id} className={`px-4 py-2.5 ${done ? "bg-slate-50/60" : ""}`}>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`text-[13px] font-black ${done ? "text-slate-400 line-through decoration-slate-400" : "text-slate-900"}`}>{r.item_std || r.item}</span>
                       {r.item_std && r.item_std !== r.item && <span className="text-[10.5px] font-bold text-slate-400">({r.item}{r.set_label ? ` · ${r.set_label}` : ""})</span>}
-                      {!r.item_std && <span title="품목 사전에 없는 이름 — 재고 탭에서 별칭을 넣고 관리 탭 [다시 맞추기]" className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">미정의</span>}
+                      {!r.item_std && <span title="품목 사전에 없는 이름 — 재고 탭에서 별칭을 넣으면 다음 열 때 맞춰집니다" className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">미정의</span>}
                       <span className="text-[12px] font-bold text-slate-700">× {r.qty || "1"}</span>
                       {done
                         ? <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600">출고 {md(kstDay(r.issued_at as string))} {r.issued_by}</span>
-                        : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">미출고</span>}
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${STAGE_TONE[st]}`}>{st === "지급" ? `지급${r.used_vendor && r.used_vendor !== r.vendor ? ` → ${r.used_vendor}` : ""}` : st === "신청" && done ? "차량 보유" : st}</span>
-                      {r.status && !done && <span className="text-[10.5px] font-bold text-slate-400">양식: {r.status}</span>}
+                        : old
+                          ? <span title="이 화면이 생기기 전 신청 — 운영지원이 카톡 체크로 처리한 것" className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">지난 기록</span>
+                          : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">미출고</span>}
+                      {!(st === "신청" && old) && <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${STAGE_TONE[st]}`}>{st === "지급" ? `지급${r.used_vendor && r.used_vendor !== r.vendor ? ` → ${r.used_vendor}` : ""}` : st === "신청" && done ? "차량 보유" : st}</span>}
+                      {r.status && !done && !old && <span className="text-[10.5px] font-bold text-slate-400">양식: {r.status}</span>}
                       <span className="ml-auto flex flex-wrap gap-1">
-                        {isOps && !done && <Btn r={r} type="출고" label="출고" tone="bg-blue-600 text-white" />}
+                        {isOps && !done && <Btn r={r} type="출고" label={old ? "출고 기록" : "출고"} tone="bg-blue-600 text-white" />}
                         {st === "신청" && done && <Btn r={r} type="지급" label="지급(업체 확인)" tone="bg-emerald-600 text-white" />}
-                        {st === "신청" && done && <Btn r={r} type="반납" label="반납" tone="bg-sky-600 text-white" />}
-                        {(done || r.mode === "차량재고") && st !== "불량" && st !== "반납" && <Btn r={r} type="불량" label="불량" tone="bg-rose-600 text-white" />}
+                        {st === "신청" && (done || old) && <Btn r={r} type="반납" label="반납" tone="bg-sky-600 text-white" />}
+                        {(done || old || r.mode === "차량재고") && st !== "불량" && st !== "반납" && <Btn r={r} type="불량" label="불량" tone="bg-rose-600 text-white" />}
+                        {!done && !old && !isOps && r.mode !== "차량재고" && <span className="text-[10px] font-bold text-slate-400">출고 전 — 운영지원이 [출고]를 누르면 단추가 생깁니다</span>}
                         {evs.length > 0 && <button type="button" onClick={() => void undo(r)} className="rounded-full border border-slate-300 px-2 py-1 text-[10.5px] font-black text-slate-500">되돌리기</button>}
                       </span>
                     </div>
@@ -280,7 +366,7 @@ export default function SupplyBoard({ author, kind, withTools = false }: { autho
                           <span className="text-[10px] font-bold text-slate-400">/ 신청 {r.qty || "1"}</span>
                         </span>
                         {act.type === "반납" && (() => {
-                          const sibs = rows.filter((x) => x.id !== r.id && x.request_date === r.request_date && x.vendor === r.vendor && x.author === r.author && x.source_id === r.source_id && stageOf(x) === "신청" && issued(x));
+                          const sibs = rows.filter((x) => x.id !== r.id && x.request_date === r.request_date && x.vendor === r.vendor && x.author === r.author && x.source_id === r.source_id && stageOf(x) === "신청" && (issued(x) || legacy(x)));
                           return sibs.length ? (
                             <span className="flex w-full flex-wrap items-center gap-1.5 text-[11px] font-bold text-slate-600">같이 반납:
                               {sibs.map((x) => { const on = act.siblings.includes(x.id); return <button key={x.id} type="button" onClick={() => setAct({ ...act, siblings: on ? act.siblings.filter((v) => v !== x.id) : [...act.siblings, x.id] })} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${on ? "bg-sky-600 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>{x.item_std || x.item} {x.qty || 1}</button>; })}

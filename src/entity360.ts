@@ -494,7 +494,8 @@ export function summarizeSupplies(rows: Row[]): { kind: string; count: number; i
   for (const r of rows) { const k = str(r, "kind") || "부품"; by.set(k, [...(by.get(k) || []), r]); }
   return Array.from(by.entries()).map(([kind, list]) => {
     const sorted = [...list].sort((a, b) => str(b, "request_date").localeCompare(str(a, "request_date")));
-    const items = uniq(sorted.map((r) => `${str(r, "item")}${str(r, "qty") ? ` ×${str(r, "qty")}` : ""}`)).slice(0, 6);
+    // 품목은 표준 이름(없으면 적은 그대로) + 수량 + 기종 — 업체에 기기가 여럿이면 어느 기종 것인지 알아야 한다(2026-10-11)
+    const items = uniq(sorted.map((r) => `${str(r, "item_std") || str(r, "item")}${str(r, "qty") ? ` ×${str(r, "qty")}` : ""}${str(r, "model") ? ` (${str(r, "model")})` : ""}`)).slice(0, 8);
     return { kind, count: list.length, items, last: str(sorted[0], "request_date") };
   }).sort((a, b) => (a.kind === "부품" ? -1 : 1) - (b.kind === "부품" ? -1 : 1));
 }
