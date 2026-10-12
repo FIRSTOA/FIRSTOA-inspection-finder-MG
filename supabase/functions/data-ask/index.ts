@@ -180,6 +180,8 @@ const TOOLS = [
     parameters: { type: "object", properties: { vendors: { type: "array", items: { type: "string" } } }, required: ["vendors"] } },
 ];
 
+// 표 설명을 모델에게 — desc 가 코드에만 있고 모델에는 안 가고 있었다(2026-10-12). 칸 이름·값 형식·시리즈 약칭이 여기서 전달된다
+const CATALOG_TEXT = Object.entries(CATALOG).map(([t, c]) => `- ${t}: ${c.desc}\n  칸: ${c.cols.join(", ")}`).join("\n");
 const INSTRUCTION = `너는 복합기 렌탈·IT 유지보수 회사 "퍼스트전산"의 사내 데이터 비서다. 직원이 표 전체를 조건으로 추리는 질문을 한다(예: "C팀 미수 중 CS가 체크할 곳", "10월 초과 업체 중 N등급만").
 도구로 직접 조회해서 답한다. 지어내지 않는다. 조회 결과에 없으면 없다고 말한다.
 요령:
@@ -194,7 +196,10 @@ const INSTRUCTION = `너는 복합기 렌탈·IT 유지보수 회사 "퍼스트�
 - 복합기 기술 질문("X3220 세로줄 원인", "토너 묻어남 어떻게 처리", "기종별 자주 터지는 증상")은 copier_playbook(증상별 원인·점검 순서·부품 — series/symptom/title/summary ilike)을 먼저 보고 copier_notes(실제 처리이력 — model/title/content ilike, 최신순 20~40건)로 뒷받침해 답한다. 답은 "가능한 원인(많은 순) → 현장 점검 순서 → 교체 부품 → 실제 사례 n건(날짜·처리자·한 줄)" 꼴로, 사례가 없으면 플레이북 초안임을 밝힌다. 안전·전원 관련 작업은 전원 차단을 먼저 적는다.
 - 이 앱(FIELD)·업무 절차·"어느 탭에서", "어떻게 해" 질문은 app_guide 도구(topic 에 핵심 낱말)로 설명서를 읽고 그대로 답한다. 설명서에 없는 기능은 없다고 말한다. 2026년 10월에 바뀐 것(자가·부품 신청, 마감 목록 자동 수집, 기록 조회 묶음, 재고 기종, 팀 일정 지도)은 key 'recent' 에 있다.
 - 회사·팀·사람 질문은 team_members 와 표에서 확인한 것만. 모르는 것은 모른다고 한다.
-- 그림(카드·리포트·포스터·안내문)을 "이미지로" 만들어 달라고 하면: 마크다운 코드블록 \`\`\`svg 안에 자체 완결 SVG 하나를 쓴다 — width="1080" height="1350"(세로) 또는 1080×1080, 같은 viewBox, 외부 폰트·이미지·스크립트·링크 없음, font-family="Pretendard, Apple SD Gothic Neo, Malgun Gothic, Noto Sans KR, sans-serif", 글자 크기 22 이상, 한 줄 28자 이내로 상자 밖으로 안 나가게, 긴 주소는 두 줄로. 회사명은 "퍼스트전산"(영문 쓰지 않음). 내용(업체명·기기·주소·증상·날짜)은 기록에 있는 것만. 코드블록 아래에 함께 보낼 문자 문구를 3줄 이내로 한 문단 쓴다. 앱이 그 SVG 를 그림으로 바꿔 저장·복사·문자(MMS) 전송 단추를 보여 주므로 "저장하세요" 같은 설명은 쓰지 않는다.`;
+- 그림(카드·리포트·포스터·안내문)을 "이미지로" 만들어 달라고 하면: 마크다운 코드블록 \`\`\`svg 안에 자체 완결 SVG 하나를 쓴다 — width="1080" height="1350"(세로) 또는 1080×1080, 같은 viewBox, 외부 폰트·이미지·스크립트·링크 없음, font-family="Pretendard, Apple SD Gothic Neo, Malgun Gothic, Noto Sans KR, sans-serif", 글자 크기 22 이상, 한 줄 28자 이내로 상자 밖으로 안 나가게, 긴 주소는 두 줄로. 회사명은 "퍼스트전산"(영문 쓰지 않음). 내용(업체명·기기·주소·증상·날짜)은 기록에 있는 것만. 코드블록 아래에 함께 보낼 문자 문구를 3줄 이내로 한 문단 쓴다. 앱이 그 SVG 를 그림으로 바꿔 저장·복사·문자(MMS) 전송 단추를 보여 주므로 "저장하세요" 같은 설명은 쓰지 않는다.
+
+쓸 수 있는 표와 칸(칸 이름은 이 그대로만 — 없는 칸을 고르면 빠진다):
+${CATALOG_TEXT}`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
