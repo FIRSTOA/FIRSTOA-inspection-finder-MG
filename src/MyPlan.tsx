@@ -194,7 +194,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   )), [tickets, date, author, includeUnassigned, scope, teamShown, showInspections]);
   // 배정 후보 — 나 먼저, 그 팀 사람들(E 팀은 CSS), 팀장
   const assignOptions = useMemo(() => {
-    const names = roster.filter((m) => m.active && m.name !== author && (teamShown === "전체" ? /^[A-E]$|CSS|팀장/.test(m.team) : (m.team === teamShown || m.team === "팀장" || (teamShown === "E" && /CSS/.test(m.team))))).map((m) => m.name);
+    const names = roster.filter((m) => m.active && m.name !== author && (teamShown === "전체" ? /^[A-E]$|CSS/.test(m.team) : (m.team === teamShown || (teamShown === "E" && /CSS/.test(m.team))))).map((m) => m.name);
     return author ? [author, ...names] : names;
   }, [roster, author, teamShown]);
   const people = useMemo(() => Array.from(new Set(myTickets.map((t) => t.assignee).filter(Boolean))).sort(), [myTickets]);
@@ -238,12 +238,11 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   }, [myTickets, lookupGeo]);
 
   // 순서: 고정(클릭 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃
-  const ordered = useMemo(() => {
-    // 팀 일정은 동선이 아니라 사람별·시간순 — 범례에서 끈 사람은 뺀다
-    if (scope === "team") return myTickets.filter((t) => !hiddenPeople.has(t.assignee || "미배정")).sort((a, b) => (a.assignee || "힣").localeCompare(b.assignee || "힣") || (a.time || "").localeCompare(b.time || ""));
-    const byId = new Map(myTickets.map((t) => [t.id, t]));
+  // 한 사람의 동선: 고정(누른 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃. 팀 일정은 사람마다 이 규칙을 따로 돌린다(2026-10-12)
+  const routeOf = useCallback((list: MyPlanTicket[]): MyPlanTicket[] => {
+    const byId = new Map(list.map((t) => [t.id, t]));
     const head = pinned.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
-    const rest = myTickets.filter((t) => !pinned.includes(t.id));
+    const rest = list.filter((t) => !pinned.includes(t.id));
     const withGeo = rest.filter((t) => getGeo(t));
     const noGeo = rest.filter((t) => !getGeo(t));
     const route: MyPlanTicket[] = [...head];
@@ -266,8 +265,18 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       route.push(next);
       cursor = getGeo(next);
     }
-    return dedupeById([...route, ...noGeo]);
-  }, [myTickets, pinned, getGeo, scope, hiddenPeople]);
+    return [...route, ...noGeo];
+  }, [pinned, getGeo]);
+  const ordered = useMemo(() => {
+    if (scope === "team") {
+      // 사람별로 묶고(미배정은 맨 뒤), 사람마다 고정→가까운 순. 범례에서 끈 사람은 뺀다
+      const groups = new Map<string, MyPlanTicket[]>();
+      for (const t of myTickets) { const k = t.assignee || "미배정"; if (hiddenPeople.has(k)) continue; groups.set(k, [...(groups.get(k) || []), t]); }
+      const keys = Array.from(groups.keys()).sort((a, b) => (a === "미배정" ? 1 : b === "미배정" ? -1 : a.localeCompare(b)));
+      return dedupeById(keys.flatMap((k) => routeOf(groups.get(k)!)));
+    }
+    return dedupeById(routeOf(myTickets));
+  }, [myTickets, scope, hiddenPeople, routeOf]);
 
   // ── 지도: 카카오맵 우선, SDK 로드 실패(도메인 미등록 미리보기 등) 시 Leaflet 폴백 ──
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -341,8 +350,21 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   // 줄 아래 작은 메뉴 — 지도(네이버·카카오·티맵) / 배정(나·다른 사람·해제). 단추 칸이 좁아 N/K/T 를 하나로(2026-10-12)
   const [rowMenu, setRowMenu] = useState<{ id: string; kind: "nav" | "assign" } | null>(null);
 
-  const markerHtml = (no: number, isPinned: boolean, style?: { bg: string; fg: string; dashed: boolean }) =>
-    `<div style="width:26px;height:26px;border-radius:50%;background:${style ? style.bg : isPinned ? "#2563eb" : "#0f172a"};color:${style ? style.fg : "#fff"};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px ${style?.dashed ? "dashed #64748b" : "solid #fff"};box-shadow:0 1px 6px rgba(0,0,0,.4)">${no}</div>`;
+  // 일정 종류를 모양으로 — AS·익일AS 는 동그라미, 납품·철수·교체·물류는 네모, 점검은 얇은 테두리(2026-10-12 "납품과 AS 를 지도에서 바로")
+  const kindOf = (t: MyPlanTicket): "as" | "delivery" | "inspect" => (/납품|철수|교체|물류/.test(`${t.scheduleType} ${planTypeLabel(t)}`) ? "delivery" : /점검|재계약/.test(planTypeLabel(t)) ? "inspect" : "as");
+  const [showLabels, setShowLabels] = useState(true);      // 마커 아래 이름표(팀: 담당 이름 / 내 일정: 업체)
+  const [mapSize, setMapSize] = useState<"normal" | "small">("normal");
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const labelOf = (t: MyPlanTicket) => (!showLabels ? "" : scope === "team" ? (t.assignee || "미배정") : popupName(t.vendor).slice(0, 8));
+  const markerHtml = (no: number, isPinned: boolean, style: { bg: string; fg: string; dashed: boolean } | undefined, kind: "as" | "delivery" | "inspect", label: string) => {
+    const radius = kind === "delivery" ? "7px" : "50%";
+    const border = style?.dashed ? "2px dashed #64748b" : kind === "inspect" ? "2px solid rgba(255,255,255,.55)" : "2px solid #fff";
+    const esc = (v: string) => String(v || "").replace(/[<>&]/g, "");
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:none">`
+      + `<div style="pointer-events:auto;width:26px;height:26px;border-radius:${radius};background:${style ? style.bg : isPinned ? "#2563eb" : "#0f172a"};color:${style ? style.fg : "#fff"};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:${border};box-shadow:0 1px 6px rgba(0,0,0,.4)">${no}</div>`
+      + (label ? `<div style="font-size:10px;font-weight:900;color:#0f172a;background:rgba(255,255,255,.93);border:1px solid #cbd5e1;border-radius:6px;padding:0 4px;white-space:nowrap;max-width:88px;overflow:hidden;text-overflow:ellipsis;line-height:15px">${esc(label)}</div>` : "")
+      + `</div>`;
+  };
   // 카카오 오버레이는 nowrap을 상속해 긴 제목이 지도 밖까지 한 줄로 뻗었다 — 줄바꿈을 명시하고
   // 업체명은 캘린더 제목 원문(구분·모델·마감 꼬리표 포함)이라 회사명만 잘라 쓴다
   const popupName = (vendor: string) => {
@@ -352,21 +374,23 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const popupHtml = (no: number, t: MyPlanTicket, interactive: boolean) => {
     const esc = (v: string) => String(v || "").replace(/[<>&]/g, "");
     const issue = esc(t.issue || "").replace(/\s+/g, " ").trim();
-    const row = (label: string, value: string, extra = "") => value ? `<div style="display:flex;gap:6px;font-size:11.5px;line-height:1.4"><span style="flex:0 0 46px;color:#94a3b8;font-weight:800">${label}</span><span style="min-width:0;color:#334155;font-weight:600;${extra}">${value}</span></div>` : "";
+    const row = (label: string, value: string, clamp = "") => value ? `<div style="display:flex;gap:6px;font-size:11px;line-height:1.35"><span style="flex:0 0 40px;color:#94a3b8;font-weight:800">${label}</span><span style="min-width:0;color:#334155;font-weight:600;${clamp}">${value}</span></div>` : "";
     const who = t.assignee ? esc(t.assignee) : "미배정";
     const whoColor = t.assignee ? colorOf(t.assignee) : "#94a3b8";
+    const chip = `border-radius:999px;padding:2px 9px;background:${whoColor};color:#fff;font-weight:900;font-size:11px;line-height:16px`;
     const assignBtn = interactive && onAssign
-      ? `<button type="button" data-assign="1" style="pointer-events:auto;cursor:pointer;border:0;border-radius:999px;padding:2px 9px;background:${whoColor};color:#fff;font-weight:900;font-size:11px">${who} ▾</button>`
-      : `<span style="display:inline-block;border-radius:999px;padding:2px 9px;background:${whoColor};color:#fff;font-weight:900;font-size:11px">${who}</span>`;
-    return `<div style="white-space:normal;word-break:keep-all;max-width:300px;min-width:220px;pointer-events:none">`
-      + `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px"><span style="font-size:11px;color:#94a3b8;font-weight:800">담당 ${assignBtn}</span>`
-      + (interactive ? `<button type="button" data-close="1" style="pointer-events:auto;cursor:pointer;border:0;background:#f1f5f9;border-radius:999px;width:22px;height:22px;font-weight:900;color:#64748b">×</button>` : "") + `</div>`
-      + `<div style="font-size:13px;font-weight:900;color:#0f172a;margin-bottom:3px">${no}. ${popupName(t.vendor)} <span style="font-size:11px;color:#64748b;font-weight:700">${[t.time, planTypeLabel(t)].filter(Boolean).join(" · ")}</span></div>`
-      + row("주소", esc(t.address || "") || `<span style="color:#b45309">주소 없음</span>`)
+      ? `<button type="button" data-assign="1" title="누르면 담당을 바꿉니다" style="pointer-events:auto;cursor:pointer;border:0;${chip}">${who} ▾</button>`
+      : `<span style="display:inline-block;${chip}">${who}</span>`;
+    const kind = kindOf(t);
+    return `<div style="white-space:normal;word-break:keep-all;max-width:260px;min-width:200px;pointer-events:none">`
+      + `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:3px">${assignBtn}<span style="font-size:10.5px;color:#64748b;font-weight:800">${[t.time, planTypeLabel(t)].filter(Boolean).join(" · ")}${kind === "delivery" ? " ▢" : ""}</span>`
+      + (interactive ? `<button type="button" data-close="1" style="pointer-events:auto;cursor:pointer;border:0;background:#f1f5f9;border-radius:999px;width:22px;height:22px;font-weight:900;color:#64748b;line-height:22px">×</button>` : "") + `</div>`
+      + `<div style="font-size:12.5px;font-weight:900;color:#0f172a;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${no}. ${popupName(t.vendor)}</div>`
+      + row("주소", esc(t.address || "") || `<span style="color:#b45309">주소 없음</span>`, "white-space:nowrap;overflow:hidden;text-overflow:ellipsis")
       + row("기종", esc(t.model || ""))
       + row("시리얼", esc(t.serial || ""))
       + row("자산기번", esc(t.asset || ""))
-      + row("증상", issue.slice(0, 120) + (issue.length > 120 ? "…" : ""))
+      + row("증상", issue, "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden")
       + `</div>`;
   };
 
@@ -377,15 +401,20 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       layer.clearLayers();
       markerRef.current.clear();
       const points: [number, number][] = [];
+      const byPerson = new Map<string, [number, number][]>();
       ordered.forEach((t, i) => {
         const g = displayGeo.get(t.id);
         if (!g) return;
         points.push([g.lat, g.lng]);
-        const icon = L.divIcon({ className: "", html: markerHtml(labelNo(t, i), pinned.includes(t.id), markerStyle(t)), iconSize: [26, 26], iconAnchor: [13, 13] });
+        const key = scope === "team" ? (t.assignee || "") : "me";
+        if (key) byPerson.set(key, [...(byPerson.get(key) || []), [g.lat, g.lng]]);
+        const label = labelOf(t);
+        const icon = L.divIcon({ className: "", html: markerHtml(labelNo(t, i), pinned.includes(t.id), markerStyle(t), kindOf(t), label), iconSize: [90, label ? 44 : 26], iconAnchor: [45, 13] });
         const marker = L.marker([g.lat, g.lng], { icon }).addTo(layer).bindPopup(popupHtml(labelNo(t, i), t, false));
         markerRef.current.set(t.id, marker);
       });
-      if (scope === "mine" && points.length >= 2) L.polyline(points, { color: "#2563eb", weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
+      // 동선 — 내 일정은 파랑, 팀 일정은 사람마다 그 사람 색(미배정은 선 없음)
+      for (const [key, pts] of byPerson) if (pts.length >= 2) L.polyline(pts, { color: key === "me" ? "#2563eb" : colorOf(key), weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
       if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 14 });
       return;
     }
@@ -395,6 +424,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     kakaoObjectsRef.current = [];
     kakaoMarkerRef.current.clear();
     const path: KakaoNS[] = [];
+    const pathByPerson = new Map<string, KakaoNS[]>();
     const bounds = new kakao.maps.LatLngBounds();
     let infoOverlay: KakaoNS | null = null;
     ordered.forEach((t, i) => {
@@ -404,14 +434,20 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       path.push(pos);
       bounds.extend(pos);
       const el = document.createElement("div");
-      el.innerHTML = markerHtml(labelNo(t, i), pinned.includes(t.id), markerStyle(t));
+      const label = labelOf(t);
+      el.innerHTML = markerHtml(labelNo(t, i), pinned.includes(t.id), markerStyle(t), kindOf(t), label);
       el.style.cursor = "pointer";
+      { const key = scope === "team" ? (t.assignee || "") : "me"; if (key) pathByPerson.set(key, [...(pathByPerson.get(key) || []), pos]); }
       el.onclick = () => {
         if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; }
         const box = document.createElement("div");
         // 상자 자체는 클릭을 통과시킨다(pointer-events:none) — 겹친 옆 마커가 상자에 가려 안 눌리던 것. 단추만 받는다
         box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:300px;white-space:normal;word-break:keep-all;pointer-events:none";
         box.innerHTML = popupHtml(labelNo(t, i), t, true);
+        // 마커가 지도 위쪽에 있으면 말풍선을 아래로 — 글이 길면 위로 넘어가 보이지 않던 것
+        let below = false;
+        try { const pt = map.getProjection().containerPointFromCoords(pos); below = pt.y < 190; } catch { /* 투영 미지원 */ }
+        box.style.transform = below ? "translateY(22px)" : "translateY(-36px)";
         const close = () => { if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; } };
         box.querySelector<HTMLButtonElement>("[data-close]")?.addEventListener("click", (ev) => { ev.stopPropagation(); close(); });
         const assignBtn = box.querySelector<HTMLButtonElement>("[data-assign]");
@@ -427,17 +463,19 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           assignBtn.replaceWith(sel);
           sel.focus();
         });
-        infoOverlay = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: 1, zIndex: 30 });
+        infoOverlay = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: below ? 0 : 1, zIndex: 30, clickable: true });
         infoOverlay.setMap(map);
         kakaoObjectsRef.current.push(infoOverlay);
       };
-      const overlay = new kakao.maps.CustomOverlay({ position: pos, content: el, yAnchor: 0.5, zIndex: 10 + i });
+      const overlay = new kakao.maps.CustomOverlay({ position: pos, content: el, yAnchor: label ? 0.3 : 0.5, zIndex: 10 + i });
       overlay.setMap(map);
       kakaoObjectsRef.current.push(overlay);
       kakaoMarkerRef.current.set(t.id, { pos, open: el.onclick as () => void });
     });
-    if (scope === "mine" && path.length >= 2) {
-      const line = new kakao.maps.Polyline({ path, strokeWeight: 3, strokeColor: "#2563eb", strokeOpacity: 0.65, strokeStyle: "shortdash" });
+    // 동선 — 내 일정은 파랑 하나, 팀 일정은 사람마다 그 사람 색(미배정은 선 없음)
+    for (const [key, pts] of pathByPerson) {
+      if (pts.length < 2) continue;
+      const line = new kakao.maps.Polyline({ path: pts, strokeWeight: 3, strokeColor: key === "me" ? "#2563eb" : colorOf(key), strokeOpacity: 0.65, strokeStyle: "shortdash" });
       line.setMap(map);
       kakaoObjectsRef.current.push(line);
     }
@@ -447,7 +485,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     kakao.maps.event.addListener(map, "click", closeOnMapClick);
     return () => { kakao.maps.event.removeListener(map, "click", closeOnMapClick); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, ordered, pinned, displayGeo, scope, markerStyle, assignOptions, author, onAssign, numberOf]);
+  }, [engine, ordered, pinned, displayGeo, scope, markerStyle, assignOptions, author, onAssign, numberOf, showLabels, colorOf]);
 
   const kakaoMarkerRef = useRef<Map<string, { pos: KakaoNS; open: () => void }>>(new Map());
   const focusTicket = (id: string) => {
@@ -598,12 +636,19 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           <span className="text-[10px] font-black text-slate-400">사람</span>
           {people.map((p) => { const off = hiddenPeople.has(p); const n = myTickets.filter((t) => t.assignee === p).length; return <button key={p} type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has(p)) next.delete(p); else next.add(p); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-200 bg-white text-slate-700"}`}><span className="h-2.5 w-2.5 rounded-full" style={{ background: colorOf(p) }} />{p} {n}</button>; })}
           {myTickets.some((t) => !t.assignee) && (() => { const off = hiddenPeople.has("미배정"); const n = myTickets.filter((t) => !t.assignee).length; return <button type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has("미배정")) next.delete("미배정"); else next.add("미배정"); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-dashed border-slate-400 bg-white text-slate-600"}`}><span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-500 bg-white" />미배정 {n}</button>; })()}
-          <span className="ml-auto text-[10px] font-semibold text-slate-400">마커 색 = 사람 · 점선 = 미배정 · 누르면 숨김</span>
+          <span className="ml-auto text-[10px] font-semibold text-slate-400">색 = 사람 · 점선 = 미배정 · 누르면 숨김 · 번호는 사람별 순서(고정으로 바꿈)</span>
         </div>
       )}
-      <div ref={mapElRef} className={`${scope === "team" ? "h-[55vh]" : "h-[42vh]"} w-full overflow-hidden rounded-xl border border-slate-200`} />
+      {/* 지도 조절 — 휴대폰은 지도가 화면을 다 먹어 목록으로 못 내려가던 것: 작게 접기, 목록으로 바로 가기, 이름표 */}
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black">
+        <button type="button" onClick={() => setMapSize((v) => (v === "small" ? "normal" : "small"))} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600">{mapSize === "small" ? "지도 펼치기" : "지도 접기"}</button>
+        <button type="button" onClick={() => listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600">목록으로 ↓</button>
+        <button type="button" onClick={() => setShowLabels((v) => !v)} className={`rounded-full px-2.5 py-1 ${showLabels ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>이름표</button>
+        <span className="ml-auto text-[10px] font-semibold text-slate-400">○ AS · ▢ 납품/물류 · 선 = 동선(고정 순 → 가까운 순)</span>
+      </div>
+      <div ref={mapElRef} className={`${mapSize === "small" ? "h-[22vh]" : scope === "team" ? "h-[38vh] sm:h-[55vh]" : "h-[36vh] sm:h-[42vh]"} w-full overflow-hidden rounded-xl border border-slate-200`} />
 
-      <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div ref={listRef} className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {ordered.map((t, i) => {
           const g = getGeo(t);
           const isPinned = pinned.includes(t.id);
@@ -676,7 +721,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 )}
                 <button type="button" onClick={() => togglePin(t.id)}
                   className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
-                  {isPinned ? `고정 ${pinned.indexOf(t.id) + 1}` : "고정"}
+                  {isPinned ? `고정 ${pinned.filter((id) => (scope === "team" ? ordered.filter((x) => (x.assignee || "미배정") === who) : ordered).some((x) => x.id === id)).indexOf(t.id) + 1}` : "고정"}
                 </button>
               </span>
               {rowMenu?.id === t.id && rowMenu.kind === "nav" && (
