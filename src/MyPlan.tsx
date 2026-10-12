@@ -259,6 +259,10 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   }, [myTickets, lookupGeo]);
 
   // 순서: 고정(클릭 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃
+  const infoOverlayRef = useRef<KakaoNS | null>(null);   // 열려 있는 말풍선
+  const drawSigRef = useRef("");                          // 마지막으로 그린 마커 구성 — 같으면 다시 그리지 않는다(60초 새로고침마다 확대가 풀리던 것, 2026-10-13)
+  const boundsKeyRef = useRef("");                        // 범위를 맞춘 일정 구성 — 일정이 바뀔 때만 다시 맞춘다
+  const colorFor = useCallback((name: string) => (people.includes(name) ? colorOf(name) : "#64748b"), [people, colorOf]);
   // 한 사람의 동선: 고정(누른 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃. 팀 일정은 사람마다 이 규칙을 따로 돌린다(2026-10-12)
   const routeOf = useCallback((list: MyPlanTicket[]): MyPlanTicket[] => {
     const byId = new Map(list.map((t) => [t.id, t]));
@@ -536,10 +540,6 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   }, [engine]);
 
   const kakaoMarkerRef = useRef<Map<string, { pos: KakaoNS; open: () => void }>>(new Map());
-  const infoOverlayRef = useRef<KakaoNS | null>(null);   // 열려 있는 말풍선
-  const drawSigRef = useRef("");                          // 마지막으로 그린 마커 구성 — 같으면 다시 그리지 않는다(60초 새로고침마다 확대가 풀리던 것, 2026-10-13)
-  const boundsKeyRef = useRef("");                        // 범위를 맞춘 일정 구성 — 일정이 바뀔 때만 다시 맞춘다
-  const colorFor = useCallback((name: string) => (people.includes(name) ? colorOf(name) : "#64748b"), [people, colorOf]);
   const focusTicket = (id: string) => {
     if (engine === "kakao" && kakaoRef.current) {
       const hit = kakaoMarkerRef.current.get(id);
