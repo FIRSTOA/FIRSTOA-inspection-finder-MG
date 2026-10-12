@@ -377,10 +377,14 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const [showLabels, setShowLabels] = useState(true);      // 마커 아래 이름표(팀: 담당 이름 / 내 일정: 업체)
   const [mapSize, setMapSize] = useState<"normal" | "small">("normal");
   const listRef = useRef<HTMLDivElement | null>(null);
-  const labelOf = (t: MyPlanTicket) => (!showLabels ? "" : scope === "team" ? (t.assignee || "미배정") : popupName(t.vendor).slice(0, 8));
+  const labelOf = (t: MyPlanTicket) => {
+    if (!showLabels) return "";
+    const base = scope === "team" ? (t.assignee || "미배정") : popupName(t.vendor).slice(0, 8);
+    return kindOf(t) === "delivery" ? `${base} · 납품` : base;   // 네모만으론 멀리서 안 보여 글자로도(2026-10-12)
+  };
   const markerHtml = (no: number, isPinned: boolean, style: { bg: string; fg: string; dashed: boolean } | undefined, kind: "as" | "delivery" | "inspect", label: string) => {
-    const radius = kind === "delivery" ? "7px" : "50%";
-    const border = style?.dashed ? "2px dashed #64748b" : kind === "inspect" ? "2px solid rgba(255,255,255,.55)" : "2px solid #fff";
+    const radius = kind === "delivery" ? "4px" : "50%";
+    const border = style?.dashed ? "2px dashed #64748b" : kind === "delivery" ? "3px solid #f59e0b" : kind === "inspect" ? "2px solid rgba(255,255,255,.55)" : "2px solid #fff";
     const esc = (v: string) => String(v || "").replace(/[<>&]/g, "");
     return `<div style="display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:none">`
       + `<div style="pointer-events:auto;width:26px;height:26px;border-radius:${radius};background:${style ? style.bg : isPinned ? "#2563eb" : "#0f172a"};color:${style ? style.fg : "#fff"};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:${border};box-shadow:0 1px 6px rgba(0,0,0,.4)">${no}</div>`
@@ -666,7 +670,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         <button type="button" onClick={() => setMapSize((v) => (v === "small" ? "normal" : "small"))} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600">{mapSize === "small" ? "지도 펼치기" : "지도 접기"}</button>
         <button type="button" onClick={() => listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600">목록으로 ↓</button>
         <button type="button" onClick={() => setShowLabels((v) => !v)} className={`rounded-full px-2.5 py-1 ${showLabels ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>이름표</button>
-        <span className="ml-auto text-[10px] font-semibold text-slate-400">○ AS · ▢ 납품/물류 · 선 = 동선(고정 순 → 가까운 순)</span>
+        <span className="ml-auto text-[10px] font-semibold text-slate-400">○ AS · <span className="inline-block h-2.5 w-2.5 rounded-[2px] border-2 border-amber-500 align-middle" /> 납품/물류(주황 테두리) · 선 = 동선(고정 순 → 가까운 순)</span>
       </div>
       <div ref={mapElRef} className={`${mapSize === "small" ? "h-[22vh]" : scope === "team" ? "h-[38vh] sm:h-[55vh]" : "h-[36vh] sm:h-[42vh]"} w-full overflow-hidden rounded-xl border border-slate-200`} />
 
@@ -737,7 +741,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                     className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700 transition hover:bg-purple-100">내일로 →</button>
                 )}
                 {/* 길찾기 — N/K/T 세 칸을 [지도] 하나로 모으고 누르면 아래에 펼친다(칸이 좁다, 2026-10-12) */}
-                <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "nav" ? null : { id: t.id, kind: "nav" }))} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "nav" ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>지도</button>
+                <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "nav" ? null : { id: t.id, kind: "nav" }))} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "nav" ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>네비</button>
                 {scope === "team" && onAssign && (
                   <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "assign" ? null : { id: t.id, kind: "assign" }))} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "assign" ? "bg-emerald-700 text-white" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>배정</button>
                 )}
@@ -751,7 +755,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
               </span>
               {rowMenu?.id === t.id && rowMenu.kind === "nav" && (
                 <span className="flex w-full items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                  <span className="text-[10px] font-black text-slate-400">길찾기</span>
+                  <span className="text-[10px] font-black text-slate-400">네비</span>
                   <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(mapQuery(t.address, t.vendor))} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="rounded-lg bg-[#03C75A] px-3 py-1.5 text-center text-[11px] font-black text-white">네이버</a>
                   <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="rounded-lg bg-[#FEE500] px-3 py-1.5 text-center text-[11px] font-black text-slate-900">카카오</a>
                   <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(mapQuery(t.address, t.vendor))} className="rounded-lg bg-[#2C5FD8] px-3 py-1.5 text-center text-[11px] font-black text-white">티맵</a>

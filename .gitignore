@@ -34,3 +34,7 @@ tools/worker/state.json
 tools/worker/__pycache__/
 tools/kakao-pc/__pycache__/
 tools/kakao-pc/poster_log.txt
+.vercel
+
+.vercel
+.env*
