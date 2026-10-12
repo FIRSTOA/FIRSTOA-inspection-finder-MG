@@ -589,12 +589,13 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   const parts = [t.team && `${t.team}지역`, t.model, t.serial && `S/N ${t.serial}`, t.asset && `자산 ${t.asset}`, eq].filter(Boolean);
                   return parts.length ? <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{parts.join(" · ")}</span> : null;
                 })()}
-                {/* 주소도 메모처럼 줄에서 바로 고친다 — 상세를 열어야 했던 불편(2026-10-10). 주소 없는 일정은 여기서 바로 적는다 */}
+                {/* 주소도 메모처럼 줄에서 바로 고친다 — 상세를 열어야 했던 불편(2026-10-10). 주소 없는 일정은 여기서 바로 적는다
+                    key 는 addr:/memo: 접두가 필수 — 주소·메모가 둘 다 비면 두 형제의 key 가 "id|"로 같아져 React 가 주소칸을 못 지우고 렌더마다 하나씩 더 그렸다(2026-10-12 법무법인 수헌 20칸) */}
                 {onAddress
-                  ? <InlineAddress key={`${t.id}|${t.address || ""}`} value={t.address || ""} suggestion={suggestAddress(t)} onSave={(next) => saveAddress(t, next)} />
+                  ? <InlineAddress key={`addr:${t.id}|${t.address || ""}`} value={t.address || ""} suggestion={suggestAddress(t)} onSave={(next) => saveAddress(t, next)} />
                   : <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-400">{t.address || "주소 없음"}</span>}
                 {/* 메모는 일정 밑에서 바로 적는다 — 상세를 열어야 했던 불편(2026-09-24). 저장은 버튼(모바일 blur 불안정) */}
-                <InlineMemo key={`${t.id}|${memos.get(t.id) || ""}`} ticketId={t.id} value={memos.get(t.id) || ""} onSave={saveMemo} />
+                <InlineMemo key={`memo:${t.id}|${memos.get(t.id) || ""}`} ticketId={t.id} value={memos.get(t.id) || ""} onSave={saveMemo} />
                 {onRemove && (
                   // 잘못 들어온 일정·빼고 싶은 일정을 동선에서 바로 정리 (일정리스트까지 가지 않게)
                   <button type="button" onClick={(event) => { event.stopPropagation(); onRemove(t); }}
