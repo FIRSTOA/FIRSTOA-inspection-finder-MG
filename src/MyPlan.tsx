@@ -93,6 +93,27 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       .catch(() => undefined);
     return () => { alive = false; };
   }, [storageKey, author, orderKey]);
+  // 지도에 안 보여도 되는 일정(전화 체크만 하면 되는 건 등) — 목록엔 남고 마커·동선에서만 빠진다(2026-10-12). 저장은 고정 순서와 같은 방식
+  const noMapKey = `__nomap__:${date}`;
+  const [noMap, setNoMap] = useState<string[]>([]);
+  useEffect(() => {
+    try { setNoMap(Array.from(new Set((JSON.parse(localStorage.getItem(`${storageKey}:nomap`) || "[]") as unknown[]).map(String)))); } catch { setNoMap([]); }
+    if (!author.trim()) return;
+    let alive = true;
+    selectRows<{ memo: string }>("plan_memos", `select=memo&author=eq.${encodeURIComponent(author)}&ticket_id=eq.${encodeURIComponent(noMapKey)}&limit=1`)
+      .then((rows) => {
+        if (!alive || !rows.length) return;
+        try { const ids = JSON.parse(rows[0].memo || "[]"); if (Array.isArray(ids)) { const uniq = Array.from(new Set(ids.map(String))); setNoMap(uniq); localStorage.setItem(`${storageKey}:nomap`, JSON.stringify(uniq)); } } catch { /* 깨진 값은 무시 */ }
+      })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [storageKey, author, noMapKey]);
+  const saveNoMap = (next: string[]) => {
+    setNoMap(next);
+    try { localStorage.setItem(`${storageKey}:nomap`, JSON.stringify(next)); } catch { /* 무시 */ }
+    if (author.trim()) void upsertRow("plan_memos", { author, ticket_id: noMapKey, memo: JSON.stringify(next), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined);
+  };
+  const toggleNoMap = (id: string) => saveNoMap(noMap.includes(id) ? noMap.filter((x) => x !== id) : [...noMap, id]);
   const savePinned = (next: string[]) => {
     setPinned(next);
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* 무시 */ }
@@ -243,8 +264,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     const byId = new Map(list.map((t) => [t.id, t]));
     const head = pinned.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
     const rest = list.filter((t) => !pinned.includes(t.id));
-    const withGeo = rest.filter((t) => getGeo(t));
-    const noGeo = rest.filter((t) => !getGeo(t));
+    const withGeo = rest.filter((t) => getGeo(t) && !noMap.includes(t.id));
+    const noGeo = rest.filter((t) => !getGeo(t) || noMap.includes(t.id));
     const route: MyPlanTicket[] = [...head];
     let cursor: Geo | null = null;
     for (let i = head.length - 1; i >= 0; i--) {
@@ -266,7 +287,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       cursor = getGeo(next);
     }
     return [...route, ...noGeo];
-  }, [pinned, getGeo]);
+  }, [pinned, getGeo, noMap]);
   const ordered = useMemo(() => {
     if (scope === "team") {
       // 사람별로 묶고(미배정은 맨 뒤), 사람마다 고정→가까운 순. 범례에서 끈 사람은 뺀다
@@ -321,6 +342,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const displayGeo = useMemo(() => {
     const byCoord = new Map<string, MyPlanTicket[]>();
     for (const t of ordered) {
+      if (noMap.includes(t.id)) continue;   // 지도 제외
       const g = getGeo(t);
       if (!g) continue;
       const key = `${g.lat.toFixed(5)},${g.lng.toFixed(5)}`;
@@ -336,7 +358,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       });
     }
     return out;
-  }, [ordered, getGeo]);
+  }, [ordered, getGeo, noMap]);
 
   // 팀 일정은 사람마다 1·2·3… — 미배정 2건이면 1·2, 이민구 3건이면 1·2·3(마커·목록 같은 번호, 같은 색)
   const numberOf = useMemo(() => {
@@ -673,7 +695,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
                   {scope === "team" && <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black" style={t.assignee ? { background: colorOf(t.assignee), color: "#fff" } : { border: "1px dashed #94a3b8", color: "#475569" }}>{t.assignee || "미배정"}</span>}
-                  {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
+                  {noMap.includes(t.id) ? <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">지도 제외</span> : !g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
                 </span>
                 {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}
                 {(() => {
@@ -719,6 +741,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 {scope === "team" && onAssign && (
                   <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "assign" ? null : { id: t.id, kind: "assign" }))} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "assign" ? "bg-emerald-700 text-white" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>배정</button>
                 )}
+                {/* 전화 체크만 하면 되는 건처럼 지도에 안 보여도 되는 일정 — 목록엔 남는다 */}
+                <button type="button" onClick={() => toggleNoMap(t.id)} title={noMap.includes(t.id) ? "지도에 다시 표시" : "지도·동선에서 빼기(목록엔 남음)"}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${noMap.includes(t.id) ? "bg-slate-700 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>{noMap.includes(t.id) ? "지도 표시" : "지도 제외"}</button>
                 <button type="button" onClick={() => togglePin(t.id)}
                   className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
                   {isPinned ? `고정 ${pinned.filter((id) => (scope === "team" ? ordered.filter((x) => (x.assignee || "미배정") === who) : ordered).some((x) => x.id === id)).indexOf(t.id) + 1}` : "고정"}
