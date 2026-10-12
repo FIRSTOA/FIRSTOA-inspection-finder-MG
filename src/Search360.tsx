@@ -31,7 +31,8 @@ const loadRecent = (): string[] => { try { const v = JSON.parse(localStorage.get
 // 문장인가(질문·요청) — 이게 아니면 업체명·기번 검색으로 본다
 const QUESTION_RE = /[?？]|몇|언제|어디|어떻|무슨|뭐|얼마|줘|주세요|알려|정리|요약|목록|리스트|있어|있나|됐어|했어|중에|추려|비교|평균|합계|건수|누가|왜|해야|필요|만들/;
 // 표 전체를 조건으로 추리는 질문의 단서 — 팀·기간·등급·"각각/씩/전체"
-const DATA_RE = /[A-E]\s*팀|이번\s*주|지난\s*주|이번\s*달|지난\s*달|\d{1,2}\s*월|등급|전체|모든|각각|몇\s*개씩|씩|리스트|목록|순위|합계|평균|건수|누가|제일|가장/;
+// 지식 질문(복합기 증상·원인·처리, 앱 사용법)도 전체 질문으로 — 업체 찾기를 건너뛴다(2026-10-12)
+const DATA_RE = /[A-E]\s*팀|이번\s*주|지난\s*주|이번\s*달|지난\s*달|\d{1,2}\s*월|등급|전체|모든|각각|몇\s*개씩|씩|리스트|목록|순위|합계|평균|건수|누가|제일|가장|원인|증상|고치|수리\s*방법|처리\s*방법|사용법|어떻게\s*(해|하|써|보|쓰)|매뉴얼|설명서|기능|앱에서|어느\s*탭|어디서/;
 
 /** 에이전트에게 넘길 압축 기록 — 정확 일치만, 최신순 350건, 글자 수 제한(토큰 절약) */
 function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
@@ -58,6 +59,8 @@ const TRY_THESE: Array<{ text: string; kind: "검색" | "업체 질문" | "전�
   { text: "무암 언제부터 임대했고 기기 이동 이력 있어?", kind: "업체 질문" },
   { text: "C팀 미수 중 CS가 체크할 곳 리스트 줘", kind: "전체 질문" },
   { text: "C팀 이번 주 PC 확장성 몇 개씩 했어?", kind: "전체 질문" },
+  { text: "X3220 세로줄 생기면 원인이 뭐야?", kind: "전체 질문" },
+  { text: "자가 반납은 앱에서 어떻게 해?", kind: "전체 질문" },
 ];
 const PLACEHOLDERS = ["잡플러스", "B6945", "잡플러스 AS 몇 번 터졌어?", "C팀 미수 중 CS가 체크할 곳 리스트 줘", "ZPBLBJST8000GQV", "C팀 이번 주 PC 확장성 몇 개씩 했어?"];
 
@@ -258,7 +261,7 @@ export default function Search360({ author }: { author: string }) {
               <div>
                 <div className="flex items-center gap-1.5 text-[10.5px] font-black tracking-widest text-blue-600"><Sparkles size={12} /> FIRSTOA 기록 비서</div>
                 <h3 className="mt-1 text-[22px] font-black leading-tight text-slate-900 sm:text-[26px]">무엇이든 물어보세요</h3>
-                <p className="mt-1 text-[12.5px] font-semibold text-slate-500">업체명·자산기번·시리얼은 검색, 문장은 질문 — 회사 기록을 근거로 답합니다.</p>
+                <p className="mt-1 text-[12.5px] font-semibold text-slate-500">업체명·자산기번·시리얼은 검색, 문장은 질문 — 회사 기록과 복합기 처리이력·앱 설명서를 근거로 답합니다.</p>
               </div>
               {/* 오른쪽 작은 숫자 — 기록 전체 건수(누르면 표별), 이번 달 AI 사용 */}
               <div className="flex flex-col items-end gap-0.5 text-[10.5px] font-bold text-slate-400">
@@ -280,7 +283,7 @@ export default function Search360({ author }: { author: string }) {
           </form>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <div className="flex rounded-full bg-slate-100 p-0.5" title="자동: 문장이면 질문, 아니면 검색으로 봅니다">
-              {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터에 질문")}
+              {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터·지식에 질문")}
             </div>
             {!landing && aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표)" className="ml-auto text-[10.5px] font-bold text-slate-400">이번 달 AI {aiMonth.count}건{aiMonth.priced ? ` · $${aiMonth.usd.toFixed(2)}` : ""}</span>}
           </div>

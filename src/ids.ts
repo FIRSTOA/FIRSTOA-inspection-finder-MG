@@ -227,3 +227,20 @@ export function slashTrainVendor(raw: string): string {
   const gradeAt = parts.findIndex((part) => /^(SS|S|V|NN|N)\s*급?$/i.test(part));
   return gradeAt >= 0 && parts[gradeAt + 1] ? parts[gradeAt + 1] : "";
 }
+
+/**
+ * 일정 제목에서 업체 이름만 — "법무법인 수헌 3년+유지보수혜택 계약성사 계약사인 체크" → "법무법인 수헌".
+ * 뒤에 붙는 메모(숫자·행위어·사람 이름)는 뗀다. 내 일정 지도에서 임대리스트 주소를 못 찾아 "주소 없음"이 많던 원인(2026-10-12).
+ */
+export function vendorNameCore(raw: string): string {
+  const base = fieldTicketVendor(raw).vendor.replace(/[()[\]【】]/g, " ").replace(/\s+/g, " ").trim();
+  const STOP = /\d|체크|재계약|계약|점검|a\/?s|납품|철수|교체|확인|방문|설치|수리|회수|미팅|견적|상담|요청|유지보수|혜택|성사|사인|마감|분기|매월|완료|예정|오전|오후|첫|두번째|차$/i;
+  const out: string[] = [];
+  for (const tk of base.split(" ")) {
+    if (!tk) continue;
+    if (out.length && STOP.test(tk)) break;
+    out.push(tk);
+    if (out.length >= 3) break;
+  }
+  return out.join(" ") || base;
+}

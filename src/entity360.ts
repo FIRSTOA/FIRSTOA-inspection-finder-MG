@@ -69,7 +69,7 @@ export const SOURCES: SourceDef[] = [
     dateKeys: ["activity_date"], titleKeys: ["category"], snippetKeys: ["quantity", "machine_count"], authorKeys: ["author"], teamKeys: ["team"], modelKeys: [], serialKeys: [], assetKeys: [],
     titleFn: (row) => (ACTIVITY_LABELS as Record<string, string>)[str(row, "category")] || str(row, "category") },
   // 부품·자가 신청(2026-10-11) — 점검·AS 양식의 신청 칸을 품목 단위로 쌓은 표. "이 기기 드럼 언제 갈았지"가 바로 나온다
-  { table: "supply_requests", label: "부품·자가 신청", group: "현장 기록", tone: T.visit, nameCols: ["vendor", "used_vendor"], deviceCols: ["serial", "asset"], rawCols: ["raw"],
+  { table: "supply_requests", label: "부품·자가 신청", group: "현장 기록", tone: T.visit, nameCols: ["vendor", "used_vendor"], deviceCols: ["serial", "asset"], rawCols: ["raw"], hidden: "stage=neq.%EC%B7%A8%EC%86%8C",
     dateKeys: ["request_date"], titleKeys: ["kind"], snippetKeys: ["status", "warranty", "author"], authorKeys: ["author"], teamKeys: ["team"], modelKeys: ["model"], serialKeys: ["serial"], assetKeys: ["asset"],
     titleFn: (row) => `${str(row, "kind")} ${str(row, "stage") === "지급" ? "지급" : str(row, "stage") === "반납" ? "신청 후 반납" : str(row, "stage") === "불량" ? "불량" : "신청"} — ${str(row, "item_std") || str(row, "item")}${str(row, "qty") ? ` ×${str(row, "qty")}` : ""}${str(row, "used_vendor") && str(row, "used_vendor") !== str(row, "vendor") ? ` (${str(row, "used_vendor")}에 지급)` : ""}` },
   { table: "logistics_records", label: "물류", group: "현장 기록", tone: T.logi, nameCols: ["_업체명", "거래처명"], deviceCols: [], rawCols: ["_원문"], hidden: "_hidden=not.is.true",

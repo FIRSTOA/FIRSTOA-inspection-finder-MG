@@ -444,6 +444,14 @@ function collectParkingLines(cleaned: string[]): string[] {
   );
 }
 
+// 공기청정기 블록 — 필터리셋·필터교체 칸이 있거나 청정기 기종이면. 복합기와 한 보고에 섞여 있어도 청정기 칸을 지킨다(2026-10-12 푸드본 블루스카이)
+const AIR_PURIFIER_MODEL_RE = /블루스카이|bluesky|샤오미|mi-?air|공기청정|청정기|퓨리케어|에어퓨리|위닉스|winix|코웨이|coway|airmega|삼성\s*ax\d|lg\s*as\d/i;
+function isAirPurifierBlock(lines: string[]): boolean {
+  if (lines.some((line) => /^(필터리셋|필터교체)\s*:/.test(line))) return true;
+  const model = lines.find((line) => /^모델명\s*:/.test(line)) || "";
+  return AIR_PURIFIER_MODEL_RE.test(model);
+}
+
 function normalizeInspectionItemBlock(blockLines: string[], blockIndex: number): string[] {
   const cleaned = blockLines
     .map((line: string) => line.trimEnd())
@@ -453,6 +461,8 @@ function normalizeInspectionItemBlock(blockLines: string[], blockIndex: number):
   // "12.토너 통합보관(…)" + 기종별 여분 수량처럼 번호만 붙은 메모 블록은 기기 양식으로 바꾸지 않고 그대로 둔다
   // — 예전엔 빈 모델명·시리얼 칸을 만들고 아래 줄들을 버렸다(2026-09-16 아시아프라퍼티)
   if (isSpareNoteBlock(cleaned)) return cleaned;
+  // 청정기 블록은 복합기 칸(매수·토너잔량·폐통)으로 바꾸지 않는다 — 양식 불러오기 때 청정기가 복합기로 변하던 문제
+  if (isAirPurifierBlock(cleaned)) return normalizeAirPurifierItemBlock(blockLines, blockIndex);
 
   const titleLine = buildItemTitleLine(cleaned, blockIndex);
   const contentLines = stripConsumedTitleLine(cleaned);
@@ -3138,6 +3148,10 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
       <button type="button" onClick={() => { setEditing(null); setOpen(true); }} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800">
         <span className="min-w-0 whitespace-normal break-words leading-5">{labels[selected] || `${selected + 1}. (미상)`}</span><span className="shrink-0 text-[10px] text-slate-400">▾</span>
       </button>
+      {/* "(미상)"만 있으면 아직 기기 정보가 없는 것 — 수정이든 추가든 적으면 양식이 만들어진다고 알려 준다(2026-10-12) */}
+      {forms.length === 1 && /\(미상\)$/.test(labels[0] || `1. (미상)`) && (
+        <div className="mt-1.5 text-[10.5px] font-semibold leading-4 text-slate-500">아직 기기 정보가 없습니다 — 위 칸을 눌러 <b>수정</b>에 모델명·시리얼을 적거나 <b>＋ 추가</b>로 넣으면 점검 양식이 만들어집니다.</div>
+      )}
     </div>
 
     {open && <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setOpen(false)} role="dialog">
@@ -5772,6 +5786,8 @@ export default function App() {
   };
 
   const updateInspectionDevice = (index: number, info: DeviceInfo) => {
+    // 양식 글이 아직 없을 때(첫 화면의 "1. (미상)")는 수정도 추가처럼 새 점검 양식을 만든다 — 고쳐도 라벨이 안 바뀌어 헷갈리던 것(2026-10-12)
+    if (index === 0 && mode !== "blank-report" && !inspectionDeviceParts(buildResultText()).devices.length) { addInspectionDevice(info); return; }
     setItemForms((prev) => prev.map((form, i) => i === index ? { ...form, ...info, location: cleanDeviceLocation(info.location, index + 1) } : form));
     setSelectedItem(index);
   };

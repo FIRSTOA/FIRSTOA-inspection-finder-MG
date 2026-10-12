@@ -21,6 +21,7 @@ import { spareNeedItems, usageSpareAdvice } from "./spareAdvice";
 import { geocodeKR } from "./geocode";
 import { addressCore, mapQuery } from "./address";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
+import { useMembers } from "./authors";
 
 export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
@@ -30,6 +31,9 @@ export type MyPlanTicket = {
 };
 
 // 자동일정 생성 건은 분기점검 워킨맵에서 온 것 — 저장 유형(매월점검) 대신 실제 의미로 표시
+// 팀 일정의 사람별 색 — 범례와 마커가 같은 색(2026-10-12)
+const PEOPLE_COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#4f46e5", "#65a30d", "#ea580c"];
+
 function planTypeLabel(t: MyPlanTicket): string {
   if (t.source === "autoplan") return t.scheduleType === "AS" ? "재계약" : "분기점검";
   if (t.source === "workin") return t.scheduleType === "AS" ? "재계약" : (t.issue || "").startsWith("매월점검") ? "매월점검" : "분기점검"; // 워킨맵 [내 일정에 넣기] — 매월점검 워킨맵 건만 매월(2026-10-01)
@@ -49,6 +53,20 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
+  // 팀 일정 지도(2026-10-12): 내 일정 ↔ 팀(A~E) 전체. 사람별 색, 미배정은 점선, 범례에서 사람을 끄고 켠다
+  const [scope, setScope] = useState<"mine" | "team">("mine");
+  const [teamSel, setTeamSel] = useState("");
+  const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
+  const roster = useMembers();
+  const myTeam = useMemo(() => {
+    const t = String(roster.find((m) => m.name === author)?.team || "").toUpperCase();
+    if (/^[A-E]$/.test(t)) return t;
+    if (/CSS/.test(t)) return "E";
+    const count = new Map<string, number>();
+    tickets.filter((x) => x.assignee === author && /^[A-E]$/.test(x.team)).forEach((x) => count.set(x.team, (count.get(x.team) || 0) + 1));
+    return Array.from(count.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "C";
+  }, [roster, author, tickets]);
+  const teamShown = teamSel || myTeam;
   // 직접 추가(원문 붙여넣기) 모달 — 워킨맵에 없는 마감 방문 등을 내 일정에 넣는 유일한 길(2026-09-15)
   const [manual, setManual] = useState<{ text: string; team: string } | null>(null);
   const [flags, setFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
@@ -168,8 +186,12 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
 
   const myTickets = useMemo(() => tickets.filter((t) =>
     t.date === date && t.status !== "완료"
-    && (t.assignee === author || (includeUnassigned && !t.assignee))
-  ), [tickets, date, author, includeUnassigned]);
+    && (scope === "team" ? (teamShown === "전체" || t.team === teamShown) : (t.assignee === author || (includeUnassigned && !t.assignee)))
+  ), [tickets, date, author, includeUnassigned, scope, teamShown]);
+  const people = useMemo(() => Array.from(new Set(myTickets.map((t) => t.assignee).filter(Boolean))).sort(), [myTickets]);
+  const colorOf = useCallback((name: string) => PEOPLE_COLORS[Math.max(0, people.indexOf(name)) % PEOPLE_COLORS.length], [people]);
+  const markerStyle = useCallback((t: MyPlanTicket): { bg: string; fg: string; dashed: boolean } | undefined =>
+    scope === "team" ? (t.assignee ? { bg: colorOf(t.assignee), fg: "#fff", dashed: false } : { bg: "#ffffff", fg: "#334155", dashed: true }) : undefined, [scope, colorOf]);
 
   /**
    * 좌표는 "이 일정의 주소"가 1순위 — 업체명 매칭은 주소가 없을 때만.
@@ -208,6 +230,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
 
   // 순서: 고정(클릭 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃
   const ordered = useMemo(() => {
+    // 팀 일정은 동선이 아니라 사람별·시간순 — 범례에서 끈 사람은 뺀다
+    if (scope === "team") return myTickets.filter((t) => !hiddenPeople.has(t.assignee || "미배정")).sort((a, b) => (a.assignee || "힣").localeCompare(b.assignee || "힣") || (a.time || "").localeCompare(b.time || ""));
     const byId = new Map(myTickets.map((t) => [t.id, t]));
     const head = pinned.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
     const rest = myTickets.filter((t) => !pinned.includes(t.id));
@@ -234,7 +258,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       cursor = getGeo(next);
     }
     return [...route, ...noGeo];
-  }, [myTickets, pinned, getGeo]);
+  }, [myTickets, pinned, getGeo, scope, hiddenPeople]);
 
   // ── 지도: 카카오맵 우선, SDK 로드 실패(도메인 미등록 미리보기 등) 시 Leaflet 폴백 ──
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -296,8 +320,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     return out;
   }, [ordered, getGeo]);
 
-  const markerHtml = (i: number, isPinned: boolean) =>
-    `<div style="width:26px;height:26px;border-radius:50%;background:${isPinned ? "#2563eb" : "#0f172a"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`;
+  const markerHtml = (i: number, isPinned: boolean, style?: { bg: string; fg: string; dashed: boolean }) =>
+    `<div style="width:26px;height:26px;border-radius:50%;background:${style ? style.bg : isPinned ? "#2563eb" : "#0f172a"};color:${style ? style.fg : "#fff"};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px ${style?.dashed ? "dashed #64748b" : "solid #fff"};box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`;
   // 카카오 오버레이는 nowrap을 상속해 긴 제목이 지도 밖까지 한 줄로 뻗었다 — 줄바꿈을 명시하고
   // 업체명은 캘린더 제목 원문(구분·모델·마감 꼬리표 포함)이라 회사명만 잘라 쓴다
   const popupName = (vendor: string) => {
@@ -307,6 +331,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const popupHtml = (i: number, t: MyPlanTicket) =>
     `<div style="white-space:normal;word-break:keep-all;line-height:1.45;max-width:200px">`
     + `<b>${i + 1}. ${popupName(t.vendor)}</b><br/><span style="font-size:11px;color:#475569">${t.time || ""} ${planTypeLabel(t)}`
+    + `${scope === "team" ? `<br/>담당 ${t.assignee ? t.assignee.replace(/[<>&]/g, "") : "미배정"}` : ""}`
     + `${t.issue ? `<br/>${String(t.issue).replace(/[<>&]/g, "").slice(0, 50)}` : ""}</span></div>`;
 
   useEffect(() => {
@@ -320,11 +345,11 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         const g = displayGeo.get(t.id);
         if (!g) return;
         points.push([g.lat, g.lng]);
-        const icon = L.divIcon({ className: "", html: markerHtml(i, pinned.includes(t.id)), iconSize: [26, 26], iconAnchor: [13, 13] });
+        const icon = L.divIcon({ className: "", html: markerHtml(i, pinned.includes(t.id), markerStyle(t)), iconSize: [26, 26], iconAnchor: [13, 13] });
         const marker = L.marker([g.lat, g.lng], { icon }).addTo(layer).bindPopup(popupHtml(i, t));
         markerRef.current.set(t.id, marker);
       });
-      if (points.length >= 2) L.polyline(points, { color: "#2563eb", weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
+      if (scope === "mine" && points.length >= 2) L.polyline(points, { color: "#2563eb", weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
       if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 14 });
       return;
     }
@@ -343,7 +368,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       path.push(pos);
       bounds.extend(pos);
       const el = document.createElement("div");
-      el.innerHTML = markerHtml(i, pinned.includes(t.id));
+      el.innerHTML = markerHtml(i, pinned.includes(t.id), markerStyle(t));
       el.style.cursor = "pointer";
       el.onclick = () => {
         if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; }
@@ -359,13 +384,13 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       kakaoObjectsRef.current.push(overlay);
       kakaoMarkerRef.current.set(t.id, { pos, open: el.onclick as () => void });
     });
-    if (path.length >= 2) {
+    if (scope === "mine" && path.length >= 2) {
       const line = new kakao.maps.Polyline({ path, strokeWeight: 3, strokeColor: "#2563eb", strokeOpacity: 0.65, strokeStyle: "shortdash" });
       line.setMap(map);
       kakaoObjectsRef.current.push(line);
     }
     if (path.length) map.setBounds(bounds, 40, 40, 40, 40);
-  }, [engine, ordered, pinned, displayGeo]);
+  }, [engine, ordered, pinned, displayGeo, scope, markerStyle]);
 
   const kakaoMarkerRef = useRef<Map<string, { pos: KakaoNS; open: () => void }>>(new Map());
   const focusTicket = (id: string) => {
@@ -493,10 +518,14 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === kstDate() ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>오늘</button>
         <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === nextBusinessDay(kstDate()) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>내일</button>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-black text-slate-700 outline-none" />
-        <span className="text-xs font-black text-slate-500">{author}의 일정 {myTickets.length}건</span>
-        <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
+        <span className="flex rounded-full bg-slate-100 p-0.5">
+          {([["mine", "내 일정"], ["team", "팀 일정"]] as const).map(([v, label]) => <button key={v} type="button" onClick={() => setScope(v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${scope === v ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>)}
+        </span>
+        {scope === "team" && <span className="flex rounded-full bg-slate-100 p-0.5">{["A", "B", "C", "D", "E", "전체"].map((tm) => <button key={tm} type="button" onClick={() => setTeamSel(tm)} className={`rounded-full px-2 py-1 text-[11px] font-black ${teamShown === tm ? "bg-slate-900 text-white" : "text-slate-500"}`}>{tm === "전체" ? "전체" : `${tm}팀`}</button>)}</span>}
+        <span className="text-xs font-black text-slate-500">{scope === "team" ? `${teamShown === "전체" ? "전체" : `${teamShown}팀`} 일정 ${myTickets.length}건 · 배정 ${myTickets.filter((t) => t.assignee).length} · 미배정 ${myTickets.filter((t) => !t.assignee).length}` : `${author}의 일정 ${myTickets.length}건`}</span>
+        {scope === "mine" && <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
           <input type="checkbox" checked={includeUnassigned} onChange={(e) => setIncludeUnassigned(e.target.checked)} className="h-3.5 w-3.5 accent-blue-600" />미배정 포함
-        </label>
+        </label>}
         {onAddManual && (
           <button type="button" onClick={() => setManual({ text: "", team: "C" })} title="스케줄 원문을 붙여 넣어 내 일정에 추가 — 워킨맵에 없는 곳도 됩니다"
             className="rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700">＋ 직접 추가</button>
@@ -506,6 +535,14 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         <span className="ml-auto text-[10px] font-bold text-slate-400">[고정]을 누른 순서가 먼저, 나머지는 가까운 순 자동</span>
       </div>
 
+      {scope === "team" && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold">
+          <span className="text-[10px] font-black text-slate-400">사람</span>
+          {people.map((p) => { const off = hiddenPeople.has(p); const n = myTickets.filter((t) => t.assignee === p).length; return <button key={p} type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has(p)) next.delete(p); else next.add(p); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-200 bg-white text-slate-700"}`}><span className="h-2.5 w-2.5 rounded-full" style={{ background: colorOf(p) }} />{p} {n}</button>; })}
+          {myTickets.some((t) => !t.assignee) && (() => { const off = hiddenPeople.has("미배정"); const n = myTickets.filter((t) => !t.assignee).length; return <button type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has("미배정")) next.delete("미배정"); else next.add("미배정"); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-dashed border-slate-400 bg-white text-slate-600"}`}><span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-500 bg-white" />미배정 {n}</button>; })()}
+          <span className="ml-auto text-[10px] font-semibold text-slate-400">마커 색 = 사람 · 점선 = 미배정 · 누르면 숨김</span>
+        </div>
+      )}
       <div ref={mapElRef} className="h-[42vh] w-full overflow-hidden rounded-xl border border-slate-200" />
 
       <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -522,6 +559,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   <span className="min-w-0 truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
+                  {scope === "team" && <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black" style={t.assignee ? { background: colorOf(t.assignee), color: "#fff" } : { border: "1px dashed #94a3b8", color: "#475569" }}>{t.assignee || "미배정"}</span>}
                   {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
                 </span>
                 {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}

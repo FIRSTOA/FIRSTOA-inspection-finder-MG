@@ -23,7 +23,7 @@ export default function SupplyBackfill() {
       setReady(true);
       setCount(rows[0]?.id || 0);
       // 미정의 품목 — 사전에 없는 이름. 재고 탭에서 별칭을 넣고 [다시 맞추기]
-      const und = await selectRows<{ item: string; kind: string }>("supply_requests", "select=item,kind&item_std=eq.&limit=2000").catch(() => [] as Array<{ item: string; kind: string }>);
+      const und = await selectRows<{ item: string; kind: string }>("supply_requests", "select=item,kind&item_std=eq.&stage=neq.%EC%B7%A8%EC%86%8C&limit=2000").catch(() => [] as Array<{ item: string; kind: string }>);
       const m = new Map<string, { item: string; kind: string; n: number }>();
       und.forEach((r) => { const k = `${r.kind}|${r.item}`; m.set(k, { item: r.item, kind: r.kind, n: (m.get(k)?.n || 0) + 1 }); });
       setUndefinedItems(Array.from(m.values()).sort((a, b) => b.n - a.n).slice(0, 40));

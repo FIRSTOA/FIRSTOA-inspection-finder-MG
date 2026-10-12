@@ -15,7 +15,7 @@ import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import type { ContactChangeFormState } from "./contactChange";
 import { CATEGORY_SCHEMAS } from "./categoryForms";
 import { normRegion } from "./region";
-import { normalizeId as normId } from "./ids";
+import { normalizeId as normId, vendorMatchKey, vendorNameCore } from "./ids";
 import { inferBrand } from "./copierBrand";
 
 export const GAS_GET_URL =
@@ -317,20 +317,39 @@ export async function leaseAddressOf(vendor: string): Promise<string> {
   if (v.length < 2) return "";
   const enc = encodeURIComponent;
   const cols = enc("_업체명,_raw");
-  const pickAddress = (rows: Array<{ _raw?: Record<string, unknown> | null }>) => {
+  type Row = { _업체명?: string; _raw?: Record<string, unknown> | null };
+  const addressOf = (row: Row) => { const raw = (row._raw && typeof row._raw === "object" ? row._raw : {}) as Record<string, unknown>; return String(raw["주소(실납품주소,도로명주소)"] ?? raw["주소"] ?? "").trim(); };
+  // 부분 일치로 찾을 때는 이름 비교키가 서로 앞부분으로 맞는 행만(“법무법인”으로 찾아 다른 법무법인 주소가 붙지 않게)
+  const pickAddress = (rows: Row[], mustMatch?: string) => {
+    const want = mustMatch ? vendorMatchKey(mustMatch) : "";
     for (const row of rows) {
-      const raw = (row._raw && typeof row._raw === "object" ? row._raw : {}) as Record<string, unknown>;
-      const address = String(raw["주소(실납품주소,도로명주소)"] ?? raw["주소"] ?? "").trim();
+      if (want) { const k = vendorMatchKey(String(row._업체명 || "")); if (!k || !(k.startsWith(want) || want.startsWith(k))) continue; }
+      const address = addressOf(row);
       if (address) return address;
     }
     return "";
   };
+  // 일정 제목에는 메모가 붙는다("법무법인 수헌 3년+유지보수혜택 …") — 업체 이름만 떼어 정확 → 부분 → 공백 뗀 이름 순으로(2026-10-12)
+  const core = vendorNameCore(v);
+  const names = Array.from(new Set([v, core, core.split(" ")[0]].filter((n) => n && n.length >= 2)));
   try {
-    const exact = await selectRows<{ _raw?: Record<string, unknown> | null }>("vendor_info", `select=${cols}&${enc("_업체명")}=eq.${enc(v)}&limit=20`);
-    const hit = pickAddress(exact);
-    if (hit) return hit;
-    const like = await selectRows<{ _raw?: Record<string, unknown> | null }>("vendor_info", `select=${cols}&${enc("_업체명")}=ilike.*${enc(v.slice(0, 8))}*&limit=20`);
-    return pickAddress(like);
+    for (const name of names) {
+      const exact = await selectRows<Row>("vendor_info", `select=${cols}&${enc("_업체명")}=eq.${enc(name)}&limit=20`);
+      const hit = pickAddress(exact);
+      if (hit) return hit;
+    }
+    for (const name of names) {
+      const like = await selectRows<Row>("vendor_info", `select=${cols}&${enc("_업체명")}=ilike.*${enc(name.slice(0, 12))}*&limit=60`);
+      const hit = pickAddress(like, core);
+      if (hit) return hit;
+    }
+    const squashed = core.replace(/\s+/g, "");
+    if (squashed !== core && squashed.length >= 2) {
+      const like = await selectRows<Row>("vendor_info", `select=${cols}&${enc("_업체명")}=ilike.*${enc(squashed.slice(0, 12))}*&limit=60`);
+      const hit = pickAddress(like, core);
+      if (hit) return hit;
+    }
+    return "";
   } catch {
     return "";
   }

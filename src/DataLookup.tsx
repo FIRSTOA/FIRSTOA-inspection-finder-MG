@@ -74,6 +74,17 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc"); // 최신순이 기본 — 오래된 것부터 훑을 때만 바꾼다(2026-09-16 요청)
   // 묶음 탭을 누르면 그 묶음에서 마지막으로 보던 항목으로(없으면 첫 항목) — 2단 선택(묶음 → 항목)
   const lastInGroup = useRef<Record<string, string>>({});
+  // 항목 고르기(2026-10-12): PC는 왼쪽 세로 목록(전부 보임), 휴대폰은 단추 → 바닥 창. 최근 본 항목은 칩으로 한 번에
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [recentKeys, setRecentKeys] = useState<string[]>(() => { try { return (JSON.parse(localStorage.getItem("cs_lookup_recent_v1") || "[]") as string[]).filter((k) => LOOKUP_CATEGORIES.some((c) => c.key === k)); } catch { return []; } });
+  const pick = (key: string) => {
+    const cat = LOOKUP_CATEGORIES.find((c) => c.key === key);
+    if (!cat) return;
+    lastInGroup.current[cat.group] = key;
+    setCategoryKey(key);
+    setPickerOpen(false);
+    setRecentKeys((cur) => { const next = [key, ...cur.filter((k) => k !== key)].slice(0, 6); try { localStorage.setItem("cs_lookup_recent_v1", JSON.stringify(next)); } catch { /* 무시 */ } return next; });
+  };
   const [team, setTeam] = useState("전체");
   // 팀 아래 인원 필터(2026-10-08) — 팀을 고르면 그 팀 사람 단추가 나오고 사람별 건수가 같이 보인다(PC확장성 개인별 실적)
   const [member, setMember] = useState("");
@@ -222,44 +233,53 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       .filter(([, value]) => value.trim());
   }, [detail]);
 
+  // 묶음별 항목 목록 — PC 왼쪽 세로 목록(compact=false)과 휴대폰 바닥 창(compact=true)이 같이 쓴다
+  const groupedList = (compact: boolean) => LOOKUP_GROUPS.map((group) => (
+    <div key={group}>
+      <div className={`px-3 text-[10px] font-black tracking-wide text-slate-400 ${compact ? "mb-1 mt-3" : "bg-slate-50 py-1.5"}`}>{group}</div>
+      <div className={compact ? "grid grid-cols-2 gap-1.5 px-3" : ""}>
+        {LOOKUP_CATEGORIES.filter((c) => c.group === group).map((item) => (
+          <button key={item.key} type="button" onClick={() => pick(item.key)}
+            className={compact
+              ? `rounded-lg border px-3 py-2 text-left text-[13px] font-black ${item.key === categoryKey ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`
+              : `flex w-full items-center px-3 py-1.5 text-left text-[12.5px] font-bold transition ${item.key === categoryKey ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  ));
+
   return (
-    <div className="space-y-4">
+    <div className="lg:flex lg:items-start lg:gap-4">
+      <aside className="hidden lg:sticky lg:top-3 lg:block lg:w-52 lg:shrink-0">
+        <nav className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{groupedList(false)}</nav>
+      </aside>
+      <div className="min-w-0 flex-1 space-y-4">
       {/* 카테고리 — 그룹별로 묶어 한 줄씩 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
-          <p className="text-[11px] font-semibold text-slate-400">기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다.</p>
-          <div className="ml-auto flex items-center gap-2">
-            <button type="button" onClick={() => void fetchPage(0)} title="새로고침"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50">
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            </button>
-          </div>
+      {/* 휴대폰·태블릿: 현재 항목 단추 + 최근 칩. PC(lg)에서는 왼쪽 목록이 있어 숨긴다 */}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:hidden">
+        <div className="flex items-center gap-2 px-3 py-2">
+          <button type="button" onClick={() => setPickerOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left">
+            <span className="shrink-0 text-[10.5px] font-black text-slate-400">{category.group}</span>
+            <span className="min-w-0 truncate text-[14px] font-black text-slate-900">{category.label}</span>
+            <span className="ml-auto shrink-0 text-[11px] font-bold text-slate-400">항목 고르기 ▾</span>
+          </button>
+          <button type="button" onClick={() => void fetchPage(0)} title="새로고침" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
         </div>
-        <div className="p-3">
-          {/* 1단 — 묶음. 좁은 화면에서는 옆으로 민다 */}
-          <div className="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {LOOKUP_GROUPS.map((group) => {
-              const on = group === category.group;
-              const n = LOOKUP_CATEGORIES.filter((item) => item.group === group).length;
-              return (
-                <button key={group} type="button" onClick={() => { lastInGroup.current[category.group] = categoryKey; setCategoryKey(lastInGroup.current[group] || LOOKUP_CATEGORIES.find((item) => item.group === group)?.key || categoryKey); }}
-                  className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-black transition ${on ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                  {group} <span className={`ml-0.5 text-[10px] tabular-nums ${on ? "text-slate-300" : "text-slate-400"}`}>{n}</span>
-                </button>
-              );
-            })}
+        {recentKeys.filter((k) => k !== categoryKey).length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto border-t border-slate-100 px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <span className="shrink-0 text-[10px] font-black text-slate-400">최근</span>
+            {recentKeys.filter((k) => k !== categoryKey).slice(0, 5).map((k) => { const c = LOOKUP_CATEGORIES.find((x) => x.key === k); return c ? <button key={k} type="button" onClick={() => pick(k)} className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11.5px] font-black text-slate-600">{c.label}</button> : null; })}
           </div>
-          {/* 2단 — 그 묶음의 항목 */}
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5">
-            {LOOKUP_CATEGORIES.filter((item) => item.group === category.group).map((item) => (
-              <button key={item.key} type="button" onClick={() => { lastInGroup.current[item.group] = item.key; setCategoryKey(item.key); }}
-                className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-black transition ${item.key === categoryKey ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:border-slate-400 hover:text-slate-900"}`}>
-                {item.label}
-              </button>
-            ))}
-            {category.note && <span className="ml-auto hidden text-[11px] font-semibold text-slate-400 lg:inline">{category.note}</span>}
-          </div>
-        </div>
+        )}
+      </section>
+      {/* PC: 현재 항목 이름·설명·새로고침 한 줄 */}
+      <section className="hidden items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm lg:flex">
+        <span className="shrink-0 text-[10.5px] font-black text-slate-400">{category.group}</span>
+        <span className="shrink-0 text-[15px] font-black text-slate-900">{category.label}</span>
+        <span className="min-w-0 truncate text-[11px] font-semibold text-slate-400">{category.note || "기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다."}</span>
+        <button type="button" onClick={() => void fetchPage(0)} title="새로고침" className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
       </section>
 
       {/* 전용 보드가 있는 카테고리: CS체크·정렬·수량조절 등 기능이 범용 표보다 풍부해 그대로 흡수 */}
@@ -590,6 +610,15 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               )}
               <button type="button" onClick={() => setDetail(null)} className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white transition hover:bg-slate-800">닫기</button>
             </div>
+          </div>
+        </div>
+      )}
+      </div>
+      {pickerOpen && (
+        <div className="fixed inset-0 z-[200] flex items-end bg-black/40 lg:hidden" onMouseDown={() => setPickerOpen(false)}>
+          <div className="max-h-[82vh] w-full overflow-y-auto rounded-t-2xl bg-white pb-6 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3"><b className="text-[14px] text-slate-900">기록 조회 항목</b><button type="button" onClick={() => setPickerOpen(false)} className="text-[12px] font-black text-slate-500">닫기</button></div>
+            {groupedList(true)}
           </div>
         </div>
       )}

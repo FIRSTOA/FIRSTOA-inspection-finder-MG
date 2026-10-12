@@ -109,7 +109,7 @@ type UndefRow = Record<string, unknown> & { id: number; kind: "부품" | "자가
  */
 export async function renormalizeUndefined(onProgress?: (done: number, total: number) => void): Promise<{ checked: number; fixed: number }> {
   const catalog = await loadSupplyCatalog(true);
-  const rows = await selectAllRowsFast<UndefRow>("supply_requests", "select=*&item_std=eq.&order=id.asc", 1000, 2);
+  const rows = await selectAllRowsFast<UndefRow>("supply_requests", "select=*&item_std=eq.&stage=neq.%EC%B7%A8%EC%86%8C&order=id.asc", 1000, 2);   // 취소(삭제)된 행은 건너뛴다
   const todo = rows.map((r) => ({ r, list: normalizeItems([{ kind: r.kind, item: r.item, qty: r.qty, status: String(r.status || ""), warranty: "", counter: "", expected: "", raw: String(r.raw || "") }], catalog, r.model) }))
     .filter((x) => x.list.length && x.list[0].itemStd);
   let fixed = 0, done = 0;

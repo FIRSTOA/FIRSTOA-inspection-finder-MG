@@ -1,4 +1,6 @@
 import { addUsage, emptyUsage, loadPrices, logUsage, priceUsage } from "../_shared/ai-usage.ts";
+import GUIDE_PAGES from "../_shared/app-guide.json" with { type: "json" };
+import { APP_GUIDE_EXTRA } from "../_shared/app-guide-extra.ts";
 /**
  * 전체 데이터에 물어보기 — "C팀 미수 중 CS가 체크할 곳", "10월 초과 업체 중 N등급" 같은 묶음 질문 (2026-10-10)
  *
@@ -16,12 +18,17 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "https://kkdiihazgzesbqxjyt
 const ANON = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
 // 허용 표·칸 — 모델은 이 밖을 볼 수 없다. desc 는 모델에게 주는 설명(값 형식·주의)
-type Cat = { desc: string; cols: string[]; hidden?: string; date?: string; team?: string; grade?: string; vendor: string };
+type Cat = { desc: string; cols: string[]; hidden?: string; date?: string; team?: string; grade?: string; vendor: string; long?: boolean };
 const CATALOG: Record<string, Cat> = {
+  // ── 지식(복합기 기술) — 2026-10-12: "X3220 세로줄 원인", "묻어남 어떻게 처리" 같은 질문의 근거 ──
+  copier_playbook: { desc: "복합기 증상별 원인·점검 순서·부품 플레이북(브랜드·시리즈·증상 단위 145편, 처리이력에서 뽑은 초안). brand 삼성/제록스/신도/교세라…, series MX4·X3220·C2060…, symptom '토너·드럼'·'급지·걸림'·'화질'…, title, summary 한 줄 결론, causes JSON[{cause, parts, share(높음/중간/낮음), steps[]}], tips, case_count 근거 사례 수, status 초안/확정. 기술 질문은 series·symptom·title·summary 를 ilike 로 찾는다(기종 숫자만으로: series=ilike.*3220*).", vendor: "title", date: "updated_at", long: true,
+    cols: ["id", "brand", "series", "symptom", "title", "summary", "causes", "tips", "case_count", "status", "updated_at"] },
+  copier_notes: { desc: "복합기 처리이력·학습 노트(기종별 실제 처리 사례 13,000건). brand, model 기종(ilike), kind '처리이력'|'학습', title 증상 한 줄, content '증상/처리/지역/레벨/업체' 글, author 처리자, created_at. 증상 낱말로 title·content 를 ilike(예: content=ilike.*세로줄*), 기종으로 model=ilike.*3220*. 최신순 20~40건만 읽고 공통 처리법을 뽑는다.", vendor: "model", date: "created_at", long: true,
+    cols: ["id", "brand", "model", "kind", "title", "content", "author", "created_at"] },
   vendor_notes: { desc: "업체 특이사항(현장 메모). work_start 출근시간은 '9시'·'9시반'·'11시 이후' 같은 글, lunch_time 점심시간도 글('12~1시'), note 는 주차·방문 요령 메모. 글이라 ilike 로 찾고(예: 9시대는 work_start=ilike.*9시* 뒤 사람이 읽어 거른다), 팀은 vendor_team 으로. '출근 시간이 X인 곳'·'점심시간'·'특이사항' 질문은 이 표.", vendor: "vendor", date: "updated_at",
     cols: ["id", "vendor", "work_start", "lunch_time", "note", "author", "pinned", "created_at", "updated_at"] },
-  supply_requests: { desc: "부품 신청·자가(여분) 신청 — 점검·AS 양식의 신청 칸을 품목 단위로. kind '부품'|'자가', item 품목(드럼·현상기·K 토너·픽업롤러), qty 수량(글), status 출고여부, warranty 보증, counter 교체 전 카운터, model/serial/asset 기기, team A~E, author 작성자, request_date 'YYYY-MM-DD'. '여분 몇 개'·'부품 뭐 신청'·'드럼 자주 들어간 기기' 질문은 이 표.", vendor: "vendor", date: "request_date", team: "team",
-    cols: ["id", "request_date", "kind", "vendor", "team", "author", "model", "serial", "asset", "item", "qty", "status", "warranty", "counter", "expected", "returned_at", "return_note"] },
+  supply_requests: { desc: "부품 신청·자가(여분) 신청 — 점검·AS 양식의 신청 칸을 품목 단위로. kind '부품'|'자가', item 적은 그대로, item_std 표준 품목(토너 K·폐토너통·드럼 K·현상제 C…), qty 수량, stage 신청/지급/반납/불량, issued_at 출고 시각(운영지원), status 출고여부 글, model/serial/asset 기기, team A~E, author 작성자, request_date 'YYYY-MM-DD'. '여분 몇 개'·'부품 뭐 신청'·'드럼 자주 들어간 기기'·'출고 안 된 것' 질문은 이 표. 취소된 행은 빠져 있다.", vendor: "vendor", date: "request_date", team: "team", hidden: "stage=neq.%EC%B7%A8%EC%86%8C",
+    cols: ["id", "request_date", "kind", "vendor", "team", "author", "model", "serial", "asset", "item", "item_std", "qty", "stage", "issued_at", "issued_by", "status", "warranty", "counter", "expected", "returned_at", "return_note"] },
   misu: { desc: "미수(밀린 임대료). 입력일은 'YYYY-MM-DD 0:00' 텍스트. 지역 칸은 대부분 비어 있어 팀은 vendor_team 으로 찾는다. 등급 칸도 비거나 섞여 있다.", vendor: "_업체명", date: "입력일", team: "지역", grade: "등급", hidden: "_hidden=not.is.true",
     cols: ["id", "입력일", "_업체명", "등급", "지역", "미수개월", "미수잔액", "실제 개월수", "실제 잔액", "관리담당자", "업체담당자", "휴대폰번호", "입금약속일", "방문내용", "고객반응", "약속일", "후속담당자", "특이사항", "최종상태" ] },
   overage: { desc: "초과료(기본 매수 초과 청구). 날짜 'YYYY-MM-DD'. 팀 칸이 없다 → vendor_team. 등급 N/NN/S/SS/V. 마감방식 분기/매월/단순마감/반기/1년누적.", vendor: "_업체명", date: "날짜", grade: "등급", hidden: "_hidden=not.is.true",
@@ -77,7 +84,8 @@ async function rest(path: string) {
   if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 160)}`);
   return await res.json();
 }
-const trim = (v: unknown) => { const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); return s.length > 140 ? s.slice(0, 140) + "…" : s; };
+const trimTo = (v: unknown, cap: number) => { const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); return s.length > cap ? s.slice(0, cap) + "…" : s; };
+const trim = (v: unknown) => trimTo(v, 140);
 
 async function queryRows(args: Record<string, unknown>) {
   const table = String(args.table || "");
@@ -97,11 +105,13 @@ async function queryRows(args: Record<string, unknown>) {
   const order = String(args.order || ""); const [oc, od] = order.split(".");
   if (oc && cat.cols.includes(oc)) parts.push(`order=${encodeURIComponent(col(oc))}.${od === "asc" ? "asc" : "desc"}`);
   else if (cat.date) parts.push(`order=${encodeURIComponent(col(cat.date))}.desc`);
-  const limit = Math.min(300, Math.max(1, Number(args.limit) || 200));
+  // 지식 표(플레이북·처리이력)는 글이 길어 행은 적게, 글은 길게 돌려준다
+  const limit = Math.min(cat.long ? 40 : 300, Math.max(1, Number(args.limit) || (cat.long ? 20 : 200)));
   parts.push(`limit=${limit}`);
   try {
     const rows = await rest(`${table}?${parts.join("&")}`) as Record<string, unknown>[];
-    return { table, count: rows.length, truncated: rows.length >= limit, rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, trim(v)]))) };
+    const cap = cat.long ? 1600 : 140;
+    return { table, count: rows.length, truncated: rows.length >= limit, rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, trimTo(v, cap)]))) };
   } catch (e) { return { error: String((e as Error).message) }; }
 }
 
@@ -140,7 +150,22 @@ async function teamMembers(args: Record<string, unknown>) {
   } catch (e) { return { error: String((e as Error).message) }; }
 }
 
+/** 앱 사용설명서(public/guide 21편 + 2026-10 변경분) — topic 낱말로 맞는 편 최대 3개 */
+type GuidePage = { key: string; title: string; text: string };
+function appGuide(args: Record<string, unknown>) {
+  const topic = String(args.topic || "").trim();
+  const pages: GuidePage[] = [...(GUIDE_PAGES as GuidePage[]), { key: "recent", title: "2026년 10월 추가·변경(최신)", text: APP_GUIDE_EXTRA }];
+  const words = topic.split(/[\s,·/?？]+/).map((w) => w.replace(/(은|는|이|가|을|를|에서|으로|로|의|도)$/, "")).filter((w) => w.length >= 2);
+  const score = (p: GuidePage) => words.reduce((n, w) => n + (p.title.includes(w) ? 8 : 0) + Math.min(20, p.text.split(w).length - 1), 0);
+  const picked = words.length ? pages.map((p) => ({ p, s: score(p) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 3).map((x) => x.p) : [];
+  const list = pages.map((p) => `${p.key}: ${p.title}`).join("\n");
+  if (!picked.length) return { pages: list, note: "topic 에 핵심 낱말(예: '자가 반납', '마감 문자', '워킨맵 라벨')을 주면 그 설명서 본문을 돌려줍니다. 최신 변경은 key 'recent'.", recent: APP_GUIDE_EXTRA.slice(0, 7000) };
+  return { pages: picked.map((p) => ({ key: p.key, title: p.title, text: p.text.slice(0, 9000) })), all: list };
+}
+
 const TOOLS = [
+  { type: "function", name: "app_guide", description: "FIELD 앱(이 프로젝트)의 사용설명서 21편과 2026년 10월 변경분. '앱에서 어떻게 해', '어느 탭에서', '자가 반납 절차', '마감 문자 자동 수집', '재고 기종', '워킨맵 라벨' 같은 사용법·절차·구조 질문이면 먼저 부른다. topic 에 핵심 낱말을 띄어쓰기로.",
+    parameters: { type: "object", properties: { topic: { type: "string", description: "관심 주제 낱말(예: '자가 반납 사진')" } } } },
   { type: "function", name: "team_members", description: "팀(A~E, E=CSS·지방)의 현재 인원 명단. '팀원별로 몇 건씩' 같은 사람별 집계를 할 때 먼저 불러 0건인 사람도 넣는다. team 을 비우면 전체.",
     parameters: { type: "object", properties: { team: { type: "string" } } } },
   { type: "function", name: "query_rows", description: "허용된 표에서 조건으로 행을 읽는다(읽기 전용). 날짜 칸은 텍스트라 gte/lt 로 'YYYY-MM-01' ~ 다음 달 1일로 자른다. ilike 는 부분 일치.",
@@ -164,6 +189,9 @@ const INSTRUCTION = `너는 복합기 렌탈·IT 유지보수 회사 "퍼스트�
 - 같은 업체가 여러 행이면 업체 단위로 묶어 최신 행 기준으로 말한다.
 - 답 형식: 첫 줄 결론(몇 곳, 기준). 그 아래 목록을 "· 업체명 — 핵심 숫자/상태 [출처 날짜]"로 최대 40줄. 마지막에 기준과 빠졌을 수 있는 것 한 줄. 존댓말. 전화번호는 질문이 연락처를 물을 때만.
 - 안내 문구·문자 초안을 요청하면 목록 아래에 바로 쓸 수 있는 문구를 한 벌 적는다(업체명 자리는 {업체명}).
+- 복합기 기술 질문("X3220 세로줄 원인", "토너 묻어남 어떻게 처리", "기종별 자주 터지는 증상")은 copier_playbook(증상별 원인·점검 순서·부품 — series/symptom/title/summary ilike)을 먼저 보고 copier_notes(실제 처리이력 — model/title/content ilike, 최신순 20~40건)로 뒷받침해 답한다. 답은 "가능한 원인(많은 순) → 현장 점검 순서 → 교체 부품 → 실제 사례 n건(날짜·처리자·한 줄)" 꼴로, 사례가 없으면 플레이북 초안임을 밝힌다. 안전·전원 관련 작업은 전원 차단을 먼저 적는다.
+- 이 앱(FIELD)·업무 절차·"어느 탭에서", "어떻게 해" 질문은 app_guide 도구(topic 에 핵심 낱말)로 설명서를 읽고 그대로 답한다. 설명서에 없는 기능은 없다고 말한다. 2026년 10월에 바뀐 것(자가·부품 신청, 마감 목록 자동 수집, 기록 조회 묶음, 재고 기종, 팀 일정 지도)은 key 'recent' 에 있다.
+- 회사·팀·사람 질문은 team_members 와 표에서 확인한 것만. 모르는 것은 모른다고 한다.
 - 그림(카드·리포트·포스터·안내문)을 "이미지로" 만들어 달라고 하면: 마크다운 코드블록 \`\`\`svg 안에 자체 완결 SVG 하나를 쓴다 — width="1080" height="1350"(세로) 또는 1080×1080, 같은 viewBox, 외부 폰트·이미지·스크립트·링크 없음, font-family="Pretendard, Apple SD Gothic Neo, Malgun Gothic, Noto Sans KR, sans-serif", 글자 크기 22 이상, 한 줄 28자 이내로 상자 밖으로 안 나가게, 긴 주소는 두 줄로. 회사명은 "퍼스트전산"(영문 쓰지 않음). 내용(업체명·기기·주소·증상·날짜)은 기록에 있는 것만. 코드블록 아래에 함께 보낼 문자 문구를 3줄 이내로 한 문단 쓴다. 앱이 그 SVG 를 그림으로 바꿔 저장·복사·문자(MMS) 전송 단추를 보여 주므로 "저장하세요" 같은 설명은 쓰지 않는다.`;
 
 Deno.serve(async (req) => {
@@ -200,7 +228,7 @@ Deno.serve(async (req) => {
       for (const call of fnCalls) {
         let args: Record<string, unknown> = {};
         try { args = JSON.parse(call.arguments || "{}"); } catch { /* 빈 인자 */ }
-        const result = call.name === "query_rows" ? await queryRows(args) : call.name === "vendor_team" ? await vendorTeam(args) : call.name === "team_members" ? await teamMembers(args) : { error: "모르는 도구" };
+        const result = call.name === "query_rows" ? await queryRows(args) : call.name === "vendor_team" ? await vendorTeam(args) : call.name === "team_members" ? await teamMembers(args) : call.name === "app_guide" ? appGuide(args) : { error: "모르는 도구" };
         calls.push(`${call.name}(${JSON.stringify(args).slice(0, 160)}) → ${"error" in result ? result.error : "count" in result ? `${result.count}행` : "ok"}`);
         if ("rows" in result && Array.isArray(result.rows) && result.rows.length) { lastRows = result.rows as Record<string, unknown>[]; lastTable = String(result.table || ""); }
         input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result).slice(0, 60000) });
