@@ -33,6 +33,9 @@ export type MyPlanTicket = {
 // 자동일정 생성 건은 분기점검 워킨맵에서 온 것 — 저장 유형(매월점검) 대신 실제 의미로 표시
 // 팀 일정의 사람별 색 — 범례와 마커가 같은 색(2026-10-12)
 const PEOPLE_COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#4f46e5", "#65a30d", "#ea580c"];
+/** 같은 id 가 두 번 들어오면 React 가 자식을 복제해 한 일정의 주소칸이 20번 보이는 식으로 깨진다(2026-10-12 법무법인 수헌) — 목록·고정 순서는 항상 id 로 한 번만 */
+const dedupeById = <T extends { id: string }>(list: T[]): T[] => { const seen = new Set<string>(); return list.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true))); };
+const isInspectionPlan = (t: MyPlanTicket) => /점검/.test(planTypeLabel(t)) || /점검/.test(t.scheduleType || "");
 
 function planTypeLabel(t: MyPlanTicket): string {
   if (t.source === "autoplan") return t.scheduleType === "AS" ? "재계약" : "분기점검";
@@ -49,7 +52,7 @@ function distKm(a: Geo, b: Geo): number {
   return Math.sqrt(Math.pow((a.lat - b.lat) * 111, 2) + Math.pow((a.lng - b.lng) * 88, 2));
 }
 
-export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove, onDefer, onAddManual, onAddress }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void; onDefer?: (ticket: MyPlanTicket, newDate: string) => void; onAddManual?: (entries: ManualScheduleEntry[], opts: { date: string; team: string }) => void; onAddress?: (ticket: MyPlanTicket, address: string) => void }) {
+export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onLoadForm, onFieldDirect, onRemove, onDefer, onAddManual, onAddress, onAssign }: { tickets: MyPlanTicket[]; author: string; onSelfRequest?: (text: string) => void; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onFieldDirect?: (ticket: MyPlanTicket) => void; onRemove?: (ticket: MyPlanTicket) => void; onDefer?: (ticket: MyPlanTicket, newDate: string) => void; onAddManual?: (entries: ManualScheduleEntry[], opts: { date: string; team: string }) => void; onAddress?: (ticket: MyPlanTicket, address: string) => void; onAssign?: (ticket: MyPlanTicket, assignee: string) => void }) {
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [geoByKey, setGeoByKey] = useState<Map<string, Geo>>(new Map());
   const [includeUnassigned, setIncludeUnassigned] = useState(false);
@@ -57,6 +60,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const [scope, setScope] = useState<"mine" | "team">("mine");
   const [teamSel, setTeamSel] = useState("");
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
+  const [showInspections, setShowInspections] = useState(false);   // 팀 일정은 필수 일정(AS·익일AS·납품…)만 — 점검은 켜야 보인다
   const roster = useMembers();
   const myTeam = useMemo(() => {
     const t = String(roster.find((m) => m.name === author)?.team || "").toUpperCase();
@@ -75,7 +79,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const orderKey = `__order__:${date}`;
   const [pinned, setPinned] = useState<string[]>([]);
   useEffect(() => {
-    try { setPinned(JSON.parse(localStorage.getItem(storageKey) || "[]")); } catch { setPinned([]); }
+    try { setPinned(Array.from(new Set((JSON.parse(localStorage.getItem(storageKey) || "[]") as unknown[]).map(String)))); } catch { setPinned([]); }
     if (!author.trim()) return;
     let alive = true;
     selectRows<{ memo: string }>("plan_memos", `select=memo&author=eq.${encodeURIComponent(author)}&ticket_id=eq.${encodeURIComponent(orderKey)}&limit=1`)
@@ -83,7 +87,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         if (!alive || !rows.length) return;
         try {
           const ids = JSON.parse(rows[0].memo || "[]");
-          if (Array.isArray(ids)) { setPinned(ids.map(String)); localStorage.setItem(storageKey, JSON.stringify(ids)); }
+          if (Array.isArray(ids)) { const uniq = Array.from(new Set(ids.map(String))); setPinned(uniq); localStorage.setItem(storageKey, JSON.stringify(uniq)); }
         } catch { /* 깨진 값은 무시 */ }
       })
       .catch(() => undefined);
@@ -184,10 +188,15 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     void getVendorFlagsBatch(vendors).then(setFlags).catch(() => {});
   }, [tickets]);
 
-  const myTickets = useMemo(() => tickets.filter((t) =>
+  const myTickets = useMemo(() => dedupeById(tickets.filter((t) =>
     t.date === date && t.status !== "완료"
-    && (scope === "team" ? (teamShown === "전체" || t.team === teamShown) : (t.assignee === author || (includeUnassigned && !t.assignee)))
-  ), [tickets, date, author, includeUnassigned, scope, teamShown]);
+    && (scope === "team" ? ((teamShown === "전체" || t.team === teamShown) && (showInspections || !isInspectionPlan(t))) : (t.assignee === author || (includeUnassigned && !t.assignee)))
+  )), [tickets, date, author, includeUnassigned, scope, teamShown, showInspections]);
+  // 배정 후보 — 나 먼저, 그 팀 사람들(E 팀은 CSS), 팀장
+  const assignOptions = useMemo(() => {
+    const names = roster.filter((m) => m.active && m.name !== author && (teamShown === "전체" ? /^[A-E]$|CSS|팀장/.test(m.team) : (m.team === teamShown || m.team === "팀장" || (teamShown === "E" && /CSS/.test(m.team))))).map((m) => m.name);
+    return author ? [author, ...names] : names;
+  }, [roster, author, teamShown]);
   const people = useMemo(() => Array.from(new Set(myTickets.map((t) => t.assignee).filter(Boolean))).sort(), [myTickets]);
   const colorOf = useCallback((name: string) => PEOPLE_COLORS[Math.max(0, people.indexOf(name)) % PEOPLE_COLORS.length], [people]);
   const markerStyle = useCallback((t: MyPlanTicket): { bg: string; fg: string; dashed: boolean } | undefined =>
@@ -257,7 +266,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       route.push(next);
       cursor = getGeo(next);
     }
-    return [...route, ...noGeo];
+    return dedupeById([...route, ...noGeo]);
   }, [myTickets, pinned, getGeo, scope, hiddenPeople]);
 
   // ── 지도: 카카오맵 우선, SDK 로드 실패(도메인 미등록 미리보기 등) 시 Leaflet 폴백 ──
@@ -328,11 +337,14 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     const clean = fieldTicketVendor(vendor).vendor.trim() || String(vendor || "").replace(/_x000d_|\r|\n/g, " ").trim();
     return (clean.length > 26 ? `${clean.slice(0, 26)}…` : clean).replace(/[<>&]/g, "");
   };
-  const popupHtml = (i: number, t: MyPlanTicket) =>
-    `<div style="white-space:normal;word-break:keep-all;line-height:1.45;max-width:200px">`
-    + `<b>${i + 1}. ${popupName(t.vendor)}</b><br/><span style="font-size:11px;color:#475569">${t.time || ""} ${planTypeLabel(t)}`
-    + `${scope === "team" ? `<br/>담당 ${t.assignee ? t.assignee.replace(/[<>&]/g, "") : "미배정"}` : ""}`
-    + `${t.issue ? `<br/>${String(t.issue).replace(/[<>&]/g, "").slice(0, 50)}` : ""}</span></div>`;
+  const popupHtml = (i: number, t: MyPlanTicket) => {
+    const esc = (v: string) => String(v || "").replace(/[<>&]/g, "");
+    const issue = esc(t.issue || "").replace(/\s+/g, " ").trim();
+    const line2 = [t.time, planTypeLabel(t), scope === "team" ? `담당 ${t.assignee ? esc(t.assignee) : "미배정"}` : ""].filter(Boolean).join(" · ");
+    return `<div style="white-space:normal;word-break:keep-all;line-height:1.45;max-width:280px;min-width:180px">`
+      + `<b>${i + 1}. ${popupName(t.vendor)}</b><br/><span style="font-size:11px;color:#475569">${line2}</span>`
+      + `${issue ? `<br/><span style="font-size:11px;color:#64748b">${issue.slice(0, 70)}${issue.length > 70 ? "…" : ""}</span>` : ""}</div>`;
+  };
 
   useEffect(() => {
     if (engine === "leaflet") {
@@ -373,7 +385,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       el.onclick = () => {
         if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; }
         const box = document.createElement("div");
-        box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:220px;white-space:normal;word-break:keep-all";
+        box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:300px;white-space:normal;word-break:keep-all";
         box.innerHTML = popupHtml(i, t);
         infoOverlay = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: 1, zIndex: 30 });
         infoOverlay.setMap(map);
@@ -522,6 +534,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           {([["mine", "내 일정"], ["team", "팀 일정"]] as const).map(([v, label]) => <button key={v} type="button" onClick={() => setScope(v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${scope === v ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>)}
         </span>
         {scope === "team" && <span className="flex rounded-full bg-slate-100 p-0.5">{["A", "B", "C", "D", "E", "전체"].map((tm) => <button key={tm} type="button" onClick={() => setTeamSel(tm)} className={`rounded-full px-2 py-1 text-[11px] font-black ${teamShown === tm ? "bg-slate-900 text-white" : "text-slate-500"}`}>{tm === "전체" ? "전체" : `${tm}팀`}</button>)}</span>}
+        {scope === "team" && <button type="button" onClick={() => setShowInspections((v) => !v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${showInspections ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`} title="팀 일정은 AS·익일AS·납품 같은 필수 일정만 보입니다. 점검(매월·분기)까지 보려면 켜세요">{showInspections ? "점검 포함" : "점검 제외"}</button>}
         <span className="text-xs font-black text-slate-500">{scope === "team" ? `${teamShown === "전체" ? "전체" : `${teamShown}팀`} 일정 ${myTickets.length}건 · 배정 ${myTickets.filter((t) => t.assignee).length} · 미배정 ${myTickets.filter((t) => !t.assignee).length}` : `${author}의 일정 ${myTickets.length}건`}</span>
         {scope === "mine" && <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
           <input type="checkbox" checked={includeUnassigned} onChange={(e) => setIncludeUnassigned(e.target.checked)} className="h-3.5 w-3.5 accent-blue-600" />미배정 포함
@@ -560,6 +573,13 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
                   {scope === "team" && <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black" style={t.assignee ? { background: colorOf(t.assignee), color: "#fff" } : { border: "1px dashed #94a3b8", color: "#475569" }}>{t.assignee || "미배정"}</span>}
+                  {scope === "team" && onAssign && (
+                    // 미배정 건을 나 또는 다른 사람에게 바로 배정(2026-10-12) — 일정리스트의 [배정]과 같은 처리
+                    <select value={t.assignee || ""} onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); onAssign(t, e.target.value); }} className="shrink-0 rounded border border-slate-300 bg-white px-1 py-0.5 text-[10px] font-black text-slate-600" title="담당자 배정 — 나 또는 다른 사람">
+                      <option value="">{t.assignee ? "배정 해제" : "배정…"}</option>
+                      {assignOptions.map((n) => <option key={n} value={n}>{n === author ? `나(${n})` : n}</option>)}
+                    </select>
+                  )}
                   {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
                 </span>
                 {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}

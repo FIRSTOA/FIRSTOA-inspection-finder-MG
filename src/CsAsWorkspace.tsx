@@ -420,7 +420,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       setTicketsState((current) => {
         const fresh = new Set(normalized.map((row) => row.id));
         const older = current.filter((row) => row.date < windowStart && !fresh.has(row.id));
-        return [...older, ...normalized];
+        // 같은 id 가 두 번 들어가면 내 일정 목록에서 한 일정이 여러 번 그려진다(2026-10-12) — 항상 id 로 한 번만
+        const seen = new Set<string>();
+        return [...older, ...normalized].filter((row) => (seen.has(row.id) ? false : (seen.add(row.id), true)));
       });
       try { localStorage.setItem(storageKey, JSON.stringify(normalized)); } catch { /* 캐시 실패 무시 */ }
       setSyncError("");
@@ -1897,6 +1899,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm} onAddManual={addManualSchedules}
             onDefer={(t, newDate) => { update(t.id, { date: newDate }); notify(`${t.vendor} — ${Number(newDate.slice(5, 7))}/${Number(newDate.slice(8, 10))}로 옮겼습니다 ✓`, "success"); }}
             onAddress={(t, address) => update(t.id, { address })}
+            onAssign={(t, name) => { const ticket = tickets.find((x) => x.id === t.id); if (ticket) applyAssign(ticket, name); }}
             // AS 일정은 일정리스트 [FIELD]와 같은 직행 — 접수원본이 있으면 그걸, 없으면 제목으로 조립한 양식으로 바로 FIELD 탭 (예전엔 과거 양식 검색창이 먼저 떴다)
             onFieldDirect={(t) => {
               const ticket = tickets.find((x) => x.id === t.id);

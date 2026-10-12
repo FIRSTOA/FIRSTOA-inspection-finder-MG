@@ -251,11 +251,10 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   ));
 
   return (
-    <div className="lg:flex lg:items-start lg:gap-4">
-      <aside className="hidden lg:sticky lg:top-3 lg:block lg:w-52 lg:shrink-0">
-        <nav className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">{groupedList(false)}</nav>
-      </aside>
-      <div className="min-w-0 flex-1 space-y-4">
+    <div className="space-y-4">
+      {/* PC: 묶음별 목록을 위에 가로로 — 왼쪽은 읽기 힘들고, 알약보다 이 목록 형식이 낫다(2026-10-12) */}
+      <nav className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid lg:grid-cols-6 lg:divide-x lg:divide-slate-100">{groupedList(false)}</nav>
+      <div className="min-w-0 space-y-4">
       {/* 카테고리 — 그룹별로 묶어 한 줄씩 */}
       {/* 휴대폰·태블릿: 현재 항목 단추 + 최근 칩. PC(lg)에서는 왼쪽 목록이 있어 숨긴다 */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:hidden">

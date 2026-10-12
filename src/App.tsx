@@ -3142,16 +3142,17 @@ function DevicePicker({ forms, labels, selected, onSelect, onAdd, onUpdate, onMo
     <button type="button" onClick={() => beginEdit("new")} className="absolute right-2 top-2 rounded-full bg-blue-700 px-2 py-1 text-[10px] font-bold leading-none text-white shadow-sm">＋ 추가</button>
     <div className="mb-1 flex items-center justify-between pr-14">
       <span className="text-sm font-bold text-slate-900">기기 선택</span>
-      <span className="text-[10px] text-slate-500">{forms.length}대 중 {selected + 1}번 편집 중</span>
+      <span className="text-[10px] text-slate-500">{labels.length ? `${forms.length}대 중 ${selected + 1}번 편집 중` : "기기 없음"}</span>
     </div>
     <div>
-      <button type="button" onClick={() => { setEditing(null); setOpen(true); }} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800">
-        <span className="min-w-0 whitespace-normal break-words leading-5">{labels[selected] || `${selected + 1}. (미상)`}</span><span className="shrink-0 text-[10px] text-slate-400">▾</span>
-      </button>
-      {/* "(미상)"만 있으면 아직 기기 정보가 없는 것 — 수정이든 추가든 적으면 양식이 만들어진다고 알려 준다(2026-10-12) */}
-      {forms.length === 1 && /\(미상\)$/.test(labels[0] || `1. (미상)`) && (
-        <div className="mt-1.5 text-[10.5px] font-semibold leading-4 text-slate-500">아직 기기 정보가 없습니다 — 위 칸을 눌러 <b>수정</b>에 모델명·시리얼을 적거나 <b>＋ 추가</b>로 넣으면 점검 양식이 만들어집니다.</div>
-      )}
+      {labels.length
+        ? <button type="button" onClick={() => { setEditing(null); setOpen(true); }} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800">
+            <span className="min-w-0 whitespace-normal break-words leading-5">{labels[selected] || `${selected + 1}. (미상)`}</span><span className="shrink-0 text-[10px] text-slate-400">▾</span>
+          </button>
+        // 양식이 아직 없으면 "(미상)" 기기를 보여 주지 않는다 — 추가해야 1번이 생긴다(2026-10-12)
+        : <button type="button" onClick={() => beginEdit("new")} className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-500">
+            <span className="min-w-0 leading-5">기기 없음 — ＋ 추가로 넣으면 점검 양식이 만들어집니다</span><span className="shrink-0 text-[12px] font-black text-blue-700">＋</span>
+          </button>}
     </div>
 
     {open && <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setOpen(false)} role="dialog">
