@@ -329,6 +329,18 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     return out;
   }, [ordered, getGeo]);
 
+  // 팀 일정은 사람마다 1·2·3… — 미배정 2건이면 1·2, 이민구 3건이면 1·2·3(마커·목록 같은 번호, 같은 색)
+  const numberOf = useMemo(() => {
+    const m = new Map<string, number>();
+    if (scope !== "team") return m;
+    const c = new Map<string, number>();
+    for (const t of ordered) { const k = t.assignee || "미배정"; const n = (c.get(k) || 0) + 1; c.set(k, n); m.set(t.id, n); }
+    return m;
+  }, [ordered, scope]);
+  const labelNo = (t: MyPlanTicket, i: number) => numberOf.get(t.id) || i + 1;
+  // 줄 아래 작은 메뉴 — 지도(네이버·카카오·티맵) / 배정(나·다른 사람·해제). 단추 칸이 좁아 N/K/T 를 하나로(2026-10-12)
+  const [rowMenu, setRowMenu] = useState<{ id: string; kind: "nav" | "assign" } | null>(null);
+
   const markerHtml = (no: number, isPinned: boolean, style?: { bg: string; fg: string; dashed: boolean }) =>
     `<div style="width:26px;height:26px;border-radius:50%;background:${style ? style.bg : isPinned ? "#2563eb" : "#0f172a"};color:${style ? style.fg : "#fff"};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px ${style?.dashed ? "dashed #64748b" : "solid #fff"};box-shadow:0 1px 6px rgba(0,0,0,.4)">${no}</div>`;
   // 카카오 오버레이는 nowrap을 상속해 긴 제목이 지도 밖까지 한 줄로 뻗었다 — 줄바꿈을 명시하고
@@ -454,18 +466,6 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
     marker.openPopup();
   };
-
-  // 팀 일정은 사람마다 1·2·3… — 미배정 2건이면 1·2, 이민구 3건이면 1·2·3(마커·목록 같은 번호, 같은 색)
-  const numberOf = useMemo(() => {
-    const m = new Map<string, number>();
-    if (scope !== "team") return m;
-    const c = new Map<string, number>();
-    for (const t of ordered) { const k = t.assignee || "미배정"; const n = (c.get(k) || 0) + 1; c.set(k, n); m.set(t.id, n); }
-    return m;
-  }, [ordered, scope]);
-  const labelNo = (t: MyPlanTicket, i: number) => numberOf.get(t.id) || i + 1;
-  // 줄 아래 작은 메뉴 — 지도(네이버·카카오·티맵) / 배정(나·다른 사람·해제). 단추 칸이 좁아 N/K/T 를 하나로(2026-10-12)
-  const [rowMenu, setRowMenu] = useState<{ id: string; kind: "nav" | "assign" } | null>(null);
 
   const togglePin = (id: string) => {
     savePinned(pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id]);
