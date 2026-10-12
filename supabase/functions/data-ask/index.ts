@@ -21,9 +21,9 @@ const ANON = Deno.env.get("SUPABASE_ANON_KEY") || "";
 type Cat = { desc: string; cols: string[]; hidden?: string; date?: string; team?: string; grade?: string; vendor: string; long?: boolean };
 const CATALOG: Record<string, Cat> = {
   // ── 지식(복합기 기술) — 2026-10-12: "X3220 세로줄 원인", "묻어남 어떻게 처리" 같은 질문의 근거 ──
-  copier_playbook: { desc: "복합기 증상별 원인·점검 순서·부품 플레이북(브랜드·시리즈·증상 단위 145편, 처리이력에서 뽑은 초안). brand 삼성/제록스/신도/교세라…, series MX4·X3220·C2060…, symptom '토너·드럼'·'급지·걸림'·'화질'…, title, summary 한 줄 결론, causes JSON[{cause, parts, share(높음/중간/낮음), steps[]}], tips, case_count 근거 사례 수, status 초안/확정. 기술 질문은 series·symptom·title·summary 를 ilike 로 찾는다(기종 숫자만으로: series=ilike.*3220*).", vendor: "title", date: "updated_at", long: true,
+  copier_playbook: { desc: "복합기 증상별 원인·점검 순서·부품 플레이북(브랜드·시리즈·증상 단위 145편, 처리이력에서 뽑은 초안). series 값은 기종이 아니라 계열 약칭이다 — 삼성: MX3(SL-X3220·X3280 계열), MX4(X4220·X4250·X4300), MX7(X7400·X7500·X7600), 9201(CLX-9201·9251), 흑백기(SL-K·SL-M) / 신도: 320·410·420·450·600·N501·bizhub / 제록스: 305·5005·APEOS·마블(DocuCentre-V C2263)·베니(ApeosPort-VI C2271)·보탄(ApeosPort-VII C2273·C3373·C4473·C5573)·세이토(ApeosPort-V C2275·C3375·C5575)·키슈·헤라(ApeosPort-IV C5580) / 교세라: 2100·5521·5526 / 오키: 5473 / HP: 8710·8730·9010 / 브라더: 5700. symptom 값은 '토너·드럼'·'급지·걸림'·'줄·화질'·'에러코드'·'스캔·팩스'·'정착기·롤러'·'네트워크·드라이버'·'소음' 8가지뿐이다(세로줄·묻어남은 '줄·화질' 또는 '토너·드럼'). title '시리즈 · 증상', summary 한 줄 결론, causes JSON[{cause, parts, share(높음/중간/낮음), steps[]}], tips, case_count 근거 사례 수, status 초안/확정. 기종을 series 로 바꿔 series=eq.MX3 처럼 찾고 symptom 은 위 8가지로.", vendor: "title", date: "updated_at", long: true,
     cols: ["id", "brand", "series", "symptom", "title", "summary", "causes", "tips", "case_count", "status", "updated_at"] },
-  copier_notes: { desc: "복합기 처리이력·학습 노트(기종별 실제 처리 사례 13,000건). brand, model 기종(ilike), kind '처리이력'|'학습', title 증상 한 줄, content '증상/처리/지역/레벨/업체' 글, author 처리자, created_at. 증상 낱말로 title·content 를 ilike(예: content=ilike.*세로줄*), 기종으로 model=ilike.*3220*. 최신순 20~40건만 읽고 공통 처리법을 뽑는다.", vendor: "model", date: "created_at", long: true,
+  copier_notes: { desc: "복합기 처리이력·학습 노트(기종별 실제 처리 사례 13,000건). 칸은 brand, model 기종(ilike), kind '처리이력'|'학습', title 증상 한 줄, content '증상/처리/지역/레벨/업체' 글, author 처리자, created_at 처리 날짜 — 이 이름 그대로 쓴다(date·handler 같은 칸은 없다; 날짜는 created_at, 처리자는 author). 증상 낱말로 title·content 를 ilike(예: content=ilike.*세로줄*), 기종으로 model=ilike.*3220*. 최신순 20~40건만 읽고 공통 처리법을 뽑고, 사례에는 created_at 날짜와 author 를 적는다.", vendor: "model", date: "created_at", long: true,
     cols: ["id", "brand", "model", "kind", "title", "content", "author", "created_at"] },
   vendor_notes: { desc: "업체 특이사항(현장 메모). work_start 출근시간은 '9시'·'9시반'·'11시 이후' 같은 글, lunch_time 점심시간도 글('12~1시'), note 는 주차·방문 요령 메모. 글이라 ilike 로 찾고(예: 9시대는 work_start=ilike.*9시* 뒤 사람이 읽어 거른다), 팀은 vendor_team 으로. '출근 시간이 X인 곳'·'점심시간'·'특이사항' 질문은 이 표.", vendor: "vendor", date: "updated_at",
     cols: ["id", "vendor", "work_start", "lunch_time", "note", "author", "pinned", "created_at", "updated_at"] },
@@ -92,6 +92,8 @@ async function queryRows(args: Record<string, unknown>) {
   const cat = CATALOG[table];
   if (!cat) return { error: `허용되지 않은 표: ${table}. 가능한 표: ${Object.keys(CATALOG).join(", ")}` };
   const want = Array.isArray(args.select) ? (args.select as string[]).filter((c) => cat.cols.includes(c)) : [];
+  // 지식 표는 날짜·처리자를 늘 같이 — 모델이 없는 칸 이름(date·handler)을 골라 사례에 날짜가 빠지던 것(2026-10-12)
+  if (cat.long) for (const extra of [cat.date || "", "author"]) if (extra && cat.cols.includes(extra) && want.length && !want.includes(extra)) want.push(extra);
   const select = (want.length ? want : cat.cols.slice(0, 14)).map(col).join(",");
   const parts: string[] = [`select=${encodeURIComponent(select)}`];
   const filters = Array.isArray(args.filters) ? (args.filters as Array<Record<string, unknown>>).slice(0, 8) : [];
