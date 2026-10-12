@@ -374,9 +374,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
 
   // 일정 종류를 모양으로 — AS·익일AS 는 동그라미, 납품·철수·교체·물류는 네모, 점검은 얇은 테두리(2026-10-12 "납품과 AS 를 지도에서 바로")
   const kindOf = (t: MyPlanTicket): "as" | "delivery" | "inspect" => (/납품|철수|교체|물류/.test(`${t.scheduleType} ${planTypeLabel(t)}`) ? "delivery" : /점검|재계약/.test(planTypeLabel(t)) ? "inspect" : "as");
-  const [showLabels, setShowLabels] = useState(true);      // 마커 아래 이름표(팀: 담당 이름 / 내 일정: 업체)
-  const [mapSize, setMapSize] = useState<"normal" | "small">("normal");
-  const listRef = useRef<HTMLDivElement | null>(null);
+  const showLabels = true;      // 마커 아래 이름표(팀: 담당 이름 / 내 일정: 업체) — 항상 켠다(토글은 군더더기, 2026-10-12)
   const labelOf = (t: MyPlanTicket) => {
     if (!showLabels) return "";
     const base = scope === "team" ? (t.assignee || "미배정") : popupName(t.vendor).slice(0, 8);
@@ -635,46 +633,39 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
 
   return (
     <div className="space-y-2 overflow-x-hidden">
+      {/* 1줄 — 고르는 것만: 날짜 · 내/팀 · 팀 */}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === kstDate() ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>오늘</button>
-        <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${date === nextBusinessDay(kstDate()) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>내일</button>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-black text-slate-700 outline-none" />
         <span className="flex rounded-full bg-slate-100 p-0.5">
-          {([["mine", "내 일정"], ["team", "팀 일정"]] as const).map(([v, label]) => <button key={v} type="button" onClick={() => setScope(v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${scope === v ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{label}</button>)}
+          <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${date === kstDate() ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>오늘</button>
+          <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${date === nextBusinessDay(kstDate()) ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>내일</button>
+        </span>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-[12px] font-black text-slate-700 outline-none" />
+        <span className="flex rounded-full bg-slate-100 p-0.5">
+          {([["mine", "내 일정"], ["team", "팀 일정"]] as const).map(([v, label]) => <button key={v} type="button" onClick={() => setScope(v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${scope === v ? "bg-slate-900 text-white" : "text-slate-500"}`}>{label}</button>)}
         </span>
         {scope === "team" && <span className="flex rounded-full bg-slate-100 p-0.5">{["A", "B", "C", "D", "E", "전체"].map((tm) => <button key={tm} type="button" onClick={() => setTeamSel(tm)} className={`rounded-full px-2 py-1 text-[11px] font-black ${teamShown === tm ? "bg-slate-900 text-white" : "text-slate-500"}`}>{tm === "전체" ? "전체" : `${tm}팀`}</button>)}</span>}
-        {scope === "team" && <button type="button" onClick={() => setShowInspections((v) => !v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${showInspections ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`} title="팀 일정은 AS·익일AS·납품 같은 필수 일정만 보입니다. 점검(매월·분기)까지 보려면 켜세요">{showInspections ? "점검 포함" : "점검 제외"}</button>}
-        <span className="text-xs font-black text-slate-500">{scope === "team" ? `${teamShown === "전체" ? "전체" : `${teamShown}팀`} 일정 ${myTickets.length}건 · 배정 ${myTickets.filter((t) => t.assignee).length} · 미배정 ${myTickets.filter((t) => !t.assignee).length}` : `${author}의 일정 ${myTickets.length}건`}</span>
         {scope === "mine" && <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
           <input type="checkbox" checked={includeUnassigned} onChange={(e) => setIncludeUnassigned(e.target.checked)} className="h-3.5 w-3.5 accent-blue-600" />미배정 포함
         </label>}
-        {onAddManual && (
-          <button type="button" onClick={() => setManual({ text: "", team: "C" })} title="스케줄 원문을 붙여 넣어 내 일정에 추가 — 워킨맵에 없는 곳도 됩니다"
-            className="rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700">＋ 직접 추가</button>
-        )}
-        {pinned.length > 0 && <button type="button" onClick={() => savePinned([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500">순서 초기화</button>}
-        {ordered.length > 0 && <button type="button" onClick={() => void copyPlanText()} title="카톡 스케줄방에 올릴 목록 — 1. 업체명 분기점검 / 2. 업체명 AS …" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-600 transition hover:bg-slate-50">📋 카톡용 복사</button>}
-        <span className="ml-auto text-[10px] font-bold text-slate-400">[고정]을 누른 순서가 먼저, 나머지는 가까운 순 자동</span>
+        <span className="ml-auto text-[11px] font-black text-slate-500">{scope === "team" ? `${myTickets.length}건 · 미배정 ${myTickets.filter((t) => !t.assignee).length}` : `${author} ${myTickets.length}건`}</span>
       </div>
-
-      {scope === "team" && (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold">
-          <span className="text-[10px] font-black text-slate-400">사람</span>
-          {people.map((p) => { const off = hiddenPeople.has(p); const n = myTickets.filter((t) => t.assignee === p).length; return <button key={p} type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has(p)) next.delete(p); else next.add(p); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-200 bg-white text-slate-700"}`}><span className="h-2.5 w-2.5 rounded-full" style={{ background: colorOf(p) }} />{p} {n}</button>; })}
-          {myTickets.some((t) => !t.assignee) && (() => { const off = hiddenPeople.has("미배정"); const n = myTickets.filter((t) => !t.assignee).length; return <button type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has("미배정")) next.delete("미배정"); else next.add("미배정"); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-dashed border-slate-400 bg-white text-slate-600"}`}><span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-500 bg-white" />미배정 {n}</button>; })()}
-          <span className="ml-auto text-[10px] font-semibold text-slate-400">색 = 사람 · 점선 = 미배정 · 누르면 숨김 · 번호는 사람별 순서(고정으로 바꿈)</span>
-        </div>
-      )}
-      {/* 지도 조절 — 휴대폰은 지도가 화면을 다 먹어 목록으로 못 내려가던 것: 작게 접기, 목록으로 바로 가기, 이름표 */}
-      <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black">
-        <button type="button" onClick={() => setMapSize((v) => (v === "small" ? "normal" : "small"))} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600">{mapSize === "small" ? "지도 펼치기" : "지도 접기"}</button>
-        <button type="button" onClick={() => listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600">목록으로 ↓</button>
-        <button type="button" onClick={() => setShowLabels((v) => !v)} className={`rounded-full px-2.5 py-1 ${showLabels ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600"}`}>이름표</button>
-        <span className="ml-auto text-[10px] font-semibold text-slate-400">○ AS · <span className="inline-block h-2.5 w-2.5 rounded-[2px] border-2 border-amber-500 align-middle" /> 납품/물류(주황 테두리) · 선 = 동선(고정 순 → 가까운 순)</span>
+      {/* 2줄 — 사람 칩(팀 일정) + 동작 단추 */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {scope === "team" && people.map((p) => { const off = hiddenPeople.has(p); const n = myTickets.filter((t) => t.assignee === p).length; return <button key={p} type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has(p)) next.delete(p); else next.add(p); return next; })} title="누르면 지도·목록에서 숨김" className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-200 bg-white text-slate-700"}`}><span className="h-2.5 w-2.5 rounded-full" style={{ background: colorOf(p) }} />{p} {n}</button>; })}
+        {scope === "team" && myTickets.some((t) => !t.assignee) && (() => { const off = hiddenPeople.has("미배정"); const n = myTickets.filter((t) => !t.assignee).length; return <button type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has("미배정")) next.delete("미배정"); else next.add("미배정"); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-dashed border-slate-400 bg-white text-slate-600"}`}><span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-500 bg-white" />미배정 {n}</button>; })()}
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          {scope === "team" && <button type="button" onClick={() => setShowInspections((v) => !v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${showInspections ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-500"}`}>{showInspections ? "점검 포함" : "점검 제외"}</button>}
+          {onAddManual && (
+            <button type="button" onClick={() => setManual({ text: "", team: "C" })} title="스케줄 원문을 붙여 넣어 내 일정에 추가 — 워킨맵에 없는 곳도 됩니다"
+              className="rounded-full bg-blue-600 px-3 py-1 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700">＋ 직접 추가</button>
+          )}
+          {pinned.length > 0 && <button type="button" onClick={() => savePinned([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">순서 초기화</button>}
+          {ordered.length > 0 && <button type="button" onClick={() => void copyPlanText()} title="카톡 스케줄방에 올릴 목록 — 1. 업체명 분기점검 / 2. 업체명 AS …" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">📋 카톡용 복사</button>}
+        </span>
       </div>
-      <div ref={mapElRef} className={`${mapSize === "small" ? "h-[22vh]" : scope === "team" ? "h-[38vh] sm:h-[55vh]" : "h-[36vh] sm:h-[42vh]"} w-full overflow-hidden rounded-xl border border-slate-200`} />
+      <div ref={mapElRef} className={`${scope === "team" ? "h-[38vh] sm:h-[55vh]" : "h-[36vh] sm:h-[42vh]"} w-full overflow-hidden rounded-xl border border-slate-200`} />
 
-      <div ref={listRef} className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {ordered.map((t, i) => {
           const g = getGeo(t);
           const isPinned = pinned.includes(t.id);
