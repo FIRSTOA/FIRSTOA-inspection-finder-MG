@@ -422,6 +422,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     if (engine === "leaflet") {
       const map = mapRef.current, layer = layerRef.current;
       if (!map || !layer) return;
+      const sigL = JSON.stringify(ordered.map((t, i) => [t.id, labelNo(t, i), displayGeo.get(t.id), labelOf(t), markerStyle(t)?.bg || "", pinned.includes(t.id)])) + `|${scope}`;
+      if (drawSigRef.current === sigL) return;
+      drawSigRef.current = sigL;
       layer.clearLayers();
       markerRef.current.clear();
       const points: [number, number][] = [];
@@ -439,18 +442,23 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       });
       // 동선 — 내 일정은 파랑, 팀 일정은 사람마다 그 사람 색(미배정은 선 없음)
       for (const [key, pts] of byPerson) if (pts.length >= 2) L.polyline(pts, { color: key === "me" ? "#2563eb" : colorOf(key), weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
-      if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 14 });
+      const idsKeyL = `${ordered.map((t) => t.id).sort().join(",")}|${scope}|${date}|${teamShown}`;
+      if (points.length && boundsKeyRef.current !== idsKeyL) { boundsKeyRef.current = idsKeyL; map.fitBounds(L.latLngBounds(points), { padding: [30, 30], maxZoom: 14 }); }
       return;
     }
     if (engine !== "kakao" || !kakaoRef.current) return;
     const { ns: kakao, map } = kakaoRef.current;
+    // 바뀐 게 없으면 손대지 않는다 — 다시 그리면 말풍선이 닫히고 범위가 되돌아가 "지도가 초기화되는" 느낌
+    const sig = JSON.stringify(ordered.map((t, i) => [t.id, labelNo(t, i), displayGeo.get(t.id), labelOf(t), markerStyle(t)?.bg || "", pinned.includes(t.id)])) + `|${scope}`;
+    if (drawSigRef.current === sig) return;
+    drawSigRef.current = sig;
+    infoOverlayRef.current = null;
     for (const obj of kakaoObjectsRef.current) obj.setMap(null);
     kakaoObjectsRef.current = [];
     kakaoMarkerRef.current.clear();
     const path: KakaoNS[] = [];
     const pathByPerson = new Map<string, KakaoNS[]>();
     const bounds = new kakao.maps.LatLngBounds();
-    let infoOverlay: KakaoNS | null = null;
     ordered.forEach((t, i) => {
       const g = displayGeo.get(t.id);
       if (!g) return;
@@ -463,7 +471,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       el.style.cursor = "pointer";
       { const key = scope === "team" ? (t.assignee || "") : "me"; if (key) pathByPerson.set(key, [...(pathByPerson.get(key) || []), pos]); }
       el.onclick = () => {
-        if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; }
+        if (infoOverlayRef.current) { infoOverlayRef.current.setMap(null); infoOverlayRef.current = null; }
         const box = document.createElement("div");
         // 상자 자체는 클릭을 통과시킨다(pointer-events:none) — 겹친 옆 마커가 상자에 가려 안 눌리던 것. 단추만 받는다
         box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:300px;white-space:normal;word-break:keep-all;pointer-events:none";
@@ -472,24 +480,34 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         let below = false;
         try { const pt = map.getProjection().containerPointFromCoords(pos); below = pt.y < 190; } catch { /* 투영 미지원 */ }
         box.style.transform = below ? "translateY(22px)" : "translateY(-36px)";
-        const close = () => { if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; } };
+        const close = () => { if (infoOverlayRef.current) { infoOverlayRef.current.setMap(null); infoOverlayRef.current = null; } };
         box.querySelector<HTMLButtonElement>("[data-close]")?.addEventListener("click", (ev) => { ev.stopPropagation(); close(); });
         const assignBtn = box.querySelector<HTMLButtonElement>("[data-assign]");
         if (assignBtn && onAssign) assignBtn.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          // 단추 자리에 사람 고르기(해제 · 나 · 팀원) — 고르면 일정리스트의 배정과 같은 처리
-          const sel = document.createElement("select");
-          sel.style.cssText = "pointer-events:auto;font-size:11px;font-weight:900;border:1px solid #cbd5e1;border-radius:8px;padding:2px 4px;background:#fff;color:#0f172a";
-          const opts = [["", t.assignee ? "배정 해제" : "배정…"], ...assignOptions.map((n) => [n, n === author ? `나(${n})` : n])];
-          for (const [v, label] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = label; if (v === (t.assignee || "")) o.selected = true; sel.appendChild(o); }
-          sel.addEventListener("click", (e2) => e2.stopPropagation());
-          sel.addEventListener("change", () => { onAssign(t, sel.value); close(); });
-          assignBtn.replaceWith(sel);
-          sel.focus();
+          // 한 번 누르면 바로 사람 칩이 펼쳐진다(각자 색) — 네이티브 셀렉트는 두 번 눌러야 했고 밋밋했다(2026-10-13)
+          const old = box.querySelector("[data-assign-menu]");
+          if (old) { old.remove(); return; }
+          const menu = document.createElement("div");
+          menu.setAttribute("data-assign-menu", "1");
+          menu.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px;pointer-events:auto";
+          const chip = (label: string, value: string, color: string, dashed: boolean) => {
+            const b = document.createElement("button");
+            b.type = "button"; b.textContent = label;
+            const current = value === (t.assignee || "");
+            b.style.cssText = dashed
+              ? "cursor:pointer;border:1px dashed #94a3b8;border-radius:999px;padding:3px 10px;background:#fff;color:#475569;font-weight:900;font-size:11px"
+              : `cursor:pointer;border:2px solid ${current ? "#0f172a" : "transparent"};border-radius:999px;padding:3px 10px;background:${color};color:#fff;font-weight:900;font-size:11px`;
+            b.addEventListener("click", (e2) => { e2.stopPropagation(); onAssign(t, value); close(); });
+            return b;
+          };
+          if (t.assignee) menu.appendChild(chip("배정 해제", "", "", true));
+          for (const n of assignOptions) menu.appendChild(chip(n === author ? `나(${n})` : n, n, colorFor(n), false));
+          box.firstElementChild?.insertAdjacentElement("afterend", menu);
         });
-        infoOverlay = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: below ? 0 : 1, zIndex: 30, clickable: true });
-        infoOverlay.setMap(map);
-        kakaoObjectsRef.current.push(infoOverlay);
+        infoOverlayRef.current = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: below ? 0 : 1, zIndex: 30, clickable: true });
+        infoOverlayRef.current.setMap(map);
+        kakaoObjectsRef.current.push(infoOverlayRef.current);
       };
       const overlay = new kakao.maps.CustomOverlay({ position: pos, content: el, yAnchor: label ? 0.3 : 0.5, zIndex: 10 + i });
       overlay.setMap(map);
@@ -503,15 +521,25 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       line.setMap(map);
       kakaoObjectsRef.current.push(line);
     }
-    if (path.length) map.setBounds(bounds, 40, 40, 40, 40);
-    // 지도 빈 곳을 누르면 말풍선이 닫힌다
-    const closeOnMapClick = () => { if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; } };
+    // 범위는 일정 구성(어떤 일정들인지·날짜·팀)이 바뀔 때만 다시 맞춘다 — 확대해 둔 것을 함부로 되돌리지 않는다
+    const idsKey = `${ordered.map((t) => t.id).sort().join(",")}|${scope}|${date}|${teamShown}`;
+    if (path.length && boundsKeyRef.current !== idsKey) { boundsKeyRef.current = idsKey; map.setBounds(bounds, 40, 40, 40, 40); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, ordered, pinned, displayGeo, scope, markerStyle, assignOptions, author, onAssign, numberOf, showLabels, colorOf, colorFor, date, teamShown]);
+  // 지도 빈 곳을 누르면 말풍선이 닫힌다 — 마커 효과와 따로 두어 다시 그리지 않을 때도 살아 있게
+  useEffect(() => {
+    if (engine !== "kakao" || !kakaoRef.current) return;
+    const { ns: kakao, map } = kakaoRef.current;
+    const closeOnMapClick = () => { if (infoOverlayRef.current) { infoOverlayRef.current.setMap(null); infoOverlayRef.current = null; } };
     kakao.maps.event.addListener(map, "click", closeOnMapClick);
     return () => { kakao.maps.event.removeListener(map, "click", closeOnMapClick); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, ordered, pinned, displayGeo, scope, markerStyle, assignOptions, author, onAssign, numberOf, showLabels, colorOf]);
+  }, [engine]);
 
   const kakaoMarkerRef = useRef<Map<string, { pos: KakaoNS; open: () => void }>>(new Map());
+  const infoOverlayRef = useRef<KakaoNS | null>(null);   // 열려 있는 말풍선
+  const drawSigRef = useRef("");                          // 마지막으로 그린 마커 구성 — 같으면 다시 그리지 않는다(60초 새로고침마다 확대가 풀리던 것, 2026-10-13)
+  const boundsKeyRef = useRef("");                        // 범위를 맞춘 일정 구성 — 일정이 바뀔 때만 다시 맞춘다
+  const colorFor = useCallback((name: string) => (people.includes(name) ? colorOf(name) : "#64748b"), [people, colorOf]);
   const focusTicket = (id: string) => {
     if (engine === "kakao" && kakaoRef.current) {
       const hit = kakaoMarkerRef.current.get(id);
