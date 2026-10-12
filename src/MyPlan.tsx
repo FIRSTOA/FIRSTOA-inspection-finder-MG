@@ -4,7 +4,7 @@
  * 순서: [고정]을 누른 순서대로 앞에 서고, 나머지는 마지막 고정 지점에서
  * 가까운 순(최근접 이웃)으로 자동 배치된다 — 동선 체크용.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { selectAllRows } from "./supabase";
 import { fieldTicketVendor, vendorMatchKey } from "./ids";
@@ -329,21 +329,33 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     return out;
   }, [ordered, getGeo]);
 
-  const markerHtml = (i: number, isPinned: boolean, style?: { bg: string; fg: string; dashed: boolean }) =>
-    `<div style="width:26px;height:26px;border-radius:50%;background:${style ? style.bg : isPinned ? "#2563eb" : "#0f172a"};color:${style ? style.fg : "#fff"};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px ${style?.dashed ? "dashed #64748b" : "solid #fff"};box-shadow:0 1px 6px rgba(0,0,0,.4)">${i + 1}</div>`;
+  const markerHtml = (no: number, isPinned: boolean, style?: { bg: string; fg: string; dashed: boolean }) =>
+    `<div style="width:26px;height:26px;border-radius:50%;background:${style ? style.bg : isPinned ? "#2563eb" : "#0f172a"};color:${style ? style.fg : "#fff"};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border:2px ${style?.dashed ? "dashed #64748b" : "solid #fff"};box-shadow:0 1px 6px rgba(0,0,0,.4)">${no}</div>`;
   // 카카오 오버레이는 nowrap을 상속해 긴 제목이 지도 밖까지 한 줄로 뻗었다 — 줄바꿈을 명시하고
   // 업체명은 캘린더 제목 원문(구분·모델·마감 꼬리표 포함)이라 회사명만 잘라 쓴다
   const popupName = (vendor: string) => {
     const clean = fieldTicketVendor(vendor).vendor.trim() || String(vendor || "").replace(/_x000d_|\r|\n/g, " ").trim();
     return (clean.length > 26 ? `${clean.slice(0, 26)}…` : clean).replace(/[<>&]/g, "");
   };
-  const popupHtml = (i: number, t: MyPlanTicket) => {
+  const popupHtml = (no: number, t: MyPlanTicket, interactive: boolean) => {
     const esc = (v: string) => String(v || "").replace(/[<>&]/g, "");
     const issue = esc(t.issue || "").replace(/\s+/g, " ").trim();
-    const line2 = [t.time, planTypeLabel(t), scope === "team" ? `담당 ${t.assignee ? esc(t.assignee) : "미배정"}` : ""].filter(Boolean).join(" · ");
-    return `<div style="white-space:normal;word-break:keep-all;line-height:1.45;max-width:280px;min-width:180px">`
-      + `<b>${i + 1}. ${popupName(t.vendor)}</b><br/><span style="font-size:11px;color:#475569">${line2}</span>`
-      + `${issue ? `<br/><span style="font-size:11px;color:#64748b">${issue.slice(0, 70)}${issue.length > 70 ? "…" : ""}</span>` : ""}</div>`;
+    const row = (label: string, value: string, extra = "") => value ? `<div style="display:flex;gap:6px;font-size:11.5px;line-height:1.4"><span style="flex:0 0 46px;color:#94a3b8;font-weight:800">${label}</span><span style="min-width:0;color:#334155;font-weight:600;${extra}">${value}</span></div>` : "";
+    const who = t.assignee ? esc(t.assignee) : "미배정";
+    const whoColor = t.assignee ? colorOf(t.assignee) : "#94a3b8";
+    const assignBtn = interactive && onAssign
+      ? `<button type="button" data-assign="1" style="pointer-events:auto;cursor:pointer;border:0;border-radius:999px;padding:2px 9px;background:${whoColor};color:#fff;font-weight:900;font-size:11px">${who} ▾</button>`
+      : `<span style="display:inline-block;border-radius:999px;padding:2px 9px;background:${whoColor};color:#fff;font-weight:900;font-size:11px">${who}</span>`;
+    return `<div style="white-space:normal;word-break:keep-all;max-width:300px;min-width:220px;pointer-events:none">`
+      + `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px"><span style="font-size:11px;color:#94a3b8;font-weight:800">담당 ${assignBtn}</span>`
+      + (interactive ? `<button type="button" data-close="1" style="pointer-events:auto;cursor:pointer;border:0;background:#f1f5f9;border-radius:999px;width:22px;height:22px;font-weight:900;color:#64748b">×</button>` : "") + `</div>`
+      + `<div style="font-size:13px;font-weight:900;color:#0f172a;margin-bottom:3px">${no}. ${popupName(t.vendor)} <span style="font-size:11px;color:#64748b;font-weight:700">${[t.time, planTypeLabel(t)].filter(Boolean).join(" · ")}</span></div>`
+      + row("주소", esc(t.address || "") || `<span style="color:#b45309">주소 없음</span>`)
+      + row("기종", esc(t.model || ""))
+      + row("시리얼", esc(t.serial || ""))
+      + row("자산기번", esc(t.asset || ""))
+      + row("증상", issue.slice(0, 120) + (issue.length > 120 ? "…" : ""))
+      + `</div>`;
   };
 
   useEffect(() => {
@@ -357,8 +369,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         const g = displayGeo.get(t.id);
         if (!g) return;
         points.push([g.lat, g.lng]);
-        const icon = L.divIcon({ className: "", html: markerHtml(i, pinned.includes(t.id), markerStyle(t)), iconSize: [26, 26], iconAnchor: [13, 13] });
-        const marker = L.marker([g.lat, g.lng], { icon }).addTo(layer).bindPopup(popupHtml(i, t));
+        const icon = L.divIcon({ className: "", html: markerHtml(labelNo(t, i), pinned.includes(t.id), markerStyle(t)), iconSize: [26, 26], iconAnchor: [13, 13] });
+        const marker = L.marker([g.lat, g.lng], { icon }).addTo(layer).bindPopup(popupHtml(labelNo(t, i), t, false));
         markerRef.current.set(t.id, marker);
       });
       if (scope === "mine" && points.length >= 2) L.polyline(points, { color: "#2563eb", weight: 3, opacity: 0.65, dashArray: "6 6" }).addTo(layer);
@@ -380,13 +392,29 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       path.push(pos);
       bounds.extend(pos);
       const el = document.createElement("div");
-      el.innerHTML = markerHtml(i, pinned.includes(t.id), markerStyle(t));
+      el.innerHTML = markerHtml(labelNo(t, i), pinned.includes(t.id), markerStyle(t));
       el.style.cursor = "pointer";
       el.onclick = () => {
         if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; }
         const box = document.createElement("div");
-        box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:300px;white-space:normal;word-break:keep-all";
-        box.innerHTML = popupHtml(i, t);
+        // 상자 자체는 클릭을 통과시킨다(pointer-events:none) — 겹친 옆 마커가 상자에 가려 안 눌리던 것. 단추만 받는다
+        box.style.cssText = "background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.18);transform:translateY(-36px);max-width:300px;white-space:normal;word-break:keep-all;pointer-events:none";
+        box.innerHTML = popupHtml(labelNo(t, i), t, true);
+        const close = () => { if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; } };
+        box.querySelector<HTMLButtonElement>("[data-close]")?.addEventListener("click", (ev) => { ev.stopPropagation(); close(); });
+        const assignBtn = box.querySelector<HTMLButtonElement>("[data-assign]");
+        if (assignBtn && onAssign) assignBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          // 단추 자리에 사람 고르기(해제 · 나 · 팀원) — 고르면 일정리스트의 배정과 같은 처리
+          const sel = document.createElement("select");
+          sel.style.cssText = "pointer-events:auto;font-size:11px;font-weight:900;border:1px solid #cbd5e1;border-radius:8px;padding:2px 4px;background:#fff;color:#0f172a";
+          const opts = [["", t.assignee ? "배정 해제" : "배정…"], ...assignOptions.map((n) => [n, n === author ? `나(${n})` : n])];
+          for (const [v, label] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = label; if (v === (t.assignee || "")) o.selected = true; sel.appendChild(o); }
+          sel.addEventListener("click", (e2) => e2.stopPropagation());
+          sel.addEventListener("change", () => { onAssign(t, sel.value); close(); });
+          assignBtn.replaceWith(sel);
+          sel.focus();
+        });
         infoOverlay = new kakao.maps.CustomOverlay({ position: pos, content: box, yAnchor: 1, zIndex: 30 });
         infoOverlay.setMap(map);
         kakaoObjectsRef.current.push(infoOverlay);
@@ -402,7 +430,12 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
       kakaoObjectsRef.current.push(line);
     }
     if (path.length) map.setBounds(bounds, 40, 40, 40, 40);
-  }, [engine, ordered, pinned, displayGeo, scope, markerStyle]);
+    // 지도 빈 곳을 누르면 말풍선이 닫힌다
+    const closeOnMapClick = () => { if (infoOverlay) { infoOverlay.setMap(null); infoOverlay = null; } };
+    kakao.maps.event.addListener(map, "click", closeOnMapClick);
+    return () => { kakao.maps.event.removeListener(map, "click", closeOnMapClick); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, ordered, pinned, displayGeo, scope, markerStyle, assignOptions, author, onAssign, numberOf]);
 
   const kakaoMarkerRef = useRef<Map<string, { pos: KakaoNS; open: () => void }>>(new Map());
   const focusTicket = (id: string) => {
@@ -421,6 +454,18 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15), { animate: true });
     marker.openPopup();
   };
+
+  // 팀 일정은 사람마다 1·2·3… — 미배정 2건이면 1·2, 이민구 3건이면 1·2·3(마커·목록 같은 번호, 같은 색)
+  const numberOf = useMemo(() => {
+    const m = new Map<string, number>();
+    if (scope !== "team") return m;
+    const c = new Map<string, number>();
+    for (const t of ordered) { const k = t.assignee || "미배정"; const n = (c.get(k) || 0) + 1; c.set(k, n); m.set(t.id, n); }
+    return m;
+  }, [ordered, scope]);
+  const labelNo = (t: MyPlanTicket, i: number) => numberOf.get(t.id) || i + 1;
+  // 줄 아래 작은 메뉴 — 지도(네이버·카카오·티맵) / 배정(나·다른 사람·해제). 단추 칸이 좁아 N/K/T 를 하나로(2026-10-12)
+  const [rowMenu, setRowMenu] = useState<{ id: string; kind: "nav" | "assign" } | null>(null);
 
   const togglePin = (id: string) => {
     savePinned(pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id]);
@@ -556,30 +601,33 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           <span className="ml-auto text-[10px] font-semibold text-slate-400">마커 색 = 사람 · 점선 = 미배정 · 누르면 숨김</span>
         </div>
       )}
-      <div ref={mapElRef} className="h-[42vh] w-full overflow-hidden rounded-xl border border-slate-200" />
+      <div ref={mapElRef} className={`${scope === "team" ? "h-[55vh]" : "h-[42vh]"} w-full overflow-hidden rounded-xl border border-slate-200`} />
 
       <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {ordered.map((t, i) => {
           const g = getGeo(t);
           const isPinned = pinned.includes(t.id);
+          const who = t.assignee || "미배정";
+          const groupHead = scope === "team" && (i === 0 || (ordered[i - 1].assignee || "미배정") !== who);
+          const groupCount = scope === "team" ? ordered.filter((x) => (x.assignee || "미배정") === who).length : 0;
           const kakao = g ? kakaoMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : kakaoMapSearchLink(mapQuery(t.address, t.vendor));
           const f = flags.get(t.vendor.trim());
           return (
-            <div key={t.id} onClick={() => focusTicket(t.id)} className={`relative flex flex-wrap items-center gap-2 px-3 py-2.5 pr-14 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
+            <Fragment key={t.id}>
+            {groupHead && (
+              // 사람별 묶음 머리 — 마커 색과 같은 점, 건수
+              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 text-[11px] font-black text-slate-700">
+                <span className="h-2.5 w-2.5 rounded-full" style={t.assignee ? { background: colorOf(t.assignee) } : { border: "1.5px dashed #64748b", background: "#fff" }} />{who} <span className="font-bold text-slate-400">{groupCount}건</span>
+              </div>
+            )}
+            <div onClick={() => focusTicket(t.id)} className={`relative flex flex-wrap items-center gap-2 px-3 py-2.5 pr-14 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
               <span className="min-w-0 flex-1 basis-[55%] overflow-hidden">
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white ${isPinned ? "bg-blue-600" : "bg-slate-900"}`}>{i + 1}</span>
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black" style={scope === "team" ? (t.assignee ? { background: colorOf(t.assignee), color: "#fff" } : { border: "1.5px dashed #64748b", color: "#334155", background: "#fff" }) : { background: isPinned ? "#2563eb" : "#0f172a", color: "#fff" }}>{labelNo(t, i)}</span>
                   <span className="min-w-0 truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
                   {scope === "team" && <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black" style={t.assignee ? { background: colorOf(t.assignee), color: "#fff" } : { border: "1px dashed #94a3b8", color: "#475569" }}>{t.assignee || "미배정"}</span>}
-                  {scope === "team" && onAssign && (
-                    // 미배정 건을 나 또는 다른 사람에게 바로 배정(2026-10-12) — 일정리스트의 [배정]과 같은 처리
-                    <select value={t.assignee || ""} onClick={(e) => e.stopPropagation()} onChange={(e) => { e.stopPropagation(); onAssign(t, e.target.value); }} className="shrink-0 rounded border border-slate-300 bg-white px-1 py-0.5 text-[10px] font-black text-slate-600" title="담당자 배정 — 나 또는 다른 사람">
-                      <option value="">{t.assignee ? "배정 해제" : "배정…"}</option>
-                      {assignOptions.map((n) => <option key={n} value={n}>{n === author ? `나(${n})` : n}</option>)}
-                    </select>
-                  )}
                   {!g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
                 </span>
                 {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}
@@ -621,16 +669,33 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   <button type="button" onClick={() => onDefer(t, nextBusinessDay(t.date))}
                     className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700 transition hover:bg-purple-100">내일로 →</button>
                 )}
-                {/* 길찾기 — 팀마다 쓰는 지도가 다르다(네이버 사용자 다수). 일정리스트 상세의 N/K/T와 같은 구성 */}
-                <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(mapQuery(t.address, t.vendor))} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#03C75A] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">N</a>
-                <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="flex-1 rounded-lg bg-[#FEE500] px-2 py-1.5 text-center text-[11px] font-black text-slate-900 sm:flex-none">K</a>
-                <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(mapQuery(t.address, t.vendor))} className="flex-1 rounded-lg bg-[#2C5FD8] px-2 py-1.5 text-center text-[11px] font-black text-white sm:flex-none">T</a>
+                {/* 길찾기 — N/K/T 세 칸을 [지도] 하나로 모으고 누르면 아래에 펼친다(칸이 좁다, 2026-10-12) */}
+                <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "nav" ? null : { id: t.id, kind: "nav" }))} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "nav" ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>지도</button>
+                {scope === "team" && onAssign && (
+                  <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "assign" ? null : { id: t.id, kind: "assign" }))} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "assign" ? "bg-emerald-700 text-white" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>배정</button>
+                )}
                 <button type="button" onClick={() => togglePin(t.id)}
                   className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
                   {isPinned ? `고정 ${pinned.indexOf(t.id) + 1}` : "고정"}
                 </button>
               </span>
+              {rowMenu?.id === t.id && rowMenu.kind === "nav" && (
+                <span className="flex w-full items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[10px] font-black text-slate-400">길찾기</span>
+                  <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(mapQuery(t.address, t.vendor))} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="rounded-lg bg-[#03C75A] px-3 py-1.5 text-center text-[11px] font-black text-white">네이버</a>
+                  <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="rounded-lg bg-[#FEE500] px-3 py-1.5 text-center text-[11px] font-black text-slate-900">카카오</a>
+                  <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(mapQuery(t.address, t.vendor))} className="rounded-lg bg-[#2C5FD8] px-3 py-1.5 text-center text-[11px] font-black text-white">티맵</a>
+                </span>
+              )}
+              {rowMenu?.id === t.id && rowMenu.kind === "assign" && onAssign && (
+                <span className="flex w-full flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[10px] font-black text-slate-400">배정</span>
+                  {assignOptions.map((n) => <button key={n} type="button" onClick={() => { onAssign(t, n); setRowMenu(null); }} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${t.assignee === n ? "text-white" : "border border-slate-300 bg-white text-slate-700"}`} style={t.assignee === n ? { background: colorOf(n) } : undefined}>{n === author ? `나(${n})` : n}</button>)}
+                  {t.assignee && <button type="button" onClick={() => { onAssign(t, ""); setRowMenu(null); }} className="rounded-full border border-dashed border-slate-400 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">배정 해제</button>}
+                </span>
+              )}
             </div>
+            </Fragment>
           );
         })}
         {!ordered.length && <div className="p-10 text-center text-xs font-bold text-slate-400">{date}에 {author}에게 배정된 일정이 없습니다.</div>}
