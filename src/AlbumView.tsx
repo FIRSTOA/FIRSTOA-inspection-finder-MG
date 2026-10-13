@@ -2,7 +2,8 @@
  *  탭하면 전체화면 + 좌우 스와이프/화살표로 넘기기 (모바일 최적화). */
 import { useEffect, useState } from "react";
 import { getAlbum } from "./supabase";
-import PhotoViewer from "./PhotoViewer";
+import PhotoViewer, { latestEdited } from "./PhotoViewer";
+import { photosToPdf } from "./photoPdf";
 
 export default function AlbumView({ id }: { id: string }) {
   const [urls, setUrls] = useState<string[]>([]);
@@ -12,10 +13,18 @@ export default function AlbumView({ id }: { id: string }) {
   const [idx, setIdx] = useState<number | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadErr, setDownloadErr] = useState("");
+  // 편집본(공유 저장된 것)이 있으면 격자·다운로드·PDF 모두 편집본으로(2026-10-14)
+  const [shown, setShown] = useState<Record<string, string>>({});
+  const [pdfNote, setPdfNote] = useState("");
+  const refreshEdited = async (list: string[]) => {
+    const pairs = await Promise.all(list.filter((u) => !/\.(mp4|mov|webm|m4v|avi|3gp|mkv)(\?|$)/i.test(u)).map(async (u) => [u, (await latestEdited(u))?.url || u] as [string, string]));
+    setShown(Object.fromEntries(pairs));
+  };
+  const view = (u: string) => shown[u] || u;
 
   useEffect(() => {
     getAlbum(id)
-      .then((a) => { setUrls(a.urls || []); setVendor(a.vendor || ""); })
+      .then((a) => { setUrls(a.urls || []); setVendor(a.vendor || ""); void refreshEdited(a.urls || []); })
       .catch((e) => setErr((e as Error).message || "불러오기 실패"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -54,17 +63,21 @@ export default function AlbumView({ id }: { id: string }) {
     }
   };
 
+  // 전체 저장 = PDF 한 파일(사진 n장 → n쪽). 편집본이 있는 사진은 편집본으로
   const handleDownloadAll = async () => {
     setDownloading(true);
     setDownloadErr("");
     try {
-      for (const [photoIndex, url] of urls.entries()) {
-        if (!isVideo(url)) await downloadPhoto(url, photoIndex);
-      }
+      const list = urls.filter((u) => !isVideo(u)).map(view);
+      const blob = await photosToPdf(list, (d, t) => setPdfNote(`PDF 만드는 중 ${d}/${t}`));
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = `${safeVendor}_사진${list.length}장.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     } catch (error) {
-      setDownloadErr((error as Error).message || "사진 다운로드에 실패했습니다.");
+      setDownloadErr((error as Error).message || "PDF 를 만들지 못했습니다.");
     } finally {
-      setDownloading(false);
+      setDownloading(false); setPdfNote("");
     }
   };
 
@@ -94,7 +107,7 @@ export default function AlbumView({ id }: { id: string }) {
             onClick={handleDownloadAll}
             className="shrink-0 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-900 disabled:opacity-50"
           >
-            {downloading ? "다운로드 중…" : "사진 전체 저장"}
+            {downloading ? (pdfNote || "다운로드 중…") : "전체 PDF 저장"}
           </button>
         )}
       </div>
@@ -118,7 +131,7 @@ export default function AlbumView({ id }: { id: string }) {
                   <span className="absolute inset-0 flex items-center justify-center text-3xl text-white/90 drop-shadow">▶</span>
                 </>
               ) : (
-                <img src={u} alt={`사진 ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                <img src={view(u)} alt={`사진 ${i + 1}`} loading="lazy" className="h-full w-full object-cover" />
               )}
             </button>
             {!isVideo(u) && (
@@ -126,7 +139,7 @@ export default function AlbumView({ id }: { id: string }) {
                 type="button"
                 aria-label={`사진 ${i + 1} 다운로드`}
                 disabled={downloading}
-                onClick={() => void handleDownload(u, i)}
+                onClick={() => void handleDownload(view(u), i)}
                 className="absolute bottom-1 right-1 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold text-white disabled:opacity-50"
               >
                 저장
@@ -137,7 +150,7 @@ export default function AlbumView({ id }: { id: string }) {
       </div>
 
       {/* 확대(휠·핀치·＋－)·회전·끌기·선명하게 — 작은 사진도 판단할 수 있게(2026-10-13). 원본은 그대로 */}
-      {idx != null && <PhotoViewer urls={urls} index={idx} onClose={() => setIdx(null)} onDownload={(u, i) => void handleDownload(u, i)} />}
+      {idx != null && <PhotoViewer urls={urls} index={idx} onClose={() => { setIdx(null); void refreshEdited(urls); }} onDownload={(u, i) => void handleDownload(u, i)} />}
     </div>
   );
 }

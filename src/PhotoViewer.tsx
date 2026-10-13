@@ -17,7 +17,7 @@ import { uploadPhoto } from "./supabase";
  */
 const PUBLIC = "https://kkdiihazgzesbqxjytqv.supabase.co/storage/v1/object/public/photos/";
 const editedBase = (orig: string) => `edited/${md5(orig)}`;
-async function latestEdited(orig: string): Promise<{ url: string; n: number } | null> {
+export async function latestEdited(orig: string): Promise<{ url: string; n: number } | null> {
   let found: { url: string; n: number } | null = null;
   for (let n = 1; n <= 30; n++) {
     const u = `${PUBLIC}${editedBase(orig)}/v${n}.png`;
@@ -125,7 +125,7 @@ async function enhance(url: string): Promise<string | null> {
   } catch { return null; }
 }
 
-export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls: string[]; index: number; onClose: () => void; onDownload?: (url: string, i: number) => void }) {
+export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls: string[]; index: number; onClose: (edited?: Record<string, { url: string; n: number } | null>) => void; onDownload?: (url: string, i: number) => void }) {
   const [idx, setIdx] = useState(index);
   const [scale, setScale] = useState(1);
   const [rot, setRot] = useState(0);
@@ -139,7 +139,6 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const [color, setColor] = useState(COLORS[0]);
   const [marks, setMarks] = useState<Mark[]>([]);
   const [nat, setNat] = useState({ w: 0, h: 0 });
-  const [saving, setSaving] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [live, setLive] = useState<Mark | null>(null);          // 그리는 중인 표시
   const [textSize, setTextSize] = useState(16);
@@ -197,13 +196,6 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
     const perPx = shown ? Math.max(nat.w, nat.h) / shown : 1;
     setMarks((cur) => [...cur, { tool: "text", color, w: 0, pts: [textAt], text: textDraft.trim(), size: Math.max(4, Math.round(textSize * 1.33 * perPx)), bg: textBg }]);
     setTextAt(null); setTextScreen(null); setTextDraft("");
-  };
-  const saveMarked = async () => {
-    if (!nat.w) return; setSaving(true);
-    const data = await exportMarked(url, marks, rot, nat);
-    setSaving(false);
-    if (!data) { window.alert("표시째 저장을 만들지 못했습니다 — 화면을 캡처해 주세요"); return; }
-    const a = document.createElement("a"); a.href = data; a.download = `사진_표시_${idx + 1}.png`; a.click();
   };
   /** 편집본을 저장소에 올려 모두가 보게 — 원본은 그대로, 다음 번호(vN)로 */
   const shareMarked = async () => {
@@ -285,9 +277,9 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           <button type="button" className={btn} onClick={reset} title="원래 크기로">맞춤</button>
           <button type="button" className={`${btn} ${sharp ? "bg-emerald-500/80 hover:bg-emerald-500" : ""}`} onClick={() => setSharp((v) => !v)} title="보기용 보정 — 작은 사진을 키우고 또렷하게. 원본은 그대로">{sharpBusy ? "보정 중…" : sharp ? "선명하게 ✓" : "선명하게"}</button>
           <button type="button" className={`${btn} ${drawOn ? "bg-rose-500/80 hover:bg-rose-500" : ""}`} onClick={() => setDrawOn((v) => !v)} title="동그라미·네모·화살표·펜으로 표시">{drawOn ? "그리기 ✓" : "그리기"}</button>
-          {onDownload && <button type="button" className={btn} onClick={() => onDownload(url, idx)} title="원본 저장">저장</button>}
+          {onDownload && <button type="button" className={btn} onClick={() => onDownload(url, idx)} title="보이는 사진(편집본이 있으면 편집본)을 기기에 받기">다운로드</button>}
         </>}
-        <button type="button" className={`${btn} ml-auto`} onClick={onClose}>닫기 ✕</button>
+        <button type="button" className={`${btn} ml-auto`} onClick={() => onClose(edited)}>닫기 ✕</button>
       </div>
       {drawOn && !video && (
         <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2" onClick={(e) => e.stopPropagation()}>
@@ -304,7 +296,6 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks((cur) => cur.slice(0, -1))}>되돌리기</button>
           <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks([])}>모두 지우기</button>
           <button type="button" className={`${btn} bg-emerald-600 hover:bg-emerald-500`} disabled={!marks.length || sharing} onClick={() => void shareMarked()} title="편집한 사진을 이 링크에 저장 — 다른 사람도 이 상태로 봅니다(원본은 그대로)">{sharing ? "저장 중…" : "편집본 저장(공유)"}</button>
-          <button type="button" className={btn} disabled={!marks.length || saving} onClick={() => void saveMarked()} title="내 기기에 내려받기">{saving ? "만드는 중…" : "내려받기"}</button>
           {tool === "text" && (
             <span className="w-full text-[11px] font-semibold text-slate-300">사진에서 글을 넣을 자리를 누르면 그 자리에 입력 상자가 뜹니다 — Enter 넣기 · Shift+Enter 줄바꿈 · Esc 취소</span>
           )}
@@ -314,7 +305,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
       <div className="relative min-h-0 flex-1 select-none overflow-hidden" onClick={(e) => e.stopPropagation()} onWheel={onWheel}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => { drag.current = null; }}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        onDoubleClick={() => { if (drawOn) return; if (scale > 1) reset(); else zoomTo(2.5); }} style={{ touchAction: "none", cursor: scale > 1 ? "grab" : "default" }}>
+        onDoubleClick={(e) => { if (drawOn || (e.target as HTMLElement).closest("button")) return; if (scale > 1) reset(); else zoomTo(2.5); }} style={{ touchAction: "none", cursor: scale > 1 ? "grab" : "default" }}>
         <div className="flex h-full w-full items-center justify-center">
           {video
             ? <video src={url} controls autoPlay playsInline className="max-h-full max-w-full object-contain" />
