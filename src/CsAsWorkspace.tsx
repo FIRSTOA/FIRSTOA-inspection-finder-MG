@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import PhotoViewer from "./PhotoViewer";
 import { useScreenActive } from "./screenActive";
 import { Search } from "lucide-react";
 import { askConfirm } from "./confirmModal";
@@ -34,7 +35,7 @@ type AsStatus = "접수" | "배정" | "완료" | "익일";
 // AS 미처리 표시는 '익일통합as'. "물류"/"휴가"는 옛 데이터 호환용으로만 남긴다.
 type ScheduleType = "AS" | "익일AS" | "납품철수교체휴가교육" | "매월점검" | "물류" | "휴가";
 type ViewMode = "list" | "calendar" | "mine" | "team"; // team = 팀 전용 캘린더(일정리스트·네이버와 무관)
-type DayFilter = "today" | "tomorrow" | "scheduled";
+type DayFilter = "today" | "tomorrow" | "scheduled" | "overdue";   // overdue = 지난 날짜인데 완료가 안 된 것(누락인지 지나간 건지 팀이 확인)
 
 export type AsTicket = {
   source?: string; // "autoplan" = 자동일정 생성 — 캘린더(월) 표시는 생략, 내 일정·목록에는 표시
@@ -520,6 +521,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   useEffect(() => { try { localStorage.setItem("cs_calendar_teams_v1", JSON.stringify(visibleTeams)); } catch { /* 저장 실패 무시 */ } }, [visibleTeams]);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
+  const [photoView, setPhotoView] = useState<{ urls: string[]; idx: number } | null>(null);   // 증상 사진 확대 보기
   // 중간보고(12시·14시 카톡 보고) 자동 생성 — 팀 일정을 눈으로 대조해 손으로 쓰던 일을 던다
   const [midReport, setMidReport] = useState<{ team: Team; day: "today" | "next"; text: string; polishing?: boolean; diag?: string } | null>(null);
   const midReportSeq = useRef(0); // 차수·팀을 바꾼 뒤 늦게 도착한 AI 응답이 덮어쓰지 않게
@@ -813,6 +815,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
   const [mobileSelectedDate, setMobileSelectedDate] = useState(todayYmd);
   const [dayFilter, setDayFilter] = useState<DayFilter>("today");
+  // 홈의 "미처리 일정" 칸에서 들어오면 미처리 탭으로(화면이 이미 떠 있어도 신호를 받는다, 2026-10-13)
+  useEffect(() => {
+    const open = () => { setMyPlanOpen(false); setDayFilter("overdue"); };
+    try { if (localStorage.getItem("cs_as_open_overdue")) { localStorage.removeItem("cs_as_open_overdue"); open(); } } catch { /* 무시 */ }
+    window.addEventListener("cs:open-overdue", open);
+    return () => window.removeEventListener("cs:open-overdue", open);
+  }, []);
   // 일정 유형 필터 (중복 선택) — AS는 익일AS 포함, 전부 끄면 아무것도 안 보인다(자동 전체 복귀 없음)
   const LIST_TYPE_OPTIONS = ["AS", "AS[완료]", "납품철수교체휴가교육"] as const; // 매월점검은 캘린더 전용 — 일정리스트 제외
   const [listTypes, setListTypes] = useState<string[]>(() => {
@@ -1414,6 +1423,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
+  const overdueCount = tickets.filter((t) => t.date < todayYmd && t.status !== "완료" && t.scheduleType !== "매월점검").length;
   // 팀·유형·날짜만 거른 기준 행 — 직원 칩의 건수 배지와 목록이 같은 범위를 본다
   const baseRows = tickets.filter((ticket) => {
     if (ticket.scheduleType === "매월점검") return false; // 매월점검은 캘린더에서만 (날짜 맞춰 가면 되는 것들)
@@ -1421,6 +1431,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     else if (team !== "ALL" && ticket.team !== team) return false;
     const dt = displayTypeOf(ticket); // 익일통합as / AS[완료] / 납품철수교체휴가교육
     if (!listTypes.includes(dt === "익일통합as" ? "AS" : dt)) return false;
+    if (dayFilter === "overdue") return ticket.date < todayYmd && ticket.status !== "완료";   // 지난 날짜·미완료 = 누락인지 그냥 지나간 건지 확인할 것
     if (dayFilter === "today") return ticket.date === todayYmd;
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
     return ticket.date > todayYmd && ticket.date !== tomorrowYmd;
@@ -1555,7 +1566,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if ((a.time || "") !== (b.time || "")) return (a.time || "").localeCompare(b.time || "");
     return displayTitleOf(a).localeCompare(displayTitleOf(b), "ko");
   });
-  const listNaver = naverBase.filter((ev) => !statusPick || (ev.completed ? "완료" : "미배정") === statusPick)
+  const listNaver = (dayFilter === "overdue" ? [] : naverBase).filter((ev) => !statusPick || (ev.completed ? "완료" : "미배정") === statusPick)
     .sort((a, b) => a.date.localeCompare(b.date) || ((CAT_ORDER[naverCategoryOf(a)] ?? 9) - (CAT_ORDER[naverCategoryOf(b)] ?? 9)) || guOf(a.location || "").localeCompare(guOf(b.location || ""), "ko") || (a.time || "").localeCompare(b.time || "") || (a.title || "").localeCompare(b.title || "", "ko"));
 
   // 기본 조회 범위(6개월) 이전 달을 캘린더에서 열면 그 달 일정만 추가 로드
@@ -1836,10 +1847,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             {/* ② 일정 구분 + 대상 건수 */}
             <div className="flex items-center gap-2">
               <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-full bg-white/[0.07] p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-none">
-                {([["today", "금일"], ["tomorrow", "익일"], ["scheduled", "예정"]] as [DayFilter, string][]).map(([key, label]) => (
+                {([["today", "금일"], ["tomorrow", "익일"], ["scheduled", "예정"], ["overdue", "미처리"]] as [DayFilter, string][]).map(([key, label]) => (
                   <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }}
-                    className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-black transition sm:px-4 ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>
+                    className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-black transition sm:px-4 ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950" : key === "overdue" && overdueCount ? "text-rose-300 hover:text-white" : "text-slate-400 hover:text-white"}`}>
                     <span className="sm:hidden">{label}</span><span className="hidden sm:inline">{label}일정</span>
+                    {key === "overdue" && overdueCount > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">{overdueCount}</span>}
                   </button>
                 ))}
                 <button type="button" onClick={() => setMyPlanOpen(true)}
@@ -1888,7 +1900,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   <button type="button" onClick={() => openMidReport("next")}
                     className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">🌙 익일스케줄</button>
                   <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
-                    {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : "예정"} · {scheduleRows.length + listNaver.length}건
+                    {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : dayFilter === "overdue" ? "미처리(지난 날짜·미완료)" : "예정"} · {scheduleRows.length + listNaver.length}건
                   </span>
                 </span>
               </div>
@@ -2246,7 +2258,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
                 {view === "as" && !!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
-                  <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img loading="lazy" src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></a>)}</div>
+                  <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url, pi) => <button key={url} type="button" title="누르면 크게 — 확대·회전·선명하게" onClick={() => setPhotoView({ urls: reception.photos || [], idx: pi })}><img loading="lazy" src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></button>)}</div>
+                  {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
                 </div>}
                 {view === "as" && !!(ticket.issue || "").trim() && <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
                   <textarea key={`issue-${ticket.id}`} defaultValue={ticket.issue || ""} rows={Math.min(5, Math.max(2, (ticket.issue || "").split("\n").length))}

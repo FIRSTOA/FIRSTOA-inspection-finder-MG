@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import PhotoViewer from "./PhotoViewer";
 import { useScreenActive } from "./screenActive";
 import { askConfirm } from "./confirmModal";
 import { Building2, ChevronLeft, ChevronRight, Copy, ExternalLink, ImagePlus, Search, Send } from "lucide-react";
@@ -288,6 +289,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   // 자기 이름으로 접수할 수 있게 한다 (기본값은 전역 작성자, 조직도 로그인 전 임시)
   const { book } = useAuthorBook();
   const [author, setAuthor] = useState(globalAuthor);
+  const [photoView, setPhotoView] = useState<{ urls: string[]; idx: number } | null>(null);   // 증상 사진 확대 보기(2026-10-13)
   useEffect(() => { setAuthor(globalAuthor); }, [globalAuthor]);
   const [route, setRoute] = useState<ReceiveRoute>("카카오");
   const [type, setType] = useState<ReceiveType>("복합기 AS");
@@ -1447,7 +1449,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                     </div>}
                   </div>}
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
-                  {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url) => <a key={url} href={url} target="_blank" rel="noreferrer"><img loading="lazy" src={url} alt="증상 사진" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" /></a>)}</div>}
+                  {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url, pi) => <button key={url} type="button" title="누르면 크게 — 확대·회전·선명하게" onClick={(e) => { e.stopPropagation(); setPhotoView({ urls: row.photos || [], idx: pi }); }}><img loading="lazy" src={url} alt="증상 사진" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" /></button>)}</div>}
+                  {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   {(row.type === "IT" || row.type === "원격이관") && (() => {
                     const meta = handlingOf(row);

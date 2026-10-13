@@ -1,5 +1,6 @@
 import { teamLabel } from "./authors";
 import CostTile from "./CostTile";
+import OverdueTile from "./OverdueTile";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -377,6 +378,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             <StatusPill tone="ok" icon={Zap} label="최근 배포" value={patchGroups[0] ? `${patchGroups[0][0]} · ${patchGroups[0][1].length}건 반영` : "-"} />
             {/* 비용(AI 질문·문자) — 관제 덱 안에(2026-10-11), 누르면 일별·실시간·지금까지 내역 */}
             <CostTile />
+            {/* 미처리 일정 — 지난 날짜인데 완료가 안 된 것, 팀별 건수(2026-10-13). 누르면 일정리스트의 미처리 탭 */}
+            <OverdueTile onOpen={() => { try { localStorage.setItem("cs_as_open_overdue", "1"); } catch { /* 무시 */ } go("asReception"); setTimeout(() => window.dispatchEvent(new CustomEvent("cs:open-overdue")), 300); }} />
           </div>
         </div>
 

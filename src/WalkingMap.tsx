@@ -2761,6 +2761,12 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
                     onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
                     className="grid h-7 w-7 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100 lg:opacity-40 lg:group-hover:opacity-100">📅</button>
+                  {onSelfRequest && (
+                    // 워킨맵 → FIELD: 이 업체 점검 양식(기종·시리얼·주소·키맨 채워진 것)을 FIELD 에 바로 연다(2026-10-13)
+                    <button type="button" title="FIELD 에서 이 업체 보고 쓰기" aria-label="FIELD 로"
+                      onClick={() => void requestSelfForm(place, (inspectionHistoryByPlace.get(place.id) || [])[0], undefined, [], workinVendorName(place.name) || place.name)}
+                      className="grid h-7 w-7 place-items-center rounded-full bg-slate-900 text-[9px] font-black leading-none text-white transition hover:bg-slate-700 lg:opacity-40 lg:group-hover:opacity-100">F</button>
+                  )}
                   {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
                     <button type="button" title={`새 키맨에게 인사 완료로 표시${keyman.after ? ` — ${keyman.after}` : ""}`} aria-label="인사 완료로 표시"
                       disabled={greetBusyId === keyman.id} onClick={() => void markKeymanGreeted(keyman)}
@@ -3062,6 +3068,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
               <button type="button" aria-label="내 일정에 넣기" title="이 업체를 내 일정에 넣기"
                 onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
                 className="grid w-11 shrink-0 place-items-center border-l border-slate-100 bg-blue-50 text-[15px] text-blue-700 active:bg-blue-100">📅</button>
+            )}
+            {!editMode && onSelfRequest && (
+              <button type="button" aria-label="FIELD 로" title="FIELD 에서 이 업체 보고 쓰기"
+                onClick={() => void requestSelfForm(place, (inspectionHistoryByPlace.get(place.id) || [])[0], undefined, [], workinVendorName(place.name) || place.name)}
+                className="grid w-11 shrink-0 place-items-center border-l border-slate-100 bg-slate-900 text-[10px] font-black text-white active:bg-slate-800">FIELD</button>
             )}
             <button type="button" onClick={() => { selectionSourceRef.current = "other"; setSelectedId(null); setExpandedId(null); }} aria-label="선택 닫기" className="w-10 shrink-0 border-l border-slate-100 text-lg font-black text-slate-400 active:bg-slate-100">×</button>
           </div>
