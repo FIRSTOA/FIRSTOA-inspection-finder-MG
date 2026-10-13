@@ -1451,7 +1451,6 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                   </div>}
                   {row.symptom && <div className="mt-1.5 whitespace-pre-wrap"><b className="text-slate-500">증상</b> {row.symptom}</div>}
                   {!!(row.photos?.length) && <div className="mt-2 flex flex-wrap gap-1.5">{row.photos.map((url, pi) => <button key={url} type="button" title="누르면 크게 — 확대·회전·선명하게" onClick={(e) => { e.stopPropagation(); setPhotoView({ urls: row.photos || [], idx: pi }); }}><img loading="lazy" src={url} alt="증상 사진" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" /></button>)}</div>}
-                  {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
                   {row.notes && <div className="mt-1 whitespace-pre-wrap"><b className="text-slate-500">메모</b> {row.notes}</div>}
                   {(row.type === "IT" || row.type === "원격이관") && (() => {
                     const meta = handlingOf(row);
@@ -1523,6 +1522,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
 
   return (
     <div className="mx-auto w-full max-w-[1560px] space-y-4 pb-16">
+      {/* 사진 보기 — 화면 맨 바깥 한 곳에만(목록 줄 안에 두면 줄마다 겹치고 목록 갱신 때 그린 게 사라졌다, 2026-10-14) */}
+      {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
       {/* 헤더 + 탭 — 한 번에 한 가지 일만 보이게 나눈다 */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
         {/* 다크 상태바 — 오늘 상황과 현재 시각을 한 줄로 (제목은 상단 헤더에 이미 있다) */}

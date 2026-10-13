@@ -1608,6 +1608,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
   return (
     <div className="space-y-5">
+      {/* 사진 보기 — 화면 맨 바깥 한 곳에만(목록 줄 안에 두면 줄마다 겹치고 목록 갱신 때 그린 게 사라졌다, 2026-10-14) */}
+      {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
       {!!syncError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
 
       {view === "calendar" ? (
@@ -2259,7 +2261,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {view === "as" && !!(reception?.photos?.length) && <div>
                   <div className="text-[10px] font-black text-slate-400">증상 사진</div>
                   <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url, pi) => <button key={url} type="button" title="누르면 크게 — 확대·회전·선명하게" onClick={() => setPhotoView({ urls: reception.photos || [], idx: pi })}><img loading="lazy" src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></button>)}</div>
-                  {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
                 </div>}
                 {view === "as" && !!(ticket.issue || "").trim() && <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
                   <textarea key={`issue-${ticket.id}`} defaultValue={ticket.issue || ""} rows={Math.min(5, Math.max(2, (ticket.issue || "").split("\n").length))}
