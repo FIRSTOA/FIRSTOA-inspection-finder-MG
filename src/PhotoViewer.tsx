@@ -10,15 +10,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const isVideo = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-type Tool = "circle" | "rect" | "pen" | "arrow";
-type Mark = { tool: Tool; color: string; w: number; pts: Array<[number, number]> };   // 좌표는 사진 원래 픽셀 기준
-const COLORS = ["#ef4444", "#facc15", "#22c55e", "#3b82f6", "#ffffff"];
-const TOOL_LABEL: Record<Tool, string> = { circle: "◯", rect: "▢", arrow: "↗", pen: "✎" };
+type Tool = "circle" | "rect" | "pen" | "arrow" | "text";
+// 좌표는 사진 원래 픽셀 기준. 글상자는 text·size(px)·bg(배경색, ""=없음)
+type Mark = { tool: Tool; color: string; w: number; pts: Array<[number, number]>; text?: string; size?: number; bg?: string };
+const COLORS = ["#ef4444", "#facc15", "#22c55e", "#3b82f6", "#ffffff", "#0f172a"];
+const BGS = ["", "#ffffff", "#0f172a", "#facc15"];
+const SIZES: Array<[string, number]> = [["작게", 0.035], ["보통", 0.05], ["크게", 0.075], ["아주 크게", 0.11]];   // 사진 긴 변 대비
+const TOOL_LABEL: Record<Tool, string> = { circle: "◯", rect: "▢", arrow: "↗", pen: "✎", text: "T" };
+const FONT = "Pretendard, Apple SD Gothic Neo, Malgun Gothic, Noto Sans KR, sans-serif";
+/** 글상자 크기 짐작(한글은 거의 정사각) */
+const textBox = (m: Mark) => { const sz = m.size || 32; const lines = String(m.text || "").split("\n"); const w = Math.max(...lines.map((l) => [...l].reduce((n, ch) => n + (/[ -~]/.test(ch) ? 0.58 : 1), 0))) * sz; return { w: w + sz * 0.6, h: lines.length * sz * 1.25 + sz * 0.35, lines, sz }; };
 
 /** 표시 하나를 SVG 요소로 */
 function MarkShape({ m }: { m: Mark }) {
   const [a, b] = [m.pts[0], m.pts[m.pts.length - 1]];
   const common = { stroke: m.color, strokeWidth: m.w, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (m.tool === "text") {
+    const { w, h, lines, sz } = textBox(m);
+    return <g>{m.bg && <rect x={a[0]} y={a[1]} width={w} height={h} rx={sz * 0.2} fill={m.bg} fillOpacity={0.88} />}
+      <text x={a[0] + sz * 0.3} y={a[1] + sz * 1.05} fill={m.color} fontSize={sz} fontWeight={800} fontFamily={FONT}>{lines.map((l, i) => <tspan key={i} x={a[0] + sz * 0.3} dy={i ? sz * 1.25 : 0}>{l}</tspan>)}</text></g>;
+  }
   if (m.tool === "pen") return <polyline points={m.pts.map((p) => p.join(",")).join(" ")} {...common} />;
   if (m.tool === "rect") return <rect x={Math.min(a[0], b[0])} y={Math.min(a[1], b[1])} width={Math.abs(b[0] - a[0])} height={Math.abs(b[1] - a[1])} {...common} />;
   if (m.tool === "circle") return <ellipse cx={(a[0] + b[0]) / 2} cy={(a[1] + b[1]) / 2} rx={Math.abs(b[0] - a[0]) / 2} ry={Math.abs(b[1] - a[1]) / 2} {...common} />;
@@ -36,6 +47,11 @@ async function exportMarked(url: string, marks: Mark[], rot: number, nat: { w: n
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${nat.w}" height="${nat.h}" viewBox="0 0 ${nat.w} ${nat.h}">${marks.map((m) => {
       const [a, b] = [m.pts[0], m.pts[m.pts.length - 1]];
       const st = `stroke="${m.color}" stroke-width="${m.w}" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+      if (m.tool === "text") {
+        const { w, h, lines, sz } = textBox(m);
+        const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return `${m.bg ? `<rect x="${a[0]}" y="${a[1]}" width="${w}" height="${h}" rx="${sz * 0.2}" fill="${m.bg}" fill-opacity="0.88"/>` : ""}<text x="${a[0] + sz * 0.3}" y="${a[1] + sz * 1.05}" fill="${m.color}" font-size="${sz}" font-weight="800" font-family="${FONT}">${lines.map((l, i) => `<tspan x="${a[0] + sz * 0.3}" dy="${i ? sz * 1.25 : 0}">${esc(l)}</tspan>`).join("")}</text>`;
+      }
       if (m.tool === "pen") return `<polyline ${st} points="${m.pts.map((p) => p.join(",")).join(" ")}"/>`;
       if (m.tool === "rect") return `<rect ${st} x="${Math.min(a[0], b[0])}" y="${Math.min(a[1], b[1])}" width="${Math.abs(b[0] - a[0])}" height="${Math.abs(b[1] - a[1])}"/>`;
       if (m.tool === "circle") return `<ellipse ${st} cx="${(a[0] + b[0]) / 2}" cy="${(a[1] + b[1]) / 2}" rx="${Math.abs(b[0] - a[0]) / 2}" ry="${Math.abs(b[1] - a[1]) / 2}"/>`;
@@ -107,8 +123,11 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const [nat, setNat] = useState({ w: 0, h: 0 });
   const [saving, setSaving] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const drawing = useRef<Mark | null>(null);
-  const [, setTick] = useState(0);
+  const [live, setLive] = useState<Mark | null>(null);          // 그리는 중인 표시
+  const [textSize, setTextSize] = useState(SIZES[1][1]);
+  const [textBg, setTextBg] = useState("#ffffff");
+  const [textAt, setTextAt] = useState<[number, number] | null>(null);   // 글상자 놓을 자리(누른 곳)
+  const [textDraft, setTextDraft] = useState("");
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
   const pinch = useRef<{ d: number; s: number } | null>(null);
   const swipe = useRef<number | null>(null);
@@ -125,17 +144,24 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
     return [Math.round(p.x), Math.round(p.y)];
   };
   const penW = Math.max(3, Math.round(Math.max(nat.w, nat.h) / 220));
-  const drawDown = (e: React.PointerEvent) => { const p = toImg(e); if (!p) return; e.stopPropagation(); (e.currentTarget as Element).setPointerCapture(e.pointerId); drawing.current = { tool, color, w: penW, pts: [p, p] }; setTick((t) => t + 1); };
+  const drawDown = (e: React.PointerEvent) => {
+    const p = toImg(e); if (!p) return; e.stopPropagation();
+    if (tool === "text") { setTextAt(p); setTextDraft(""); return; }   // 누른 자리에 글상자 — 위 입력칸에 적고 [넣기]
+    (e.currentTarget as Element).setPointerCapture(e.pointerId); setLive({ tool, color, w: penW, pts: [p, p] });
+  };
   const drawMove = (e: React.PointerEvent) => {
-    const d = drawing.current; if (!d) return; const p = toImg(e); if (!p) return; e.stopPropagation();
-    if (d.tool === "pen") d.pts.push(p); else d.pts[1] = p;
-    setTick((t) => t + 1);
+    if (!live) return; const p = toImg(e); if (!p) return; e.stopPropagation();
+    setLive((d) => (d ? { ...d, pts: d.tool === "pen" ? [...d.pts, p] : [d.pts[0], p] } : d));
   };
   const drawUp = (e: React.PointerEvent) => {
-    const d = drawing.current; drawing.current = null; if (!d) return; e.stopPropagation();
+    const d = live; setLive(null); if (!d) return; e.stopPropagation();
     const [a, b] = [d.pts[0], d.pts[d.pts.length - 1]];
     if (d.tool === "pen" ? d.pts.length > 2 : Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) > 6) setMarks((cur) => [...cur, d]);
-    setTick((t) => t + 1);
+  };
+  const putText = () => {
+    if (!textAt || !textDraft.trim()) return;
+    setMarks((cur) => [...cur, { tool: "text", color, w: 0, pts: [textAt], text: textDraft.trim(), size: Math.round(Math.max(nat.w, nat.h) * textSize), bg: textBg }]);
+    setTextAt(null); setTextDraft("");
   };
   const saveMarked = async () => {
     if (!nat.w) return; setSaving(true);
@@ -213,10 +239,25 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           {(Object.keys(TOOL_LABEL) as Tool[]).map((t) => <button key={t} type="button" onClick={() => setTool(t)} className={`h-8 w-8 rounded-full text-[15px] font-black ${tool === t ? "bg-white text-slate-950" : "bg-white/15 text-white"}`} title={t === "circle" ? "동그라미" : t === "rect" ? "네모" : t === "arrow" ? "화살표" : "펜"}>{TOOL_LABEL[t]}</button>)}
           <span className="mx-1 h-5 w-px bg-white/20" />
           {COLORS.map((c) => <button key={c} type="button" onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-white" : "border-transparent"}`} style={{ background: c }} aria-label="색" />)}
+          {tool === "text" && <>
+            <span className="mx-1 h-5 w-px bg-white/20" />
+            <select value={textSize} onChange={(e) => setTextSize(Number(e.target.value))} className="rounded-full bg-white/15 px-2 py-1.5 text-[12px] font-black text-white">{SIZES.map(([l, v]) => <option key={l} value={v} className="text-slate-900">{l}</option>)}</select>
+            <span className="text-[11px] font-black text-slate-300">배경</span>
+            {BGS.map((b) => <button key={b || "none"} type="button" onClick={() => setTextBg(b)} title={b ? "배경색" : "배경 없음"} className={`h-7 w-7 rounded-md border-2 text-[10px] font-black ${textBg === b ? "border-white" : "border-white/20"}`} style={{ background: b || "transparent", color: "#fff" }}>{b ? "" : "없음"}</button>)}
+          </>}
           <span className="mx-1 h-5 w-px bg-white/20" />
           <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks((cur) => cur.slice(0, -1))}>되돌리기</button>
           <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks([])}>모두 지우기</button>
           <button type="button" className={`${btn} bg-emerald-500/80 hover:bg-emerald-500`} disabled={!marks.length || saving} onClick={() => void saveMarked()}>{saving ? "만드는 중…" : "표시째 저장"}</button>
+          {tool === "text" && (
+            <div className="flex w-full items-center gap-1.5">
+              {textAt
+                ? <><textarea autoFocus value={textDraft} onChange={(e) => setTextDraft(e.target.value)} rows={1} placeholder="적을 글자 (줄바꿈 가능)" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); putText(); } }} className="min-w-0 flex-1 resize-none rounded-lg bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-900 outline-none" />
+                    <button type="button" className={`${btn} bg-blue-500/80 hover:bg-blue-500`} disabled={!textDraft.trim()} onClick={putText}>넣기</button>
+                    <button type="button" className={btn} onClick={() => setTextAt(null)}>취소</button></>
+                : <span className="text-[11px] font-semibold text-slate-300">사진에서 글상자를 놓을 자리를 누르세요 — 크기·글자색(위 색)·배경을 고르고 적습니다</span>}
+            </div>
+          )}
         </div>
       )}
       {/* 가운데 — 사진. 휠 확대, 끌어서 이동, 핀치, 더블클릭 확대/맞춤 */}
@@ -235,7 +276,8 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
                     style={{ pointerEvents: drawOn ? "auto" : "none", cursor: drawOn ? "crosshair" : "default", touchAction: "none" }}
                     onPointerDown={drawDown} onPointerMove={drawMove} onPointerUp={drawUp}>
                     {marks.map((m, i) => <MarkShape key={i} m={m} />)}
-                    {drawing.current && <MarkShape m={drawing.current} />}
+                    {live && <MarkShape m={live} />}
+                    {textAt && <circle cx={textAt[0]} cy={textAt[1]} r={penW * 2} fill={color} stroke="#fff" strokeWidth={penW / 2} />}
                   </svg>
                 )}
               </div>}
