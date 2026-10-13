@@ -1,6 +1,6 @@
 /** 사진 앨범 보기 — 카톡 링크(?album=id)로 진입 시 사진 전부 격자로 표시.
  *  탭하면 전체화면 + 좌우 스와이프/화살표로 넘기기 (모바일 최적화). */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getAlbum } from "./supabase";
 import PhotoViewer from "./PhotoViewer";
 
@@ -12,7 +12,6 @@ export default function AlbumView({ id }: { id: string }) {
   const [idx, setIdx] = useState<number | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadErr, setDownloadErr] = useState("");
-  const touchX = useRef<number | null>(null);
 
   useEffect(() => {
     getAlbum(id)
