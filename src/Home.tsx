@@ -1,6 +1,5 @@
 import { teamLabel } from "./authors";
 import CostTile from "./CostTile";
-import OverdueTile from "./OverdueTile";
 import OverduePanel from "./OverduePanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -355,7 +354,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         <div className="pointer-events-none absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
 
         {/* ── ① 관제 덱 ── */}
-        <div className="relative flex flex-col gap-4 border-b border-white/[0.08] px-4 py-5 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="relative flex flex-col gap-4 border-b border-white/[0.08] px-4 py-5 sm:px-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-2 text-[10.5px] font-black tracking-[0.22em] text-blue-300"><Radio size={13} className="animate-pulse motion-reduce:animate-none" />FIRSTOA CS · LIVE OPERATIONS</div>
             <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -380,8 +379,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             <StatusPill tone="ok" icon={Zap} label="최근 배포" value={patchGroups[0] ? `${patchGroups[0][0]} · ${patchGroups[0][1].length}건 반영` : "-"} />
             {/* 비용(AI 질문·문자) — 관제 덱 안에(2026-10-11), 누르면 일별·실시간·지금까지 내역 */}
             <CostTile />
-            {/* 미처리 일정 — 지난 날짜인데 완료가 안 된 것, 팀별 건수(2026-10-13). 누르면 일정리스트의 미처리 탭 */}
-            <OverdueTile onOpen={openOverdue} />
           </div>
         </div>
 

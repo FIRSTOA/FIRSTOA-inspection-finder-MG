@@ -21,6 +21,7 @@ describe("검색어 이름(vendorSearchName)", () => {
   it("법인표기·숫자 메모·붙은 영문 꼬리를 뗀다", () => {
     expect(vendorSearchName("주식회사 티나고ew725.3.7부터 1년씩 계약연장 전 주식회사 정스타피온")).toBe("티나고");
     expect(vendorSearchName("넥스트라이프 본사")).toBe("넥스트라이프 본사");
+    expect(vendorSearchName("윤스라이팅-개인번호로 연락 X")).toBe("윤스라이팅");
     expect(vendorSearchName("(주)이에이엔테크놀로지(8층)PS키트")).toBe("이에이엔테크놀로지");
   });
 });
