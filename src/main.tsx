@@ -24,7 +24,14 @@ const checkForNewBuild = async () => {
     const html = await response.text()
     const latestAsset = html.match(/<script[^>]+src="([^"]+\.js)"/)?.[1]
     const currentAsset = [...document.scripts].map((script) => script.getAttribute('src') || '').find((src) => /\/assets\/[^/]+\.js$/.test(src))
-    if (latestAsset && currentAsset && new URL(latestAsset, location.origin).pathname !== new URL(currentAsset, location.origin).pathname) location.reload()
+    if (latestAsset && currentAsset && new URL(latestAsset, location.origin).pathname !== new URL(currentAsset, location.origin).pathname) {
+      // 창(사진 보기·확인창 등)이 열려 있거나 입력 중이면 새로고침하지 않는다 — 드롭다운을 닫는 순간의 포커스로 새로고침돼
+      // 하던 일이 날아가고 첫 화면(FIELD)으로 튕기던 것(2026-10-14). 사진 링크 페이지는 새로고침하지 않는다. 다음 검사(5분)·창 복귀 때 다시 본다
+      const active = document.activeElement as HTMLElement | null
+      const busy = !!document.querySelector('[role="dialog"]') || !!active?.closest('input, textarea, select, [contenteditable="true"]')
+      if (busy || new URLSearchParams(location.search).has('photo')) return
+      location.reload()
+    }
   } catch {
     // Offline use keeps the currently loaded build.
   }
