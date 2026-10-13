@@ -244,3 +244,12 @@ export function vendorNameCore(raw: string): string {
   }
   return out.join(" ") || base;
 }
+
+/**
+ * 업체 검색어로 쓸 이름 — 법인표기를 빼고 첫 숫자·메모 앞까지. "주식회사 티나고ew725.3.7부터 1년씩 계약연장 …" → "티나고" (2026-10-13 워킨맵 F)
+ */
+export function vendorSearchName(raw: string): string {
+  const base = String(raw || "").replace(/㈜|\(주\)|\(유\)|주식회사|유한회사|재단법인|사단법인/g, " ").replace(/\s+/g, " ").trim();
+  const cut = base.split(/\d/)[0].replace(/([가-힣])[a-z]+$/i, "$1").replace(/[\s\-·,()[\]]+$/, "").trim();
+  return vendorNameCore(cut || base) || base;
+}

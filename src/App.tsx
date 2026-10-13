@@ -4203,6 +4203,7 @@ export default function App() {
   // 거래처 조회(통합이력 / 점검양식 검색) 관련
   const [currentVendor, setCurrentVendor] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const [searchSeed, setSearchSeed] = useState("");   // 업체 검색 팝업을 이 이름으로 시작(워킨맵 F)
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   // 일정리스트→FIELD 경로는 업체명 칸에 네이버 제목 전체("이민구 셋팅요청 S D450 30S…")가 실려 온다
   // — 통합이력 검색은 배정자 이름을 명단으로 벗기고 핵심 업체명만 쓴다 (저장·앨범용 원문 업체명은 그대로)
@@ -6434,7 +6435,7 @@ export default function App() {
         {visited.has("weekly") && <KeepAlive active={screen === "weekly"}><WorkDashboard author={author} focusDate={weeklyFocus} /></KeepAlive>}
         {screen === "okr" && <OkrHub author={author} />}
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
-        {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} />}
+        {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} onOpenField={(vendor) => { if (mode !== "inspection" && mode !== "blank-report") setMode("inspection"); setScreen("field"); setSearchSeed(vendor); setSearchOpen(true); }} />}
         {screen === "help" && <HelpCenter />}
         {screen === "foodMap" && <FoodMap author={author} team={(() => { const t = teamForAuthor(author); return /^[A-E]$/.test(t) ? t : ""; })()} />}
         {visited.has("calendar") && <KeepAlive active={screen === "calendar"}><CsCalendar /></KeepAlive>}
@@ -7257,6 +7258,8 @@ export default function App() {
                 />
               ) : (
                 <VendorSearch
+                  key={searchSeed}
+                  initialQuery={searchSeed}
                   accent={config.accent}
                   onLoadForm={handleLoadForm}
                   onVendor={setCurrentVendor}

@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { LocateFixed, Search } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { deleteRows, selectAllRows, selectAllRowsFast, selectRows, upsertRows } from "./supabase";
-import { workinVendorName } from "./ids";
+import { vendorSearchName, workinVendorName } from "./ids";
 import { isPersonChange } from "./keyman";
 import { isMobileDevice, kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { geocodeKR } from "./geocode";
@@ -1261,7 +1261,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
 
 const LIST_PAGE = 60; // 목록 한 번에 그리는 줄 수 (지도 선택 추적에서도 쓴다)
 
-export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userKey?: string; onSelfRequest?: (text: string) => void }) {
+export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenField }: { userKey?: string; onSelfRequest?: (text: string) => void; onOpenField?: (vendor: string) => void }) {
   const initialLocalPlacesRef = useRef<MapPlace[] | null>(loadMigratablePlaces());
   const [places, setPlaces] = useState<MapPlace[]>(() => initialLocalPlacesRef.current || loadPlaces());
   const [sharedReady, setSharedReady] = useState(false);
@@ -2761,10 +2761,10 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                   <button type="button" title="이 업체를 내 일정에 넣기" aria-label="내 일정에 넣기"
                     onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
                     className="grid h-7 w-7 place-items-center rounded-full border border-blue-200 bg-blue-50 text-[13px] leading-none text-blue-700 transition hover:bg-blue-100 lg:opacity-40 lg:group-hover:opacity-100">📅</button>
-                  {onSelfRequest && (
-                    // 워킨맵 → FIELD: 이 업체 점검 양식(기종·시리얼·주소·키맨 채워진 것)을 FIELD 에 바로 연다(2026-10-13)
-                    <button type="button" title="FIELD 에서 이 업체 보고 쓰기" aria-label="FIELD 로"
-                      onClick={() => void requestSelfForm(place, (inspectionHistoryByPlace.get(place.id) || [])[0], undefined, [], workinVendorName(place.name) || place.name)}
+                  {onOpenField && (
+                    // 워킨맵 → FIELD: 업체 검색 팝업(최근 방문 양식 목록)을 이 업체명으로 바로 연다 — 양식을 임의로 만들지 않는다(2026-10-13)
+                    <button type="button" title="FIELD 에서 이 업체 최근 양식 불러오기" aria-label="FIELD 로"
+                      onClick={() => onOpenField(vendorSearchName(workinVendorName(place.name) || place.name))}
                       className="grid h-7 w-7 place-items-center rounded-full bg-slate-900 text-[9px] font-black leading-none text-white transition hover:bg-slate-700 lg:opacity-40 lg:group-hover:opacity-100">F</button>
                   )}
                   {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
@@ -3069,9 +3069,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest }: { userK
                 onClick={() => { setPlanDate(defaultPlanDate()); setPlanTarget(place); }}
                 className="grid w-11 shrink-0 place-items-center border-l border-slate-100 bg-blue-50 text-[15px] text-blue-700 active:bg-blue-100">📅</button>
             )}
-            {!editMode && onSelfRequest && (
-              <button type="button" aria-label="FIELD 로" title="FIELD 에서 이 업체 보고 쓰기"
-                onClick={() => void requestSelfForm(place, (inspectionHistoryByPlace.get(place.id) || [])[0], undefined, [], workinVendorName(place.name) || place.name)}
+            {!editMode && onOpenField && (
+              <button type="button" aria-label="FIELD 로" title="FIELD 에서 이 업체 최근 양식 불러오기"
+                onClick={() => onOpenField(vendorSearchName(workinVendorName(place.name) || place.name))}
                 className="grid w-11 shrink-0 place-items-center border-l border-slate-100 bg-slate-900 text-[10px] font-black text-white active:bg-slate-800">FIELD</button>
             )}
             <button type="button" onClick={() => { selectionSourceRef.current = "other"; setSelectedId(null); setExpandedId(null); }} aria-label="선택 닫기" className="w-10 shrink-0 border-l border-slate-100 text-lg font-black text-slate-400 active:bg-slate-100">×</button>

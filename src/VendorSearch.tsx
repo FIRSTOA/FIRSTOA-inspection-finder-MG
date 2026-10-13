@@ -12,6 +12,7 @@ type Props = {
   onLoadForm: (text: string) => void;
   onVendor: (vendor: string) => void;
   onError: (msg: string) => void;
+  initialQuery?: string;   // 워킨맵 등에서 업체명으로 바로 검색 시작(2026-10-13)
 };
 
 const GUBUN_STYLE: Record<string, { bg: string; fg: string }> = {
@@ -36,8 +37,8 @@ function MetaLine({ gubun, e }: { gubun: string; e: VendorMetaEntry }) {
   );
 }
 
-export default function VendorSearch({ accent, onLoadForm, onVendor, onError }: Props) {
-  const [query, setQuery] = useState("");
+export default function VendorSearch({ accent, onLoadForm, onVendor, onError, initialQuery = "" }: Props) {
+  const [query, setQuery] = useState(initialQuery);
   const [hits, setHits] = useState<VendorHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [showHits, setShowHits] = useState(false);
