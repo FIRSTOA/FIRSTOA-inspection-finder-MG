@@ -200,7 +200,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   }, [idx, scale, go, zoomTo, onClose]);
 
   const onWheel = (e: React.WheelEvent) => { e.preventDefault(); zoomTo(e.deltaY < 0 ? scale * 1.15 : scale / 1.15); };
-  const onPointerDown = (e: React.PointerEvent) => { if (e.button !== 0 || drawOn) return; drag.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y, moved: false }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
+  const onPointerDown = (e: React.PointerEvent) => { if (e.button !== 0 || drawOn || (e.target as HTMLElement).closest("button")) return; /* 단추(‹ ›) 위에서는 끌기를 잡지 않는다 — 포인터를 가로채 단추 클릭이 안 먹던 것 */ drag.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y, moved: false }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag.current || pinch.current) return;
     const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
