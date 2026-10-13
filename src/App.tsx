@@ -4204,6 +4204,8 @@ export default function App() {
   const [currentVendor, setCurrentVendor] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [searchSeed, setSearchSeed] = useState("");   // 업체 검색 팝업을 이 이름으로 시작(워킨맵 F)
+  const searchReturnRef = useRef<"" | "walkingMap">("");   // 양식을 안 고르고 닫으면 돌아갈 화면(워킨맵에서 F 로 왔을 때)
+  const closeSearch = () => { setSearchOpen(false); if (searchReturnRef.current) { const back = searchReturnRef.current; searchReturnRef.current = ""; setScreen(back); } };
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   // 일정리스트→FIELD 경로는 업체명 칸에 네이버 제목 전체("이민구 셋팅요청 S D450 30S…")가 실려 온다
   // — 통합이력 검색은 배정자 이름을 명단으로 벗기고 핵심 업체명만 쓴다 (저장·앨범용 원문 업체명은 그대로)
@@ -4735,6 +4737,7 @@ export default function App() {
       if (detected === "inspection") setReportTypeOther("");
     }
     setInputText(text);
+    searchReturnRef.current = "";   // 양식을 골랐으면 FIELD 에 남는다
     setSearchOpen(false);
     showToast("양식을 불러왔어요");
   };
@@ -6435,7 +6438,7 @@ export default function App() {
         {visited.has("weekly") && <KeepAlive active={screen === "weekly"}><WorkDashboard author={author} focusDate={weeklyFocus} /></KeepAlive>}
         {screen === "okr" && <OkrHub author={author} />}
         {screen === "growth" && <GrowthHub author={author} onOpenWeek={(week) => { setWeeklyFocus(week); setScreen("weekly"); }} />}
-        {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} onOpenField={(vendor) => { if (mode !== "inspection" && mode !== "blank-report") setMode("inspection"); setScreen("field"); setSearchSeed(vendor); setSearchOpen(true); }} />}
+        {screen === "walkingMap" && <WalkingMap userKey={author} onSelfRequest={openSelfRequestInField} onOpenField={(vendor) => { if (mode !== "inspection" && mode !== "blank-report") setMode("inspection"); setScreen("field"); setSearchSeed(vendor); searchReturnRef.current = "walkingMap"; setSearchOpen(true); }} />}
         {screen === "help" && <HelpCenter />}
         {screen === "foodMap" && <FoodMap author={author} team={(() => { const t = teamForAuthor(author); return /^[A-E]$/.test(t) ? t : ""; })()} />}
         {visited.has("calendar") && <KeepAlive active={screen === "calendar"}><CsCalendar /></KeepAlive>}
@@ -7233,7 +7236,7 @@ export default function App() {
       {searchOpen && (
         <div
           className="fixed inset-0 z-[70] flex items-end bg-slate-900/40 backdrop-blur-sm sm:items-center sm:justify-center"
-          onClick={() => setSearchOpen(false)}
+          onClick={closeSearch}
         >
           <div
             className="flex h-[90vh] w-full flex-col rounded-t-3xl bg-white sm:h-[82vh] sm:max-w-2xl sm:rounded-3xl"
@@ -7244,7 +7247,7 @@ export default function App() {
                 <div className="text-base font-bold">{mode === "air-purifier" ? "청정기 거래처 찾기" : "거래처·양식 검색"}</div>
                 {mode !== "air-purifier" && <div className="mt-0.5 text-[11px] font-semibold text-white/70">업체를 찾아 최근 점검·AS 양식을 불러옵니다.</div>}
               </div>
-              <button type="button" onClick={() => setSearchOpen(false)} className="rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold">
+              <button type="button" onClick={closeSearch} className="rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold">
                 닫기
               </button>
             </div>
