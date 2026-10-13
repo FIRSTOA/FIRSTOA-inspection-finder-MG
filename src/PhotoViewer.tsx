@@ -15,7 +15,7 @@ type Tool = "circle" | "rect" | "pen" | "arrow" | "text";
 type Mark = { tool: Tool; color: string; w: number; pts: Array<[number, number]>; text?: string; size?: number; bg?: string };
 const COLORS = ["#ef4444", "#facc15", "#22c55e", "#3b82f6", "#ffffff", "#0f172a"];
 const BGS = ["", "#ffffff", "#0f172a", "#facc15"];
-const SIZES: Array<[string, number]> = [["작게", 0.035], ["보통", 0.05], ["크게", 0.075], ["아주 크게", 0.11]];   // 사진 긴 변 대비
+const SIZES = [8, 10, 12, 14, 16, 20, 24, 32, 48];   // 글자 크기(pt) — 화면에 보이는 크기 기준, 사진 해상도로 바꿔 넣는다
 const TOOL_LABEL: Record<Tool, string> = { circle: "◯", rect: "▢", arrow: "↗", pen: "✎", text: "T" };
 const FONT = "Pretendard, Apple SD Gothic Neo, Malgun Gothic, Noto Sans KR, sans-serif";
 /** 글상자 크기 짐작(한글은 거의 정사각) */
@@ -124,9 +124,10 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const [saving, setSaving] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [live, setLive] = useState<Mark | null>(null);          // 그리는 중인 표시
-  const [textSize, setTextSize] = useState(SIZES[1][1]);
+  const [textSize, setTextSize] = useState(16);
   const [textBg, setTextBg] = useState("#ffffff");
-  const [textAt, setTextAt] = useState<[number, number] | null>(null);   // 글상자 놓을 자리(누른 곳)
+  const [textAt, setTextAt] = useState<[number, number] | null>(null);   // 글상자 놓을 자리(누른 곳, 사진 좌표)
+  const [textScreen, setTextScreen] = useState<{ x: number; y: number } | null>(null);   // 그 자리의 화면 좌표 — 입력 상자를 바로 거기 띄운다
   const [textDraft, setTextDraft] = useState("");
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
   const pinch = useRef<{ d: number; s: number } | null>(null);
@@ -146,7 +147,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const penW = Math.max(3, Math.round(Math.max(nat.w, nat.h) / 220));
   const drawDown = (e: React.PointerEvent) => {
     const p = toImg(e); if (!p) return; e.stopPropagation();
-    if (tool === "text") { setTextAt(p); setTextDraft(""); return; }   // 누른 자리에 글상자 — 위 입력칸에 적고 [넣기]
+    if (tool === "text") { setTextAt(p); setTextScreen({ x: e.clientX, y: e.clientY }); setTextDraft(""); return; }   // 누른 자리에 바로 입력 상자
     (e.currentTarget as Element).setPointerCapture(e.pointerId); setLive({ tool, color, w: penW, pts: [p, p] });
   };
   const drawMove = (e: React.PointerEvent) => {
@@ -160,8 +161,12 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   };
   const putText = () => {
     if (!textAt || !textDraft.trim()) return;
-    setMarks((cur) => [...cur, { tool: "text", color, w: 0, pts: [textAt], text: textDraft.trim(), size: Math.round(Math.max(nat.w, nat.h) * textSize), bg: textBg }]);
-    setTextAt(null); setTextDraft("");
+    // pt → 화면 px(×1.33) → 사진 px(사진 원래 폭 ÷ 지금 화면에 보이는 폭) — 확대해 둔 상태면 그만큼 작게 들어간다
+    const rect = svgRef.current?.getBoundingClientRect();
+    const shown = rect ? Math.max(rect.width, rect.height) : 0;
+    const perPx = shown ? Math.max(nat.w, nat.h) / shown : 1;
+    setMarks((cur) => [...cur, { tool: "text", color, w: 0, pts: [textAt], text: textDraft.trim(), size: Math.max(4, Math.round(textSize * 1.33 * perPx)), bg: textBg }]);
+    setTextAt(null); setTextScreen(null); setTextDraft("");
   };
   const saveMarked = async () => {
     if (!nat.w) return; setSaving(true);
@@ -241,7 +246,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           {COLORS.map((c) => <button key={c} type="button" onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-white" : "border-transparent"}`} style={{ background: c }} aria-label="색" />)}
           {tool === "text" && <>
             <span className="mx-1 h-5 w-px bg-white/20" />
-            <select value={textSize} onChange={(e) => setTextSize(Number(e.target.value))} className="rounded-full bg-white/15 px-2 py-1.5 text-[12px] font-black text-white">{SIZES.map(([l, v]) => <option key={l} value={v} className="text-slate-900">{l}</option>)}</select>
+            <select value={textSize} onChange={(e) => setTextSize(Number(e.target.value))} title="글자 크기" className="rounded-full bg-white/15 px-2 py-1.5 text-[12px] font-black text-white">{SIZES.map((v) => <option key={v} value={v} className="text-slate-900">{v}</option>)}</select>
             <span className="text-[11px] font-black text-slate-300">배경</span>
             {BGS.map((b) => <button key={b || "none"} type="button" onClick={() => setTextBg(b)} title={b ? "배경색" : "배경 없음"} className={`h-7 w-7 rounded-md border-2 text-[10px] font-black ${textBg === b ? "border-white" : "border-white/20"}`} style={{ background: b || "transparent", color: "#fff" }}>{b ? "" : "없음"}</button>)}
           </>}
@@ -250,13 +255,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks([])}>모두 지우기</button>
           <button type="button" className={`${btn} bg-emerald-500/80 hover:bg-emerald-500`} disabled={!marks.length || saving} onClick={() => void saveMarked()}>{saving ? "만드는 중…" : "표시째 저장"}</button>
           {tool === "text" && (
-            <div className="flex w-full items-center gap-1.5">
-              {textAt
-                ? <><textarea autoFocus value={textDraft} onChange={(e) => setTextDraft(e.target.value)} rows={1} placeholder="적을 글자 (줄바꿈 가능)" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); putText(); } }} className="min-w-0 flex-1 resize-none rounded-lg bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-900 outline-none" />
-                    <button type="button" className={`${btn} bg-blue-500/80 hover:bg-blue-500`} disabled={!textDraft.trim()} onClick={putText}>넣기</button>
-                    <button type="button" className={btn} onClick={() => setTextAt(null)}>취소</button></>
-                : <span className="text-[11px] font-semibold text-slate-300">사진에서 글상자를 놓을 자리를 누르세요 — 크기·글자색(위 색)·배경을 고르고 적습니다</span>}
-            </div>
+            <span className="w-full text-[11px] font-semibold text-slate-300">사진에서 글을 넣을 자리를 누르면 그 자리에 입력 상자가 뜹니다 — Enter 넣기 · Shift+Enter 줄바꿈 · Esc 취소</span>
           )}
         </div>
       )}
@@ -277,7 +276,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
                     onPointerDown={drawDown} onPointerMove={drawMove} onPointerUp={drawUp}>
                     {marks.map((m, i) => <MarkShape key={i} m={m} />)}
                     {live && <MarkShape m={live} />}
-                    {textAt && <circle cx={textAt[0]} cy={textAt[1]} r={penW * 2} fill={color} stroke="#fff" strokeWidth={penW / 2} />}
+                    {textAt && <g stroke={color} strokeWidth={penW / 1.5} strokeLinecap="round"><line x1={textAt[0] - penW * 3} y1={textAt[1]} x2={textAt[0] + penW * 3} y2={textAt[1]} /><line x1={textAt[0]} y1={textAt[1] - penW * 3} x2={textAt[0]} y2={textAt[1] + penW * 3} /></g>}
                   </svg>
                 )}
               </div>}
@@ -285,6 +284,17 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
         {idx > 0 && <button type="button" onClick={() => go(idx - 1)} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 px-3 py-2 text-xl font-bold">‹</button>}
         {idx < urls.length - 1 && <button type="button" onClick={() => go(idx + 1)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 px-3 py-2 text-xl font-bold">›</button>}
       </div>
+      {textAt && textScreen && (
+        <div className="fixed z-[310] flex items-start gap-1" style={{ left: Math.min(textScreen.x, window.innerWidth - 250), top: Math.min(textScreen.y, window.innerHeight - 90) }} onClick={(e) => e.stopPropagation()}>
+          <textarea autoFocus value={textDraft} onChange={(e) => setTextDraft(e.target.value)} rows={2} placeholder="글자 입력"
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); putText(); } if (e.key === "Escape") { e.stopPropagation(); setTextAt(null); setTextScreen(null); } }}
+            className="w-52 resize rounded-md border-2 px-2 py-1 font-extrabold outline-none" style={{ borderColor: color, color, background: textBg || "rgba(255,255,255,.08)", fontSize: Math.min(28, textSize * 1.33) }} />
+          <div className="flex flex-col gap-1">
+            <button type="button" disabled={!textDraft.trim()} onClick={putText} className="rounded-md bg-blue-600 px-2 py-1 text-[11px] font-black text-white disabled:opacity-40">넣기</button>
+            <button type="button" onClick={() => { setTextAt(null); setTextScreen(null); }} className="rounded-md bg-white/20 px-2 py-1 text-[11px] font-black text-white">취소</button>
+          </div>
+        </div>
+      )}
       <div className="px-3 py-1.5 text-center text-[10.5px] font-semibold text-slate-400" onClick={(e) => e.stopPropagation()}>휠·핀치·더블클릭으로 확대, 확대한 뒤 끌어서 이동 · 원본 파일은 바뀌지 않습니다</div>
     </div>
   );
