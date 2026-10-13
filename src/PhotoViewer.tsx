@@ -7,6 +7,7 @@
  * 그리기(2026-10-14): 동그라미·네모·펜·화살표, 색, 되돌리기·지우기, [표시째 저장](원본 + 표시를 합친 새 PNG — 원본 파일은 그대로).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const isVideo = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -222,8 +223,13 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const onTouchEnd = () => { pinch.current = null; swipe.current = null; };
 
   const btn = "rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-black text-white hover:bg-white/25 disabled:opacity-40";
-  return (
-    <div className="fixed inset-0 z-[300] flex flex-col bg-black/95 text-white" onClick={onClose} role="dialog" aria-label="사진 보기">
+  // 화면 맨 위층(body)에 띄우고, 누름·키 이벤트가 바깥(일정·접수 줄)으로 새지 않게 막는다 —
+  // React 이벤트는 portal 이어도 부모 컴포넌트로 전달돼, 창 안에서 누른 것이 줄의 [FIELD] 동작을 일으켰다(2026-10-14)
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  return createPortal(
+    <div className="fixed inset-0 z-[300] flex flex-col bg-black/95 text-white" onClick={(e) => { e.stopPropagation(); onClose(); }}
+      onPointerDown={stop} onPointerUp={stop} onMouseDown={stop} onMouseUp={stop} onTouchStart={stop} onTouchEnd={stop} onKeyDown={stop} onKeyUp={stop} onDoubleClick={stop} onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      role="dialog" aria-label="사진 보기">
       {/* 위 — 번호·조절 단추 */}
       <div className="flex flex-wrap items-center gap-1.5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
         <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-black">{idx + 1} / {urls.length}</span>
@@ -296,6 +302,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
         </div>
       )}
       <div className="px-3 py-1.5 text-center text-[10.5px] font-semibold text-slate-400" onClick={(e) => e.stopPropagation()}>휠·핀치·더블클릭으로 확대, 확대한 뒤 끌어서 이동 · 원본 파일은 바뀌지 않습니다</div>
-    </div>
+    </div>,
+    document.body,
   );
 }
