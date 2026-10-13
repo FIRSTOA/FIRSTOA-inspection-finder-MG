@@ -3,12 +3,55 @@
  *
  * 왜: 접수 사진이 작게만 보여 판단이 안 됐다(240×320 같은 캡처본). 원본 파일은 건드리지 않고 화면에서만 키우고 또렷하게 한다.
  *     "선명하게"는 작은 사진을 2~3배로 늘린 뒤 언샤프 마스크를 한 번 거친 것 — 글자·선이 조금 더 읽힌다. 저장·링크는 늘 원본.
- * 쓰는 곳: 앨범(AlbumView), 일정리스트·서비스접수의 증상 사진.
+ * 쓰는 곳: 앨범(AlbumView), 일정리스트·서비스접수의 증상 사진, 카톡 링크(?photo=).
+ * 그리기(2026-10-14): 동그라미·네모·펜·화살표, 색, 되돌리기·지우기, [표시째 저장](원본 + 표시를 합친 새 PNG — 원본 파일은 그대로).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const isVideo = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+type Tool = "circle" | "rect" | "pen" | "arrow";
+type Mark = { tool: Tool; color: string; w: number; pts: Array<[number, number]> };   // 좌표는 사진 원래 픽셀 기준
+const COLORS = ["#ef4444", "#facc15", "#22c55e", "#3b82f6", "#ffffff"];
+const TOOL_LABEL: Record<Tool, string> = { circle: "◯", rect: "▢", arrow: "↗", pen: "✎" };
+
+/** 표시 하나를 SVG 요소로 */
+function MarkShape({ m }: { m: Mark }) {
+  const [a, b] = [m.pts[0], m.pts[m.pts.length - 1]];
+  const common = { stroke: m.color, strokeWidth: m.w, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (m.tool === "pen") return <polyline points={m.pts.map((p) => p.join(",")).join(" ")} {...common} />;
+  if (m.tool === "rect") return <rect x={Math.min(a[0], b[0])} y={Math.min(a[1], b[1])} width={Math.abs(b[0] - a[0])} height={Math.abs(b[1] - a[1])} {...common} />;
+  if (m.tool === "circle") return <ellipse cx={(a[0] + b[0]) / 2} cy={(a[1] + b[1]) / 2} rx={Math.abs(b[0] - a[0]) / 2} ry={Math.abs(b[1] - a[1]) / 2} {...common} />;
+  const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), h = m.w * 4;
+  const p1: [number, number] = [b[0] - h * Math.cos(ang - 0.45), b[1] - h * Math.sin(ang - 0.45)];
+  const p2: [number, number] = [b[0] - h * Math.cos(ang + 0.45), b[1] - h * Math.sin(ang + 0.45)];
+  return <g {...common}><line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} /><polyline points={`${p1.join(",")} ${b.join(",")} ${p2.join(",")}`} /></g>;
+}
+
+/** 원본 + 표시를 합친 PNG(보이는 회전 그대로) */
+async function exportMarked(url: string, marks: Mark[], rot: number, nat: { w: number; h: number }): Promise<string | null> {
+  try {
+    const img = new Image(); img.crossOrigin = "anonymous";
+    await new Promise<void>((ok, bad) => { img.onload = () => ok(); img.onerror = () => bad(new Error("load")); img.src = url; });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${nat.w}" height="${nat.h}" viewBox="0 0 ${nat.w} ${nat.h}">${marks.map((m) => {
+      const [a, b] = [m.pts[0], m.pts[m.pts.length - 1]];
+      const st = `stroke="${m.color}" stroke-width="${m.w}" fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+      if (m.tool === "pen") return `<polyline ${st} points="${m.pts.map((p) => p.join(",")).join(" ")}"/>`;
+      if (m.tool === "rect") return `<rect ${st} x="${Math.min(a[0], b[0])}" y="${Math.min(a[1], b[1])}" width="${Math.abs(b[0] - a[0])}" height="${Math.abs(b[1] - a[1])}"/>`;
+      if (m.tool === "circle") return `<ellipse ${st} cx="${(a[0] + b[0]) / 2}" cy="${(a[1] + b[1]) / 2}" rx="${Math.abs(b[0] - a[0]) / 2}" ry="${Math.abs(b[1] - a[1]) / 2}"/>`;
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), h = m.w * 4;
+      return `<g ${st}><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><polyline points="${b[0] - h * Math.cos(ang - 0.45)},${b[1] - h * Math.sin(ang - 0.45)} ${b[0]},${b[1]} ${b[0] - h * Math.cos(ang + 0.45)},${b[1] - h * Math.sin(ang + 0.45)}"/></g>`;
+    }).join("")}</svg>`;
+    const over = new Image();
+    await new Promise<void>((ok, bad) => { over.onload = () => ok(); over.onerror = () => bad(new Error("svg")); over.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`; });
+    const turned = rot % 180 !== 0;
+    const c = document.createElement("canvas"); c.width = turned ? nat.h : nat.w; c.height = turned ? nat.w : nat.h;
+    const ctx = c.getContext("2d"); if (!ctx) return null;
+    ctx.translate(c.width / 2, c.height / 2); ctx.rotate((rot * Math.PI) / 180);
+    ctx.drawImage(img, -nat.w / 2, -nat.h / 2, nat.w, nat.h); ctx.drawImage(over, -nat.w / 2, -nat.h / 2, nat.w, nat.h);
+    return c.toDataURL("image/png");
+  } catch { return null; }
+}
 
 /** 보기용 보정 — 작으면 키우고(최대 3배, 1600px 까지) 3×3 언샤프로 또렷하게. 실패(CORS 등)하면 null */
 async function enhance(url: string): Promise<string | null> {
@@ -56,6 +99,16 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const [sharp, setSharp] = useState(false);
   const [sharpSrc, setSharpSrc] = useState<string | null>(null);
   const [sharpBusy, setSharpBusy] = useState(false);
+  // 그리기
+  const [drawOn, setDrawOn] = useState(false);
+  const [tool, setTool] = useState<Tool>("circle");
+  const [color, setColor] = useState(COLORS[0]);
+  const [marks, setMarks] = useState<Mark[]>([]);
+  const [nat, setNat] = useState({ w: 0, h: 0 });
+  const [saving, setSaving] = useState(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const drawing = useRef<Mark | null>(null);
+  const [, setTick] = useState(0);
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
   const pinch = useRef<{ d: number; s: number } | null>(null);
   const swipe = useRef<number | null>(null);
@@ -63,7 +116,34 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const video = isVideo(url);
 
   const reset = useCallback(() => { setScale(1); setRot(0); setPos({ x: 0, y: 0 }); }, []);
-  const go = useCallback((n: number) => { if (n < 0 || n >= urls.length) return; setIdx(n); setScale(1); setRot(0); setPos({ x: 0, y: 0 }); setSharpSrc(null); }, [urls.length]);
+  const go = useCallback((n: number) => { if (n < 0 || n >= urls.length) return; setIdx(n); setScale(1); setRot(0); setPos({ x: 0, y: 0 }); setSharpSrc(null); setMarks([]); }, [urls.length]);
+  // 화면 좌표 → 사진 원래 픽셀 좌표(확대·이동·회전을 거꾸로) — SVG 의 화면 변환 행렬을 뒤집어 쓴다
+  const toImg = (e: React.PointerEvent): [number, number] | null => {
+    const svg = svgRef.current; if (!svg) return null;
+    const m = svg.getScreenCTM(); if (!m) return null;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    return [Math.round(p.x), Math.round(p.y)];
+  };
+  const penW = Math.max(3, Math.round(Math.max(nat.w, nat.h) / 220));
+  const drawDown = (e: React.PointerEvent) => { const p = toImg(e); if (!p) return; e.stopPropagation(); (e.currentTarget as Element).setPointerCapture(e.pointerId); drawing.current = { tool, color, w: penW, pts: [p, p] }; setTick((t) => t + 1); };
+  const drawMove = (e: React.PointerEvent) => {
+    const d = drawing.current; if (!d) return; const p = toImg(e); if (!p) return; e.stopPropagation();
+    if (d.tool === "pen") d.pts.push(p); else d.pts[1] = p;
+    setTick((t) => t + 1);
+  };
+  const drawUp = (e: React.PointerEvent) => {
+    const d = drawing.current; drawing.current = null; if (!d) return; e.stopPropagation();
+    const [a, b] = [d.pts[0], d.pts[d.pts.length - 1]];
+    if (d.tool === "pen" ? d.pts.length > 2 : Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) > 6) setMarks((cur) => [...cur, d]);
+    setTick((t) => t + 1);
+  };
+  const saveMarked = async () => {
+    if (!nat.w) return; setSaving(true);
+    const data = await exportMarked(url, marks, rot, nat);
+    setSaving(false);
+    if (!data) { window.alert("표시째 저장을 만들지 못했습니다 — 화면을 캡처해 주세요"); return; }
+    const a = document.createElement("a"); a.href = data; a.download = `사진_표시_${idx + 1}.png`; a.click();
+  };
   const zoomTo = useCallback((next: number) => setScale(clamp(Number(next.toFixed(2)), 1, 8)), []);
 
   // 선명하게 — 사진이 바뀌거나 켜질 때 한 번 만든다(보기용, 원본은 그대로)
@@ -88,7 +168,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   }, [idx, scale, go, zoomTo, onClose]);
 
   const onWheel = (e: React.WheelEvent) => { e.preventDefault(); zoomTo(e.deltaY < 0 ? scale * 1.15 : scale / 1.15); };
-  const onPointerDown = (e: React.PointerEvent) => { if (e.button !== 0) return; drag.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y, moved: false }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
+  const onPointerDown = (e: React.PointerEvent) => { if (e.button !== 0 || drawOn) return; drag.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y, moved: false }; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag.current || pinch.current) return;
     const dx = e.clientX - drag.current.x, dy = e.clientY - drag.current.y;
@@ -99,7 +179,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
     const d = drag.current; drag.current = null;
     if (!d) return;
     const dx = e.clientX - d.x;
-    if (scale <= 1 && Math.abs(dx) > 50) { if (dx > 0) go(idx - 1); else go(idx + 1); }
+    if (!drawOn && scale <= 1 && Math.abs(dx) > 50) { if (dx > 0) go(idx - 1); else go(idx + 1); }
   };
   const onTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) { const [a, b] = [e.touches[0], e.touches[1]]; pinch.current = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), s: scale }; }
@@ -123,21 +203,42 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           <button type="button" className={btn} onClick={() => setRot((r) => (r + 90) % 360)} title="90° 회전 (R)">↻ 회전</button>
           <button type="button" className={btn} onClick={reset} title="원래 크기로">맞춤</button>
           <button type="button" className={`${btn} ${sharp ? "bg-emerald-500/80 hover:bg-emerald-500" : ""}`} onClick={() => setSharp((v) => !v)} title="보기용 보정 — 작은 사진을 키우고 또렷하게. 원본은 그대로">{sharpBusy ? "보정 중…" : sharp ? "선명하게 ✓" : "선명하게"}</button>
+          <button type="button" className={`${btn} ${drawOn ? "bg-rose-500/80 hover:bg-rose-500" : ""}`} onClick={() => setDrawOn((v) => !v)} title="동그라미·네모·화살표·펜으로 표시">{drawOn ? "그리기 ✓" : "그리기"}</button>
           {onDownload && <button type="button" className={btn} onClick={() => onDownload(url, idx)} title="원본 저장">저장</button>}
         </>}
         <button type="button" className={`${btn} ml-auto`} onClick={onClose}>닫기 ✕</button>
       </div>
+      {drawOn && !video && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2" onClick={(e) => e.stopPropagation()}>
+          {(Object.keys(TOOL_LABEL) as Tool[]).map((t) => <button key={t} type="button" onClick={() => setTool(t)} className={`h-8 w-8 rounded-full text-[15px] font-black ${tool === t ? "bg-white text-slate-950" : "bg-white/15 text-white"}`} title={t === "circle" ? "동그라미" : t === "rect" ? "네모" : t === "arrow" ? "화살표" : "펜"}>{TOOL_LABEL[t]}</button>)}
+          <span className="mx-1 h-5 w-px bg-white/20" />
+          {COLORS.map((c) => <button key={c} type="button" onClick={() => setColor(c)} className={`h-7 w-7 rounded-full border-2 ${color === c ? "border-white" : "border-transparent"}`} style={{ background: c }} aria-label="색" />)}
+          <span className="mx-1 h-5 w-px bg-white/20" />
+          <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks((cur) => cur.slice(0, -1))}>되돌리기</button>
+          <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks([])}>모두 지우기</button>
+          <button type="button" className={`${btn} bg-emerald-500/80 hover:bg-emerald-500`} disabled={!marks.length || saving} onClick={() => void saveMarked()}>{saving ? "만드는 중…" : "표시째 저장"}</button>
+        </div>
+      )}
       {/* 가운데 — 사진. 휠 확대, 끌어서 이동, 핀치, 더블클릭 확대/맞춤 */}
       <div className="relative min-h-0 flex-1 select-none overflow-hidden" onClick={(e) => e.stopPropagation()} onWheel={onWheel}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => { drag.current = null; }}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        onDoubleClick={() => (scale > 1 ? reset() : zoomTo(2.5))} style={{ touchAction: "none", cursor: scale > 1 ? "grab" : "default" }}>
+        onDoubleClick={() => { if (drawOn) return; if (scale > 1) reset(); else zoomTo(2.5); }} style={{ touchAction: "none", cursor: scale > 1 ? "grab" : "default" }}>
         <div className="flex h-full w-full items-center justify-center">
           {video
             ? <video src={url} controls autoPlay playsInline className="max-h-full max-w-full object-contain" />
-            : <img src={sharp && sharpSrc ? sharpSrc : url} alt="" draggable={false}
-                className="max-h-full max-w-full object-contain transition-transform duration-75"
-                style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale}) rotate(${rot}deg)`, imageRendering: "auto" }} />}
+            : <div className="relative inline-block max-h-full max-w-full transition-transform duration-75" style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale}) rotate(${rot}deg)` }}>
+                <img src={sharp && sharpSrc ? sharpSrc : url} alt="" draggable={false} onLoad={(e) => { const im = e.currentTarget; if (!sharp || !nat.w) setNat({ w: im.naturalWidth, h: im.naturalHeight }); }}
+                  className="block max-h-[calc(100dvh-150px)] max-w-[100vw] object-contain" />
+                {nat.w > 0 && (
+                  <svg ref={svgRef} viewBox={`0 0 ${nat.w} ${nat.h}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full"
+                    style={{ pointerEvents: drawOn ? "auto" : "none", cursor: drawOn ? "crosshair" : "default", touchAction: "none" }}
+                    onPointerDown={drawDown} onPointerMove={drawMove} onPointerUp={drawUp}>
+                    {marks.map((m, i) => <MarkShape key={i} m={m} />)}
+                    {drawing.current && <MarkShape m={drawing.current} />}
+                  </svg>
+                )}
+              </div>}
         </div>
         {idx > 0 && <button type="button" onClick={() => go(idx - 1)} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 px-3 py-2 text-xl font-bold">‹</button>}
         {idx < urls.length - 1 && <button type="button" onClick={() => go(idx + 1)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 px-3 py-2 text-xl font-bold">›</button>}
