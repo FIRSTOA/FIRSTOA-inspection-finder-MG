@@ -148,7 +148,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const penW = Math.max(3, Math.round(Math.max(nat.w, nat.h) / 220));
   const drawDown = (e: React.PointerEvent) => {
     const p = toImg(e); if (!p) return; e.stopPropagation();
-    if (tool === "text") { setTextAt(p); setTextScreen({ x: e.clientX, y: e.clientY }); setTextDraft(""); return; }   // 누른 자리에 바로 입력 상자
+    if (tool === "text") return;   // 글상자는 손을 뗄 때 연다(drawUp) — 누르는 순간 열면 손 떼는 위치가 상자 위라 클릭이 배경으로 가 창이 닫혔다
     (e.currentTarget as Element).setPointerCapture(e.pointerId); setLive({ tool, color, w: penW, pts: [p, p] });
   };
   const drawMove = (e: React.PointerEvent) => {
@@ -156,6 +156,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
     setLive((d) => (d ? { ...d, pts: d.tool === "pen" ? [...d.pts, p] : [d.pts[0], p] } : d));
   };
   const drawUp = (e: React.PointerEvent) => {
+    if (tool === "text") { const p = toImg(e); if (!p) return; e.stopPropagation(); setTextAt(p); setTextScreen({ x: e.clientX + 6, y: e.clientY + 6 }); setTextDraft(""); return; }
     const d = live; setLive(null); if (!d) return; e.stopPropagation();
     const [a, b] = [d.pts[0], d.pts[d.pts.length - 1]];
     if (d.tool === "pen" ? d.pts.length > 2 : Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) > 6) setMarks((cur) => [...cur, d]);
@@ -227,7 +228,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   // React 이벤트는 portal 이어도 부모 컴포넌트로 전달돼, 창 안에서 누른 것이 줄의 [FIELD] 동작을 일으켰다(2026-10-14)
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   return createPortal(
-    <div className="fixed inset-0 z-[300] flex flex-col bg-black/95 text-white" onClick={(e) => { e.stopPropagation(); onClose(); }}
+    <div className="fixed inset-0 z-[300] flex flex-col bg-black/95 text-white" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}
       onPointerDown={stop} onPointerUp={stop} onMouseDown={stop} onMouseUp={stop} onTouchStart={stop} onTouchEnd={stop} onKeyDown={stop} onKeyUp={stop} onDoubleClick={stop} onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }}
       role="dialog" aria-label="사진 보기">
       {/* 위 — 번호·조절 단추 */}
