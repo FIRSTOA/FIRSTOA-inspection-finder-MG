@@ -4,10 +4,27 @@
  * 왜: 접수 사진이 작게만 보여 판단이 안 됐다(240×320 같은 캡처본). 원본 파일은 건드리지 않고 화면에서만 키우고 또렷하게 한다.
  *     "선명하게"는 작은 사진을 2~3배로 늘린 뒤 언샤프 마스크를 한 번 거친 것 — 글자·선이 조금 더 읽힌다. 저장·링크는 늘 원본.
  * 쓰는 곳: 앨범(AlbumView), 일정리스트·서비스접수의 증상 사진, 카톡 링크(?photo=).
- * 그리기(2026-10-14): 동그라미·네모·펜·화살표, 색, 되돌리기·지우기, [표시째 저장](원본 + 표시를 합친 새 PNG — 원본 파일은 그대로).
+ * 그리기(2026-10-14): 동그라미·네모·펜·화살표·글상자, 색, 되돌리기·지우기, [편집본 저장(공유)](링크에 저장 — 모두가 편집본을 봄, 원본 유지), [내려받기].
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { md5 } from "./md5";
+import { uploadPhoto } from "./supabase";
+
+/**
+ * 편집본 공유(2026-10-14) — 원본은 그대로 두고 photos/edited/<원본 주소 md5>/v1.png, v2.png … 로 쌓는다(저장소는 덮어쓰기 권한이 없다).
+ * 보기 창은 가장 높은 번호를 찾아 기본으로 보여 주고 [원본 보기]로 돌아갈 수 있다. 누구 화면에서든 같은 편집본이 보인다.
+ */
+const PUBLIC = "https://kkdiihazgzesbqxjytqv.supabase.co/storage/v1/object/public/photos/";
+const editedBase = (orig: string) => `edited/${md5(orig)}`;
+async function latestEdited(orig: string): Promise<{ url: string; n: number } | null> {
+  let found: { url: string; n: number } | null = null;
+  for (let n = 1; n <= 30; n++) {
+    const u = `${PUBLIC}${editedBase(orig)}/v${n}.png`;
+    try { const r = await fetch(u, { method: "HEAD", cache: "no-store" }); if (!r.ok) break; found = { url: u, n }; } catch { break; }
+  }
+  return found;
+}
 
 const isVideo = (u: string) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -133,11 +150,22 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
   const pinch = useRef<{ d: number; s: number } | null>(null);
   const swipe = useRef<number | null>(null);
-  const url = urls[idx];
-  const video = isVideo(url);
+  const orig = urls[idx];
+  const video = isVideo(orig);
+  const [edited, setEdited] = useState<Record<string, { url: string; n: number } | null>>({});   // 원본 주소 → 최근 편집본
+  const [showOrig, setShowOrig] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  useEffect(() => {
+    if (video || orig in edited) return;
+    let alive = true;
+    void latestEdited(orig).then((r) => { if (alive) setEdited((cur) => ({ ...cur, [orig]: r })); });
+    return () => { alive = false; };
+  }, [orig, video, edited]);
+  const ed = edited[orig] || null;
+  const url = ed && !showOrig ? ed.url : orig;   // 보이는 사진 = 최근 편집본(있으면) — 그리기·저장도 이걸 바탕으로
 
   const reset = useCallback(() => { setScale(1); setRot(0); setPos({ x: 0, y: 0 }); }, []);
-  const go = useCallback((n: number) => { if (n < 0 || n >= urls.length) return; setIdx(n); setScale(1); setRot(0); setPos({ x: 0, y: 0 }); setSharpSrc(null); setMarks([]); }, [urls.length]);
+  const go = useCallback((n: number) => { if (n < 0 || n >= urls.length) return; setIdx(n); setScale(1); setRot(0); setPos({ x: 0, y: 0 }); setSharpSrc(null); setMarks([]); setNat({ w: 0, h: 0 }); setShowOrig(false); }, [urls.length]);
   // 화면 좌표 → 사진 원래 픽셀 좌표(확대·이동·회전을 거꾸로) — SVG 의 화면 변환 행렬을 뒤집어 쓴다
   const toImg = (e: React.PointerEvent): [number, number] | null => {
     const svg = svgRef.current; if (!svg) return null;
@@ -176,6 +204,20 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
     setSaving(false);
     if (!data) { window.alert("표시째 저장을 만들지 못했습니다 — 화면을 캡처해 주세요"); return; }
     const a = document.createElement("a"); a.href = data; a.download = `사진_표시_${idx + 1}.png`; a.click();
+  };
+  /** 편집본을 저장소에 올려 모두가 보게 — 원본은 그대로, 다음 번호(vN)로 */
+  const shareMarked = async () => {
+    if (!nat.w || !marks.length) return; setSharing(true);
+    try {
+      const data = await exportMarked(url, marks, rot, nat);
+      if (!data) throw new Error("편집본을 만들지 못했습니다");
+      const blob = await (await fetch(data)).blob();
+      const n = (ed?.n || 0) + 1;
+      const saved = await uploadPhoto(`${editedBase(orig)}/v${n}.png`, blob, "image/png");
+      setEdited((cur) => ({ ...cur, [orig]: { url: saved, n } }));
+      setMarks([]); setRot(0); setShowOrig(false); setNat({ w: 0, h: 0 });
+    } catch (e) { window.alert(`편집본 저장 실패: ${(e as Error).message}`); }
+    finally { setSharing(false); }
   };
   const zoomTo = useCallback((next: number) => setScale(clamp(Number(next.toFixed(2)), 1, 8)), []);
 
@@ -234,6 +276,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
       {/* 위 — 번호·조절 단추 */}
       <div className="flex flex-wrap items-center gap-1.5 px-3 py-2" onClick={(e) => e.stopPropagation()}>
         <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-black">{idx + 1} / {urls.length}</span>
+        {ed && <button type="button" onClick={() => { setShowOrig((v) => !v); setNat({ w: 0, h: 0 }); setMarks([]); }} className={`rounded-full px-3 py-1 text-[11px] font-black ${showOrig ? "bg-white/15 text-white" : "bg-amber-400 text-slate-950"}`} title="편집본은 원본 위에 덧그린 새 파일 — 원본은 그대로 있습니다">{showOrig ? "원본 보는 중 · 편집본 보기" : `편집본 v${ed.n} · 원본 보기`}</button>}
         {!video && <>
           <button type="button" className={btn} onClick={() => zoomTo(scale / 1.25)} title="축소 (－)">－</button>
           <span className="min-w-12 text-center text-[12px] font-black tabular-nums">{Math.round(scale * 100)}%</span>
@@ -260,7 +303,8 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           <span className="mx-1 h-5 w-px bg-white/20" />
           <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks((cur) => cur.slice(0, -1))}>되돌리기</button>
           <button type="button" className={btn} disabled={!marks.length} onClick={() => setMarks([])}>모두 지우기</button>
-          <button type="button" className={`${btn} bg-emerald-500/80 hover:bg-emerald-500`} disabled={!marks.length || saving} onClick={() => void saveMarked()}>{saving ? "만드는 중…" : "표시째 저장"}</button>
+          <button type="button" className={`${btn} bg-emerald-600 hover:bg-emerald-500`} disabled={!marks.length || sharing} onClick={() => void shareMarked()} title="편집한 사진을 이 링크에 저장 — 다른 사람도 이 상태로 봅니다(원본은 그대로)">{sharing ? "저장 중…" : "편집본 저장(공유)"}</button>
+          <button type="button" className={btn} disabled={!marks.length || saving} onClick={() => void saveMarked()} title="내 기기에 내려받기">{saving ? "만드는 중…" : "내려받기"}</button>
           {tool === "text" && (
             <span className="w-full text-[11px] font-semibold text-slate-300">사진에서 글을 넣을 자리를 누르면 그 자리에 입력 상자가 뜹니다 — Enter 넣기 · Shift+Enter 줄바꿈 · Esc 취소</span>
           )}
@@ -275,7 +319,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload }: { urls
           {video
             ? <video src={url} controls autoPlay playsInline className="max-h-full max-w-full object-contain" />
             : <div className="relative inline-block max-h-full max-w-full transition-transform duration-75" style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale}) rotate(${rot}deg)` }}>
-                <img src={sharp && sharpSrc ? sharpSrc : url} alt="" draggable={false} onLoad={(e) => { const im = e.currentTarget; if (!sharp || !nat.w) setNat({ w: im.naturalWidth, h: im.naturalHeight }); }}
+                <img key={url} src={sharp && sharpSrc ? sharpSrc : url} alt="" draggable={false} onLoad={(e) => { const im = e.currentTarget; if (!sharp || !nat.w) setNat({ w: im.naturalWidth, h: im.naturalHeight }); }}
                   className="block max-h-[calc(100dvh-150px)] max-w-[100vw] object-contain" />
                 {nat.w > 0 && (
                   <svg ref={svgRef} viewBox={`0 0 ${nat.w} ${nat.h}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full"

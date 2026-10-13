@@ -811,7 +811,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       `참고사항${T}${manual.참고사항}`,
       // 카톡은 텍스트만 전송된다(발신 큐가 text 하나) — 사진은 공개 링크로 실어 보낸다
       // 링크는 앱의 사진 보기(확대·회전·선명하게)로 — 저장소 원본 주소는 브라우저가 그림만 띄워 판단이 안 됐다(2026-10-14)
-      ...(photos.length ? [`증상사진(${photos.length}장)`, ...photos.map((_photo, pi) => `${window.location.origin}/?photo=${photos.map((p) => encodeURIComponent(p.url)).join("|")}&i=${pi}`)] : []),
+      ...(photos.length ? [`📷 증상사진 ${photos.length}장 모아보기:`, `${window.location.origin}/?photo=${photos.map((p) => encodeURIComponent(p.url)).join("|")}`] : []),   // 링크 하나에 전부 — 좌우로 넘김(2026-10-14)
       `교체이력${T}${manual.교체이력}${T}교체일로부터${T}${교체일로부터}`,
       `AS접수횟수(${basisLabel})${T}${basisEntries.length}회${basisEntries.length > AS_HISTORY_SHOWN ? ` (아래 최근 ${AS_HISTORY_SHOWN}건)` : ""}`,
       `AS접수히스토리(${basisLabel})`,
