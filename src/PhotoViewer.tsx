@@ -211,10 +211,10 @@ export default function PhotoViewer({ urls, index, onClose, onDownload, knownEdi
     } catch (e) { window.alert(`편집본 저장 실패: ${(e as Error).message}`); }
     finally { setSharing(false); }
   };
-  // 회전한 채로 두면 1.5초 뒤 그 방향 그대로 편집본으로 저장 — 다른 사람도 돌아간 상태로 본다(2026-10-14). 그리는 중이면 [편집본 저장]이 같이 담는다
+  // 회전하면 바로(0.3초) 그 방향 그대로 편집본으로 저장 — 다른 사람도 돌아간 상태로 본다(2026-10-14). 그리는 중이면 [편집본 저장]이 같이 담는다
   useEffect(() => {
     if (video || rot % 360 === 0 || marks.length || drawOn || sharing || !nat.w) return;
-    const t = window.setTimeout(() => { void shareMarked(); }, 1500);
+    const t = window.setTimeout(() => { void shareMarked(); }, 300);   // 거의 바로 — 연달아 누르는 회전은 한 번에 담는다
     return () => window.clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rot, marks.length, drawOn, nat.w]);
