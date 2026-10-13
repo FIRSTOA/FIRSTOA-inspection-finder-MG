@@ -192,6 +192,7 @@ function teamFromRegion(region: string) {
 // 화질 손실은 올리기 전에 생긴다 → 작은 사진은 올리기 전에 알려 주고 확인을 받는다.
 const PHOTO_LOW_RES = 600;   // 긴 변이 이보다 작으면 썸네일 수준 — 확인 없이는 올리지 않는다
 const PHOTO_SMALL = 1200;    // 이보다 작으면 "작음" 표시만
+const PHOTO_BLOCK = 400;     // 이보다 작으면 아예 안 올린다 — 카톡 말풍선 미리보기(240×180 등)를 복사한 것(2026-10-14)
 const photoLongSide = (p: { width?: number; height?: number }) => Math.max(p.width || 0, p.height || 0);
 // 접수 당시의 시트 표기값 (접수일 "7월 31일" / 접수시각 "20:22") — 처리 단계 갱신에도 그대로 보낸다
 function receiptParts(iso: string) {
@@ -335,6 +336,15 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   const [scheduleToo, setScheduleToo] = useState(true); // 저장하면서 일정리스트에도 등록
   const [photoBusy, setPhotoBusy] = useState(false);
 
+  const [pasteInfo, setPasteInfo] = useState("");   // 붙여넣기 시험 — 클립보드에 어떤 형식이 왔는지(카톡이 원본 주소를 같이 주는지 확인, 2026-10-14)
+  const describePaste = async (e: React.ClipboardEvent) => {
+    const types = Array.from(e.clipboardData.types || []);
+    const html = e.clipboardData.getData("text/html") || "";
+    const srcs = Array.from(html.matchAll(/<img[^>]+src="([^"]+)"/gi)).map((m) => m[1]);
+    const files = Array.from(e.clipboardData.files);
+    const sizes = await Promise.all(files.filter((f) => f.type.startsWith("image/")).map((f) => new Promise<string>((ok) => { const u = URL.createObjectURL(f); const im = new Image(); im.onload = () => { ok(`${f.type} ${im.naturalWidth}×${im.naturalHeight}`); URL.revokeObjectURL(u); }; im.onerror = () => ok(f.type); im.src = u; })));
+    setPasteInfo(`형식: ${types.join(", ") || "없음"} · 그림 ${sizes.join(", ") || "없음"} · html 이미지 주소 ${srcs.length ? srcs.map((x) => x.slice(0, 80)).join(" | ") : "없음"}`);
+  };
   const handlePhotoPick = async (files: FileList | File[] | null) => {
     if (!files || !files.length || photoBusy) return;
     setPhotoBusy(true);
@@ -348,15 +358,21 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       }
       // 썸네일 크기는 올리기 전에 확인 — 2026-10-10 "카톡방 링크로 보면 화질이 너무 나쁘다": 올라간 사진 자체가 240×320이었다
       // (카톡 PC 채팅창 미리보기 복사). 업로드 화질을 아무리 올려도 소용없으니 원인을 붙여넣는 사람에게 바로 알려 준다.
-      const low = prepared.filter((p) => p.image.width && photoLongSide(p.image) < PHOTO_LOW_RES);
-      let toUpload = prepared;
+      // 400px 미만은 막는다 — 증상을 볼 수 없는 미리보기 크기
+      const blocked = prepared.filter((p) => p.image.width && photoLongSide(p.image) < PHOTO_BLOCK);
+      if (blocked.length) {
+        notify(`사진 ${blocked.length}장이 너무 작아(${blocked.map((p) => `${p.image.width}×${p.image.height}`).join(", ")}) 올리지 않았습니다 — 카톡에서 사진을 눌러 크게 연 창에서 복사(Ctrl+C)한 뒤 다시 붙여 넣으세요`, "error");
+      }
+      const usable = prepared.filter((p) => !blocked.includes(p));
+      const low = usable.filter((p) => p.image.width && photoLongSide(p.image) < PHOTO_LOW_RES);
+      let toUpload = usable;
       if (low.length) {
         const sizes = low.map((p) => `${p.image.width}×${p.image.height}`).join(", ");
         const ok = await askConfirm(
-          `사진 ${low.length}장이 썸네일 크기(${sizes})라 카톡방 링크로 열면 증상이 안 보입니다.\n\n카톡 PC에서는 사진을 더블클릭해 크게 연 다음 복사(Ctrl+C)하거나, 파일로 저장해서 첨부하세요. 채팅창의 작은 미리보기를 복사하면 240px짜리가 올라갑니다.\n\n그래도 이대로 올릴까요?`,
+          `사진 ${low.length}장이 썸네일 크기(${sizes})라 카톡방 링크로 열면 증상이 안 보입니다.\n\n카톡 PC에서는 사진을 눌러 크게 연 창에서 복사(Ctrl+C)하거나, 파일로 저장해서 첨부하세요. 채팅창의 작은 미리보기를 복사하면 240px짜리가 올라갑니다.\n\n그래도 이대로 올릴까요?`,
           { okLabel: "그래도 올리기", danger: true },
         );
-        if (!ok) toUpload = prepared.filter((p) => !low.includes(p));
+        if (!ok) toUpload = usable.filter((p) => !low.includes(p));
       }
       const uploaded: Array<{ url: string; name: string; width?: number; height?: number }> = [];
       for (const { file, image } of toUpload) {
@@ -364,7 +380,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
         uploaded.push({ url, name: file.name, width: image.width, height: image.height });
       }
       if (uploaded.length) setPhotos((prev) => [...prev, ...uploaded]);
-      else if (low.length) notify("작은 사진은 올리지 않았습니다. 크게 연 뒤 다시 복사해 주세요.", "error");
+      else if (low.length && !blocked.length) notify("작은 사진은 올리지 않았습니다. 크게 연 뒤 다시 복사해 주세요.", "error");
     } catch (e) {
       notify(`사진 업로드 실패: ${(e as Error).message}`, "error");
     } finally {
@@ -1804,7 +1820,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                       : null}
                 </div>}
                 {type !== "원격이관" && <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
-                  <div tabIndex={0} onPaste={(e) => { const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-200">
+                  <div tabIndex={0} onPaste={(e) => { void describePaste(e); const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-200">
                     {photos.map((photo, index) => {
                       // 썸네일 크기(저화질)·작은 사진은 타일에 크기를 붙여 보낸 사람이 바로 알아보게
                       const long = photoLongSide(photo);
@@ -1821,7 +1837,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                       {photoBusy ? "…" : <ImagePlus size={21} />}
                       <input type="file" accept="image/*" multiple disabled={photoBusy} onChange={(e) => { void handlePhotoPick(e.target.files); e.target.value = ""; }} className="hidden" />
                     </label>}
-                    <span className="basis-full text-[10px] font-bold text-slate-400">클릭 후 Ctrl+V 붙여넣기 가능 · 카톡 PC 사진은 <b className="text-slate-600">더블클릭으로 크게 연 뒤</b> 복사하거나 파일로 저장해 첨부하세요 (채팅창의 작은 미리보기를 복사하면 240px 썸네일이 올라가 증상이 안 보입니다)</span>
+                    <span className="basis-full text-[10px] font-bold text-slate-400">클릭 후 Ctrl+V 붙여넣기 가능 · 카톡 PC 사진은 <b className="text-slate-600">눌러 크게 연 뒤</b> 복사하거나 파일로 저장해 첨부하세요 (채팅창의 작은 미리보기를 복사하면 240px 썸네일이 올라가 증상이 안 보입니다)</span>
+                    {pasteInfo && <span className="basis-full break-all rounded bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">붙여넣기 시험 · {pasteInfo}</span>}
                   </div>
                 </div>}
                 {type === "복합기 AS" && <>
