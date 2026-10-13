@@ -7,6 +7,17 @@
 import { useEffect, useRef, useState } from "react";
 import App from "./App";
 import AlbumView from "./AlbumView";
+import PhotoViewer from "./PhotoViewer";
+
+/** 카톡 사진 링크(?photo=주소|주소…&i=0) — 우리 저장소 사진만 확대·회전 뷰어로 연다(로그인 없이, 2026-10-14) */
+function photoParam(): { urls: string[]; idx: number } | null {
+  const q = new URLSearchParams(window.location.search);
+  const raw = q.get("photo");
+  if (!raw) return null;
+  const urls = raw.split("|").map((u) => u.trim()).filter((u) => /^https:\/\/kkdiihazgzesbqxjytqv\.supabase\.co\/storage\/v1\/object\/public\//.test(u));
+  if (!urls.length) return null;
+  return { urls, idx: Math.min(urls.length - 1, Math.max(0, Number(q.get("i")) || 0)) };
+}
 import SsoGate from "./SsoGate";
 import { getConfig } from "./supabase";
 import { getSsoSession, isOnValue, rememberSsoRequired, SSO_ERROR_KEY, ssoRequiredCached, startGroupwareLogin } from "./sso";
@@ -21,13 +32,15 @@ export default function Boot({ albumId }: { albumId: string | null }) {
   }, []);
   // 잠금인데 세션이 없으면(실패로 돌아온 경우 제외) 그룹웨어 로그인으로 바로 이동 — 한 번만
   const sent = useRef(false);
-  const needLogin = !albumId && required && !getSsoSession();
+  const [photo] = useState(photoParam);
+  const needLogin = !albumId && !photo && required && !getSsoSession();
   useEffect(() => {
     if (!needLogin || ssoError || sent.current) return;
     sent.current = true;
     startGroupwareLogin("/");
   }, [needLogin, ssoError]);
   if (albumId) return <AlbumView id={albumId} />;
+  if (photo) return <div className="min-h-[100dvh] bg-black"><PhotoViewer urls={photo.urls} index={photo.idx} onClose={() => { window.location.href = "/"; }} /></div>;
   if (needLogin) {
     if (ssoError) return <SsoGate error={ssoError} />;
     return <div className="flex min-h-[100dvh] items-center justify-center bg-[#070d1a] text-sm font-bold text-slate-300">그룹웨어 로그인으로 이동 중…</div>;
