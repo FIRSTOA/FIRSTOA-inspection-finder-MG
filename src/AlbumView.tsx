@@ -15,10 +15,12 @@ export default function AlbumView({ id }: { id: string }) {
   const [downloadErr, setDownloadErr] = useState("");
   // 편집본(공유 저장된 것)이 있으면 격자·다운로드·PDF 모두 편집본으로(2026-10-14)
   const [shown, setShown] = useState<Record<string, string>>({});
+  const [editedMap, setEditedMap] = useState<Record<string, { url: string; n: number } | null>>({});
   const [pdfNote, setPdfNote] = useState("");
   const refreshEdited = async (list: string[]) => {
-    const pairs = await Promise.all(list.filter((u) => !/\.(mp4|mov|webm|m4v|avi|3gp|mkv)(\?|$)/i.test(u)).map(async (u) => [u, (await latestEdited(u))?.url || u] as [string, string]));
-    setShown(Object.fromEntries(pairs));
+    const pairs = await Promise.all(list.filter((u) => !/\.(mp4|mov|webm|m4v|avi|3gp|mkv)(\?|$)/i.test(u)).map(async (u) => [u, await latestEdited(u)] as [string, { url: string; n: number } | null]));
+    setEditedMap(Object.fromEntries(pairs));
+    setShown(Object.fromEntries(pairs.map(([u, e]) => [u, e?.url || u])));
   };
   const view = (u: string) => shown[u] || u;
 
@@ -150,7 +152,7 @@ export default function AlbumView({ id }: { id: string }) {
       </div>
 
       {/* 확대(휠·핀치·＋－)·회전·끌기·선명하게 — 작은 사진도 판단할 수 있게(2026-10-13). 원본은 그대로 */}
-      {idx != null && <PhotoViewer urls={urls} index={idx} onClose={() => { setIdx(null); void refreshEdited(urls); }} onDownload={(u, i) => void handleDownload(u, i)} />}
+      {idx != null && <PhotoViewer urls={urls} index={idx} knownEdited={editedMap} onClose={() => { setIdx(null); void refreshEdited(urls); }} onDownload={(u, i) => void handleDownload(u, i)} />}
     </div>
   );
 }
