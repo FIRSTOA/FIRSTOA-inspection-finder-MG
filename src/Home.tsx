@@ -1,6 +1,7 @@
 import { teamLabel } from "./authors";
 import CostTile from "./CostTile";
 import OverdueTile from "./OverdueTile";
+import OverduePanel from "./OverduePanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -309,6 +310,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const [openManual, setOpenManual] = useState("start");
   const [patchExpanded, setPatchExpanded] = useState(false);
   const go = (screen: Screen) => screen === "field" ? onGoField() : onNavigate?.(screen);
+  const openOverdue = () => { try { localStorage.setItem("cs_as_open_overdue", "1"); } catch { /* 무시 */ } go("asReception"); setTimeout(() => window.dispatchEvent(new CustomEvent("cs:open-overdue")), 300); };
 
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   const dateLabel = useMemo(() => new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(now), [now.getDate()]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -379,13 +381,15 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             {/* 비용(AI 질문·문자) — 관제 덱 안에(2026-10-11), 누르면 일별·실시간·지금까지 내역 */}
             <CostTile />
             {/* 미처리 일정 — 지난 날짜인데 완료가 안 된 것, 팀별 건수(2026-10-13). 누르면 일정리스트의 미처리 탭 */}
-            <OverdueTile onOpen={() => { try { localStorage.setItem("cs_as_open_overdue", "1"); } catch { /* 무시 */ } go("asReception"); setTimeout(() => window.dispatchEvent(new CustomEvent("cs:open-overdue")), 300); }} />
+            <OverdueTile onOpen={openOverdue} />
           </div>
         </div>
 
         {/* ── ② 지표 ── */}
         <div className="relative grid grid-cols-1 gap-3 px-4 py-4 sm:px-6 lg:grid-cols-12 lg:items-start">
           <div className="grid min-w-0 auto-rows-min grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-7">
+            {/* 미처리 일정 — 팀 탭(A~E). 오른쪽 기둥이 길어 비던 왼쪽 공간을 채운다(2026-10-13) */}
+            <OverduePanel onOpen={openOverdue} />
             <Metric label="오늘 현장 기록" icon={Activity} accent="text-emerald-300" loading={loading} value={data ? data.todayInspections + data.todayAs : null} sub={data ? `점검 ${data.todayInspections} · AS ${data.todayAs} · 이번 주 ${fmt(weekRecords)}건` : undefined} />
             <Metric label="이번 주 방문" icon={Route} accent="text-blue-300" loading={loading} value={data ? data.weekVisits : null} sub={data ? `${Math.round(data.weekMinutes / 60)}시간 현장 · 작성자 ${new Set(data.weekRows.map((r) => r.작성자).filter(Boolean)).size}명` : undefined} />
             <Metric label="키맨·주소 변경 7일" icon={UsersRound} accent="text-amber-300" loading={loading} value={data ? data.keymanChanges7d : null} sub={data ? (data.keymanGreetWaiting ? `인사 대기 ${data.keymanGreetWaiting}건 — 워킨맵에서 체크` : "인사 대기 없음") : undefined} />
