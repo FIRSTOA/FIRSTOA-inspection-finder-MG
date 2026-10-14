@@ -13,7 +13,7 @@ const SESSION_KEY = "cs_sso_session_v1";
 const STATE_KEY = "cs_sso_state_v1";
 const REQUIRED_KEY = "cs_sso_required_v1";
 export const SSO_ERROR_KEY = "cs_sso_error_v1";
-const SESSION_HOURS = 12;
+const SESSION_HOURS = 24 * 7; // 로그인 유지 7일(2026-10-14 사용자 결정 — 12시간마다 다시 로그인하던 것)
 
 export type SsoUser = { sub: string; username: string; name: string; empNo: string; department: string; position: string; email: string; role: "ADMIN" | "MANAGER" | "STAFF" | string; mustChangePassword?: boolean };
 export type SsoSession = { user: SsoUser; at: string; exp: number };
@@ -23,8 +23,11 @@ export function getSsoSession(): SsoSession | null {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as SsoSession;
-    if (!s?.user?.name || !s.exp || Date.now() > s.exp) return null;
-    return s;
+    if (!s?.user?.name || !s.exp) return null;
+    // 유지 시간을 늘렸을 때 이미 로그인한 기기도 새 기준(로그인 시각 + 7일)을 따른다
+    const exp = Math.max(s.exp, (Date.parse(s.at) || 0) + SESSION_HOURS * 3600_000);
+    if (Date.now() > exp) return null;
+    return { ...s, exp };
   } catch { return null; }
 }
 export function clearSsoSession() { try { localStorage.removeItem(SESSION_KEY); } catch { /* 무시 */ } }

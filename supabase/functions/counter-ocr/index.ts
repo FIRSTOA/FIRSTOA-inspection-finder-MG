@@ -1,6 +1,6 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 /**
- * 매수·토너 사진 읽기(2026-10-14) — FIELD 점검 양식의 [📷 매수 분석]. 복합기 카운터 화면·소모품 화면 사진에서
+ * 매수·토너 사진 읽기(2026-10-14) — FIELD 점검 양식의 [📷 매수 분석]·[📷 잔량 분석](kind count|toner). 복합기 카운터 화면·소모품 화면 사진에서
  * 흑백·컬러·큰컬러·합계 매수와 K/C/M/Y 토너 잔량(%), 폐통(%)을 읽어 JSON 으로 돌려준다. 못 읽은 칸은 빈 글자.
  * 요청: { image: dataURL, model?: 기종, author? }  응답: { black, color, largeColor, total, tonerK, tonerC, tonerM, tonerY, waste, note }
  */
@@ -39,7 +39,8 @@ Deno.serve(async (req) => {
         input: [
           { role: "system", content: INSTRUCTION },
           { role: "user", content: [
-            { type: "input_text", text: `기종: ${String(body.model || "").slice(0, 60) || "모름"}` },
+            { type: "input_text", text: `기종: ${String(body.model || "").slice(0, 60) || "모름"}
+찾을 것: ${body.kind === "toner" ? "토너 잔량(K/C/M/Y %)과 폐토너통(%) — 매수 칸은 비워도 된다" : body.kind === "count" ? "누적 매수(흑백·컬러·큰컬러·합계) — 잔량 칸은 비워도 된다" : "매수와 잔량 모두"}` },
             { type: "input_image", image_url: image, detail: "high" },
           ] },
         ],

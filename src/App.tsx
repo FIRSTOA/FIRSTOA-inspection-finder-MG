@@ -34,7 +34,7 @@ import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategory
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus, sendServiceReception } from "./api";
 import { checkSendRooms } from "./api";
-import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
+import { uploadPhoto, createAlbum, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
 import { normalizeLogisticsKind, saveActivityEvent, teamForAuthor, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -3560,28 +3560,38 @@ type ProcessingFormPanelProps = {
 
 /** [📷 매수 분석] — 복합기 카운터·소모품 화면 사진을 찍거나 고르면 매수(흑·컬·큰컬·합)·잔량(K/C/M/Y)·폐통을 읽어 채운다(2026-10-14, counter-ocr) */
 type CounterOcr = { black: string; color: string; largeColor: string; total: string; tonerK: string; tonerC: string; tonerM: string; tonerY: string; waste: string; note?: string; error?: string };
-function CounterOcrButton({ model, onResult }: { model: string; onResult: (r: CounterOcr) => void }) {
+let ocrFlag: Promise<boolean> | null = null;   // 관리 탭 FIELD_OCR — 켜야 [매수 분석]·[잔량 분석]이 보인다(시험 중이라 숨김, 2026-10-14)
+function CounterOcrButton({ kind, model, onResult }: { kind: "count" | "toner"; model: string; onResult: (r: CounterOcr) => void }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    ocrFlag ||= getConfig().then((c) => /^(true|1|on|yes)$/i.test(String(c.FIELD_OCR || ""))).catch(() => false);
+    let alive = true; void ocrFlag?.then((v) => { if (alive) setOn(v); });
+    return () => { alive = false; };
+  }, []);
   const pick = async (file: File | undefined) => {
     if (!file) return;
     setBusy(true); setNote("");
     try {
       const prepared = await prepareImageForUpload(file, 1800, { quality: 0.9 });
       const dataUrl = await new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => bad(new Error("사진을 읽지 못했습니다")); r.readAsDataURL(prepared.blob); });
-      const res = await invokeEdgeFunction<CounterOcr>("counter-ocr", { image: dataUrl, model, author: localStorage.getItem("author") || "" }, 90_000);
+      const res = await invokeEdgeFunction<CounterOcr>("counter-ocr", { image: dataUrl, model, kind, author: localStorage.getItem("author") || "" }, 90_000);
       if (res.error) throw new Error(res.error);
-      const got = [res.black && `흑 ${res.black}`, res.color && `컬 ${res.color}`, res.largeColor && `큰컬 ${res.largeColor}`, res.total && `합 ${res.total}`, [res.tonerK, res.tonerC, res.tonerM, res.tonerY].some(Boolean) && `잔량 K${res.tonerK || "-"} C${res.tonerC || "-"} M${res.tonerM || "-"} Y${res.tonerY || "-"}`, res.waste && `폐통 ${res.waste}%`].filter(Boolean);
-      if (!got.length) { setNote(`읽은 숫자가 없습니다${res.note ? ` — ${res.note}` : ""}. 카운터 화면을 정면에서 가깝게 찍어 주세요`); return; }
+      const got = (kind === "count"
+        ? [res.black && `흑 ${res.black}`, res.color && `컬 ${res.color}`, res.largeColor && `큰컬 ${res.largeColor}`, res.total && `합 ${res.total}`]
+        : [[res.tonerK, res.tonerC, res.tonerM, res.tonerY].some(Boolean) && `K${res.tonerK || "-"} C${res.tonerC || "-"} M${res.tonerM || "-"} Y${res.tonerY || "-"}`, res.waste && `폐통 ${res.waste}%`]).filter(Boolean);
+      if (!got.length) { setNote(`읽은 숫자가 없습니다${res.note ? ` — ${res.note}` : ""}. ${kind === "count" ? "카운터(사용량) 화면" : "소모품(토너 잔량) 화면"}을 정면에서 가깝게 찍어 주세요`); return; }
       onResult(res);
       setNote(`채움: ${got.join(" · ")}${res.note ? ` (${res.note})` : ""} — 숫자를 한 번 확인하세요`);
     } catch (e) { setNote(`분석 실패: ${(e as Error).message}`); }
     finally { setBusy(false); }
   };
+  if (!on) return null;
   return (
     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-      <label className={`shrink-0 cursor-pointer rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${busy ? "bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`} title="카운터·소모품 화면 사진으로 매수·잔량·폐통 자동 기입">
-        {busy ? "분석 중…" : "📷 매수 분석"}
+      <label className={`shrink-0 cursor-pointer rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${busy ? "bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`} title={kind === "count" ? "카운터(사용량) 화면 사진으로 흑·컬·큰컬·합 자동 기입" : "소모품 화면 사진으로 토너 잔량 K/C/M/Y·폐통 자동 기입"}>
+        {busy ? "분석 중…" : kind === "count" ? "📷 매수 분석" : "📷 잔량 분석"}
         <input type="file" accept="image/*" capture="environment" disabled={busy} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void pick(f); }} />
       </label>
       {note && <span className="min-w-0 basis-full text-[10.5px] font-semibold leading-4 text-slate-500">{note}</span>}
@@ -3665,9 +3675,9 @@ function ProcessingFormPanel({
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
         <div className="mb-1.5 flex items-center gap-2">
           <span className="inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">매수</span>
-          <CounterOcrButton model={itemForm.model} onResult={(r) => {
+          <CounterOcrButton kind="count" model={itemForm.model} onResult={(r) => {
             // 읽은 칸만 채운다(빈 값은 지금 적힌 것을 지우지 않는다)
-            const pairs: Array<[keyof PerItemForm, string]> = [["mailBlack", r.black], ["mailColor", r.color], ["mailLargeColor", r.largeColor], ["mailTotal", r.total], ["tonerK", r.tonerK], ["tonerC", r.tonerC], ["tonerM", r.tonerM], ["tonerY", r.tonerY], ["waste", r.waste]];
+            const pairs: Array<[keyof PerItemForm, string]> = [["mailBlack", r.black], ["mailColor", r.color], ["mailLargeColor", r.largeColor], ["mailTotal", r.total]];
             for (const [k, v] of pairs) if (v) setItemF(k, v);
           }} />
         </div>
@@ -3693,7 +3703,13 @@ function ProcessingFormPanel({
 
       {/* 잔량 — K/C/M/Y + 폐통, 직접 입력 (5칸) */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">잔량</div>
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">잔량</span>
+          <CounterOcrButton kind="toner" model={itemForm.model} onResult={(r) => {
+            const pairs: Array<[keyof PerItemForm, string]> = [["tonerK", r.tonerK], ["tonerC", r.tonerC], ["tonerM", r.tonerM], ["tonerY", r.tonerY], ["waste", r.waste]];
+            for (const [k, v] of pairs) if (v) setItemF(k, v);
+          }} />
+        </div>
         <div className="grid grid-cols-5 gap-1">
           {(["K", "C", "M", "Y"] as const).map((ch: "K" | "C" | "M" | "Y") => {
             const key = (`toner${ch}`) as "tonerK" | "tonerC" | "tonerM" | "tonerY";
