@@ -19,6 +19,7 @@ import { syncPush } from "./push";
 import { useInboxBadge } from "./useInboxBadge";
 import InspectionChecklist from "./InspectionChecklist";
 import KeymanCard from "./KeymanCard";
+import GradeCheck from "./GradeCheck";
 import LogisticsForm from "./LogisticsForm";
 import { EMPTY_LOGISTICS_FORM, buildLogisticsText } from "./logistics";
 import ReplacementForm from "./ReplacementForm";
@@ -3557,6 +3558,37 @@ type ProcessingFormPanelProps = {
   regionValue: string;
 };
 
+/** [📷 매수 분석] — 복합기 카운터·소모품 화면 사진을 찍거나 고르면 매수(흑·컬·큰컬·합)·잔량(K/C/M/Y)·폐통을 읽어 채운다(2026-10-14, counter-ocr) */
+type CounterOcr = { black: string; color: string; largeColor: string; total: string; tonerK: string; tonerC: string; tonerM: string; tonerY: string; waste: string; note?: string; error?: string };
+function CounterOcrButton({ model, onResult }: { model: string; onResult: (r: CounterOcr) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true); setNote("");
+    try {
+      const prepared = await prepareImageForUpload(file, 1800, { quality: 0.9 });
+      const dataUrl = await new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => bad(new Error("사진을 읽지 못했습니다")); r.readAsDataURL(prepared.blob); });
+      const res = await invokeEdgeFunction<CounterOcr>("counter-ocr", { image: dataUrl, model, author: localStorage.getItem("author") || "" }, 90_000);
+      if (res.error) throw new Error(res.error);
+      const got = [res.black && `흑 ${res.black}`, res.color && `컬 ${res.color}`, res.largeColor && `큰컬 ${res.largeColor}`, res.total && `합 ${res.total}`, [res.tonerK, res.tonerC, res.tonerM, res.tonerY].some(Boolean) && `잔량 K${res.tonerK || "-"} C${res.tonerC || "-"} M${res.tonerM || "-"} Y${res.tonerY || "-"}`, res.waste && `폐통 ${res.waste}%`].filter(Boolean);
+      if (!got.length) { setNote(`읽은 숫자가 없습니다${res.note ? ` — ${res.note}` : ""}. 카운터 화면을 정면에서 가깝게 찍어 주세요`); return; }
+      onResult(res);
+      setNote(`채움: ${got.join(" · ")}${res.note ? ` (${res.note})` : ""} — 숫자를 한 번 확인하세요`);
+    } catch (e) { setNote(`분석 실패: ${(e as Error).message}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      <label className={`shrink-0 cursor-pointer rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${busy ? "bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`} title="카운터·소모품 화면 사진으로 매수·잔량·폐통 자동 기입">
+        {busy ? "분석 중…" : "📷 매수 분석"}
+        <input type="file" accept="image/*" capture="environment" disabled={busy} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void pick(f); }} />
+      </label>
+      {note && <span className="min-w-0 basis-full text-[10.5px] font-semibold leading-4 text-slate-500">{note}</span>}
+    </span>
+  );
+}
+
 function ProcessingFormPanel({
   itemForm, setItemF,
   shared, setSharedF,
@@ -3631,7 +3663,14 @@ function ProcessingFormPanel({
 
       {/* 매수 */}
       <div className="mb-2 rounded-xl p-2" style={{ background: bgSoft }}>
-        <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">매수</div>
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">매수</span>
+          <CounterOcrButton model={itemForm.model} onResult={(r) => {
+            // 읽은 칸만 채운다(빈 값은 지금 적힌 것을 지우지 않는다)
+            const pairs: Array<[keyof PerItemForm, string]> = [["mailBlack", r.black], ["mailColor", r.color], ["mailLargeColor", r.largeColor], ["mailTotal", r.total], ["tonerK", r.tonerK], ["tonerC", r.tonerC], ["tonerM", r.tonerM], ["tonerY", r.tonerY], ["waste", r.waste]];
+            for (const [k, v] of pairs) if (v) setItemF(k, v);
+          }} />
+        </div>
         <div className="grid grid-cols-2 gap-1.5">
           <div className="flex items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-slate-500">
             <span className="flex w-9 shrink-0 items-center justify-center bg-slate-200 px-1 text-xs font-bold text-slate-600">흑</span>
@@ -6899,6 +6938,7 @@ export default function App() {
           )}
           <div className="space-y-2 border-t border-slate-200 bg-slate-50 p-3">
             {(mode === "inspection" || mode === "blank-report") && currentVendor && <KeymanCard vendor={currentVendor} author={author} region={sharedForm.region} />}
+            {(mode === "inspection" || mode === "blank-report") && currentVendor && <GradeCheck vendor={currentVendor} text={textOutput || listOutput[0]?.content || ""} onFix={(g) => { setTextOutput((t) => t.replace(/^(등급\s*[:：])\s*.*$/m, `$1 ${g}`)); setEditedBlocks({}); showToast(`등급을 ${g}로 바꿨어요`); }} />}
             {(mode === "inspection" || mode === "blank-report") && <InspectionChecklist resetToken={`${mode}:${hasOutput ? "filled" : "empty"}`} />}
             <div className="grid grid-cols-3 gap-2">
               <button onClick={handleReset} className="rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-500 shadow-sm transition hover:bg-slate-50 active:scale-[0.99]">초기화</button>
@@ -7011,6 +7051,7 @@ export default function App() {
         {/* 액션: 보조줄(초기화·복사·사진첨부) + 전송줄(보내기·자가·부품) */}
         <div className="mx-auto max-w-3xl space-y-2 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
           {(mode === "inspection" || mode === "blank-report") && currentVendor && <KeymanCard vendor={currentVendor} author={author} region={sharedForm.region} />}
+            {(mode === "inspection" || mode === "blank-report") && currentVendor && <GradeCheck vendor={currentVendor} text={textOutput || listOutput[0]?.content || ""} onFix={(g) => { setTextOutput((t) => t.replace(/^(등급\s*[:：])\s*.*$/m, `$1 ${g}`)); setEditedBlocks({}); showToast(`등급을 ${g}로 바꿨어요`); }} />}
             {(mode === "inspection" || mode === "blank-report") && <InspectionChecklist resetToken={`${mode}:${hasOutput ? "filled" : "empty"}`} />}
           <div className="flex flex-wrap gap-2">
             <button

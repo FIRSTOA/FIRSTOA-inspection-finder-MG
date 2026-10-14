@@ -166,11 +166,19 @@ export default function PhotoViewer({ urls, index, onClose, onDownload, knownEdi
   const reset = useCallback(() => { setScale(1); setRot(0); setPos({ x: 0, y: 0 }); }, []);
   const go = useCallback((n: number) => { if (n < 0 || n >= urls.length) return; setIdx(n); setScale(1); setRot(0); setPos({ x: 0, y: 0 }); setSharpSrc(null); setMarks([]); setNat({ w: 0, h: 0 }); setShowOrig(false); }, [urls.length]);
   // 화면 좌표 → 사진 원래 픽셀 좌표(확대·이동·회전을 거꾸로) — SVG 의 화면 변환 행렬을 뒤집어 쓴다
-  const toImg = (e: React.PointerEvent): [number, number] | null => {
-    const svg = svgRef.current; if (!svg) return null;
-    const m = svg.getScreenCTM(); if (!m) return null;
-    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
-    return [Math.round(p.x), Math.round(p.y)];
+  // 화면 좌표 → 사진 원래 픽셀 좌표. getScreenCTM 은 부모의 CSS 확대·회전을 빼먹는 브라우저가 있어(그린 자리가 저장 때 어긋남, 2026-10-14)
+  // 화면에 보이는 사진 상자(회전 포함)의 가운데를 기준으로 회전을 거꾸로 돌리고 크기 비율로 나눠 직접 계산한다
+  const toImg = (e: { clientX: number; clientY: number }): [number, number] | null => {
+    const svg = svgRef.current; if (!svg || !nat.w) return null;
+    const r = svg.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const dx = e.clientX - cx, dy = e.clientY - cy;
+    const a = (-((rot % 360) + 360) % 360) * Math.PI / 180;
+    const ux = dx * Math.cos(a) - dy * Math.sin(a), uy = dx * Math.sin(a) + dy * Math.cos(a);
+    const turned = ((rot % 180) + 180) % 180 !== 0;
+    const w = turned ? r.height : r.width, h = turned ? r.width : r.height;   // 회전 전 화면 크기
+    if (!w || !h) return null;
+    return [Math.round((ux / w + 0.5) * nat.w), Math.round((uy / h + 0.5) * nat.h)];
   };
   const penW = Math.max(3, Math.round(Math.max(nat.w, nat.h) / 220));
   const drawDown = (e: React.PointerEvent) => {
@@ -192,7 +200,7 @@ export default function PhotoViewer({ urls, index, onClose, onDownload, knownEdi
     if (!textAt || !textDraft.trim()) return;
     // pt → 화면 px(×1.33) → 사진 px(사진 원래 폭 ÷ 지금 화면에 보이는 폭) — 확대해 둔 상태면 그만큼 작게 들어간다
     const rect = svgRef.current?.getBoundingClientRect();
-    const shown = rect ? Math.max(rect.width, rect.height) : 0;
+    const shown = rect ? Math.max(rect.width, rect.height) : 0;   // 회전해도 긴 변은 같다
     const perPx = shown ? Math.max(nat.w, nat.h) / shown : 1;
     setMarks((cur) => [...cur, { tool: "text", color, w: 0, pts: [textAt], text: textDraft.trim(), size: Math.max(4, Math.round(textSize * 1.33 * perPx)), bg: textBg }]);
     setTextAt(null); setTextScreen(null); setTextDraft("");

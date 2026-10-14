@@ -10,7 +10,7 @@ import {
 } from "./api";
 import { kstDate } from "./visits";
 import { normRegion } from "./region";
-import { deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
+import { createAlbum, deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { sheetVendorName } from "./vendorName";
 import { prepareImageForUpload, type PreparedImage } from "./imageUpload";
@@ -331,6 +331,20 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   const [savedRowId, setSavedRowId] = useState<string | null>(null);
   const sheetRowTargetRef = useRef<string>("");   // 접수 저장 직후 시트 행번호를 기록할 대상 접수 id
   const [photos, setPhotos] = useState<Array<{ url: string; name: string; width?: number; height?: number }>>([]);
+  // 증상 사진 → 앨범 하나(FIELD 보고와 같은 ?album= 링크) — "?photo=주소|주소" 는 카톡이 '|'에서 링크를 잘라 1장만 보이고
+  // 잘린 주소가 그룹웨어 로그인으로 넘어갔다(2026-10-14). 사진 구성이 바뀔 때마다 앨범을 새로 만든다(같은 구성은 한 번)
+  const [photoAlbum, setPhotoAlbum] = useState<{ key: string; id: string } | null>(null);
+  const photoKey = photos.map((p) => p.url).join(" ");
+  useEffect(() => {
+    if (!photos.length) { setPhotoAlbum(null); return; }
+    if (photoAlbum?.key === photoKey) return;
+    let alive = true;
+    void createAlbum(photos.map((p) => p.url), "서비스접수", { category: "접수", sourceType: "reception" })
+      .then((id) => { if (alive) setPhotoAlbum({ key: photoKey, id }); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoKey]);
   const [confirmAction, setConfirmAction] = useState<"save" | "send" | null>(null);
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [scheduleToo, setScheduleToo] = useState(true); // 저장하면서 일정리스트에도 등록
@@ -827,7 +841,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
       `참고사항${T}${manual.참고사항}`,
       // 카톡은 텍스트만 전송된다(발신 큐가 text 하나) — 사진은 공개 링크로 실어 보낸다
       // 링크는 앱의 사진 보기(확대·회전·선명하게)로 — 저장소 원본 주소는 브라우저가 그림만 띄워 판단이 안 됐다(2026-10-14)
-      ...(photos.length ? [`📷 증상사진 ${photos.length}장 모아보기:`, `${window.location.origin}/?photo=${photos.map((p) => encodeURIComponent(p.url)).join("|")}`] : []),   // 링크 하나에 전부 — 좌우로 넘김(2026-10-14)
+      ...(photos.length ? [`📷 증상사진 ${photos.length}장 모아보기:`, photoAlbum?.key === photoKey ? `${window.location.origin}/?album=${photoAlbum.id}` : `${window.location.origin}/?photo=${encodeURIComponent(photos[0].url)}`] : []),   // 링크 하나에 전부 — 좌우로 넘김(2026-10-14)
       `교체이력${T}${manual.교체이력}${T}교체일로부터${T}${교체일로부터}`,
       `AS접수횟수(${basisLabel})${T}${basisEntries.length}회${basisEntries.length > AS_HISTORY_SHOWN ? ` (아래 최근 ${AS_HISTORY_SHOWN}건)` : ""}`,
       `AS접수히스토리(${basisLabel})`,
