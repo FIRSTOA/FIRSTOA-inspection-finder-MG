@@ -3580,7 +3580,7 @@ function CounterOcrButton({ kind, model, onResult }: { kind: "count" | "toner"; 
       if (res.error) throw new Error(res.error);
       const got = (kind === "count"
         ? [res.black && `흑 ${res.black}`, res.color && `컬 ${res.color}`, res.largeColor && `큰컬 ${res.largeColor}`, res.total && `합 ${res.total}`]
-        : [[res.tonerK, res.tonerC, res.tonerM, res.tonerY].some(Boolean) && `K${res.tonerK || "-"} C${res.tonerC || "-"} M${res.tonerM || "-"} Y${res.tonerY || "-"}`, res.waste && `폐통 ${res.waste}%`]).filter(Boolean);
+        : [[res.tonerK, res.tonerC, res.tonerM, res.tonerY].some(Boolean) && `K${res.tonerK || "-"} C${res.tonerC || "-"} M${res.tonerM || "-"} Y${res.tonerY || "-"}`]).filter(Boolean);
       if (!got.length) { setNote(`읽은 숫자가 없습니다${res.note ? ` — ${res.note}` : ""}. ${kind === "count" ? "카운터(사용량) 화면" : "소모품(토너 잔량) 화면"}을 정면에서 가깝게 찍어 주세요`); return; }
       onResult(res);
       setNote(`채움: ${got.join(" · ")}${res.note ? ` (${res.note})` : ""} — 숫자를 한 번 확인하세요`);
@@ -3590,7 +3590,7 @@ function CounterOcrButton({ kind, model, onResult }: { kind: "count" | "toner"; 
   if (!on) return null;
   return (
     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-      <label className={`shrink-0 cursor-pointer rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${busy ? "bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`} title={kind === "count" ? "카운터(사용량) 화면 사진으로 흑·컬·큰컬·합 자동 기입" : "소모품 화면 사진으로 토너 잔량 K/C/M/Y·폐통 자동 기입"}>
+      <label className={`shrink-0 cursor-pointer rounded-full px-2.5 py-0.5 text-[11.5px] font-black ${busy ? "bg-slate-200 text-slate-400" : "bg-blue-600 text-white hover:bg-blue-700"}`} title={kind === "count" ? "카운터(사용량) 화면 사진으로 흑·컬·큰컬·합 자동 기입" : "소모품 화면 사진으로 토너 잔량 K/C/M/Y 자동 기입(폐통은 직접)"}>
         {busy ? "분석 중…" : kind === "count" ? "📷 매수 분석" : "📷 잔량 분석"}
         <input type="file" accept="image/*" capture="environment" disabled={busy} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void pick(f); }} />
       </label>
@@ -3706,7 +3706,8 @@ function ProcessingFormPanel({
         <div className="mb-1.5 flex items-center gap-2">
           <span className="inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">잔량</span>
           <CounterOcrButton kind="toner" model={itemForm.model} onResult={(r) => {
-            const pairs: Array<[keyof PerItemForm, string]> = [["tonerK", r.tonerK], ["tonerC", r.tonerC], ["tonerM", r.tonerM], ["tonerY", r.tonerY], ["waste", r.waste]];
+            // 폐통은 복합기 화면에 % 가 안 나온다(사용자, 2026-10-14) — K/C/M/Y 만 채우고 폐통은 손으로
+            const pairs: Array<[keyof PerItemForm, string]> = [["tonerK", r.tonerK], ["tonerC", r.tonerC], ["tonerM", r.tonerM], ["tonerY", r.tonerY]];
             for (const [k, v] of pairs) if (v) setItemF(k, v);
           }} />
         </div>

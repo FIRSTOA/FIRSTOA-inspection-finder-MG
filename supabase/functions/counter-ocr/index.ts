@@ -16,7 +16,7 @@ JSON 하나로만 답한다: {"black":"","color":"","largeColor":"","total":"","
 - black 흑백(모노·B/W·Black) 누적 매수, color 컬러(풀컬러) 누적 매수, largeColor 큰컬러(A3 컬러·대형 컬러)가 따로 있으면, total 합계(총 카운터).
 - 숫자는 쉼표 없이 정수 글자("98083"). 화면에 없으면 "".
 - 합계가 없고 흑백·컬러가 있으면 total 은 둘(셋)의 합으로 적는다. 흑백기면 color 는 "".
-- tonerK/C/M/Y 는 잔량 %(숫자만, "75"). 막대만 있고 숫자가 없으면 눈금으로 10 단위 어림, 그래도 모르면 "". 폐토너통 % 는 waste.
+- tonerK/C/M/Y 는 잔량 %(숫자만, "75"). 막대만 있고 숫자가 없으면 눈금으로 10 단위 어림, 그래도 모르면 "". 폐토너통은 복합기 화면에 % 가 보통 나오지 않는다 — 숫자 % 가 분명히 보일 때만 waste, 아니면 "" (추측 금지).
 - note 에는 읽기 애매했던 것을 한 줄(한국어)로.`;
 
 Deno.serve(async (req) => {
@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
           { role: "system", content: INSTRUCTION },
           { role: "user", content: [
             { type: "input_text", text: `기종: ${String(body.model || "").slice(0, 60) || "모름"}
-찾을 것: ${body.kind === "toner" ? "토너 잔량(K/C/M/Y %)과 폐토너통(%) — 매수 칸은 비워도 된다" : body.kind === "count" ? "누적 매수(흑백·컬러·큰컬러·합계) — 잔량 칸은 비워도 된다" : "매수와 잔량 모두"}` },
+찾을 것: ${body.kind === "toner" ? "토너 잔량(K/C/M/Y %) — 매수·폐통 칸은 비워도 된다" : body.kind === "count" ? "누적 매수(흑백·컬러·큰컬러·합계) — 잔량 칸은 비워도 된다" : "매수와 잔량 모두"}` },
             { type: "input_image", image_url: image, detail: "high" },
           ] },
         ],
