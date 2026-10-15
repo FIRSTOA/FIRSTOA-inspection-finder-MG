@@ -122,6 +122,17 @@ function TextArea({ label, value, onChange, placeholder }: { label: string; valu
   );
 }
 
+/** 불러올 업체가 지금 적힌 업체와 다르면 확인 — 다른 업체 키맨·등급이 섞여 들어가지 않게 */
+function confirmVendorLoad(current: string, incoming: string, src: "inspection" | "as"): boolean {
+  const k = (v: string) => String(v || "").replace(/㈜|\(주\)|주식회사|\s/g, "");
+  if (!current.trim() || !incoming.trim() || k(current) === k(incoming) || k(incoming).includes(k(current)) || k(current).includes(k(incoming))) return true;
+  return window.confirm(`지금 적힌 업체: ${current}
+${src === "inspection" ? "점검" : "AS"} 탭의 업체: ${incoming}
+
+업체가 다릅니다. ${src === "inspection" ? "점검" : "AS"} 탭 내용(업체·등급·지역·키맨)으로 바꿀까요?
+취소하면 아무것도 불러오지 않습니다.`);
+}
+
 export default function CopierExpansionForm({ form, setForm, author, setAuthor, onLoad, onError }: Props) {
   const set = (k: keyof CopierExpansionFormState) => (v: string) => setForm({ ...form, [k]: v });
   const { authors } = useAuthorBook();
@@ -129,6 +140,9 @@ export default function CopierExpansionForm({ form, setForm, author, setAuthor, 
   const handleLoad = (src: "inspection" | "as") => {
     const r = onLoad(src);
     if (!r) { onError(`${src === "inspection" ? "점검" : "AS"} 탭에 입력된 내용이 없어요`); return; }
+    // 지금 적힌 업체와 점검/AS 탭의 업체가 다르면 묻는다 — 점검 탭에 남아 있던 다른 업체(파트라)가 세원기술단 확장성을 덮어쓰던 것(2026-10-15)
+    if (!confirmVendorLoad(form.company, r.company, src)) return;
+
     if (r.author) setAuthor(r.author);
     const k = r.keymen[0];
     setForm({

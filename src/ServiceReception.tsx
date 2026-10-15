@@ -345,6 +345,18 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoKey]);
+  /** 보내기 직전 — 지금 사진 구성의 앨범이 없으면 만들고, 글 속 "?photo=…" 임시 링크를 앨범 링크로 바꾼다.
+   *  사진을 올리자마자 보내면 앨범이 아직 없어 첫 장 링크만 나가던 것(2026-10-15 "2장이라는데 1장") */
+  const withAlbumLink = async (text: string, urls: string[] = photos.map((p) => p.url)): Promise<string> => {
+    if (!urls.length || !/\?photo=/.test(text)) return text;
+    const key = urls.join(" ");
+    let id = photoAlbum?.key === key ? photoAlbum.id : "";
+    if (!id) {
+      try { id = await createAlbum(urls, vendorName || "서비스접수", { category: "접수", sourceType: "reception" }); if (key === photoKey) setPhotoAlbum({ key, id }); }
+      catch { return text; }
+    }
+    return text.replace(/https?:\/\/[^\s]+\/\?photo=[^\s]+/g, `${window.location.origin}/?album=${id}`);
+  };
   const [confirmAction, setConfirmAction] = useState<"save" | "send" | null>(null);
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [scheduleToo, setScheduleToo] = useState(true); // 저장하면서 일정리스트에도 등록
@@ -1047,7 +1059,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
         rowId = await persist("접수");
         setSavedRowId(rowId);
       }
-      const res = await sendServiceReception(type === "IT" ? "IT" : "AS", region, report); // IT 접수 → IT 접수방(room_map IT접수|*), 복합기 → 지역 AS방
+      const res = await sendServiceReception(type === "IT" ? "IT" : "AS", region, await withAlbumLink(report)); // IT 접수 → IT 접수방(room_map IT접수|*), 복합기 → 지역 AS방
       if (!res.ok) {
         setActionResult(`전송 실패: ${res.error} — 접수는 저장됐어요. 다시 누르면 전송만 재시도합니다.`);
         return;
@@ -1133,7 +1145,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     if (!report) throw new Error("보고양식이 비어 있습니다 — 순번 선택 또는 신규 정보를 입력하세요");
     if (!region) throw new Error("지역이 비어 있어 보낼 팀 방을 정할 수 없습니다 — 자동 입력값 수정(또는 신규 지역 칩)에서 지역을 입력하세요");
     const id = await ensureSaved();
-    const res = await sendServiceReception(type === "IT" ? "IT" : "AS", region, report);
+    const res = await sendServiceReception(type === "IT" ? "IT" : "AS", region, await withAlbumLink(report));
     if (!res.ok) throw new Error(res.error || "전송 실패");
     const room = String(res.message || "").replace("게시 대기: ", "");
     await updateServiceReception(id, { status: "전송완료", sent_room: room });
@@ -1241,7 +1253,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     try {
       const created = await createTicketFromReception(row, again, true, { csTransfer: true });
       const text = [`[IT→CS 방문이관] ${kstDate()} ${author}`, meta.handled ? `원격 처리내용: ${meta.handled}` : "", "", row.report_text || `${row.vendor} / ${row.symptom || row.title || ""}`].join("\n").trim();
-      const res = await sendServiceReception("AS", row.region, text);
+      const res = await sendServiceReception("AS", row.region, await withAlbumLink(text, row.photos || []));
       if (!res.ok) throw new Error(res.error || "카톡 전송 실패");
       const patch = { result: "방문이관", csTransferAt: kstDate(), csTransferBy: author };
       patchHandling(row, patch);

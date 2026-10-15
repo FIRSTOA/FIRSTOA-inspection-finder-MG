@@ -4714,6 +4714,8 @@ export default function App() {
   };
   // 거래처 전환 시 함께 비워야 하는 현장 사진 상태.
   const [photos, setPhotos] = useState<{ file: File; url: string; id?: string }[]>([]);
+  // FIELD 에 작성 중인 것(양식·사진)이 있으면 새 버전 자동 새로고침을 막는다(main.tsx 가 읽음, 2026-10-15)
+  useEffect(() => { (window as unknown as { __fieldDraft?: boolean }).__fieldDraft = !!(photos.length || String(textOutput || "").trim() || String(inputText || "").trim()); }, [photos.length, textOutput, inputText]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   // 새로고침·모바일 브라우저 재시작 대비: 기기(IndexedDB)에 보관된 사진을 앱 시작 시 복원
   const hydratedPhotosRef = useRef<Record<string, { file: File; url: string; id: string }[]>>({});

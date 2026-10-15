@@ -29,7 +29,11 @@ const checkForNewBuild = async () => {
       // 하던 일이 날아가고 첫 화면(FIELD)으로 튕기던 것(2026-10-14). 사진 링크 페이지는 새로고침하지 않는다. 다음 검사(5분)·창 복귀 때 다시 본다
       const active = document.activeElement as HTMLElement | null
       const busy = !!document.querySelector('[role="dialog"]') || !!active?.closest('input, textarea, select, [contenteditable="true"]')
-      if (busy || new URLSearchParams(location.search).has('photo')) return
+      // FIELD 에 작성 중인 양식·사진이 있거나, 사진 고르기(갤러리·카메라)를 열었다 돌아온 직후면 새로고침하지 않는다 —
+      // 갤러리에서 돌아오거나 화면이 꺼졌다 켜질 때 새로고침돼 양식·사진이 초기화되고, 50장 올리던 중 끊기던 것(2026-10-15)
+      const w = window as unknown as { __fieldDraft?: boolean; __filePickAt?: number }
+      const picking = Date.now() - (w.__filePickAt || 0) < 30 * 60_000
+      if (busy || w.__fieldDraft || picking || new URLSearchParams(location.search).has('photo')) return
       location.reload()
     }
   } catch {
@@ -37,6 +41,8 @@ const checkForNewBuild = async () => {
   }
 }
 
+// 파일 고르기 창을 연 시각 — 돌아온 직후 새로고침 금지에 쓴다
+document.addEventListener('click', (e) => { const t = e.target as HTMLElement | null; if (t?.closest('input[type="file"], label:has(input[type="file"])')) (window as unknown as { __filePickAt?: number }).__filePickAt = Date.now() }, true)
 window.addEventListener('focus', () => void checkForNewBuild())
 document.addEventListener('visibilitychange', () => void checkForNewBuild())
 window.setInterval(() => void checkForNewBuild(), 5 * 60 * 1000)
