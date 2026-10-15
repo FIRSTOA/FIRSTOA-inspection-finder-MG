@@ -19,7 +19,7 @@ import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { maxUpdatedAt, mergePlaces, staleIdsFromStamps, updatedAtMs } from "./placesSync";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 import { notify } from "./toast";
-import { mapQuery } from "./address";
+import { addressCore, mapQuery } from "./address";
 
 type MapLabel = {
   code: string;
@@ -140,6 +140,7 @@ type MapPreferences = {
   quarterHas?: { renewal: boolean; misu: boolean; overage: boolean; bulman: boolean };
   quarterGrades?: string[];
   inspectDays?: number; // 점검 경과 N일 초과만 보기(0=전체) — 2026-10-10
+  savedIn?: string;     // 저장한 때의 "연-분기" — 분기가 바뀌면 지난 분기 화면에 머물지 않게(2026-10-15 감사)
 };
 const GRADE_CODES = ["N", "NN", "S", "SS", "V"];
 
@@ -150,7 +151,7 @@ function loadMapPreferences(key: string): MapPreferences {
     const storedKind = stored?.kind;
     return {
       team: stored?.team && teams.includes(stored.team) ? stored.team : "C",
-      quarter: stored?.quarter && quarters.includes(stored.quarter) ? stored.quarter : currentQuarter,
+      quarter: stored?.quarter && quarters.includes(stored.quarter) && stored.savedIn === `${new Date().getFullYear()}-${currentQuarter}` ? stored.quarter : currentQuarter,
       kind: storedKind === "ALL" || workKinds.some((item) => item.value === storedKind) ? storedKind as WorkKind | "ALL" : "ALL",
       labels: Array.isArray(stored?.labels) ? stored.labels.filter((code) => mapLabels.some((item) => item.code === code)) : [],
       renewalGrade: ["ALL", ...GRADE_CODES].includes(String(stored?.renewalGrade)) ? String(stored?.renewalGrade) : "ALL",
@@ -1388,6 +1389,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
   const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const [editMode, setEditMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<number[]>([]);
+  const [coordBusy, setCoordBusy] = useState("");   // 좌표 채우기 진행
   const [draft, setDraft] = useState<MapPlace | null>(null);
   const [pendingImport, setPendingImport] = useState<MapPlace[]>([]);
   const [importTeam, setImportTeam] = useState<Team>("C");
@@ -1820,6 +1822,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
         renewalGrade: renewalGradeFilter, renewalOrder, monthlyOrder,
         quarterHas: { renewal: quarterHasRenewal, misu: quarterHasMisu, overage: quarterHasOverage, bulman: quarterHasBulman }, quarterGrades,
         inspectDays: inspectDaysFilter,
+        savedIn: `${new Date().getFullYear()}-${Math.floor(new Date().getMonth() / 3) + 1}`,
       } satisfies MapPreferences));
     } catch { /* 저장 공간 부족·차단 환경 — 취향 저장은 없어도 동작한다 */ }
   }, [preferenceStorageKey, teamFilter, quarterFilter, kindFilter, labelFilters, renewalGradeFilter, renewalOrder, monthlyOrder, quarterHasRenewal, quarterHasMisu, quarterHasOverage, quarterHasBulman, quarterGrades, inspectDaysFilter]);
@@ -2316,8 +2319,38 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
 
   const allVisibleChecked = filtered.length > 0 && filtered.every((place) => checkedIds.includes(place.id));
 
+  // 지금 고른 팀·분기·업무에서 좌표가 0인 곳을 주소로 찾아 채운다(2026-10-15 감사: 4분기 재계약 B·C·D 271곳이 좌표 0이라 지도에 안 보였다)
+  const missingCoords = places.filter((p) => p.team === teamFilter && p.quarter === quarterFilter && (kindFilter === "ALL" || p.kind === kindFilter) && (!p.latitude || !p.longitude) && p.address.trim());
+  const fillMissingCoords = async () => {
+    if (!sharedReady) { notify("공용 목록을 아직 불러오는 중입니다 — 몇 초 뒤 다시 눌러 주세요", "info"); return; }
+    const targets = [...missingCoords];
+    if (!targets.length || !await askConfirm(`${teamFilter}팀 ${quarterFilter}분기에서 좌표가 없는 ${targets.length}곳을 주소로 찾아 지도에 올릴까요?\n(한 곳에 1초 안팎, 못 찾은 곳은 그대로 둡니다)`, { okLabel: "좌표 채우기" })) return;
+    let ok = 0, fail = 0;
+    const done: MapPlace[] = [];
+    for (let i = 0; i < targets.length; i++) {
+      const p = targets[i];
+      setCoordBusy(`좌표 찾는 중 ${i + 1}/${targets.length}`);
+      try {
+        const hit = await geocodeKR(addressCore(p.address));
+        if (hit && hit.lat > 33 && hit.lat < 39.5 && hit.lng > 124 && hit.lng < 132) { done.push({ ...p, latitude: hit.lat, longitude: hit.lng }); ok++; } else fail++;
+      } catch { fail++; }
+      if (done.length >= 20 || i === targets.length - 1) {
+        const batch = done.splice(0);
+        if (batch.length) {
+          try { await upsertRows("workin_map_places", batch.map((b) => toDbPlace(b, userKey)), "id"); const byId = new Map(batch.map((b) => [b.id, b])); setPlaces((cur) => cur.map((x) => byId.get(x.id) || x)); }
+          catch (error) { notify(`저장 실패: ${(error as Error).message.slice(0, 60)}`, "error"); setCoordBusy(""); return; }
+        }
+      }
+    }
+    setCoordBusy("");
+    notify(`좌표 ${ok}곳 채움${fail ? ` · 못 찾음 ${fail}곳(주소 확인 필요)` : ""}`, ok ? "success" : "info");
+  };
+  // 팀·분기·업무를 바꾸면 목록 편집에서 체크한 것을 비운다 — 안 보이는 다른 팀 행까지 일괄 색칠되던 것
+  useEffect(() => { setCheckedIds([]); }, [teamFilter, quarterFilter, kindFilter]);
+
   const saveDraft = () => {
     if (!draft || !draft.name.trim()) return;
+    if (!sharedReady) { notify("공용 목록을 아직 불러오는 중입니다 — 몇 초 뒤 다시 눌러 주세요", "info"); return; }
     const previous = places.find((place) => place.id === draft.id);
     const savedDraft = withLabelHistory(draft, previous?.label);
     if (sharedReady) {
@@ -2336,10 +2369,12 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
 
   const deleteDraft = async () => {
     if (!draft || !places.some((place) => place.id === draft.id)) return setDraft(null);
+    if (!sharedReady) { notify("공용 목록을 아직 불러오는 중입니다 — 몇 초 뒤 다시 눌러 주세요", "info"); return; }
     if (!await askConfirm("이 거래처를 워킨맵에서 삭제할까요?")) return;
-    if (sharedReady) void deleteRows("workin_map_places", `id=eq.${draft.id}`).catch((error) => {
+    void deleteRows("workin_map_places", `id=eq.${draft.id}`).catch((error) => {
       console.error(error);
       setSyncState("error");
+      notify(`삭제 실패 — 네트워크를 확인하고 다시 시도해 주세요 (${(error as Error).message.slice(0, 60)})`, "error");
     });
     setPlaces((current) => current.filter((place) => place.id !== draft.id));
     setSelectedId(null);
@@ -2348,6 +2383,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
   };
 
   const bulkSetLabel = (label: string) => {
+    if (!sharedReady) { notify("공용 목록을 아직 불러오는 중입니다 — 몇 초 뒤 다시 눌러 주세요", "info"); return; }
     const changed = places
       .filter((place) => checkedIds.includes(place.id))
       .map((place) => withLabelHistory({ ...place, label }, place.label));
@@ -2365,6 +2401,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
   const setPlaceLabel = (id: number, label: string, reason = "") => {
     const target = places.find((place) => place.id === id);
     if (!target || target.label === label) return;
+    if (!sharedReady) { notify("공용 목록을 아직 불러오는 중입니다 — 몇 초 뒤 다시 눌러 주세요", "info"); return; }
     const next = withLabelHistory({ ...target, label }, target.label, reason);
     if (sharedReady) {
       setSyncState("loading");
@@ -2414,7 +2451,9 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
           // 시트에 없는 열(메모 15개 미만·전화·상세주소 등)은 빈 값 — 예전엔 getCell(0) 예외로 손으로 만든 시트가 통째로 실패했다
           const column = headerIndexes.get(header);
           const cell = column ? row.getCell(column) : null;
-          values[header] = ["번호", "위도", "경도"].includes(header) ? (cell ? Number(cell.value) || 0 : 0) : (cell ? cell.text || "" : "");
+          // 수식 칸이면 value 가 {formula, result} — 예전엔 Number(object)=NaN→0 이 돼 4분기 재계약 좌표가 전부 0으로 들어갔다(2026-10-15 감사)
+          const num = (c: typeof cell) => { if (!c) return 0; const v = c.value as unknown; if (typeof v === "number") return v; const r = v && typeof v === "object" && "result" in (v as object) ? Number((v as { result: unknown }).result) : Number(String(c.text || "").replace(/,/g, "")); return Number.isFinite(r) ? r : 0; };
+          values[header] = ["번호", "위도", "경도"].includes(header) ? num(cell) : (cell ? cell.text || "" : "");
         });
         if (String(values["이름"] || "").trim()) rows.push(values);
       });
@@ -2614,6 +2653,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
           <button type="button" onClick={exportExcel} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">현재 목록 내보내기</button>
           <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleExcelImport(file); }} />
         </div>
+        {(missingCoords.length > 0 || coordBusy) && (
+          <button type="button" disabled={!!coordBusy} onClick={() => void fillMissingCoords()} className="mt-2 w-full rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 transition hover:bg-amber-100 disabled:opacity-60">
+            {coordBusy || `📍 좌표 없는 ${missingCoords.length}곳 — 주소로 지도에 올리기`}
+          </button>
+        )}
       </div>
 
       {editMode && (
@@ -2753,7 +2797,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                 <span className="grid shrink-0 grid-cols-2 gap-1">
                   {QUICK_LABELS.map(({ code, name, color }) => { const on = place.label === code; return <button key={code} type="button" disabled={on}
                     title={on ? `지금 ${name}(${code})` : `${name}(${code})으로 바로 표시`} aria-label={`${name}으로 표시`}
-                    onClick={() => (code === "G12" ? openTransfer(place) : setPlaceLabel(place.id, code))}
+                    onClick={() => { if (code === "G12") { openTransfer(place); return; } void askConfirm(`${workinVendorName(place.name) || place.name}\n${name}(${code})으로 표시할까요?`, { okLabel: "표시" }).then((ok) => { if (ok) setPlaceLabel(place.id, code); }); }}
                     className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[9px] font-black tracking-tight text-white ${on ? "border-slate-900" : "border-white lg:opacity-40 lg:group-hover:opacity-100"}`} style={{ backgroundColor: color }}>{code}</button>; })}
                   <button type="button" title="이 업체 정보 수정" aria-label="수정"
                     onClick={() => setDraft({ ...place, memos: [...place.memos] })}

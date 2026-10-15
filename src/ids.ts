@@ -250,6 +250,7 @@ export function vendorNameCore(raw: string): string {
  */
 export function vendorSearchName(raw: string): string {
   const base = String(raw || "").replace(/㈜|\(주\)|\(유\)|주식회사|유한회사|재단법인|사단법인/g, " ").replace(/\s+/g, " ").trim();
-  const cut = base.split(/\d|[-–—/:|·]/)[0].replace(/([가-힣])[a-z]+$/i, "$1").replace(/[\s\-·,()[\]]+$/, "").trim();
+  // 숫자는 날짜·층·대수 꼬리일 때만 자른다 — "카페24"·"3M코리아"처럼 이름 속 숫자는 남긴다(2026-10-15 감사)
+  const cut = base.split(/\s*\d+(?=[.\-/~:]|\s*(?:부터|까지|년|월|일|층|대|개|호))|[-–—/:|·]/)[0].replace(/([가-힣])[a-z]+$/i, "$1").replace(/[\s\-·,()[\]]+$/, "").trim();
   return vendorNameCore(cut || base) || base;
 }
