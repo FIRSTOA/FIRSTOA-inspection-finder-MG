@@ -53,7 +53,7 @@ export default function LookupHub({ author }: { author: string }) {
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-[#1E252F] px-5 py-4">
           <h2 className="text-base font-black text-white lg:text-lg">조회</h2>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">쌓인 기록을 한 곳에서 — 기록 조회와 업무 현황판</p>
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">쌓인 기록을 한 곳에서 — 통합 검색과 기록 조회 (업무 현황판은 주간현황판 → 팀 현황으로 옮김)</p>
         </div>
         {/* 다크 상태줄 — 오늘 들어온 기록 */}
         <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
@@ -66,7 +66,7 @@ export default function LookupHub({ author }: { author: string }) {
           <span className="ml-auto hidden text-[11px] font-semibold text-slate-500 sm:block">기록은 보기 전용 — 수정·삭제는 각 업무 화면과 관리 탭에서</span>
         </div>
         <div className="flex overflow-x-auto">
-          {([["all", "통합 검색"], ["records", "기록 조회"], ["status", "업무 현황판"]] as Array<[Tab, string]>).map(([key, label]) => (
+          {([["all", "통합 검색"], ["records", "기록 조회"]] as Array<[Tab, string]>).map(([key, label]) => (
             <button key={key} type="button" onClick={() => setTab(key)}
               className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
           ))}

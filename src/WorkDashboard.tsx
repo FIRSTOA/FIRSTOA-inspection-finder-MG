@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PortalSelect from "./PortalSelect";
+import OperationsDashboard from "./OperationsDashboard";
+import TeamRanking from "./TeamRanking";
 import { notify } from "./toast";
 import RichCell from "./RichCell";
 import { inputCellKeyDown, tableCellClick } from "./cellNav";
@@ -237,6 +239,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
   // 열람 대상 — 기본은 나, 다른 직원을 고르면 그 사람 기록을 읽기 전용으로 본다
   const { book } = useAuthorBook();
   const [viewAs, setViewAs] = useState(author);
+  const [boardTab, setBoardTab] = useState<"mine" | "team" | "rank">("mine");
   useEffect(() => { setViewAs(author); }, [author]);
   const subject = viewAs || author;
   const readOnly = subject !== author;
@@ -342,7 +345,18 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
   const periodTabs = ([["day", "일간"], ["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as [Period, string][]);
 
   if (!author) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
+  // 주간현황판이 메인 — 조회 탭의 업무현황판(팀 전체 수치)을 [팀 현황]으로 옮기고 [순위표]를 더했다(2026-10-15 팀장 요청)
+  const boardTabs = (
+    <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+      {([["mine", "내 현황"], ["team", "팀 현황"], ["rank", "순위표"]] as const).map(([k, label]) => (
+        <button key={k} type="button" onClick={() => setBoardTab(k)} className={`flex-1 rounded-lg px-4 py-2 text-[13px] font-black transition sm:flex-none ${boardTab === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>{label}</button>
+      ))}
+    </div>
+  );
+  if (boardTab === "team") return <div className="space-y-4 pb-16">{boardTabs}<OperationsDashboard author={author} /></div>;
+  if (boardTab === "rank") return <div className="space-y-4 pb-16">{boardTabs}<TeamRanking author={author} /></div>;
   return <div className="space-y-4 pb-16">
+    {boardTabs}
     {readOnly && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-800">👀 {subject} 님의 기록을 보는 중 — 읽기 전용입니다. 입력·수정은 본인 기록에서만 가능해요.</div>}
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="bg-[#1E252F] px-5 py-4">
