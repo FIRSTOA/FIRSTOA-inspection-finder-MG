@@ -44,6 +44,18 @@ def rest_call(path: str, method: str = "GET", body: dict | None = None):
     return json.loads(raw) if raw.strip().startswith(("[", "{")) else None
 
 
+_quiet_until: dict[str, float] = {}  # 방별 "창 없음" 로그를 30분에 한 번만 — 1분 주기로 돌면서 같은 줄이 쌓이던 것(2026-10-17 노트북 첫 가동)
+
+
+def _should_log_missing(room: str) -> bool:
+    import time
+    now = time.time()
+    if _quiet_until.get(room, 0) > now:
+        return False
+    _quiet_until[room] = now + 30 * 60
+    return True
+
+
 def report_pc_send(room: str) -> None:
     """방별 마지막 활동(room_activity)에 'pc_send' 로 기록 — FIELD 관리 탭 '카톡 발송 현황'이 누가 보냈는지 보여 준다. 실패해도 무시"""
     try:
@@ -63,9 +75,8 @@ def main() -> int:
     if not rows:
         return 0  # 적체 없음 — 봇이 잘 돌고 있다 (로그도 남기지 않는다: 1분마다 도는 조용한 파수꾼)
 
-    log("=" * 64)
-    log(f"outbox 적체 {len(rows)}건 — 봇 대신 PC가 발송 시도")
-    sent = 0
+    # 창이 열려 있는 방만 추린다 — 창 없는 방은 30분에 한 번만 로그(조용한 파수꾼)
+    todo = []
     for row in rows:
         room = str(row.get("room") or "").strip()
         text = str(row.get("text") or "")
@@ -73,8 +84,16 @@ def main() -> int:
             continue
         hwnd, title = find_room_window(room)
         if not hwnd:
-            log(f"  ✗ [{room}] 창이 안 열려 있음 — 건너뜀 (outbox에 유지)")
+            if _should_log_missing(room):
+                log(f"  ✗ [{room}] 창이 안 열려 있음 — 카톡 PC에서 그 방을 더블클릭해 창으로 열어 두면 다음 1분 안에 보냅니다 (이 줄은 30분에 한 번만 적습니다)")
             continue
+        todo.append((row, room, text, hwnd, title))
+    if not todo:
+        return 0
+    log("=" * 64)
+    log(f"outbox 적체 {len(rows)}건 중 창이 열린 {len(todo)}건 — 봇 대신 PC가 발송 시도")
+    sent = 0
+    for row, room, text, hwnd, title in todo:
         set_clipboard_text(text)
         if paste_and_send(hwnd, room, 0.9):
             try:
@@ -86,7 +105,7 @@ def main() -> int:
                 log(f"  ⚠ [{title}] 발송했으나 outbox 정리 실패: {e} — 봇이 중복 발송할 수 있음")
         else:
             log(f"  ✗ [{title}] 붙여넣기 실패")
-    log(f"끝 · 대신 발송 {sent}/{len(rows)}건")
+    log(f"끝 · 대신 발송 {sent}/{len(todo)}건")
     return 0
 
 
