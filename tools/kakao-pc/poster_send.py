@@ -190,9 +190,31 @@ def paste_and_send(hwnd: int, room: str, wait: float) -> bool:
 # ── 본 작업 ────────────────────────────────────────────────
 def send_to_room(room: str, text: str, media: bytes, animated: bool = False) -> bool:
     hwnd, title = find_room_window(room)
+    opened_here = False
+    if not hwnd:
+        # 창이 없으면 방 이름으로 검색해 연다(2026-10-17, open_room.py) — 재부팅 뒤 창이 다 닫혀 있어도 포스터가 나간다
+        try:
+            from open_room import open_room
+            if open_room(room):
+                hwnd, title = find_room_window(room)
+                opened_here = bool(hwnd)
+        except Exception as e:
+            log(f"    방 열기 실패: {e}")
     if not hwnd:
         log(f"    ✗ 방 창이 안 열려 있음: {room}")
         return False
+    try:
+        return _send_to_open_room(hwnd, title, room, text, media, animated)
+    finally:
+        if opened_here:  # 검색으로 연 창은 닫는다 — 창이 쌓이면 카톡이 죽는다(노트북 실측)
+            time.sleep(2.5)
+            try:
+                win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+            except Exception:
+                pass
+
+
+def _send_to_open_room(hwnd: int, title: str, room: str, text: str, media: bytes, animated: bool) -> bool:
     log(f"    창 확인: '{title}'")
     if text:
         set_clipboard_text(text)
