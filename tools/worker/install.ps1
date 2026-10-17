@@ -36,6 +36,16 @@ Write-Host "python: $py"
 & $py -m pip install --quiet --disable-pip-version-check pywin32 pillow pyautogui 2>$null
 if ($LASTEXITCODE -ne 0) { Write-Host "pip install warning - relay/poster may not work until pywin32/pillow/pyautogui are installed" }
 
+# stop the running worker first (re-install = update): the old process would keep the old code and the old environment
+# (2026-10-17: laptop re-ran bootstrap but the previous worker.py kept running, so new relay code and FIRSTOA_BACKUP_ROOT were not picked up)
+Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+try {
+  Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" -ErrorAction Stop |
+    Where-Object { $_.CommandLine -and $_.CommandLine -like '*worker.py*' } |
+    ForEach-Object { Write-Host ("stopping old worker pid " + $_.ProcessId); Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+} catch {}
+Start-Sleep -Seconds 2
+
 # smoke test: one cycle
 Write-Host "smoke test (one cycle)..."
 & $py $script --once
