@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>FIELD 2026 성과 리포트</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* 레이아웃: 원본 리포트(어두운 청록 바탕·큰 숫자·번호 붙은 장)를 잇는 한 장짜리 세로 리포트 — 한 가지 어두운 테마로 고정 */
+:root{--bg:#0c1113;--card:#131c1f;--card-2:#1c282b;--stroke:#29373b;--stroke-2:#3a5055;--ink:#f2f5ef;--ink-2:#c1ceca;--muted:#98aaa6;--teal:#65d6c5;--teal-2:#9fe9dc;--teal-soft:#162f2c;--gold:#dfbc7c;--gold-soft:#2c281f;--gold-stroke:#55472f;--rose:#e9a6a0;--rose-soft:#2d1f1f;--sans:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.65 var(--sans);-webkit-font-smoothing:antialiased;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+h1,h2,h3,p,ul{margin:0}ul{padding:0;list-style:none}
+.wrap{max-width:1180px;margin:auto}
+.num{font-weight:700;letter-spacing:-.04em;line-height:1.1;font-variant-numeric:tabular-nums}
+.mu{color:var(--muted)}.gold{color:var(--gold)}.teal{color:var(--teal-2)}
+.k{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.nav{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px 0;border-bottom:1px solid var(--stroke)}
+.brand{font-size:11px;letter-spacing:.06em;color:var(--muted)}.brand b{font-size:22px;letter-spacing:-.04em;color:var(--ink);margin-right:10px}
+.nav .date{font-size:12px;color:var(--muted)}
+.hero{padding:56px 0 0;position:relative;isolation:isolate}
+.hero:before{content:"FIELD";position:absolute;right:0;top:0;font:700 clamp(96px,17vw,220px)/1 var(--sans);letter-spacing:-.07em;color:#172326;z-index:-1;pointer-events:none}
+.hero .k{color:var(--teal-2)}.hero .rule{width:36px;height:2px;background:var(--teal);margin:20px 0}
+.hero h1{font-size:clamp(30px,4.4vw,56px);line-height:1.24;font-weight:700;letter-spacing:-.05em;max-width:860px;text-wrap:balance;word-break:keep-all}
+.hero h1 b{color:var(--teal)}
+.hero .sub{max-width:660px;color:var(--ink-2);font-size:15px;line-height:1.9;margin-top:22px;word-break:keep-all}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:44px;border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);padding:28px 0}
+.kpi{padding:0 24px;border-left:1px solid var(--stroke);min-width:0}.kpi:first-child{padding-left:0;border:0}
+.kpi .num{font-size:44px}.kpi .num small{font-size:20px;font-weight:500;color:var(--muted);margin-left:2px}.kpi .l{font-size:12px;color:var(--muted);margin-top:8px;word-break:keep-all}
+section{padding-top:64px;display:grid;gap:22px;min-width:0}
+.sh{display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:baseline;border-bottom:1px solid var(--stroke);padding-bottom:18px}
+.sh .no{font-size:14px;color:var(--teal);font-weight:500}.sh h2{font-size:24px;letter-spacing:-.04em;font-weight:700;word-break:keep-all}
+.sh p{grid-column:2;color:var(--muted);font-size:12.5px;margin-top:4px;word-break:keep-all}
+/* 분기 계단 */
+.stairs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.step{min-width:0;border:1px solid var(--stroke);border-radius:12px;background:var(--card);padding:22px;display:flex;flex-direction:column;gap:16px}
+.step.hot{border-color:#42796f;background:linear-gradient(150deg,#19312c,var(--card))}
+.blk{position:relative;isolation:isolate;display:flex;flex-direction:column;justify-content:flex-end;height:190px;padding-bottom:18px;border-bottom:1px solid var(--stroke)}
+.blk .bar{position:absolute;right:0;bottom:0;width:44px;background:var(--teal);opacity:.2;border-radius:4px 4px 0 0;z-index:-1}
+.blk .num{font-size:56px}.blk .cap{font-size:12px;color:var(--muted);margin-top:4px}
+.blk .nm{order:-1;margin-bottom:auto;font-size:19px;font-weight:700;letter-spacing:-.03em}
+.step.q1 .blk .num{color:var(--muted)}.step.hot .blk .num{color:var(--teal-2)}
+.when{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted)}.when span:first-child{color:var(--ink);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid #33504a;background:var(--teal-soft);color:var(--teal-2);border-radius:5px;padding:4px 8px;font-size:11px;font-weight:500;word-break:keep-all}
+.chip.g{color:var(--ink-2);border-color:var(--stroke);background:#1c2628}.chip.ai{color:var(--gold);border-color:var(--gold-stroke);background:var(--gold-soft)}
+/* 회사 / 직원 두 기둥 */
+.vs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.col{border:1px solid var(--stroke);border-radius:12px;padding:26px;min-width:0;background:var(--card)}
+.col.hot{border-color:#437d71;background:linear-gradient(150deg,#152925,#111a1c)}
+.col .t{display:flex;flex-direction:column;gap:4px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--stroke)}
+.col .t b{font-size:22px;letter-spacing:-.03em}.col.hot .t b{color:var(--teal-2)}.col .t span{font-size:12px;color:var(--muted);word-break:keep-all}
+.col li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:11px 0;border-bottom:1px solid #24332f;font-size:13px}
+.col li:last-child{border-bottom:0;padding-bottom:0}
+.col li .s{font-size:12px;font-weight:700;color:var(--gold);letter-spacing:-.05em;white-space:nowrap}
+.col li .s.c{color:var(--teal)}
+.col li b{font-weight:500;word-break:keep-all;display:block}.col li b .ai{color:var(--gold);margin-left:4px;font-size:12px}
+.col li i{font-style:normal;display:block;font-size:12px;color:var(--muted);margin-top:2px;word-break:keep-all}
+.col li small{font-size:11px;color:var(--muted);white-space:nowrap}
+.note{border:1px solid var(--gold-stroke);background:var(--gold-soft);border-radius:12px;padding:18px 22px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.note>div{padding:0 22px;border-left:1px solid var(--gold-stroke);min-width:0}.note>div:first-child{padding-left:0;border:0}
+.note .num{font-size:30px;color:var(--gold)}.note .l{font-size:12px;color:var(--ink-2);margin-top:4px;word-break:keep-all}
+/* 빨라진 것 */
+.gains{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.gain{border:1px solid var(--stroke);border-radius:12px;background:var(--card);padding:20px 22px;min-width:0;display:grid;gap:12px}
+.gain.est{border-style:dashed;border-color:var(--stroke-2)}
+.gain .pct{font-size:30px;color:var(--teal-2)}.gain .pct span{font-size:14px;color:var(--ink);margin-left:8px;font-weight:700;letter-spacing:-.02em}
+.ba{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.ba div{min-width:0}.ba .lab{font-size:11px;color:var(--muted)}.ba .val{font-size:15px;font-weight:700;letter-spacing:-.02em;word-break:keep-all}
+.ba .arr{color:var(--teal);font-size:18px}
+.gain .src{font-size:11px;color:var(--muted);word-break:keep-all}
+/* 데이터 격자 */
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--stroke);border:1px solid var(--stroke);border-radius:12px;overflow:hidden}
+.cell{background:var(--card);padding:20px 22px;min-width:0}
+.cell .num{font-size:30px}.cell .num small{font-size:14px;font-weight:500;color:var(--muted);margin-left:3px}
+.cell .l{font-size:12.5px;margin-top:6px;word-break:keep-all}.cell .src{font-size:11px;color:var(--muted);margin-top:2px;word-break:keep-all}
+/* 투입 시간 */
+.hours{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:14px}
+.hkpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--stroke);border:1px solid var(--stroke);border-radius:12px;overflow:hidden;align-content:start}
+.tbl{border:1px solid var(--stroke);border-radius:12px;background:var(--card);padding:18px 22px;min-width:0;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:13px;min-width:460px}
+th{text-align:left;font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--stroke)}
+td{padding:9px 8px;border-bottom:1px solid #24332f;white-space:nowrap}tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}td.bar{width:34%;min-width:120px}
+.hb{height:10px;border-radius:3px;background:var(--teal);opacity:.75}
+tfoot td{font-weight:700;border-top:1px solid var(--stroke-2);border-bottom:0}tfoot tr+tr td{font-weight:500;border-top:0}
+.method{font-size:12px;color:var(--muted);line-height:1.8;word-break:keep-all}
+/* 근거 */
+.evid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ev{border:1px solid var(--stroke);border-radius:10px;padding:14px 16px;min-width:0;background:var(--card)}
+.ev .num{font-size:24px}.ev .l{font-size:12px;color:var(--ink-2);margin-top:4px;word-break:keep-all}.ev .src{font-size:11px;color:var(--muted);word-break:keep-all}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--stroke);font-size:12px;color:var(--muted);line-height:1.9;word-break:keep-all}
+footer b{color:var(--ink-2);font-weight:700}
+a:focus-visible{outline:2px solid var(--teal);outline-offset:4px}
+@media (max-width:980px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:26px}.kpi:nth-child(3){padding-left:0;border:0}.stairs{grid-template-columns:repeat(2,minmax(0,1fr))}.gains{grid-template-columns:repeat(2,minmax(0,1fr))}.grid,.evid{grid-template-columns:repeat(2,minmax(0,1fr))}.hours{grid-template-columns:1fr}.note{grid-template-columns:1fr;gap:14px}.note>div{padding:0;border:0}}
+@media (max-width:640px){.kpis{grid-template-columns:1fr}.kpi{padding:0;border:0}.kpi .num{font-size:38px}.stairs,.vs,.gains,.grid,.evid,.hkpis{grid-template-columns:1fr}.blk{height:150px}.blk .num{font-size:44px}.col li{grid-template-columns:30px minmax(0,1fr)}.col li small{grid-column:2}.hero:before{display:none}}
+@media (prefers-reduced-motion:no-preference){.blk .bar{transition:height .6s ease}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="nav">
+    <div class="brand"><b>FIELD</b>2026 REPORT · 퍼스트전산 운영지원 · 현장업무 자동화</div>
+    <div class="date">집계 기준 2026-10-17 · 1월 ~ 10월 17일</div>
+  </div>
+
+  <header class="hero">
+    <div class="k">FIELD · 2026 · 1인 기획 · 개발 · 운영</div>
+    <div class="rule"></div>
+    <h1>손으로 치던 점검 보고가, 열 달 만에 <b>팀 운영 포털</b>이 되었습니다</h1>
+    <p class="sub">접수 → 일정 → 현장 보고 → 고객 문자 → 실적 집계가 한 흐름으로 이어집니다. 이 리포트는 회사(경영·관리)에 필요한 것과 현장 직원에게 필요한 것을 나눠 정리했습니다. 모든 수치는 코드 저장소의 커밋 기록과 데이터베이스 집계에서 그대로 가져왔습니다.</p>
+    <div class="legend"><span><span class="gold">★</span> 우선순위 (★★ 핵심)</span><span><span class="gold">✦</span> AI 기능</span><span>✓ 기능</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="num">12,859<small>건</small></div><div class="l">올해 자동으로 쌓인 점검·AS 보고<br>사람이 시트에 옮겨 적은 건 0건</div></div>
+      <div class="kpi"><div class="num">1,523</div><div class="l">코드 변경 횟수 · 4월 ~ 10/17</div></div>
+      <div class="kpi"><div class="num">292<small>h</small></div><div class="l">투입 시간 · 4~9월 · 커밋 기록으로 잡히는 최소치<br>작업일 82일</div></div>
+      <div class="kpi"><div class="num">67<small>%</small></div><div class="l">근무 외 시간(18~09시) 작업 비율<br>주말 작업일 23일</div></div>
+    </div>
+  </header>
+
+  <section id="quarters">
+    <div class="sh"><div class="no">01</div><h2>네 분기, 한눈에</h2><p>막대 높이 = 코드 변경 횟수 · 1분기는 노코드 도구로 운영해 코드 기록이 없습니다</p></div>
+    <div class="stairs">
+      <div class="step q1">
+        <div class="blk"><div class="nm">노코드 운영</div><div class="num">0</div><div class="cap">코드 변경 · GPT로 작업, 기록 없음</div></div>
+        <div class="when"><span>1분기 · 1~3월</span><span>Make 자동화 · 카톡 브리핑</span></div>
+        <div class="chips"><span class="chip g">Make 자동화</span><span class="chip g">카톡 브리핑</span><span class="chip g">시트 5개 조회</span><span class="chip g">수기 보고 2회</span></div>
+      </div>
+      <div class="step">
+        <div class="blk"><div class="bar" style="height:34%"></div><div class="nm">FIELD 탄생</div><div class="num">342</div><div class="cap">코드 변경 · 저장소 4개</div></div>
+        <div class="when"><span>2분기 · 4~6월</span><span>작업일 28 · 79시간</span></div>
+        <div class="chips"><span class="chip">점검 변환기</span><span class="chip">거래처 조회</span><span class="chip ai">✦ 카톡 AI 분류</span><span class="chip">통합 DB</span><span class="chip ai">✦ 사진→양식</span><span class="chip">카톡방 자동 게시</span></div>
+      </div>
+      <div class="step hot">
+        <div class="blk"><div class="bar" style="height:100%"></div><div class="nm">팀 운영 포털</div><div class="num">1,003</div><div class="cap">코드 변경 · AI 공동 작성 77%</div></div>
+        <div class="when"><span>3분기 · 7~9월</span><span>작업일 54 · 214시간</span></div>
+        <div class="chips"><span class="chip">워킨맵</span><span class="chip">서비스접수</span><span class="chip">네이버 캘린더 양방향</span><span class="chip">문자·MMS</span><span class="chip ai">✦ 보고 AI 다듬기</span><span class="chip ai">✦ OKR AI</span><span class="chip">족보 12,580건</span></div>
+      </div>
+      <div class="step">
+        <div class="blk"><div class="bar" style="height:18%"></div><div class="nm">데이터 활용</div><div class="num">178</div><div class="cap">코드 변경 · 10/1 ~ 10/17</div></div>
+        <div class="when"><span>4분기 · 10월 (진행 중)</span><span>작업일 14 · 시간 집계 범위 밖</span></div>
+        <div class="chips"><span class="chip">통합검색 360</span><span class="chip ai">✦ AI 질문</span><span class="chip">미처리 일정</span><span class="chip">순위표</span><span class="chip">부품·자가 신청</span><span class="chip">24시간 실행기</span><span class="chip">사진 편집·PDF</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="who">
+    <div class="sh"><div class="no">02</div><h2>회사에 필요한 것, 개인에게 필요한 것</h2></div>
+    <div class="vs">
+      <div class="col hot">
+        <div class="t"><b>회사 · 조직 전체에 도움이 된 것</b><span>접수가 빠지지 않고, 실적이 저절로 모이고, 고객에게 바로 닿는 것</span></div>
+        <ul>
+          <li><span class="s">★★</span><div><b>서비스접수 ↔ 네이버 캘린더 양방향</b><i>접수 926건 · 캘린더 자동 반영 3,774회 · 접수에서 바로 만든 일정 422건</i></div><small>7~8월</small></li>
+          <li><span class="s">★★</span><div><b>접수 시트 기입 10초+ → 3.2초</b><i>구글 시트 API 직행, 실패 시 자동 우회 · 올해 시트 기입 1,535건</i></div><small>8/14</small></li>
+          <li><span class="s">★★</span><div><b>주간 실적 자동 집계</b><i>주당 20~30분 수작업 → 0 · 주간현황판에서 바로 확인</i></div><small>8월</small></li>
+          <li><span class="s">★★</span><div><b>미처리 일정 · 홈 A~E 탭</b><i>날짜가 지난 일정이 홈 첫 화면에 팀별로 바로 보임</i></div><small>10월</small></li>
+          <li><span class="s">★★</span><div><b>노트북 24시간 실행기</b><i>매일 02:30 자동 백업 · 카톡 PC 중계 · 포스터 발송 · 일감 처리</i></div><small>10월</small></li>
+          <li><span class="s">★</span><div><b>문자·MMS 직접 발송 + 점검 리포트</b><i>문자 2,019통 발송(7/19~) · 10월 1~17일만 374통 · 점검 양식을 고객용 리포트 이미지로</i></div><small>8~9월</small></li>
+          <li><span class="s">★</span><div><b>분기점검 안내 문자</b><i>6단계 × 100통 → 3번 누르기</i></div><small>7월</small></li>
+          <li><span class="s">✓</span><div><b>순위표 · 주간현황판 통합</b><i>팀·개인 월간 순위, 강점·보완점 자동 표시</i></div><small>10/15</small></li>
+        </ul>
+      </div>
+      <div class="col">
+        <div class="t"><b>개인 · 각자의 업무에 필요한 것</b><span>내 보고가 빨라지고, 찾는 게 한 번에 나오고, 다시 치는 일이 없는 것</span></div>
+        <ul>
+          <li><span class="s">★★</span><div><b>점검 원문 → 양식 변환</b><i>FIELD의 시작 · 카톡에 붙여 넣으면 양식 완성</i></div><small>4/4</small></li>
+          <li><span class="s">★★</span><div><b>보내기 한 번 = 기록 저장 + 카톡방 게시</b><i>올해 FIELD로 보낸 보고 3,043건</i></div><small>6/18</small></li>
+          <li><span class="s">★★</span><div><b>거래처 9가지 기록 조회</b><i>업체명 하나로 점검·AS·미수·초과·담당자 변경까지</i></div><small>4/26</small></li>
+          <li><span class="s">★</span><div><b>워킨맵 · 자동 일정 · 내 일정 · 팀 일정 지도</b><i>거래처 7,895곳 지도 · 일정 1,633건 · 방문 기록 2,769건</i></div><small>7~10월</small></li>
+          <li><span class="s">★</span><div><b>중간보고·익일 스케줄 AI 다듬기<span class="ai">✦</span></b><i>최근 1주 61회 사용 · 성장노트·골든카드 AI 변환과 함께</i></div><small>8/25</small></li>
+          <li><span class="s">★</span><div><b>통합검색 360 + AI 질문·지식 문서<span class="ai">✦</span></b><i>표 23개를 한 번에 검색 · 지식 문서 450건 · "이 업체 어떤 곳이야?"에 데이터로 답</i></div><small>10월</small></li>
+          <li><span class="s c">✓</span><div><b>사진 뷰어 · 편집본 공유 · 앨범 · PDF</b><i>서버 보관 사진 22,693장 · 앨범 2,694개 · 표시한 사진을 링크 하나로</i></div><small>10월</small></li>
+          <li><span class="s">✦</span><div><b>골든미팅카드 AI 초안<span class="ai">✦</span></b><i>1~2시간 → 검토 20분</i></div><small>5월</small></li>
+          <li><span class="s">✦</span><div><b>매수·토너잔량 OCR<span class="ai">✦</span></b><i>카운터 사진을 숫자로 · 검증 중(숨김)</i></div><small>10/14</small></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="gains">
+    <div class="sh"><div class="no">03</div><h2>얼마나 빨라졌나</h2><p>개선 전 → 개선 후 · 점선 테두리는 팀 자체 보고치를 바탕으로 한 환산</p></div>
+    <div class="gains">
+      <div class="gain"><div class="pct num">▼68%<span>접수 시트 기입</span></div><div class="ba"><div><div class="lab">개선 전</div><div class="val">10초 이상</div></div><div class="arr">→</div><div><div class="lab">개선 후</div><div class="val">3.2초</div></div></div><div class="src">8/14 실측 · 구글 시트 API 직행</div></div>
+      <div class="gain"><div class="pct num">▼100%<span>주간 실적 보고</span></div><div class="ba"><div><div class="lab">개선 전</div><div class="val">주당 20~30분</div></div><div class="arr">→</div><div><div class="lab">개선 후</div><div class="val">자동 집계</div></div></div><div class="src">주간현황판 · 활동 기록 2,989건에서 집계</div></div>
+      <div class="gain"><div class="pct num">▼80%<span>골든미팅카드 초안</span></div><div class="ba"><div><div class="lab">개선 전</div><div class="val">1~2시간</div></div><div class="arr">→</div><div><div class="lab">개선 후</div><div class="val">검토 20분</div></div></div><div class="src">성장기록 · AI 초안</div></div>
+      <div class="gain est"><div class="pct num">▼76%<span>AS·점검 보고 작성</span></div><div class="ba"><div><div class="lab">개선 전</div><div class="val">건당 25분</div></div><div class="arr">→</div><div><div class="lab">개선 후</div><div class="val">6분</div></div></div><div class="src">C파트 8월 OKR 자체 보고 · 월 20시간 절감</div></div>
+      <div class="gain est"><div class="pct num">964<span>시간 / 올해 환산</span></div><div class="ba"><div><div class="lab">FIELD로 보낸 보고</div><div class="val">3,043건</div></div><div class="arr">×</div><div><div class="lab">건당 절감</div><div class="val">19분</div></div></div><div class="src">위 C파트 보고치(25분→6분)를 전사 건수에 곱한 추정 · 카톡 AI 분류 9,816건은 제외</div></div>
+    </div>
+  </section>
+
+  <section id="data">
+    <div class="sh"><div class="no">04</div><h2>올해 쌓인 데이터</h2><p>2026-10-17 데이터베이스 집계 · 괄호는 표 이름</p></div>
+    <div class="grid">
+      <div class="cell"><div class="num">12,859<small>건</small></div><div class="l">2026년 점검·AS 보고 자동 적재</div><div class="src">FIELD 3,043 + 카톡 AI 분류 9,816 (jeomgeom · as_records)</div></div>
+      <div class="cell"><div class="num">22,693<small>장</small></div><div class="l">서버에 보관된 현장 사진</div><div class="src">앨범 2,694개 (photo_assets · photo_albums)</div></div>
+      <div class="cell"><div class="num">926<small>건</small></div><div class="l">서비스접수 · 7/25부터</div><div class="src">카카오 경로 96% (service_receptions)</div></div>
+      <div class="cell"><div class="num">3,774<small>회</small></div><div class="l">네이버 캘린더 자동 반영 · 8/15부터</div><div class="src">등록·이동·수정·삭제 (naver_write_log)</div></div>
+      <div class="cell"><div class="num">2,019<small>통</small></div><div class="l">고객 문자 발송 · 7/19부터</div><div class="src">성공 2,019 / 취소 2 (message_jobs)</div></div>
+      <div class="cell"><div class="num">1,633<small>건</small></div><div class="l">팀 일정 · 그중 네이버 연동 421건</div><div class="src">(as_tickets)</div></div>
+      <div class="cell"><div class="num">13,241<small>건</small></div><div class="l">복합기 처리이력 족보</div><div class="src">AI 정제 12,580건 포함 (copier_notes)</div></div>
+      <div class="cell"><div class="num">7,895<small>곳</small></div><div class="l">워킨맵 거래처</div><div class="src">(workin_map_places)</div></div>
+      <div class="cell"><div class="num">2,769<small>건</small></div><div class="l">방문 기록 · 보내기와 동시에 자동</div><div class="src">(visit_logs)</div></div>
+      <div class="cell"><div class="num">2,989<small>건</small></div><div class="l">활동 기록 · 주간 실적·순위표의 원천</div><div class="src">보내기와 동시에 자동 (activity_events)</div></div>
+      <div class="cell"><div class="num">450<small>건</small></div><div class="l">통합검색 지식 문서</div><div class="src">(knowledge_docs)</div></div>
+      <div class="cell"><div class="num">23,123<small>행</small></div><div class="l">임대리스트 주간 동기화</div><div class="src">미수 8,284 · 초과 3,314 · 담당자 변경 1,468 함께 수집 (vendor_info 외)</div></div>
+    </div>
+  </section>
+
+  <section id="hours">
+    <div class="sh"><div class="no">05</div><h2>언제, 얼마나 일했나</h2><p>커밋 시각으로 추정 · 2026-04-04 ~ 09-30 · 10월은 코드 변경만 표시 · 1분기 GPT 작업은 커밋이 없어 제외</p></div>
+    <div class="hours">
+      <div class="hkpis">
+        <div class="cell"><div class="num">292<small>시간</small></div><div class="l">추정 작업 시간 · 4~9월</div><div class="src">1,345회 코드 변경에서 역산</div></div>
+        <div class="cell"><div class="num">82<small>일</small></div><div class="l">작업일 · 그중 주말 23일</div><div class="src">토요일 커밋이 가장 많음</div></div>
+        <div class="cell"><div class="num">67<small>%</small></div><div class="l">근무 외 시간(18~09시) 커밋</div><div class="src">주말 커밋 비율 38%</div></div>
+        <div class="cell"><div class="num">14.2<small>시간</small></div><div class="l">가장 긴 날 · 8/17 (월)</div><div class="src">홍보물 PDF · 족보 검수 · 60건</div></div>
+      </div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>월</th><th class="r">작업일 (주말)</th><th class="r">코드 변경</th><th class="r">추정 시간</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>4월</td><td class="r">5 (2)</td><td class="r">30</td><td class="r">9h</td><td class="bar"><div class="hb" style="width:9%" title="4월 9시간"></div></td></tr>
+            <tr><td>5월</td><td class="r">9 (5)</td><td class="r">167</td><td class="r">30h</td><td class="bar"><div class="hb" style="width:29%" title="5월 30시간"></div></td></tr>
+            <tr><td>6월</td><td class="r">14 (3)</td><td class="r">145</td><td class="r">40h</td><td class="bar"><div class="hb" style="width:38%" title="6월 40시간"></div></td></tr>
+            <tr><td>7월</td><td class="r">17 (5)</td><td class="r">362</td><td class="r">79h</td><td class="bar"><div class="hb" style="width:76%" title="7월 79시간"></div></td></tr>
+            <tr><td>8월</td><td class="r">20 (5)</td><td class="r">497</td><td class="r">104h</td><td class="bar"><div class="hb" style="width:100%" title="8월 104시간"></div></td></tr>
+            <tr><td>9월</td><td class="r">17 (3)</td><td class="r">144</td><td class="r">31h</td><td class="bar"><div class="hb" style="width:30%" title="9월 31시간"></div></td></tr>
+            </tbody>
+          <tfoot><tr><td>합계 · 4~9월</td><td class="r">82 (23)</td><td class="r">1,345</td><td class="r">292h</td><td></td></tr>
+          <tr><td class="mu">10월 (~17일)</td><td class="r mu">14 (4)</td><td class="r mu">178</td><td class="r mu">집계 범위 밖</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <p class="method"><b class="teal">계산 방법</b> — 같은 날 2시간 이내 간격의 커밋을 한 세션으로 묶고, 세션 시간은 첫 커밋 30분 전부터 마지막 커밋까지로 잡았습니다. 커밋 없이 한 기획·화면 설계·직원 피드백 검토·테스트·회의, 그리고 1분기 GPT 작업은 전부 빠져 있어 <b>실제 투입은 이 숫자보다 큽니다.</b> 292시간은 "기록으로 증명되는 최소치"입니다.</p>
+  </section>
+
+  <section id="evidence">
+    <div class="sh"><div class="no">06</div><h2>화면 뒤에서 도는 것</h2><p>2026-10-17 저장소 집계 · 이 숫자들이 위 기능을 받치고 있습니다</p></div>
+    <div class="evid">
+      <div class="ev"><div class="num">49,331<small class="mu"> 줄</small></div><div class="l">직접 관리하는 코드</div><div class="src">파일 146개</div></div>
+      <div class="ev"><div class="num">24</div><div class="l">서버 함수 · 그중 AI 12개</div><div class="src">캘린더 · 문자 · 지도 · AI 질문 등</div></div>
+      <div class="ev"><div class="num">70</div><div class="l">데이터 표</div><div class="src">점검 · AS · 접수 · 일정 · 사진 · 재고 등</div></div>
+      <div class="ev"><div class="num">467</div><div class="l">자동 검사 · 코드를 고칠 때마다 전부 실행</div><div class="src">고장 난 채 배포되는 일을 막음</div></div>
+      <div class="ev"><div class="num">21<small class="mu"> 편</small></div><div class="l">화면별 사용설명서</div><div class="src">로그인 없이 열림</div></div>
+      <div class="ev"><div class="num">77<small class="mu"> %</small></div><div class="l">AI 공동 작성 코드 변경</div><div class="src">설계·검수·배포는 사람이</div></div>
+      <div class="ev"><div class="num">1</div><div class="l">기획 · 개발 · 운영 · 교육 인원</div><div class="src">외주 0원 · 운영지원 업무와 병행</div></div>
+      <div class="ev"><div class="num">02:30</div><div class="l">매일 자동 백업 시각</div><div class="src">노트북 실행기 · 표 전체</div></div>
+    </div>
+  </section>
+
+  <footer>
+    <b>집계 기준</b> · 코드 변경: 업무 저장소 7곳 git 커밋(미러·개인 앱 제외), 4~9월은 2026-10-02 집계값, 10월은 2026-10-17 집계값 · 작업 시간: 3분기 보고 범위에 맞춰 4~9월만 집계 · 데이터 건수: Supabase 표별 행 수(2026-10-17) · 개선 전/후: 8/14 실측, 사용설명서, 8월 OKR 팀 자체 보고 · AI 공동 작성 비율: 커밋 서명 기준<br>
+    <b>이 리포트에 넣지 않은 것</b> · 다른 직원이 만든 복합기 구동원리·IT 학습 자료·마감 카운터 문자 기능은 제외했습니다. 1분기 노코드 작업(Make·GPT)은 기록이 없어 시간에 넣지 않았습니다.
+  </footer>
+</div>
+</body>
+</html>
