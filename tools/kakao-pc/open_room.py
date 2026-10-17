@@ -85,8 +85,75 @@ def room_windows_snapshot() -> set:
     return s
 
 
+def close_friend_add_windows() -> int:
+    """'친구 추가' 창이 떠 있으면 닫는다 — 거기에 글을 붙여 넣으면 ID로 친구를 찾는 꼴이라 반드시 막는다"""
+    hit = []
+
+    def cb(h, _):
+        try:
+            if win32gui.IsWindowVisible(h) and "친구 추가" in win32gui.GetWindowText(h):
+                hit.append(h)
+        except Exception:
+            pass
+
+    win32gui.EnumWindows(cb, None)
+    for h in hit:
+        try:
+            win32gui.PostMessage(h, win32con.WM_CLOSE, 0, 0)
+        except Exception:
+            pass
+    if hit:
+        time.sleep(0.4)
+    return len(hit)
+
+
+def search_box_rect(main: int, list_rect):
+    """채팅 목록 바로 위의 검색칸(진단: id=1020, 407x50, 목록과 같은 폭·목록 바로 위)"""
+    if not list_rect:
+        return None
+    hit = []
+
+    def cb(h, _):
+        try:
+            if not win32gui.IsWindowVisible(h) or win32gui.GetClassName(h) != CHAT_CLASS:
+                return
+            r = win32gui.GetWindowRect(h)
+            if abs(r[0] - list_rect[0]) <= 3 and abs(r[3] - list_rect[1]) <= 3 and 20 <= (r[3] - r[1]) <= 80:
+                hit.append(r)
+        except Exception:
+            pass
+
+    try:
+        win32gui.EnumChildWindows(main, cb, None)
+    except Exception:
+        pass
+    return hit[0] if hit else None
+
+
+def focus_search_box(main: int, pyautogui, debug: bool = False):
+    """채팅 탭으로 간 뒤 검색칸을 직접 클릭해 포커스 — Ctrl+F 는 친구 탭에 있으면 '친구 추가' 창을 연다(2026-10-17 실측)"""
+    pyautogui.hotkey("ctrl", "e")  # 진단: 채팅 목록(ChatRoomListCtrl)로 포커스 = 채팅 탭
+    time.sleep(0.5)
+    list_rect = chat_list_rect(main)
+    box = search_box_rect(main, list_rect)
+    if box:
+        pyautogui.click(box[0] + 120, (box[1] + box[3]) // 2)
+    else:
+        pyautogui.hotkey("ctrl", "f")
+    time.sleep(0.5)
+    if close_friend_add_windows():
+        log("    '친구 추가' 창이 떠서 닫았습니다 — 이번 시도는 중단")
+        return None, list_rect, box
+    if win32gui.GetForegroundWindow() != main:
+        log(f"    맨 앞 창이 '{win32gui.GetWindowText(win32gui.GetForegroundWindow())}' 이라 중단")
+        return None, list_rect, box
+    if debug:
+        log(f"    [debug] 목록={list_rect} 검색칸={box} ({'클릭' if box else 'Ctrl+F'})")
+    return True, list_rect, box
+
+
 def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
-    """방 이름으로 방 창을 연다. 이미 열려 있으면 True. 끝나면 메인 창 검색칸은 Esc 로 비운다."""
+    """방 이름으로 방 창을 연다. 이미 열려 있으면 True. 끝나면 메인 창 검색칸은 비운다."""
     import pyautogui
 
     pyautogui.FAILSAFE = False
@@ -96,54 +163,47 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
     if not main:
         log("    카톡 메인 창을 못 찾음 — 카톡 PC가 꺼져 있거나 로그인 전")
         return False
+    close_friend_add_windows()
     if not bring_front(main):
         return False
     before = room_windows_snapshot()
-    # 채팅 탭 검색칸으로: Ctrl+F (이 버전은 새 창 없이 검색칸 포커스). 이전 검색어가 남아 있을 수 있어 전체 선택 후 덮어쓴다
-    pyautogui.hotkey("ctrl", "f")
-    time.sleep(0.5)
+    ok, list_rect, box = focus_search_box(main, pyautogui, debug)
+    if not ok:
+        return False
     set_clipboard_text(room)
     pyautogui.hotkey("ctrl", "a")
     pyautogui.hotkey("ctrl", "v")
     time.sleep(wait)  # 목록이 걸러질 시간
-    # 1차: 걸러진 목록의 첫 항목을 더블클릭(실측: ↓+Enter 는 아무 창도 안 열었다, 2026-10-17 강남C 점검방)
-    rect = chat_list_rect(main)
-    if rect:
-        x, y = rect[0] + 140, rect[1] + 32
-        pyautogui.doubleClick(x, y)
+    if close_friend_add_windows():
+        log("    붙여 넣은 뒤 '친구 추가' 창이 떠서 닫았습니다 — 중단")
+        return False
+    # 걸러진 목록의 첫 항목을 더블클릭(↓+Enter 는 아무 창도 안 열었다 — 2026-10-17 실측)
+    list_rect = chat_list_rect(main) or list_rect
+    if list_rect:
+        pyautogui.doubleClick(list_rect[0] + 140, list_rect[1] + 32)
         time.sleep(1.5)
     hwnd, title = find_room_window(room)
-    if not hwnd:
-        # 2차: 검색칸에서 ↓ Enter
-        if bring_front(main):
-            pyautogui.hotkey("ctrl", "f")
-            time.sleep(0.3)
-            pyautogui.press("down")
-            time.sleep(0.3)
-            pyautogui.press("enter")
-            time.sleep(1.5)
-        hwnd, title = find_room_window(room)
     if debug:
         new = room_windows_snapshot() - before
-        log(f"    [debug] 목록 좌표={rect} 새 창={[(h, win32gui.GetWindowText(h), win32gui.GetWindowRect(h)) for h in new]}")
+        log(f"    [debug] 새 창={[(h, win32gui.GetWindowText(h), win32gui.GetWindowRect(h)) for h in new]}")
     # 검색칸 비우기(다음 검색·사람 사용에 방해 안 되게)
     try:
         if bring_front(main):
-            pyautogui.hotkey("ctrl", "f")
-            time.sleep(0.2)
-            pyautogui.hotkey("ctrl", "a")
-            pyautogui.press("backspace")
-            pyautogui.press("esc")
+            ok2, _, _ = focus_search_box(main, pyautogui)
+            if ok2:
+                pyautogui.hotkey("ctrl", "a")
+                pyautogui.press("backspace")
+                pyautogui.press("esc")
     except Exception:
         pass
+    close_friend_add_windows()
     if hwnd:
         log(f"    ✓ 방 창 열림: '{title}'")
         return True
-    # 엉뚱한 창이 열렸으면 닫는다 — 글은 제목 확인된 창에만 붙이므로 안전하지만, 창이 쌓이면 다음 판단을 흐린다
     for h in room_windows_snapshot() - before:
         t = win32gui.GetWindowText(h)
         if not t.strip():
-            continue  # 제목 없는 창은 카톡 내부 팝업(검색 결과 띠 등) — 건드리지 않는다
+            continue  # 제목 없는 창은 카톡 내부 팝업 — 건드리지 않는다
         if h != main and norm(t) not in (norm(x) for x in MAIN_TITLES):
             log(f"    ✗ 엉뚱한 창 '{t}' 이 열려 닫습니다 (목표: {room})")
             try:
