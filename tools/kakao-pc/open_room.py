@@ -134,6 +134,29 @@ def focused_is_edit() -> bool | None:
         return None
 
 
+def find_edit_rect(main: int):
+    """메인 창 안에 이미 열린 검색 입력칸(EditControl)이 있으면 그 화면 좌표 — 돋보기는 켜기/끄기 토글이라(2026-10-17 실측) 열려 있을 땐 누르면 닫힌다"""
+    try:
+        import uiautomation as uia
+        root = uia.ControlFromHandle(main)
+        found = []
+
+        def walk(c, d=0):
+            if found or d > 8:
+                return
+            if c.ControlTypeName == "EditControl":
+                r = c.BoundingRectangle
+                if r.width() > 40:
+                    found.append((r.left, r.top, r.right, r.bottom))
+                    return
+            for ch in c.GetChildren():
+                walk(ch, d + 1)
+        walk(root)
+        return found[0] if found else None
+    except Exception:
+        return None
+
+
 def focus_search_box(main: int, pyautogui, debug: bool = False):
     """채팅 탭 머리띠의 돋보기(🔍)를 눌러 검색칸을 연다 — 2026-10-17 화면 실측(490x1020 창): 돋보기 = 채팅 탭 영역 오른쪽 끝에서 137px, 위에서 32px.
     Ctrl+F 는 친구 탭이면 '친구 추가' 창을 열고, 목록 위 50px 띠는 전체/안읽음 필터 버튼이라 둘 다 쓰지 않는다."""
@@ -144,9 +167,20 @@ def focus_search_box(main: int, pyautogui, debug: bool = False):
     if not view:
         log("    채팅 탭 영역(ChatRoomListView)을 못 찾음")
         return None, list_rect, None
-    x, y = view[2] - 137, view[1] + 32
-    pyautogui.click(x, y)
-    time.sleep(0.6)
+    edit = find_edit_rect(main)
+    if edit:
+        x, y = (edit[0] + edit[2]) // 2, (edit[1] + edit[3]) // 2  # 이미 열린 검색칸 — 그 안을 클릭
+        pyautogui.click(x, y)
+        time.sleep(0.4)
+        pyautogui.hotkey("ctrl", "a")  # 입력칸 안이라 안전 — 남은 검색어를 덮어쓴다
+        time.sleep(0.1)
+    else:
+        x, y = view[2] - 137, view[1] + 32  # 돋보기
+        pyautogui.click(x, y)
+        time.sleep(0.6)
+        if focused_is_edit() is False and find_edit_rect(main) is None:
+            pyautogui.click(x, y)  # 토글이 꺼진 상태였으면 한 번 더
+            time.sleep(0.6)
     if close_friend_add_windows():
         log("    '친구 추가' 창이 떠서 닫았습니다 — 이번 시도는 중단")
         return None, list_rect, (x, y)
@@ -155,7 +189,7 @@ def focus_search_box(main: int, pyautogui, debug: bool = False):
         return None, list_rect, (x, y)
     is_edit = focused_is_edit()
     if debug:
-        log(f"    [debug] 채팅탭={view} 목록={list_rect} 돋보기 클릭={(x, y)} 포커스가 입력칸? {is_edit}")
+        log(f"    [debug] 채팅탭={view} 목록={list_rect} {'열린 검색칸' if edit else '돋보기'} 클릭={(x, y)} 포커스가 입력칸? {is_edit}")
     if is_edit is False:
         log("    돋보기를 눌렀는데 입력칸에 포커스가 없음 — 붙여 넣지 않고 중단")
         return None, list_rect, (x, y)
