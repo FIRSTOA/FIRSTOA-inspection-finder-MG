@@ -28,7 +28,7 @@ VERSION = "2026-10-10a"
 WORKER_NAME = os.environ.get("FIRSTOA_WORKER_NAME", f"worker@{HOST}")
 LOOP_SECONDS = 60
 BACKUP_AT = (2, 30)            # KST 02:30 이후 그날 첫 바퀴에
-RELAY_EVERY = 300              # 초 — 봇이 3분 넘게 못 가져간 outbox 를 카톡 PC 가 대신 보낸다(outbox_relay.py 규칙)
+RELAY_EVERY = 60               # 초 — 봇이 2분 넘게 못 가져간 outbox 를 카톡 PC 가 대신 보낸다(outbox_relay.py 규칙 · 2026-10-17 300→60)
 POSTER_HOUR = 8                # 월요일 08시대
 RELAY_ENABLED = os.environ.get("FIRSTOA_RELAY", "1") != "0"
 POSTER_ENABLED = os.environ.get("FIRSTOA_POSTER", "1") != "0"

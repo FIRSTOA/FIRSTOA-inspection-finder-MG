@@ -7,7 +7,7 @@
 |---|---|---|
 | 심박 | 1분마다 | `worker_heartbeat` 에 살아 있음 기록. 15분 끊기면 DB 파수꾼이 담당자에게 웹푸시 |
 | 전체 표 백업 | 매일 02:30 KST | `backup_tables.py` — 60여 표를 `구글 드라이브\FIRSTOA-백업\<날짜>\` 에 jsonl.gz, 14회차 보관 |
-| 카톡 PC 발송 중계 | 5분마다 | 봇이 3분 넘게 못 가져간 outbox 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`) |
+| 카톡 PC 발송 중계 | 1분마다 | 봇이 2분 넘게 못 가져간 outbox 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`) |
 | 월요 키맨 포스터 | 월 08시 | `tools/kakao-pc/poster_send.py --weekly` |
 | 일감 처리 | 들어올 때 | `worker_jobs` 의 queued 행을 잡아 실행 — `ping` `backup` `relay` `poster` (음성·OCR 은 자리만) |
 

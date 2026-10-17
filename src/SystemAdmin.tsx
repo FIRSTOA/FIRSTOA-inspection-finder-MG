@@ -6,6 +6,7 @@ import { GAS_GET_URL } from "./api";
 import { notify } from "./toast";
 import PortalSelect from "./PortalSelect";
 import VendorCodeAdmin from "./VendorCodeAdmin";
+import RoomDeliveryBoard from "./RoomDeliveryBoard";
 
 /**
  * 카톡방·전송 설정 관리.
@@ -499,6 +500,9 @@ export default function SystemAdmin() {
           {!jobs.length && <div className="p-8 text-center text-sm font-bold text-slate-400">{loading ? "불러오는 중…" : "최근 작업 기록이 없습니다."}</div>}
         </div>
       </section>
+
+      {/* 카톡 발송 현황 — 방별 마지막 배달(폰 봇/노트북 PC)·밀린 글 */}
+      <RoomDeliveryBoard />
 
       {/* 거래처 코드 미매칭 확정 — 워킨맵 지점 ↔ 임대리스트 거래처 수동 연결 */}
       <VendorCodeAdmin />
