@@ -107,19 +107,14 @@ def close_friend_add_windows() -> int:
     return len(hit)
 
 
-def search_box_rect(main: int, list_rect):
-    """채팅 목록 바로 위의 검색칸(진단: id=1020, 407x50, 목록과 같은 폭·목록 바로 위)"""
-    if not list_rect:
-        return None
+def chat_list_view_rect(main: int):
+    """채팅 탭 전체 영역(ChatRoomListView, 클래스 EVA_Window) — 머리띠(채팅 제목·돋보기·새 채팅 아이콘)가 이 영역 맨 위 55px 이다"""
     hit = []
 
     def cb(h, _):
         try:
-            if not win32gui.IsWindowVisible(h) or win32gui.GetClassName(h) != CHAT_CLASS:
-                return
-            r = win32gui.GetWindowRect(h)
-            if abs(r[0] - list_rect[0]) <= 3 and abs(r[3] - list_rect[1]) <= 3 and 20 <= (r[3] - r[1]) <= 80:
-                hit.append(r)
+            if win32gui.IsWindowVisible(h) and win32gui.GetClassName(h) == "EVA_Window" and win32gui.GetWindowText(h).startswith("ChatRoomListView"):
+                hit.append(win32gui.GetWindowRect(h))
         except Exception:
             pass
 
@@ -130,26 +125,41 @@ def search_box_rect(main: int, list_rect):
     return hit[0] if hit else None
 
 
+def focused_is_edit() -> bool | None:
+    """지금 포커스가 입력칸인지 — uiautomation 이 있으면 확인, 없으면 None(모름)"""
+    try:
+        import uiautomation as uia
+        return uia.GetFocusedControl().ControlTypeName == "EditControl"
+    except Exception:
+        return None
+
+
 def focus_search_box(main: int, pyautogui, debug: bool = False):
-    """채팅 탭으로 간 뒤 검색칸을 직접 클릭해 포커스 — Ctrl+F 는 친구 탭에 있으면 '친구 추가' 창을 연다(2026-10-17 실측)"""
-    pyautogui.hotkey("ctrl", "e")  # 진단: 채팅 목록(ChatRoomListCtrl)로 포커스 = 채팅 탭
+    """채팅 탭 머리띠의 돋보기(🔍)를 눌러 검색칸을 연다 — 2026-10-17 화면 실측(490x1020 창): 돋보기 = 채팅 탭 영역 오른쪽 끝에서 137px, 위에서 32px.
+    Ctrl+F 는 친구 탭이면 '친구 추가' 창을 열고, 목록 위 50px 띠는 전체/안읽음 필터 버튼이라 둘 다 쓰지 않는다."""
+    pyautogui.hotkey("ctrl", "e")  # 채팅 탭(진단: 채팅 목록으로 포커스)
     time.sleep(0.5)
+    view = chat_list_view_rect(main)
     list_rect = chat_list_rect(main)
-    box = search_box_rect(main, list_rect)
-    if box:
-        pyautogui.click(box[0] + 120, (box[1] + box[3]) // 2)
-    else:
-        pyautogui.hotkey("ctrl", "f")
-    time.sleep(0.5)
+    if not view:
+        log("    채팅 탭 영역(ChatRoomListView)을 못 찾음")
+        return None, list_rect, None
+    x, y = view[2] - 137, view[1] + 32
+    pyautogui.click(x, y)
+    time.sleep(0.6)
     if close_friend_add_windows():
         log("    '친구 추가' 창이 떠서 닫았습니다 — 이번 시도는 중단")
-        return None, list_rect, box
+        return None, list_rect, (x, y)
     if win32gui.GetForegroundWindow() != main:
         log(f"    맨 앞 창이 '{win32gui.GetWindowText(win32gui.GetForegroundWindow())}' 이라 중단")
-        return None, list_rect, box
+        return None, list_rect, (x, y)
+    is_edit = focused_is_edit()
     if debug:
-        log(f"    [debug] 목록={list_rect} 검색칸={box} ({'클릭' if box else 'Ctrl+F'})")
-    return True, list_rect, box
+        log(f"    [debug] 채팅탭={view} 목록={list_rect} 돋보기 클릭={(x, y)} 포커스가 입력칸? {is_edit}")
+    if is_edit is False:
+        log("    돋보기를 눌렀는데 입력칸에 포커스가 없음 — 붙여 넣지 않고 중단")
+        return None, list_rect, (x, y)
+    return True, list_rect, (x, y)
 
 
 def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
@@ -171,7 +181,6 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
     if not ok:
         return False
     set_clipboard_text(room)
-    pyautogui.hotkey("ctrl", "a")
     pyautogui.hotkey("ctrl", "v")
     time.sleep(wait)  # 목록이 걸러질 시간
     if close_friend_add_windows():
@@ -180,20 +189,17 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
     # 걸러진 목록의 첫 항목을 더블클릭(↓+Enter 는 아무 창도 안 열었다 — 2026-10-17 실측)
     list_rect = chat_list_rect(main) or list_rect
     if list_rect:
-        pyautogui.doubleClick(list_rect[0] + 140, list_rect[1] + 32)
+        pyautogui.doubleClick(list_rect[0] + 140, list_rect[1] + 40)  # 첫 항목(높이 약 80px)의 가운데
         time.sleep(1.5)
     hwnd, title = find_room_window(room)
     if debug:
         new = room_windows_snapshot() - before
         log(f"    [debug] 새 창={[(h, win32gui.GetWindowText(h), win32gui.GetWindowRect(h)) for h in new]}")
-    # 검색칸 비우기(다음 검색·사람 사용에 방해 안 되게)
+    # 검색 모드 닫기(Esc) — 다음 검색·사람 사용에 방해 안 되게. 메인 창이 앞에 있을 때만
     try:
-        if bring_front(main):
-            ok2, _, _ = focus_search_box(main, pyautogui)
-            if ok2:
-                pyautogui.hotkey("ctrl", "a")
-                pyautogui.press("backspace")
-                pyautogui.press("esc")
+        if win32gui.GetForegroundWindow() == main or bring_front(main):
+            pyautogui.press("esc")
+            time.sleep(0.3)
     except Exception:
         pass
     close_friend_add_windows()
