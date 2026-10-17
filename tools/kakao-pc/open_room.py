@@ -157,11 +157,37 @@ def find_edit_rect(main: int):
         return None
 
 
+def _dark_ratio(pyautogui, region) -> float:
+    """영역 안에서 어두운 픽셀 비율 — 사이드바 탭 아이콘은 활성이면 검정, 아니면 회색(2026-10-17 화면 실측)"""
+    try:
+        img = pyautogui.screenshot(region=region).convert("L")
+        px = list(img.getdata())
+        return sum(1 for v in px if v < 90) / max(1, len(px))
+    except Exception:
+        return -1.0
+
+
+def go_chat_tab(main: int, pyautogui, debug: bool = False) -> bool:
+    """왼쪽 사이드바의 말풍선(채팅) 아이콘을 클릭해 채팅 탭으로 — Ctrl+E 는 탭을 바꾸지 않았다(친구 탭이면 머리띠 같은 자리가 '친구 추가'라 사고).
+    화면 실측(490x1020 창): 친구 아이콘 (40,70) · 채팅 아이콘 (40,140). 활성 아이콘이 더 진하다."""
+    l, t, r, b = win32gui.GetWindowRect(main)
+    pyautogui.click(l + 40, t + 140)
+    time.sleep(0.6)
+    chat = _dark_ratio(pyautogui, (l + 26, t + 126, 28, 28))
+    friend = _dark_ratio(pyautogui, (l + 26, t + 56, 28, 28))
+    ok = chat >= 0 and chat > friend + 0.05
+    if debug:
+        log(f"    [debug] 채팅 탭 클릭 ({l + 40},{t + 140}) · 진한 비율 채팅={chat:.2f} 친구={friend:.2f} → {'채팅 탭' if ok else '확인 실패'}")
+    if not ok:
+        log("    채팅 탭으로 간 것을 화면에서 확인하지 못해 중단합니다(창 크기·배율이 다르면 좌표 보정 필요)")
+    return ok
+
+
 def focus_search_box(main: int, pyautogui, debug: bool = False):
     """채팅 탭 머리띠의 돋보기(🔍)를 눌러 검색칸을 연다 — 2026-10-17 화면 실측(490x1020 창): 돋보기 = 채팅 탭 영역 오른쪽 끝에서 137px, 위에서 32px.
     Ctrl+F 는 친구 탭이면 '친구 추가' 창을 열고, 목록 위 50px 띠는 전체/안읽음 필터 버튼이라 둘 다 쓰지 않는다."""
-    pyautogui.hotkey("ctrl", "e")  # 채팅 탭(진단: 채팅 목록으로 포커스)
-    time.sleep(0.5)
+    if not go_chat_tab(main, pyautogui, debug):
+        return None, chat_list_rect(main), None
     view = chat_list_view_rect(main)
     list_rect = chat_list_rect(main)
     if not view:
