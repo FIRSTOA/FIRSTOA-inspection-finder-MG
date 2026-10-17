@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "e2638a8006",
+    "date": "2026-10-17",
+    "note": "홈 개편: 실시간 전송 현황판(모든 방 상태 격자 + 오늘 전송 흐름 + 폰 봇·노트북 실행기 상태, 15초 갱신) — 옛 최근 기록 피드·봇 알약은 현황판으로 통합, 셈법은 roomDelivery.ts 공용"
+  },
+  {
     "hash": "792c399a2f",
     "date": "2026-10-17",
     "note": "관리 탭 카톡 발송 현황(방별 마지막 배달·밀린 글·지연) + 노트북 중계 1분 주기·2분 기준 + PC 배달을 room_activity에 기록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b2949d384b",
     "date": "2026-09-12",
     "note": "workin_map_places.updated_at 서버 시각 트리거 — 증분 폴링이 기기 시계 오차로 변경을 놓치지 않게"
-  },
-  {
-    "hash": "3caa9a0fd2",
-    "date": "2026-09-12",
-    "note": "워킨맵 통신량 다이어트 머지 — 증분 폴링(updated_at) + 복귀 재조회 10분 스로틀 + visit_logs 열 축소"
   }
 ];
