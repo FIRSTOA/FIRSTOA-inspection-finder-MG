@@ -1,13 +1,13 @@
 import { teamLabel } from "./authors";
 import CostTile from "./CostTile";
 import OverduePanel from "./OverduePanel";
+import LiveSendBoard from "./LiveSendBoard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowRight,
   BarChart3,
   BookOpen,
-  Bot,
   CalendarDays,
   Camera,
   ChevronDown,
@@ -22,7 +22,6 @@ import {
   MessageSquareText,
   PhoneCall,
   Radio,
-  RefreshCw,
   Route,
   ShieldCheck,
   Sparkles,
@@ -240,10 +239,6 @@ const relTime = (iso: string | null) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   if (m < 1) return "방금"; if (m < 60) return `${m}분 전`; if (m < 1440) return `${Math.floor(m / 60)}시간 전`; return `${Math.floor(m / 1440)}일 전`;
 };
-const clockOf = (row: RecordRow) => {
-  if (row.created_at) { const d = new Date(row.created_at); return `${row.작성일?.slice(5) || ""} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`.trim(); }
-  return row.작성일?.slice(5) || "";
-};
 const greeting = (h: number) => (h < 6 ? "늦은 밤까지 수고가 많습니다" : h < 11 ? "좋은 아침입니다" : h < 14 ? "점심은 챙기셨나요" : h < 18 ? "오후도 힘내세요" : "오늘 하루 고생 많으셨습니다");
 
 // ── 조각 ─────────────────────────────────────────────────────────────────────
@@ -303,7 +298,7 @@ function Bars({ daily }: { daily: Telemetry["daily"] }) {
 
 export default function Home({ onGoField, onNavigate }: { onGoField: () => void; onNavigate?: (screen: Screen) => void }) {
   const now = useClock();
-  const { data, loading, refresh } = useTelemetry();
+  const { data, loading } = useTelemetry();
   const [author, setAuthor] = useState(readAuthor);
   useEffect(() => { const sync = () => setAuthor(readAuthor()); window.addEventListener("focus", sync); window.addEventListener("storage", sync); return () => { window.removeEventListener("focus", sync); window.removeEventListener("storage", sync); }; }, []);
   const [openManual, setOpenManual] = useState("start");
@@ -323,10 +318,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   }, []);
 
   // 상태 판정 — 숫자보다 "정상/지연" 한 단어가 먼저 읽히게
-  const bot: { tone: Tone; value: string } = !data ? { tone: "idle", value: "확인 중" }
-    : data.outboxPending === 0 ? { tone: "ok", value: `정상 · 마지막 배달 ${relTime(data.botLastDelivery)}` }
-    : (data.outboxOldestMin ?? 0) >= 30 ? { tone: "bad", value: `지연 · ${data.outboxPending}건 대기 ${data.outboxOldestMin}분` }
-    : { tone: "warn", value: `전송 중 · ${data.outboxPending}건` };
   const sheet: { tone: Tone; value: string } = !data ? { tone: "idle", value: "확인 중" }
     : data.sheetFailed ? { tone: "bad", value: `실패 ${data.sheetFailed} · 대기 ${data.sheetPending}` }
     : data.sheetPending ? { tone: "warn", value: `대기 ${data.sheetPending}건` } : { tone: "ok", value: "정상 · 큐 비어 있음" };
@@ -374,7 +365,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           </div>
           <div className="grid w-full gap-2 sm:grid-cols-2 lg:w-auto lg:min-w-[580px]">
             <StatusPill tone={db.tone} icon={Database} label="데이터베이스" value={db.value} />
-            <StatusPill tone={bot.tone} icon={Bot} label="카톡 전송 봇" value={bot.value} />
             <StatusPill tone={sheet.tone} icon={ShieldCheck} label="시트 동기화" value={sheet.value} />
             <StatusPill tone="ok" icon={Zap} label="최근 배포" value={patchGroups[0] ? `${patchGroups[0][0]} · ${patchGroups[0][1].length}건 반영` : "-"} />
             {/* 비용(AI 질문·문자) — 관제 덱 안에(2026-10-11), 누르면 일별·실시간·지금까지 내역 */}
@@ -382,9 +372,12 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           </div>
         </div>
 
-        {/* ── ② 지표 ── */}
+        {/* ── ② 실시간 전송 현황판 — 모든 방 + 오늘 전송 흐름 (2026-10-17 홈 개편) ── */}
+        <LiveSendBoard />
+
+        {/* ── ③ 지표 ── */}
         <div className="relative grid grid-cols-1 gap-3 px-4 py-4 sm:px-6 lg:grid-cols-12 lg:items-start">
-          <div className="grid min-w-0 auto-rows-min grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-7">
+          <div className="grid min-w-0 auto-rows-min grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-8">
             {/* 미처리 일정 — 팀 탭(A~E). 오른쪽 기둥이 길어 비던 왼쪽 공간을 채운다(2026-10-13) */}
             <OverduePanel onOpen={openOverdue} />
             <Metric label="오늘 현장 기록" icon={Activity} accent="text-emerald-300" loading={loading} value={data ? data.todayInspections + data.todayAs : null} sub={data ? `점검 ${data.todayInspections} · AS ${data.todayAs} · 이번 주 ${fmt(weekRecords)}건` : undefined} />
@@ -412,7 +405,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             </div>
           </div>
 
-          <div className="grid min-w-0 grid-cols-1 gap-3 lg:col-span-5">
+          <div className="grid min-w-0 grid-cols-1 gap-3 lg:col-span-4">
             <div className={`p-4 ${card}`}>
               <div className="flex items-center justify-between">
                 <span className={eyebrow}>{quarter}분기 점검 진행률 <span className="normal-case tracking-normal text-slate-600">· 워킨맵 기준</span></span>
@@ -428,24 +421,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
                 ))}
               </div>
               <button type="button" onClick={() => go("walkingMap")} className="mt-3 flex items-center gap-1 text-[11px] font-black text-blue-300 transition hover:text-white">워킨맵에서 색상별로 보기 <ArrowRight size={13} /></button>
-            </div>
-            <div className={`flex min-h-0 flex-col ${card}`}>
-              <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
-                <span className={`flex items-center gap-2 ${eyebrow}`}><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>실시간 활동</span>
-                <button type="button" onClick={() => void refresh()} className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white"><RefreshCw size={11} />새로고침</button>
-              </div>
-              <ul className="max-h-[372px] divide-y divide-white/[0.06] overflow-y-auto">
-                {(data?.recent || []).map((row) => (
-                  <li key={`${row.구분}-${row.id}`} className="flex items-center gap-3 px-4 py-2">
-                    <span className="w-[86px] shrink-0 whitespace-nowrap font-mono text-[10.5px] font-bold tabular-nums text-slate-500">{clockOf(row)}</span>
-                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${/AS/i.test(row.구분) ? "bg-violet-500/20 text-violet-200" : "bg-blue-500/20 text-blue-200"}`}>{row.구분 || "기록"}</span>
-                    <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-slate-100">{row.업체명}</span>
-                    <span className="shrink-0 text-[11px] font-black text-slate-400">{row.작성자}{row.지역 ? ` · ${row.지역}` : ""}</span>
-                  </li>
-                ))}
-                {!data && Array.from({ length: 6 }).map((_, i) => <li key={i} className="px-4 py-2.5"><div className="h-3.5 animate-pulse rounded bg-white/[0.06]" /></li>)}
-                {data && !data.recent.length && <li className="px-4 py-6 text-center text-xs font-bold text-slate-500">기록이 없습니다</li>}
-              </ul>
             </div>
           </div>
         </div>
@@ -547,7 +522,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         {/* ── ⑧ 시스템 푸터 ── */}
         <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.08] px-4 py-3 font-mono text-[10.5px] font-bold text-slate-500 sm:px-6">
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1"><span>FIRSTOA CS</span><span className="text-slate-700">|</span><span>build {patchGroups[0]?.[0] || "—"}</span><span className="text-slate-700">|</span><span>db supabase · seoul</span><span className="text-slate-700">|</span><span>edge vercel</span>{data && <><span className="text-slate-700">|</span><span>data {relTime(new Date(data.fetchedAt).toISOString())}</span></>}</span>
-          <span className="flex items-center gap-1.5 text-slate-500"><Clock3 size={11} />60초마다 자동 갱신 · 새 기능 제안은 팀장·개발 담당에게</span>
+          <span className="flex items-center gap-1.5 text-slate-500"><Clock3 size={11} />전송 현황 15초 · 지표 60초마다 자동 갱신 · 새 기능 제안은 팀장·개발 담당에게</span>
         </div>
       </div>
     </div>

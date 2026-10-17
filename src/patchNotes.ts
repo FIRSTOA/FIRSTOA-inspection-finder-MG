@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "792c399a2f",
+    "date": "2026-10-17",
+    "note": "관리 탭 카톡 발송 현황(방별 마지막 배달·밀린 글·지연) + 노트북 중계 1분 주기·2분 기준 + PC 배달을 room_activity에 기록"
+  },
+  {
     "hash": "926bb43114",
     "date": "2026-10-17",
     "note": "전파 약할 때 폰 쪽 보관함 — 못 보낸 점검·AS 양식을 폰에 적어 두고 다음에 FIELD 열면 [지금 보내기] 띠로 이어서 보냄"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "3caa9a0fd2",
     "date": "2026-09-12",
     "note": "워킨맵 통신량 다이어트 머지 — 증분 폴링(updated_at) + 복귀 재조회 10분 스로틀 + visit_logs 열 축소"
-  },
-  {
-    "hash": "b773c0c05f",
-    "date": "2026-09-12",
-    "note": "피드백 보드 2차 — 반려(사유)·삭제·개발 취소·개발 시작(개발자 전용)·자동 배포 옵션 / 홈 모바일 우측 잘림 수리"
   }
 ];
