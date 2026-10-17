@@ -5026,6 +5026,25 @@ export default function App() {
   const quietSendRef = useRef(false);
   const [autoResend, setAutoResend] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination; mode: string; since: number; tries: number; error: string } | null>(null);
   const autoResendRunRef = useRef<() => Promise<void>>(async () => {});
+  /** 폰 쪽 보관함 — 전파 탓에 못 보낸 양식을 폰에 적어 두고, 다음에 FIELD를 열면 보낼지 묻는다(2026-10-17).
+   *  글 몇 KB만 저장하고 사진은 이미 폰 저장소(IndexedDB)에 있다. 보내고 나면 지운다. 점검·AS처럼 글만으로 보내는 양식만 */
+  type PendingSend = { kind: "normal" | "자가" | "부품"; destination?: SendDestination; mode: Mode; text: string; photoCount: number; at: number; vendor: string };
+  const PENDING_KEY = "field:pendingSend";
+  const readPending = (): PendingSend | null => {
+    try {
+      const raw = localStorage.getItem(PENDING_KEY); if (!raw) return null;
+      const p = JSON.parse(raw) as PendingSend;
+      if (!p || !p.text || Date.now() - p.at > 48 * 3600_000) { localStorage.removeItem(PENDING_KEY); return null; } // 이틀 지난 건 버린다
+      return p;
+    } catch { return null; }
+  };
+  const [pendingSend, setPendingSend] = useState<PendingSend | null>(() => readPending());
+  const writePending = (p: PendingSend | null) => {
+    try { if (p) localStorage.setItem(PENDING_KEY, JSON.stringify(p)); else localStorage.removeItem(PENDING_KEY); } catch { /* 저장 공간 없음 — 화면 재시도만 */ }
+    setPendingSend(p);
+  };
+  const resumePendingRef = useRef(false);
+  const pendingTextModes: Mode[] = ["contact-change", "pc", "logistics", "replacement", "bulman", "misu", "recontract", "overage-adjust"];
   useEffect(() => {
     if (!autoResend) return;
     const run = () => { if (navigator.onLine !== false) void autoResendRunRef.current(); };
@@ -5579,14 +5598,17 @@ export default function App() {
 
   // 전파가 약한 현장에서 보내기가 실패하면(2026-10-17 정준영 "전파가 안 터져 안 보내짐") 입력은 그대로 두고
   // 신호가 잡히면 자동으로 다시 보낸다 — 20초마다·온라인 복귀 즉시, 최대 15분. 양식을 바꾸면 취소.
-  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false): Promise<boolean> => {
+  const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false, presetText?: string): Promise<boolean> => {
     lastSendErrRef.current = "";
-    const ok = await handleSendAllInner(kind, destination, skipPhotoCheck);
-    if (ok) { setAutoResend(null); return true; }
+    const ok = await handleSendAllInner(kind, destination, skipPhotoCheck, presetText);
+    if (ok) { setAutoResend(null); if (pendingSend) writePending(null); return true; }
     if (isNetworkFailure(lastSendErrRef.current)) {
       setAlertBox(null);
       setAutoResend({ kind, destination, mode, since: Date.now(), tries: 0, error: lastSendErrRef.current });
-      showToast("📶 전파가 약해 보내지 못했습니다\n입력한 내용은 그대로 있어요. 신호가 잡히면 자동으로 다시 보냅니다(최대 15분).\nFIELD 화면을 닫지 말고 그대로 두세요.", "warning");
+      const text = presetText ?? buildResultText();
+      const keep = Boolean(text) && !pendingTextModes.includes(mode);
+      if (keep) writePending({ kind, destination, mode, text, photoCount: photos.length, at: Date.now(), vendor: (currentVendor || "").slice(0, 30) });
+      showToast(`📶 전파가 약해 보내지 못했습니다\n입력한 내용은 그대로 있어요. 신호가 잡히면 자동으로 다시 보냅니다(최대 15분).${keep ? "\n화면을 닫아도 돼요 — 다음에 FIELD를 열면 보낼지 물어봅니다." : "\nFIELD 화면을 닫지 말고 그대로 두세요."}`, "warning");
     }
     return false;
   };
@@ -5596,7 +5618,7 @@ export default function App() {
     if (job.mode !== mode) { setAutoResend(null); return; }
     if (Date.now() - job.since > 15 * 60_000) {
       setAutoResend(null);
-      showToast("📶 15분 동안 신호가 잡히지 않아 자동 재전송을 멈췄습니다\n입력한 내용은 그대로 있어요 — 신호가 좋은 곳에서 [보내기]를 다시 눌러 주세요.", "error");
+      showToast(`📶 15분 동안 신호가 잡히지 않아 자동 재전송을 멈췄습니다\n입력한 내용은 그대로 있어요.${pendingSend ? " 보관함에 있으니 신호가 좋은 곳에서 [지금 보내기]를 눌러 주세요." : " 신호가 좋은 곳에서 [보내기]를 다시 눌러 주세요."}`, "error");
       return;
     }
     quietSendRef.current = true;
@@ -5612,8 +5634,26 @@ export default function App() {
     }
     setAutoResend((cur) => cur && { ...cur, tries: cur.tries + 1, error: lastSendErrRef.current });
   };
-  const handleSendAllInner = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false): Promise<boolean> => {
-    let target = buildResultText();
+  /** 보관함의 양식 보내기 — 사진이 모드별이라 그 모드로 옮긴 뒤 다음 렌더에서 이어서 보낸다 */
+  const sendPending = () => {
+    const p = pendingSend; if (!p || sending) return;
+    if (p.mode !== mode) { resumePendingRef.current = true; handleModeChange(p.mode); return; }
+    void sendPendingNow();
+  };
+  const sendPendingNow = async () => {
+    const p = pendingSend; if (!p) return;
+    if (photos.length < p.photoCount) { showToast(`사진 ${p.photoCount}장 중 ${photos.length}장만 준비됐어요(폰 저장소에서 불러오는 중)` + "\n" + `잠시 후 [지금 보내기]를 다시 눌러 주세요. 사진 없이 보내려면 [지우기] 후 직접 보내세요.`, "warning"); return; }
+    await handleSendAll(p.kind, p.destination, true, p.text);
+  };
+  useEffect(() => {
+    if (!resumePendingRef.current || !pendingSend || pendingSend.mode !== mode) return;
+    resumePendingRef.current = false;
+    const t = window.setTimeout(() => { void sendPendingNow(); }, 300); // 모드 전환 뒤 사진 상태가 자리 잡을 시간
+    return () => window.clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+  const handleSendAllInner = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false, presetText?: string): Promise<boolean> => {
+    let target = presetText ?? buildResultText();
     if (!target) {
       showToast("보낼 내용이 없어요", "error");
       return false;
@@ -7477,7 +7517,17 @@ export default function App() {
           <div className="mt-0.5 text-[11px] font-semibold text-amber-800">{sending ? "다시 보내는 중…" : `재시도 ${autoResend.tries}번 · 입력은 그대로 · 화면을 닫지 마세요`}</div>
           <div className="mt-2 flex gap-2">
             <button type="button" disabled={sending} onClick={() => void autoResendRunRef.current()} className="rounded-full bg-amber-600 px-3 py-1.5 text-xs font-black text-white disabled:opacity-50">지금 다시</button>
-            <button type="button" onClick={() => setAutoResend(null)} className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-black text-amber-800">자동 재전송 취소</button>
+            <button type="button" onClick={() => { setAutoResend(null); writePending(null); }} className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-black text-amber-800">자동 재전송 취소</button>
+          </div>
+        </div>
+      )}
+      {pendingSend && !autoResend && (
+        <div className="fixed inset-x-3 bottom-20 z-[60] mx-auto max-w-md rounded-2xl border border-sky-300 bg-sky-50 px-4 py-3 shadow-lg">
+          <div className="text-sm font-black text-sky-900">📦 안 보낸 양식 1건이 있어요</div>
+          <div className="mt-0.5 text-[11px] font-semibold text-sky-800">{MODE_CONFIG[pendingSend.mode]?.label || pendingSend.mode}{pendingSend.vendor ? ` · ${pendingSend.vendor}` : ""} · {new Date(pendingSend.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}{pendingSend.photoCount ? ` · 사진 ${pendingSend.photoCount}장` : ""} — 전파가 약해 못 보낸 것</div>
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={sending} onClick={sendPending} className="rounded-full bg-sky-600 px-3 py-1.5 text-xs font-black text-white disabled:opacity-50">{sending ? "보내는 중…" : "지금 보내기"}</button>
+            <button type="button" onClick={() => { void askConfirm("보관함에서 지울까요?" + "\n" + "지우면 이 양식은 다시 보내지 않습니다. 입력창에 남아 있으면 직접 [보내기]로 보낼 수 있어요.", { okLabel: "지우기" }).then((ok) => { if (ok) writePending(null); }); }} className="rounded-full border border-sky-300 bg-white px-3 py-1.5 text-xs font-black text-sky-800">지우기</button>
           </div>
         </div>
       )}
