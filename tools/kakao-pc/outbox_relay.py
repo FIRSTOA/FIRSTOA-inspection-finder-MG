@@ -79,6 +79,7 @@ def main() -> int:
 
     # 창이 열려 있는 방만 추린다 — 창 없는 방은 30분에 한 번만 로그(조용한 파수꾼)
     todo = []
+    opened_here: list[int] = []  # 이번에 검색으로 연 창 — 보내고 나면 닫는다(창이 쌓이면 카톡이 대화 내용 불러오다 죽는다 — 2026-10-17 노트북 실측)
     for row in rows:
         room = str(row.get("room") or "").strip()
         text = str(row.get("text") or "")
@@ -93,6 +94,8 @@ def main() -> int:
                 try:
                     if open_room(room):
                         hwnd, title = find_room_window(room)
+                        if hwnd:
+                            opened_here.append(hwnd)
                 except Exception as e:
                     log(f"    열기 실패: {e}")
         if not hwnd:
@@ -117,6 +120,21 @@ def main() -> int:
                 log(f"  ⚠ [{title}] 발송했으나 outbox 정리 실패: {e} — 봇이 중복 발송할 수 있음")
         else:
             log(f"  ✗ [{title}] 붙여넣기 실패")
+    # 검색으로 열었던 창은 닫는다 — 사람이 미리 열어 둔 창은 그대로. 전송이 서버에 닿을 시간을 잠깐 준다
+    if opened_here:
+        import time as _t
+        import win32con
+        import win32gui
+        _t.sleep(2.5)
+        closed = 0
+        for h in opened_here:
+            try:
+                if win32gui.IsWindow(h):
+                    win32gui.PostMessage(h, win32con.WM_CLOSE, 0, 0)
+                    closed += 1
+            except Exception:
+                pass
+        log(f"  검색으로 열었던 방 창 {closed}개 닫음(창을 쌓아 두지 않는다)")
     log(f"끝 · 대신 발송 {sent}/{len(todo)}건")
     return 0
 
