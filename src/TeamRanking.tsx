@@ -14,11 +14,42 @@ type Metric = { key: string; label: string; unit: string; count: (evs: ActivityE
 
 const byKind = (kind: string) => (evs: ActivityEvent[]) => evs.filter((e) => e.category === kind).length;
 const byVendor = (kind: string) => (evs: ActivityEvent[]) => new Set(evs.filter((e) => e.category === kind).map((e) => vendorMatchKey(e.vendor) || e.vendor)).size;
+/** 같은 사람이 같은 업체를 다시 보낸 것(수정 재전송·연타)은 한 건으로 — 2026-10-17 "한왕주 PC 8개인데 실제 6개"
+ *  · 확장성: 같은 날 같은 업체는 1건(사양을 채워 한 번 더 보낸 것)
+ *  · 그 밖: 같은 업체를 10분 안에 다시 보낸 것은 1건(점검 대수는 큰 값) */
+export function dedupeForRanking(evs: ActivityEvent[]): ActivityEvent[] {
+  const sorted = [...evs].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const out: ActivityEvent[] = [];
+  const lastAt = new Map<string, { at: number; idx: number }>();
+  const dayKeys = new Set<string>();
+  for (const e of sorted) {
+    const v = vendorMatchKey(e.vendor) || e.vendor.trim();
+    if (!v) { out.push(e); continue; }
+    if (e.category === "expansion_it" || e.category === "expansion_copier") {
+      const k = `${e.author}|${e.category}|${v}|${e.activityDate}`;
+      if (dayKeys.has(k)) continue;
+      dayKeys.add(k); out.push(e); continue;
+    }
+    const k = `${e.author}|${e.category}|${v}`;
+    const at = new Date(e.createdAt).getTime();
+    const prev = lastAt.get(k);
+    if (prev && at - prev.at <= 10 * 60_000) {
+      const kept = out[prev.idx];
+      if ((e.machineCount || 0) > (kept.machineCount || 0)) out[prev.idx] = { ...kept, machineCount: e.machineCount };
+      lastAt.set(k, { at, idx: prev.idx });
+      continue;
+    }
+    lastAt.set(k, { at, idx: out.length });
+    out.push(e);
+  }
+  return out;
+}
+
 const METRICS: Metric[] = [
   { key: "inspection", label: "점검", unit: "대", count: (evs) => evs.filter((e) => e.category === "inspection").reduce((n, e) => n + (e.machineCount || 1), 0) },
   { key: "as", label: "AS", unit: "건", count: byKind("as") },
   { key: "logistics", label: "물류", unit: "건", count: byKind("logistics") },
-  { key: "expansion", label: "확장성", unit: "건", count: (evs) => evs.filter((e) => e.category === "expansion_it" || e.category === "expansion_copier").length },
+  { key: "expansion", label: "확장성", unit: "곳", count: (evs) => evs.filter((e) => e.category === "expansion_it" || e.category === "expansion_copier").length },
   { key: "recontract", label: "재계약", unit: "곳", count: byVendor("recontract") },
   { key: "misu", label: "미수", unit: "건", count: byKind("misu") },
   { key: "overage", label: "초과조정", unit: "건", count: byKind("overage") },
@@ -46,7 +77,7 @@ export default function TeamRanking({ author }: { author: string }) {
 
   useEffect(() => {
     let alive = true; setEvents(null);
-    void getActivityEvents(range.start, range.end).then((rows) => { if (alive) setEvents(rows.filter((r) => r.status !== "cancelled")); }).catch(() => { if (alive) setEvents([]); });
+    void getActivityEvents(range.start, range.end).then((rows) => { if (alive) setEvents(dedupeForRanking(rows.filter((r) => r.status !== "cancelled"))); }).catch(() => { if (alive) setEvents([]); });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
@@ -137,7 +168,7 @@ export default function TeamRanking({ author }: { author: string }) {
               <tbody>{insight.rows.map((r) => <tr key={r.mt.key} className="border-t border-slate-100"><td className="py-1 font-bold text-slate-700">{r.mt.label}</td><td className={`py-1 text-right font-mono font-black ${r.ratio >= 1.2 ? "text-emerald-700" : r.ratio < 0.8 ? "text-amber-700" : "text-slate-800"}`}>{r.v}{r.mt.unit}</td><td className="py-1 text-right font-mono text-slate-500">{r.a.toFixed(1)}</td><td className="py-1 text-right font-mono text-slate-500">{r.rank}/{table.length}</td></tr>)}</tbody>
             </table>
           </div>
-          <div className="mt-2 text-[10.5px] font-semibold text-slate-400">숫자는 FIELD 보고·확장성·불만·미수 등 활동 기록을 센 것입니다. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
+          <div className="mt-2 text-[10.5px] font-semibold text-slate-400">숫자는 FIELD 보고·확장성·불만·미수 등 활동 기록을 센 것입니다. 같은 업체를 10분 안에 다시 보낸 것은 1건, 확장성은 하루 한 업체 1곳으로 셉니다. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
         </section>
       )}
     </div>

@@ -4564,6 +4564,8 @@ export default function App() {
     kind: "success" | "warning" | "error" = "success",
     options: { duration?: number; action?: "workin-details" } = {},
   ) => {
+    if (kind === "error") lastSendErrRef.current = text;
+    if (quietSendRef.current && kind !== "success") return; // 자동 재전송 중 실패는 창을 띄우지 않는다(아래 띠에 표시)
     if (kind !== "success" && !options.action) {
       const lines = text.split("\n");
       const title = lines[0].length <= 40 ? lines[0] : "";
@@ -5020,6 +5022,20 @@ export default function App() {
   const [sending, setSendingState] = useState(false);
   // 연타 방지 — state만으로는 두 번째 클릭이 첫 setSending(true)가 화면에 반영되기 전에 들어와 두 번 전송됐다(같은 초에 방문 2건, 2026-09-28)
   const sendingRef = useRef(false);
+  const lastSendErrRef = useRef("");
+  const quietSendRef = useRef(false);
+  const [autoResend, setAutoResend] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination; mode: string; since: number; tries: number; error: string } | null>(null);
+  const autoResendRunRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    if (!autoResend) return;
+    const run = () => { if (navigator.onLine !== false) void autoResendRunRef.current(); };
+    const timer = window.setInterval(run, 20_000);
+    window.addEventListener("online", run);
+    return () => { window.clearInterval(timer); window.removeEventListener("online", run); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoResend?.since]);
+  /** 전파·네트워크 탓 실패인지 — 이때만 자동 재전송(업체명·지역 같은 양식 문제는 아님) */
+  const isNetworkFailure = (msg: string) => (typeof navigator !== "undefined" && navigator.onLine === false) || /failed to fetch|networkerror|load failed|network|네트워크|시간 초과|timeout|timed out|abort/i.test(msg);
   const setSending = (v: boolean) => { sendingRef.current = v; setSendingState(v); };
   const [photoPrompt, setPhotoPrompt] = useState<{ kind: "normal" | "자가" | "부품"; destination?: SendDestination } | null>(null);
   const sendPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -5561,7 +5577,42 @@ export default function App() {
     return result;
   };
 
+  // 전파가 약한 현장에서 보내기가 실패하면(2026-10-17 정준영 "전파가 안 터져 안 보내짐") 입력은 그대로 두고
+  // 신호가 잡히면 자동으로 다시 보낸다 — 20초마다·온라인 복귀 즉시, 최대 15분. 양식을 바꾸면 취소.
   const handleSendAll = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false): Promise<boolean> => {
+    lastSendErrRef.current = "";
+    const ok = await handleSendAllInner(kind, destination, skipPhotoCheck);
+    if (ok) { setAutoResend(null); return true; }
+    if (isNetworkFailure(lastSendErrRef.current)) {
+      setAlertBox(null);
+      setAutoResend({ kind, destination, mode, since: Date.now(), tries: 0, error: lastSendErrRef.current });
+      showToast("📶 전파가 약해 보내지 못했습니다\n입력한 내용은 그대로 있어요. 신호가 잡히면 자동으로 다시 보냅니다(최대 15분).\nFIELD 화면을 닫지 말고 그대로 두세요.", "warning");
+    }
+    return false;
+  };
+  autoResendRunRef.current = async () => {
+    const job = autoResend;
+    if (!job || sending || sendingRef.current) return;
+    if (job.mode !== mode) { setAutoResend(null); return; }
+    if (Date.now() - job.since > 15 * 60_000) {
+      setAutoResend(null);
+      showToast("📶 15분 동안 신호가 잡히지 않아 자동 재전송을 멈췄습니다\n입력한 내용은 그대로 있어요 — 신호가 좋은 곳에서 [보내기]를 다시 눌러 주세요.", "error");
+      return;
+    }
+    quietSendRef.current = true;
+    lastSendErrRef.current = "";
+    let ok = false;
+    try { ok = await handleSendAllInner(job.kind, job.destination, true); } finally { quietSendRef.current = false; }
+    if (ok) { setAutoResend(null); return; }
+    if (!isNetworkFailure(lastSendErrRef.current)) {
+      // 네트워크가 아닌 이유(업체명·지역 등)로 막혔으면 그 내용을 보여 주고 멈춘다
+      setAutoResend(null);
+      if (lastSendErrRef.current) showToast(lastSendErrRef.current, "error");
+      return;
+    }
+    setAutoResend((cur) => cur && { ...cur, tries: cur.tries + 1, error: lastSendErrRef.current });
+  };
+  const handleSendAllInner = async (kind: "normal" | "자가" | "부품" = "normal", destination?: SendDestination, skipPhotoCheck = false): Promise<boolean> => {
     let target = buildResultText();
     if (!target) {
       showToast("보낼 내용이 없어요", "error");
@@ -7420,6 +7471,16 @@ export default function App() {
 
       {/* Toast */}
       {sending && <span data-busy="true" className="hidden" />}
+      {autoResend && (
+        <div className="fixed inset-x-3 bottom-20 z-[60] mx-auto max-w-md rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-lg">
+          <div className="text-sm font-black text-amber-900">📶 신호 기다리는 중 — 잡히면 자동으로 보냅니다</div>
+          <div className="mt-0.5 text-[11px] font-semibold text-amber-800">{sending ? "다시 보내는 중…" : `재시도 ${autoResend.tries}번 · 입력은 그대로 · 화면을 닫지 마세요`}</div>
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={sending} onClick={() => void autoResendRunRef.current()} className="rounded-full bg-amber-600 px-3 py-1.5 text-xs font-black text-white disabled:opacity-50">지금 다시</button>
+            <button type="button" onClick={() => setAutoResend(null)} className="rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-black text-amber-800">자동 재전송 취소</button>
+          </div>
+        </div>
+      )}
       {alertBox && (
         <div className="fixed inset-0 z-[2500] flex items-center justify-center bg-black/45 p-6" onMouseDown={() => setAlertBox(null)}>
           <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
