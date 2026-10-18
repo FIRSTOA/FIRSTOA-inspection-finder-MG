@@ -45,3 +45,4 @@ Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 
 - 2026-10-18 (Aside) AGENTS.md 신설. `docs/tasks/` 에 병렬 작업 지시서 3건 추가.
 - 2026-10-18 (Aside) `.claude/agents/` 역할 5개 + `CLAUDE.md` 팀장 규칙 추가.
 - 2026-10-18 (Claude Code) 검사기 역할 3개 추가(field-deploy-check·sql-review·kakao-pc-rules). `docs/tasks/` 지시서 3건 삭제(사용자 지시 — 이메일 카운터는 네이버 계정 승인 뒤 재개). 파일: .claude/agents/*.md, AGENTS.md.
+- 2026-10-19 (Claude Code) 에이전트 팀 전반 점검(feature-planner+debugger) 후 4건 수정: ① 옛 뭄바이 프로젝트 키가 박힌 supabase/customer-message-cron.sql 삭제(대체는 customer-message-cron-seoul.sql) ② CsAsWorkspace 티켓 바꿀 때 제목 편집칸이 안 닫히던 도달 불가 코드 ③ "오늘/이번달"을 UTC로 자르던 9곳을 kstDate()로(DeptRequests·CopierNotes·ReadingHub·SelfDev·authors·ContactChangeHistory·entity360) ④ CounterSms 반영 표시·목록 삭제가 실패해도 화면은 성공처리하던 것을 실패 안내로. 남은 것(점검 결과): lint 72에러, RichCell innerHTML 소독, selectRows 타임아웃, 운영 DB RLS 실상태 확인, App.tsx 분할.

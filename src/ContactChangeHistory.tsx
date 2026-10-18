@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
+import { kstDate } from "./visits";
 import { deleteRows, selectAllRows, selectRows, updateRows } from "./supabase";
 import { vendorMatchKey } from "./ids";
 import { notify } from "./toast";
@@ -131,7 +132,7 @@ ${names}${matches.length > 5 ? `
 계속할까요?`)) return;
       for (const match of matches) {
         const memos = Array.isArray(match.memos) ? match.memos.map(String) : [];
-        memos.push(`[변경반영] ${new Date().toISOString().slice(0, 10)} ${row.category || "변경"} → ${after}`.slice(0, 300));
+        memos.push(`[변경반영] ${kstDate()} ${row.category || "변경"} → ${after}`.slice(0, 300));
         await updateRows("workin_map_places", `id=eq.${match.id}`, isAddress ? { address: after, address_detail: "", memos } : { phone: after, memos });
       }
       notify(`워킨맵 ${matches.length}곳에 반영했습니다.`, "success");

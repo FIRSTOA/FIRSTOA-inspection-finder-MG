@@ -867,6 +867,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   const detailTicket = tickets.find((ticket) => ticket.id === detailId);
   useEffect(() => {
     setDetailReception(null);
+    setTitleDraft(null); // 다른 티켓으로 바꾸면 제목 편집칸을 닫는다 (이전엔 return 뒤에 있어 실행되지 않던 코드)
     const receptionId = tickets.find((ticket) => ticket.id === detailId)?.receptionId;
     if (!receptionId) return;
     let active = true;
@@ -877,7 +878,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       .finally(() => { if (active) setDetailLoading(false); });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    setTitleDraft(null);
   }, [detailId]);
   const deferTicket = tickets.find((ticket) => ticket.id === deferId);
 

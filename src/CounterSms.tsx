@@ -187,9 +187,16 @@ export default function CounterSms({ author }: { author: string }) {
       setNotice(`카운터 사진 전송 실패: ${(e as Error).message}`);
     } finally { setPhotoBusyId(""); }
   };
-  const markInbox = async (id: number, batchId: string, note = "") => {
-    await updateRows("counter_sms_inbox", `id=eq.${id}`, { applied_at: new Date().toISOString(), applied_by: author || "미지정", batch_id: batchId || null, note }).catch(() => undefined);
+  /** 받은 문자에 "반영됨" 표시. 저장이 실패하면 목록에서 지우지 않고 false — 지우면 새로고침 때 되살아나 두 번 반영될 수 있다 */
+  const markInbox = async (id: number, batchId: string, note = ""): Promise<boolean> => {
+    try {
+      await updateRows("counter_sms_inbox", `id=eq.${id}`, { applied_at: new Date().toISOString(), applied_by: author || "미지정", batch_id: batchId || null, note });
+    } catch (e) {
+      setNotice(`받은 문자에 반영 표시를 저장하지 못했습니다: ${(e as Error).message} — 목록은 만들어졌으니 받은 문자 카드에서 [무시]로 정리하세요`);
+      return false;
+    }
     setInbox((cur) => cur.filter((r) => r.id !== id));
+    return true;
   };
 
   const loadBatch = useCallback(async (t: string) => {
@@ -402,9 +409,10 @@ export default function CounterSms({ author }: { author: string }) {
           const entry: BatchLogEntry = { at: stamp, by, added: fresh.length, skipped: dupes.map((t) => t.vendor), dropped: dropped.map((t) => t.vendor), kept, mode: sync ? "sync" : "merge" }; // skipped = 이번 목록에도 있던(유지) 업체 — 카드의 "또 올라옴" 재료
           await updateRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`, { log: [...(batch.log || []), entry] }).catch(() => undefined);
         }
-        if (uploadInboxId) { await markInbox(uploadInboxId, batch.id, sync ? "맞추기" : "추가"); setUploadInboxId(null); }
+        const inboxMarked = uploadInboxId ? await markInbox(uploadInboxId, batch.id, sync ? "맞추기" : "추가") : true;
+        setUploadInboxId(null);
         setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
-        setNotice(sync
+        if (inboxMarked) setNotice(sync
           ? `${team}팀 ${kindsText} 목록을 맞췄습니다 — 새로 ${fresh.length}곳 · 유지 ${kept}곳 · 목록에서 빠져 완료 ${dropped.length}곳${dropped.length ? `(${dropped.slice(0, 6).map((t) => t.vendor).join(", ")}${dropped.length > 6 ? " 외" : ""})` : ""}${untouched ? ` · 다른 종류 ${untouched}곳 그대로` : ""}`
           : `${team}팀 목록에 ${fresh.length}곳을 추가했습니다${dupes.length ? ` · 이미 있어 건너뜀 ${dupes.length}곳(${dupes.map((t) => t.vendor).join(", ")})` : ""}.`);
         await loadBatch(team);
@@ -434,9 +442,10 @@ export default function CounterSms({ author }: { author: string }) {
           ...(identCols ? { lease_code: t.leaseCodes[0] || null, serials: t.serials, assets: t.assets } : {}),
         });
       }
-      if (uploadInboxId) { await markInbox(uploadInboxId, id, "새 목록"); setUploadInboxId(null); }
+      const inboxMarked = uploadInboxId ? await markInbox(uploadInboxId, id, "새 목록") : true;
+      setUploadInboxId(null);
       setUploadOpen(false); setUploadRaw(""); setUploadBlocks(null); setUploadTitle("");
-      setNotice(`${team}팀에 ${merged.length}곳을 등록했습니다 — 팀원 모두에게 보입니다.`);
+      if (inboxMarked) setNotice(`${team}팀에 ${merged.length}곳을 등록했습니다 — 팀원 모두에게 보입니다.`);
       await loadBatch(team);
     } catch (e) {
       setNotice(`등록 실패: ${(e as Error).message}`);
@@ -446,8 +455,12 @@ export default function CounterSms({ author }: { author: string }) {
     if (!batch) return;
     // 통째 삭제는 되돌릴 수 없다(2026-10-10 실수 삭제) — 몇 곳이 지워지는지와 "한 업체만 지우려면 카드의 삭제"를 확인창에 적는다
     if (!await askConfirm(`[${batch.team}팀] ${batch.title} 목록 전체(${batchTargets.length}곳)를 삭제할까요?\n보냄·완료 표시까지 모두 지워지고 되돌릴 수 없습니다.\n\n한 업체만 지우려면 취소하고 그 카드의 [삭제]를 누르세요.`, { danger: true, okLabel: `전체 ${batchTargets.length}곳 삭제` })) return;
-    await deleteRows("counter_sms_targets", `batch_id=eq.${encodeURIComponent(batch.id)}`).catch(() => undefined);
-    await deleteRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`).catch(() => undefined);
+    try {
+      await deleteRows("counter_sms_targets", `batch_id=eq.${encodeURIComponent(batch.id)}`);
+      await deleteRows("counter_sms_batches", `id=eq.${encodeURIComponent(batch.id)}`);
+    } catch (e) {
+      setNotice(`목록 삭제 실패: ${(e as Error).message} — 일부만 지워졌을 수 있으니 새로고침 후 확인하세요`);
+    }
     await loadBatch(team);
   };
 

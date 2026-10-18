@@ -11,6 +11,7 @@
  * 화면은 Search360.tsx. 이 파일은 React 없이 순수 로직 — 테스트 가능(tests/entity360.test.ts).
  */
 import { historyCoreName, vendorMatchKey } from "./ids";
+import { kstDate } from "./visits";
 import { ACTIVITY_LABELS } from "./operations";
 import { selectRows } from "./supabase";
 
@@ -590,7 +591,7 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
   const misu = latest(events, "misu"); const over = latest(events, "overage"); const recon = latest(events, "recontract"); const bul = latest(events, "bulman");
   const counts = results.map((r) => ({ label: r.source.label, group: r.source.group, exact: r.exact.length, loose: r.loose.length, ok: r.ok, rawSkipped: !!r.rawSkipped }));
   const dated = exact.map((ev) => ev.date).filter(Boolean).sort();
-  const todayYmd = today.toISOString().slice(0, 10);
+  const todayYmd = kstDate(today);
   return {
     address, addressFrom, keyman, keymanFrom,
     tel: mode(lease.map((r) => str(r, "일반전화"))), grade: mode(lease.map((r) => str(r, "등급"))), leaseStatus: mode(lease.map((r) => str(r, "임대여부"))),

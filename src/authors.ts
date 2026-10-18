@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
+import { kstDate } from "./visits";
 
 // 작성자 명단 — 원본은 Supabase cs_members 테이블이다.
 // 예전에는 브라우저 localStorage에 두어 신입·퇴사 반영이 그 PC에서만 보였다.
@@ -117,7 +118,7 @@ export async function addMember(team: string, name: string, joinedOn?: string, d
   if (!clean) return;
   const found = await findMember(team, clean);
   if (found) await updateRows("cs_members", `id=eq.${found.id}`, { active: true, left_on: null, dept, title, updated_at: new Date().toISOString() });
-  else await insertRow("cs_members", { name: clean, team, dept, title, active: true, joined_on: joinedOn || new Date().toISOString().slice(0, 10), sort: 99 });
+  else await insertRow("cs_members", { name: clean, team, dept, title, active: true, joined_on: joinedOn || kstDate(), sort: 99 });
   await fetchMembers();
 }
 
@@ -150,7 +151,7 @@ export async function deleteMember(id: string) {
 
 /** (예전) 퇴사 처리 — 남아 있는 퇴사자 행 복구용으로만 유지 */
 export async function retireMember(id: string, leftOn?: string) {
-  await updateRows("cs_members", `id=eq.${id}`, { active: false, left_on: leftOn || new Date().toISOString().slice(0, 10), updated_at: new Date().toISOString() });
+  await updateRows("cs_members", `id=eq.${id}`, { active: false, left_on: leftOn || kstDate(), updated_at: new Date().toISOString() });
   await fetchMembers();
 }
 

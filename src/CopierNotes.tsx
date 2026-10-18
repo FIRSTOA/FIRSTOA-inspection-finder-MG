@@ -3,6 +3,7 @@
  * (supabase/dev-notes.sql의 copier_notes 테이블)
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { kstDate } from "./visits";
 import { BookOpen, ClipboardList, GraduationCap, Wrench } from "lucide-react";
 import CopierLearning from "./CopierLearning";
 import MdView from "./MdView";
@@ -101,7 +102,7 @@ export default function CopierNotes({ author }: { author: string }) {
   // 상단 통계 (전체 기준 — 필터와 무관)
   const [stats, setStats] = useState<{ total: number; learn: number; cases: number; month: number } | null>(null);
   useEffect(() => {
-    const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+    const monthStart = `${kstDate().slice(0, 7)}-01`;
     void Promise.all([
       countRows("copier_notes"),
       countRows("copier_notes", `kind=eq.${encodeURIComponent("학습")}`),

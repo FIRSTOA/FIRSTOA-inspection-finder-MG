@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
+import { kstDate } from "./visits";
 import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import { displayTitle, useAuthorBook, useMembers } from "./authors";
 import PersonPicker from "./PersonPicker";
@@ -208,7 +209,7 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     return <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700">👤 {row.target}</span>;
   };
 
-  const overdue = (row: DeptRequest) => !!row.due_date && row.status !== "완료" && row.due_date < new Date().toISOString().slice(0, 10);
+  const overdue = (row: DeptRequest) => !!row.due_date && row.status !== "완료" && row.due_date < kstDate();
   const detailRow = detailId ? rows.find((row) => row.id === detailId) : undefined;
 
   return (

@@ -3,6 +3,7 @@
  * 글은 익명으로 노출되고 author는 저장만 하여 포인트(받은 추천 합계) 집계에 쓴다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { kstDate } from "./visits";
 import { askConfirm } from "./confirmModal";
 import { deleteRows, insertRow, selectRows, uploadPublicFile } from "./supabase";
 import { GAS_GET_URL } from "./api";
@@ -272,10 +273,10 @@ export default function ReadingHub({ author, kind = "reading" }: { author: strin
   const myVotes = useMemo(() => new Set(votes.filter((v) => v.voter === author).map((v) => v.post_id)), [votes, author]);
   const points = useMemo(() => {
     const authorOf = new Map(posts.map((p) => [p.id, p.author || "미지정"]));
-    const monthKey = new Date().toISOString().slice(0, 7);
+    const monthKey = kstDate().slice(0, 7);
     const map = new Map<string, number>();
     for (const v of votes) {
-      if (pointsMonthly && String(v.created_at || "").slice(0, 7) !== monthKey) continue;
+      if (pointsMonthly && (v.created_at ? kstDate(new Date(v.created_at)).slice(0, 7) : "") !== monthKey) continue;
       const owner = authorOf.get(v.post_id);
       if (!owner) continue;
       map.set(owner, (map.get(owner) || 0) + 1);

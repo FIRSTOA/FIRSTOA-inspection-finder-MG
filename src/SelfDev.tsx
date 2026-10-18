@@ -71,11 +71,11 @@ function DevDashboard({ author, onGo }: { author: string; onGo: (tab: Tab) => vo
     for (const v of votes) map.set(v.post_id, (map.get(v.post_id) || 0) + 1);
     return map;
   }, [votes]);
-  const monthKey = new Date().toISOString().slice(0, 7);
+  const monthKey = kstDate().slice(0, 7);
   const monthlyRank = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of votes) {
-      if (String(v.created_at || "").slice(0, 7) !== monthKey) continue;
+      if ((v.created_at ? kstDate(new Date(v.created_at)).slice(0, 7) : "") !== monthKey) continue;
       const owner = ownerOf.get(v.post_id);
       if (owner) map.set(owner, (map.get(owner) || 0) + 1);
     }
@@ -336,11 +336,11 @@ function PraiseBoard({ author }: { author: string }) {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  const monthKey = new Date().toISOString().slice(0, 7);
+  const monthKey = kstDate().slice(0, 7);
   const monthlyKing = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of rows) {
-      if (row.created_at.slice(0, 7) !== monthKey) continue;
+      if (kstDate(new Date(row.created_at)).slice(0, 7) !== monthKey) continue;
       map.set(row.to_name, (map.get(row.to_name) || 0) + 1);
     }
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
