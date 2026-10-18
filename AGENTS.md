@@ -31,13 +31,17 @@
 5. 비밀값(키, 비밀번호)은 코드에 넣지 않는다. anon key는 이미 `src/supabase.ts`에 있음.
 
 ## 에이전트 팀 (역할)
-`.claude/agents/` 에 역할 5개: ui-designer(화면 틀·일관성), debugger(원인 추적·재발 방지), feature-planner(설계·작업 분해, 코딩 안 함), qa-checker(빌드·테스트·범위·회귀 검사), db-schema(테이블·RLS·크론). Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 같은 역할 파일을 읽고 순서대로 흉내 내면 된다: 기획 → 디자인/DB → 구현 → QA.
+`.claude/agents/` 에 역할 8개.
+- 일하는 역할 5: ui-designer(화면 틀·일관성), debugger(원인 추적·재발 방지), feature-planner(설계·작업 분해, 코딩 안 함), qa-checker(빌드·테스트·범위·회귀 검사), db-schema(테이블·RLS·크론).
+- 프로젝트 맞춤 검사기 3: field-deploy-check(배포 전 tsc 종료코드→테스트→빌드→비밀값, 배포 후 라이브 번들 문구 확인), sql-review(사용자가 SQL Editor에서 실행하기 전 권한·삭제·기존 표 변경·비밀키 검사), kakao-pc-rules(tools/kakao-pc 코드의 금지 단축키·안전 순서 강제).
+Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 같은 역할 파일을 읽고 순서대로 흉내 내면 된다: 기획 → 디자인/DB → 구현 → QA → 배포 검사.
 
 ## 현재 진행 중 (2026-10-18)
-- **이메일 카운터 자동 정리**: 복합기가 `count@firstoa.co.kr`로 보내는 카운터 메일(네이버 hee2gwang·hee3gwang 수신)을 어사이드가 매일 10시 정리해 `outbox`로 카톡 전송 중. 파서·양식 정리는 `docs/tasks/email-counter.md` 참고. 다음 단계는 FIELD에 저장·조회 화면(작업 A)과 노트북 실행기 수집(작업 C).
-- **고객용 QR AS 접수**: 설계만 됨. `docs/tasks/qr-reception.md`.
-- **카톡 발송 안정화**: `tools/kakao-pc/open_room.py` 렉 감지·재시작 패치 적용됨(2026-10-18).
+- **이메일 카운터**: 복합기가 `count@firstoa.co.kr`로 보내는 카운터 메일(네이버 hee2gwang·hee3gwang 수신)을 어사이드가 매일 10시 정리해 `outbox`로 카톡 전송 중(DB 저장은 아직 없음). FIELD 저장·조회와 노트북 IMAP 수집은 **대표 승인 후 네이버 계정 IMAP 설정이 되면** 다시 지시서를 쓴다. 2026-10-18 지시서 3건은 사용자 지시로 삭제(기록은 git ce02b75).
+- **고객용 QR AS 접수**: 보류(위와 같음).
+- **카톡 발송 안정화**: `tools/kakao-pc/open_room.py` 렉 감지·재시작 패치 적용됨(2026-10-18). 노트북 반영은 bootstrap 한 줄 재실행.
 
 ## 작업 기록
 - 2026-10-18 (Aside) AGENTS.md 신설. `docs/tasks/` 에 병렬 작업 지시서 3건 추가.
 - 2026-10-18 (Aside) `.claude/agents/` 역할 5개 + `CLAUDE.md` 팀장 규칙 추가.
+- 2026-10-18 (Claude Code) 검사기 역할 3개 추가(field-deploy-check·sql-review·kakao-pc-rules). `docs/tasks/` 지시서 3건 삭제(사용자 지시 — 이메일 카운터는 네이버 계정 승인 뒤 재개). 파일: .claude/agents/*.md, AGENTS.md.
