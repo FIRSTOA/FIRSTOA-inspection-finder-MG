@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 # 창 찾기·클립보드·붙여넣기는 포스터 전송기와 같은 부품을 쓴다
 from poster_send import REST, SUPABASE_ANON, find_room_window, log, paste_and_send, set_clipboard_text
-from open_room import open_room  # 창이 없으면 방 이름으로 검색해 연다(2026-10-17, 카톡 26.8 실측)
+from open_room import open_room, restart_kakao  # 창이 없으면 방 이름으로 검색해 연다(2026-10-17, 카톡 26.8 실측)
 
 STALE_SECONDS = 120  # 봇 폴링(7초)의 넉넉한 배수 — 이보다 오래 남았으면 봇이 못 보내는 상태다 (2026-10-17: 180→120, 실행기 1분 주기와 함께 조용한 방도 3분 안에)
 
@@ -46,6 +46,9 @@ def rest_call(path: str, method: str = "GET", body: dict | None = None):
 
 
 _open_tried: dict[str, float] = {}  # 방별 마지막 "검색해서 열기" 시도 — 10분에 한 번만(못 여는 방을 1분마다 두드리지 않게)
+_open_fail_streak = 0  # 연속 열기 실패 횟수(어느 방이든) — 3번(≈30분)이면 카톡이 렉 걸린 것으로 보고 재시작(2026-10-18 아침 ERP방 8번 연속 실패 → 1시간 22분 지연)
+_kakao_restarted_at = 0.0  # 재시작은 1시간에 한 번만
+RESTART_AFTER_FAILS = 3
 _quiet_until: dict[str, float] = {}  # 방별 "창 없음" 로그를 30분에 한 번만 — 1분 주기로 돌면서 같은 줄이 쌓이던 것(2026-10-17 노트북 첫 가동)
 
 
@@ -72,6 +75,7 @@ def report_pc_send(room: str) -> None:
 
 
 def main() -> int:
+    global _open_fail_streak, _kakao_restarted_at
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=STALE_SECONDS)).strftime("%Y-%m-%dT%H:%M:%S")
     rows = rest_call(f"/outbox?select=id,room,text,created_at&created_at=lt.{cutoff}&order=created_at.asc&limit=20") or []
     if not rows:
@@ -98,6 +102,16 @@ def main() -> int:
                             opened_here.append(hwnd)
                 except Exception as e:
                     log(f"    열기 실패: {e}")
+                if hwnd:
+                    _open_fail_streak = 0
+                else:
+                    _open_fail_streak += 1
+                    hung = getattr(open_room, "last_fail", "") == "hung"
+                    if (hung or _open_fail_streak >= RESTART_AFTER_FAILS) and _t.time() - _kakao_restarted_at > 3600:
+                        _kakao_restarted_at = _t.time()
+                        if restart_kakao("응답 없음" if hung else f"방 열기 {_open_fail_streak}번 연속 실패"):
+                            _open_fail_streak = 0
+                            _open_tried[room] = 0  # 다음 분에 바로 다시 시도
         if not hwnd:
             if _should_log_missing(room):
                 log(f"  ✗ [{room}] 창이 안 열려 있음 — 카톡 PC에서 그 방을 더블클릭해 창으로 열어 두면 다음 1분 안에 보냅니다 (이 줄은 30분에 한 번만 적습니다)")

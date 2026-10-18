@@ -48,6 +48,49 @@ def main_window():
     return hit[0] if hit else None
 
 
+def kakao_responding(hwnd: int, timeout_ms: int = 3000) -> bool:
+    """카톡 창이 메시지에 답하는지(렉·멈춤 감지) — WM_NULL 을 3초 안에 처리하지 못하면 응답 없음"""
+    import ctypes
+    import ctypes.wintypes as wt
+
+    try:
+        if ctypes.windll.user32.IsHungAppWindow(hwnd):
+            return False
+        res = wt.DWORD()
+        ok = ctypes.windll.user32.SendMessageTimeoutW(hwnd, 0, 0, 0, 0x0002, timeout_ms, ctypes.byref(res))  # SMTO_ABORTIFHUNG
+        return bool(ok)
+    except Exception:
+        return True  # 확인 못 하면 일단 진행
+
+
+def restart_kakao(reason: str = "") -> bool:
+    """카톡을 정상 종료하고 다시 켠다 — 정상 종료 뒤 재실행은 자동 로그인이 된다(2026-10-18 실측). 크래시 뒤에는 로그인 화면이 뜨므로 강제 종료는 최후 수단"""
+    import os
+    import subprocess
+
+    exe = r"C:\Program Files\Kakao\KakaoTalk\KakaoTalk.exe"
+    if not os.path.exists(exe):
+        log(f"    카톡 실행 파일이 없음: {exe}")
+        return False
+    log(f"    ↻ 카톡 재시작 ({reason})")
+    try:
+        subprocess.run(["taskkill", "/IM", "KakaoTalk.exe"], capture_output=True, timeout=15)  # 정상 종료 요청
+        time.sleep(4)
+        subprocess.run(["taskkill", "/F", "/IM", "KakaoTalk.exe"], capture_output=True, timeout=15)  # 안 죽었으면 강제
+        time.sleep(2)
+        subprocess.Popen([exe], close_fds=True)
+    except Exception as e:
+        log(f"    카톡 재시작 실패: {e}")
+        return False
+    for _ in range(12):  # 최대 60초 — 자동 로그인 끝나면 메인 창(EVA_Window_Dblclk '카카오톡')이 생긴다
+        time.sleep(5)
+        if main_window():
+            log("    ✓ 카톡 다시 켜짐(로그인됨)")
+            return True
+    log("    ✗ 카톡을 다시 켰지만 로그인 창이 안 생김 — 로그인 화면일 수 있음(사람이 확인)")
+    return False
+
+
 def bring_front(hwnd: int) -> bool:
     import pyautogui
 
@@ -258,6 +301,10 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
     if not main:
         log("    카톡 메인 창을 못 찾음 — 카톡 PC가 꺼져 있거나 로그인 전")
         return False
+    if not kakao_responding(main):
+        log("    ✗ 카톡이 응답 없음(렉·멈춤) — 이번 시도 건너뜀")
+        open_room.last_fail = "hung"
+        return False
     if close_popup_windows(main):
         log("    떠 있던 팝업(친구 추가 등)을 닫았습니다")
     if not bring_front(main):
@@ -286,7 +333,7 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
             break
         pyautogui.doubleClick(x, y)
         hwnd, title = None, ""
-        for _ in range(8):  # 창이 뜨기까지 최대 4초(카톡이 느릴 때 1.5초로는 못 잡았다 — 2026-10-17 부품요청)
+        for _ in range(12):  # 창이 뜨기까지 최대 6초(카톡이 느릴 때 대비)(카톡이 느릴 때 1.5초로는 못 잡았다 — 2026-10-17 부품요청)
             time.sleep(0.5)
             hwnd, title = find_room_window(room)
             if hwnd:
@@ -332,8 +379,14 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
                 win32gui.PostMessage(h, win32con.WM_CLOSE, 0, 0)
             except Exception:
                 pass
-    log(f"    ✗ 방 창을 못 열었음: {room} — 방 이름이 카톡 방 제목과 다르거나 봇 계정이 그 방에 없음")
+    # 실패 원인을 항상 남긴다 (2026-10-18 아침 ERP방 8번 연속 실패 때 이유를 모래다)
+    fgt = win32gui.GetWindowText(win32gui.GetForegroundWindow())
+    log(f"    ✗ 방 창을 못 열었음: {room} — 목록={list_rect} 새 창={len(room_windows_snapshot() - before)}개 맨 앞='{fgt}' 카톡 응답={kakao_responding(main, 1500)} (방 이름이 다르거나, 봇 계정이 그 방에 없거나, 카톡이 느림)")
+    open_room.last_fail = "noopen"
     return False
+
+
+open_room.last_fail = ""  # 마지막 실패 종류: hung(응답 없음) / noopen(창 안 열림) — 중계기가 재시작 판단에 쓴다
 
 
 def main() -> int:
