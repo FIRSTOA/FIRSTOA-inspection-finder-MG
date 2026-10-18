@@ -218,7 +218,11 @@ function focusAgentTeam() {
   const el = document.getElementById("agent-team");
   if (!el) return;
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  // scrollIntoView 금지: 홈의 검은 판이 overflow-hidden 이라 그 안쪽 scrollTop 이 밀려 위가 잘린 채 되돌릴 수 없었다(2026-10-19 실측).
+  // 창(window)만 스크롤하고, 혹시 밀린 overflow-hidden 조상은 0 으로 되돌린다.
+  for (let p = el.parentElement; p; p = p.parentElement) if (p.scrollTop) p.scrollTop = 0;
+  const top = el.getBoundingClientRect().top + window.scrollY - 76; // 상단 바 높이만큼 여유
+  window.scrollTo({ top: Math.max(0, top), behavior: reduce ? "auto" : "smooth" });
   el.dispatchEvent(new CustomEvent("agent-team:focus"));
 }
 

@@ -5,11 +5,11 @@ import { AGENT_WORK_LOG, type AgentWorkItem } from "./agentWorkLog";
 import { kstDate, weekRange } from "./visits";
 
 // 카드 테두리: 평소 / 관제 덱 알약으로 불려 왔을 때(1.5초). 모션 줄이기면 글로우 없이 테두리만.
-const cardBase = "rounded-2xl border bg-white/[0.035] transition-[border-color,box-shadow] duration-500 motion-reduce:transition-none";
+const cardBase = "rounded-2xl border bg-white/[0.035] transition-[border-color,box-shadow,transform] duration-500 motion-reduce:transition-none";
 const cardIdle = "border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
-const cardFlash = "border-fuchsia-300/70 motion-safe:shadow-[0_0_0_3px_rgba(232,121,249,0.18),0_0_40px_-6px_rgba(232,121,249,0.6)]";
+const cardFlash = "border-fuchsia-300 shadow-[0_0_0_4px_rgba(232,121,249,0.55),0_0_0_10px_rgba(232,121,249,0.18),0_0_90px_-4px_rgba(232,121,249,0.95)] motion-safe:scale-[1.012]";
 const FOCUS_EVENT = "agent-team:focus";
-const FLASH_MS = 1500;
+const FLASH_MS = 2600;
 const eyebrow = "text-[10px] font-black uppercase tracking-[0.16em] text-slate-500";
 // 단추에 inline box-shadow(입체 그림자)를 쓰므로 초점 표시는 ring 대신 outline 으로 한다(ring 은 box-shadow 라 덮인다).
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400";
