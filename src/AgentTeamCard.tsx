@@ -206,17 +206,17 @@ export default function AgentTeamCard() {
           </div>
           <div className="relative [perspective:1400px]" onPointerMove={onMove} onPointerLeave={onLeave}>
             <div ref={glareRef} aria-hidden className="pointer-events-none absolute -inset-2 rounded-2xl opacity-0 transition-opacity duration-300" />
-            <div ref={stageRef} className="relative transition-transform duration-300 ease-out [transform-style:preserve-3d] motion-reduce:transition-none">
+            <div ref={stageRef} className="relative transition-transform duration-300 ease-out will-change-transform [backface-visibility:hidden] motion-reduce:transition-none">
               <LeaderNode />
 
               {/* PC: 가운데 줄기 → 가로 버스선 → 부서 7칸 */}
               <div aria-hidden className="mx-auto hidden h-6 w-0.5 bg-linear-to-b from-fuchsia-300/70 to-white/20 lg:block" />
-              <ul className="relative hidden grid-cols-7 gap-2 pt-5 [transform-style:preserve-3d] lg:grid">
+              <ul className="relative hidden grid-cols-7 gap-2 pt-5 lg:grid">
                 <span aria-hidden className="absolute left-[calc(100%/14)] right-[calc(100%/14)] top-0 h-0.5 rounded-full bg-linear-to-r from-fuchsia-400/60 via-white/25 to-cyan-400/60" />
                 {AGENT_DEPTS.map((d) => {
                   const open = openDept === d.name;
                   return (
-                    <li key={d.name} className="relative [transform:translateZ(18px)]">
+                    <li key={d.name} className="relative">
                       <span aria-hidden className="absolute -top-5 left-1/2 h-5 w-0.5 -translate-x-1/2" style={{ background: rgba(d.accent, open ? 0.9 : 0.35) }} />
                       <DeptNode d={d} open={open} onToggle={() => toggle(d.name)} layout="col" count={work.byDept[d.name] ?? EMPTY_COUNT} />
                     </li>
@@ -326,10 +326,10 @@ export default function AgentTeamCard() {
   );
 }
 
-/** 팀장 노드: 겹친 판 두 장 + 빛나는 이모지 타일 + 가동 점. PC에선 조직도 판에서 한 겹 더 떠 있다(translateZ). */
+/** 팀장 노드: 겹친 판 두 장 + 빛나는 이모지 타일 + 가동 점. (translateZ 로 띄우던 것은 글자가 어중간한 배율로 재래스터돼 흐려져서 뺐다 — 2026-10-19 실측) */
 function LeaderNode() {
   return (
-    <div className="relative mx-auto lg:max-w-lg lg:[transform:translateZ(36px)]">
+    <div className="relative mx-auto lg:max-w-lg">
       <span aria-hidden className="absolute inset-x-2 -bottom-2 top-2 rounded-2xl border border-fuchsia-300/10 bg-fuchsia-400/[0.05]" />
       <div
         className="relative flex items-center gap-3 rounded-2xl border border-white/[0.12] p-2.5"
