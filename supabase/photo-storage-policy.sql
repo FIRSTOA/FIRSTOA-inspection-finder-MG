@@ -1,3 +1,4 @@
+-- ⚠ 재실행 금지 (2026-10-19 감사): photos 버킷의 public UPDATE 정책을 되살린다(익명 덮어쓰기 통로). 2026-08-17 에 일부러 제거했다.
 -- photos 버킷은 공개 URL로만 읽습니다. storage.objects SELECT 정책은 필요하지 않습니다.
 -- 아래 정책은 photos 버킷에만 적용되며, 다른 Storage 버킷에는 영향을 주지 않습니다.
 do $$

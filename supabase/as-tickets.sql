@@ -1,3 +1,5 @@
+-- ⚠ 재실행 금지 (2026-10-19 감사): scheduleType CHECK 가 옛 5개다. 라이브는 as-tickets-constraints.sql(2026-08-15) 의 6개('납품철수교체휴가교육' 포함).
+--    다시 돌리면 네이버 납품 일정 수입이 다시 막힌다.
 -- 일정리스트/캘린더 공유 테이블 (1회 실행) — 백로그 D
 -- 기존에는 브라우저 localStorage에만 저장돼 기기·직원 간 공유가 안 됐다.
 -- 컬럼명은 프론트 AsTicket 타입과 1:1 (scheduleType은 따옴표로 camelCase 유지).

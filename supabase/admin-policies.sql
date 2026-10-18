@@ -1,3 +1,4 @@
+-- ⚠ 재실행 금지 (2026-10-19 감사): pc_expansion·mfp_expansion 에 anon DELETE/UPDATE 전권을 다시 준다. 라이브는 숨김 3컬럼만 허용(security-grants.sql 원칙).
 -- 관리 화면에서 값을 바꿀 수 있도록 쓰기 정책 추가.
 -- (기존 stock_items·cs_members·message_templates와 동일한 수준)
 --

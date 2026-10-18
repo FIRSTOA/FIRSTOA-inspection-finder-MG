@@ -1,3 +1,5 @@
+-- ⚠ 재실행 금지 (2026-10-19 감사): 50행 부근의 category CHECK 가 옛 5개뿐이다. 라이브는 reception_copier·reception_copier_new·reception_remote 포함 8개.
+--    다시 돌리면 서비스접수 동기화 INSERT 가 전부 CHECK 위반으로 실패한다. 현재 정의는 supabase/schema-snapshot-20261019.sql 참고.
 -- FIELD 4종(확장성 IT/복합기, 담당자·주소 변경, 불만) 외부 동기화 작업 큐
 -- 한 번만 Supabase SQL Editor에서 실행합니다.
 

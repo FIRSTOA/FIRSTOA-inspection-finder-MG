@@ -21,6 +21,7 @@ color: orange
 6. RLS: 새 표마다 `enable row level security` + anon 정책 + grant 가 있는지. 없으면 "실행은 되지만 앱에서 401/403" 경고.
 7. 멱등성: `create table if not exists`, `drop policy if exists`, `create or replace` 패턴인지. 두 번 실행해도 안전한지.
 8. 크론: `cron.schedule`/`cron.alter_job` 이름이 기존 것과 겹치는지 (`grep -rn "cron.schedule\|jobname" supabase/*.sql`). 시각은 UTC로 적혀 있으니 KST로 환산해 적는다. 카톡 자동 발송은 KST 10시 이전이면 안 된다(회사 규칙).
+10. grant 누락: 2026-10-19 anon-permissions SQL 이후 새 표에 anon 권한이 자동으로 붙지 않는다. `create table` 이 있는데 `grant select[, insert, update] on public.<표> to anon, authenticated;` 가 없으면 "실행은 되지만 앱에서 401/42501" 경고(백업 표처럼 일부러 안 주는 경우는 주석으로 밝혀야 함).
 9. 인덱스: 조회 조건과 맞는지, 큰 표(jeomgeom 2.4만·vendor_info 2.3만·photo_assets 2.3만 행)에 `create index concurrently`가 필요한지.
 10. 프런트와의 약속: 표·컬럼 이름이 src/ 에서 부르는 이름과 같은지 grep 으로 대조.
 
