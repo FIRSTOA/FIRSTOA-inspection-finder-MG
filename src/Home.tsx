@@ -208,7 +208,13 @@ function StatusPill({ tone, icon: Icon, label, value, onClick }: { tone: Tone; i
     </>
   );
   if (onClick) {
-    return <button type="button" onClick={onClick} className={`${cls} text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400`}>{inner}</button>;
+    // 누를 수 있는 알약은 하나뿐이라 살짝 다르게: 자주색 테두리·은은한 빛·내려가기 화살표. 운영 지표를 가리지 않게 얇게(2026-10-19 사용자 요청)
+    return (
+      <button type="button" onClick={onClick} className={`${cls} w-full cursor-pointer text-left !border-fuchsia-400/45 shadow-[0_0_0_1px_rgba(232,121,249,0.12),0_0_28px_-10px_rgba(232,121,249,0.7)] transition hover:!border-fuchsia-300/80 hover:bg-white/[0.06] hover:shadow-[0_0_0_1px_rgba(232,121,249,0.25),0_0_36px_-8px_rgba(232,121,249,0.9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-300`}>
+        {inner}
+        <span className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-fuchsia-400/15 px-2 py-0.5 text-[10px] font-black text-fuchsia-200">보기<ChevronDown size={11} /></span>
+      </button>
+    );
   }
   return <div className={cls}>{inner}</div>;
 }
