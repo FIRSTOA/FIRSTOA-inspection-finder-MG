@@ -2,6 +2,21 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "360e30a29e",
+    "date": "2026-10-19",
+    "note": "카톡봇 심박 끄기 SQL(실행은 사용자 결정 뒤) — sql-review 통과, 되돌리기 한 줄 명시"
+  },
+  {
+    "hash": "a7a66d0c37",
+    "date": "2026-10-19",
+    "note": "실행기 파수꾼 SQL: 데스크톱 옛 심박 행 삭제 + 가장 최근 실행기 한 대만 감시 (2시간마다 오던 \"실행기 멈췄어요\" 푸시 원인)"
+  },
+  {
+    "hash": "9d0a598298",
+    "date": "2026-10-19",
+    "note": "점검 후 수정 4건: 옛 프로젝트 키 박힌 cron SQL 삭제 + 티켓 바꿀 때 제목 편집칸 안 닫히던 버그 + \"오늘/이번달\" UTC 컷 9곳 KST로 + 마감방 문자 반영/삭제 실패를 성공처럼 보이던 것 안내로"
+  },
+  {
     "hash": "bf540382d8",
     "date": "2026-10-18",
     "note": "에이전트 팀 8개: 검사기 3개 추가(field-deploy-check·sql-review·kakao-pc-rules) + CLAUDE.md 호출 규칙 + 작업 지시서 3건 삭제(이메일 카운터는 네이버 계정 승인 뒤 재개)"
@@ -1235,20 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "df43b656b4",
     "date": "2026-09-17",
     "note": "관리 탭 인원 명단 — CS팀 팀 구분에 E(지방) 추가: E지역 인원을 등록하면 일정리스트 배정 명단·중간보고에 바로 잡힌다"
-  },
-  {
-    "hash": "bf92038273",
-    "date": "2026-09-17",
-    "note": "IT 접수 분리 — 서비스접수 IT 건은 IT 캘린더(관리 탭 네이버 캘린더 IT 칸)·IT 접수방(방 매핑 IT접수|*)으로, 일정리스트에 IT 배지 + 완료는 IT 캘린더 제자리 체크. 접수 리스트 IT 행에 [CS 이관] 버튼: CS 일정 생성 + 익일통합as 캘린더 복제 + 지역 AS방 전송 + 처리여부 방문이관"
-  },
-  {
-    "hash": "1e17500528",
-    "date": "2026-09-17",
-    "note": "월요 키맨·주소 브리핑을 시트 기준으로 — 담당자변경 시트를 매일 07시·브리핑 직전(월 09:30) 서버가 자동으로 당기는 cron SQL 추가(supabase/contact-sheet-pull-cron.sql). 지금은 누가 키맨 화면을 열 때만 당겨져 FIELD 작성분만 실렸다"
-  },
-  {
-    "hash": "6ea4c0ee5d",
-    "date": "2026-09-17",
-    "note": "E지역(지방·충청외) 활성화 — 워킨맵 E탭·자동일정·조회 팀 필터·현황 진행률·양식 지역 선택·배정 명단·재계약/초과 양식 E방(충청외극지방 E/초과사용 계약종료체크)에 E 추가 + 관리 탭 방 매핑 E·IT접수 분류. DB는 supabase/enable-region-e.sql 실행 필요(워킨맵 팀 제약·점검|E 방)"
   }
 ];

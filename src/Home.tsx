@@ -2,6 +2,7 @@ import { teamLabel } from "./authors";
 import CostTile from "./CostTile";
 import OverduePanel from "./OverduePanel";
 import LiveSendBoard from "./LiveSendBoard";
+import AgentTeamCard from "./AgentTeamCard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -475,6 +476,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             ))}
           </div>
         </div>
+
+        <AgentTeamCard />
 
         {/* ── ⑥ 릴리스 타임라인 + ⑦ 온보딩 ── */}
         <div className="relative grid grid-cols-1 gap-3 border-t border-white/[0.08] px-4 py-5 sm:px-6 lg:grid-cols-12">

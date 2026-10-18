@@ -31,14 +31,20 @@
 5. 비밀값(키, 비밀번호)은 코드에 넣지 않는다. anon key는 이미 `src/supabase.ts`에 있음.
 
 ## 에이전트 팀 (역할)
-`.claude/agents/` 에 역할 8개.
-- 일하는 역할 5: ui-designer(화면 틀·일관성), debugger(원인 추적·재발 방지), feature-planner(설계·작업 분해, 코딩 안 함), qa-checker(빌드·테스트·범위·회귀 검사), db-schema(테이블·RLS·크론).
-- 프로젝트 맞춤 검사기 3: field-deploy-check(배포 전 tsc 종료코드→테스트→빌드→비밀값, 배포 후 라이브 번들 문구 확인), sql-review(사용자가 SQL Editor에서 실행하기 전 권한·삭제·기존 표 변경·비밀키 검사), kakao-pc-rules(tools/kakao-pc 코드의 금지 단축키·안전 순서 강제).
+`.claude/agents/` 에 역할 10개. 팀장은 Claude Code 본체(클로드, Fable 5.1). 역할 파일 머리에 이름·부서·캐릭터·모델이 있고, 보고 첫 줄에 `[부서 이름]`을 붙인다. 홈 화면 "AI 에이전트 팀" 카드(src/agentTeam.ts)가 같은 목록을 보여 주므로 역할을 늘리거나 이름을 바꾸면 그 파일도 같이 고친다.
+- 기획실 한설계 feature-planner(opus): 설계·작업 분해, 코딩 안 함.
+- 디자인실 윤화면 ui-designer(sonnet): 화면 틀·일관성.
+- 데이터실 표다빈 db-schema(opus): 테이블·RLS·크론.
+- 개발실 구현서 developer(sonnet): 설계안 범위대로 구현, 큰 기능은 여러 명 동시. 오류진 debugger(opus): 원인 추적·재발 방지.
+- 품질실 검수아 qa-checker(sonnet): 빌드·테스트·범위·회귀 검사.
+- 검사실 배포준 field-deploy-check(haiku): 배포 전 tsc 종료코드→테스트→빌드→비밀값, 배포 후 라이브 번들 확인. 권한나 sql-review(sonnet): SQL Editor 실행 전 권한·삭제·기존 표 변경·비밀키 검사. 방지훈 kakao-pc-rules(sonnet): tools/kakao-pc 금지 단축키·안전 순서 강제.
+- 운영실 감시연 ops-monitor(haiku): 심박·outbox·방 배달·백업·일감 실패를 읽기 전용으로 조회해 보고. "잘 돌아가?" 질문에 먼저.
 Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 같은 역할 파일을 읽고 순서대로 흉내 내면 된다: 기획 → 디자인/DB → 구현 → QA → 배포 검사.
 
 ## 현재 진행 중 (2026-10-18)
 - **이메일 카운터**: 복합기가 `count@firstoa.co.kr`로 보내는 카운터 메일(네이버 hee2gwang·hee3gwang 수신)을 어사이드가 매일 10시 정리해 `outbox`로 카톡 전송 중(DB 저장은 아직 없음). FIELD 저장·조회와 노트북 IMAP 수집은 **대표 승인 후 네이버 계정 IMAP 설정이 되면** 다시 지시서를 쓴다. 2026-10-18 지시서 3건은 사용자 지시로 삭제(기록은 git ce02b75).
 - **고객용 QR AS 접수**: 보류(위와 같음).
+- **홈 AI 에이전트 팀 카드**: 설계안 docs/tasks/agent-team-card.md (2026-10-19, feature-planner). 정적 데이터 src/agentTeam.ts + src/AgentTeamCard.tsx, Home.tsx 2줄, DB 없음. 열린 질문(운영 부서 구성·debugger 소속·위치) 사용자 답 대기.
 - **카톡 발송 안정화**: `tools/kakao-pc/open_room.py` 렉 감지·재시작 패치 적용됨(2026-10-18). 노트북 반영은 bootstrap 한 줄 재실행.
 
 ## 작업 기록
@@ -46,3 +52,4 @@ Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 
 - 2026-10-18 (Aside) `.claude/agents/` 역할 5개 + `CLAUDE.md` 팀장 규칙 추가.
 - 2026-10-18 (Claude Code) 검사기 역할 3개 추가(field-deploy-check·sql-review·kakao-pc-rules). `docs/tasks/` 지시서 3건 삭제(사용자 지시 — 이메일 카운터는 네이버 계정 승인 뒤 재개). 파일: .claude/agents/*.md, AGENTS.md.
 - 2026-10-19 (Claude Code) 에이전트 팀 전반 점검(feature-planner+debugger) 후 4건 수정: ① 옛 뭄바이 프로젝트 키가 박힌 supabase/customer-message-cron.sql 삭제(대체는 customer-message-cron-seoul.sql) ② CsAsWorkspace 티켓 바꿀 때 제목 편집칸이 안 닫히던 도달 불가 코드 ③ "오늘/이번달"을 UTC로 자르던 9곳을 kstDate()로(DeptRequests·CopierNotes·ReadingHub·SelfDev·authors·ContactChangeHistory·entity360) ④ CounterSms 반영 표시·목록 삭제가 실패해도 화면은 성공처리하던 것을 실패 안내로. 남은 것(점검 결과): lint 72에러, RichCell innerHTML 소독, selectRows 타임아웃, 운영 DB RLS 실상태 확인, App.tsx 분할.
+- 2026-10-19 (Claude Code) 에이전트 팀 10명 체제: 개발실 developer(구현서)·운영실 ops-monitor(감시연) 채용, 8개 역할에 이름·부서·캐릭터·모델(opus/sonnet/haiku) 배정, CLAUDE.md 호출표·모델 정책 갱신. 홈 화면 "AI 에이전트 팀" 카드(src/agentTeam.ts·AgentTeamCard.tsx·tests/agentTeam.test.ts, Home.tsx +2줄) — 구현은 구현서(sonnet)가 지시서 docs/tasks/agent-team-card.md 대로. 실행기 파수꾼 오알림 원인(데스크톱 옛 심박 행)은 supabase/worker-watchdog-current-host.sql 실행 대기. 카톡봇 심박은 같은 계정이라 유지(kakao-bot-heartbeat-off.sql 보류).
