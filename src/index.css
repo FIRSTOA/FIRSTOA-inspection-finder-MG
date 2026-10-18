@@ -48,6 +48,10 @@ td:has(> div > [data-cell][data-selected]) {
 .fit-marquee { animation: fit-marquee var(--dur, 4s) linear infinite alternate; will-change: transform; }
 @keyframes fit-marquee { 0% { transform: translateX(0); } 100% { transform: translateX(var(--shift, 0px)); } }
 @media (prefers-reduced-motion: reduce) { .fit-marquee { animation: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; } }
+/* 홈 AI 에이전트 팀 카드 — 일 흐름 레일 위를 왼→오로 흐르는 빛 점(transform·opacity만, 2026-10-19). 모션 줄이기면 멈추고 숨김 */
+.agent-flow-run { animation: agent-flow-run 4.2s cubic-bezier(0.65, 0, 0.35, 1) infinite; will-change: transform; }
+@keyframes agent-flow-run { 0% { transform: translateX(0); opacity: 0; } 8% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .agent-flow-run { animation: none; opacity: 0; } }
 /* 여러 칸 범위(Shift+클릭·Shift+화살표·드래그) — 연한 파랑 배경(2026-10-01, 엑셀처럼 복사·붙여넣기) */
 td:has(> [data-cell][data-range]),
 td:has(> div > [data-cell][data-range]) {

@@ -62,3 +62,10 @@ export const AGENT_FLOW: string[]       // "기획 → 디자인/DB → 구현 �
 - 새 탭/라우트, `src/App.tsx` 수정, HelpCenter GUIDES 추가, 사이드바.
 - patchNotes 정리·Home 청크 다이어트, 다른 홈 카드 "김에 정리".
 - `.claude/agents/*.md` 본문 노출·편집 기능.
+
+## 2차 (2026-10-19 새벽, 사용자 지시 — 1차 "하지 않을 것"보다 우선)
+사용자 원문: "처음 쓰는 분을 위한 4단계, 전체 기능 — 무엇이 편해지는지 한 줄씩 이거 두 개는 필요 없을 듯 자리만 차지하는 듯해 / AI 에이전트 팀 카드 … 대표나 팀장님이 보고 와 이런 게 있어? 대단하다 싶을 정도로 조금만 더 개선 … 3D스러운 느낌도 넣어봐도 되고 일단 해보자"
+- Home.tsx: ⑤ 모듈 그리드("전체 기능")·⑦ 온보딩("처음 쓰는 분을 위한 4단계") 구역 제거, 거기서만 쓰던 데이터·상태·아이콘 import 제거, 릴리스 카드 전체 너비. (담당 개발실 구현서)
+- AgentTeamCard.tsx 전면 재작성: 입체 조직도(팀장→부서 7 연결선), PC 마우스 기울기(ref, setState 없음), 흐름 레일 빛 점(index.css @keyframes agent-flow-run 1개), 모델 비율 범례, motion-reduce 대응. agentTeam.ts 는 필드 추가만(accent·stage·AGENT_FLOW_STEPS). (담당 디자인실 윤화면)
+- tests/agentTeamCard.render.test.tsx: 서버 렌더 스모크(팀장·부서 7·기본 펼침·button 접근성). 1차 무결성 테스트는 tests/agentTeam.test.ts 에 그대로.
+- 여전히 하지 않을 것: App.tsx, HelpCenter, patchNotes, DB·SQL, 역할 본문 노출, 그 외 홈 카드(관제 덱·LiveSendBoard·지표·FeedbackBoard·절약 효과·릴리스·푸터) 내용 변경.

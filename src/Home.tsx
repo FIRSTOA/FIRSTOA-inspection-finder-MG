@@ -7,26 +7,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowRight,
-  BarChart3,
-  BookOpen,
-  CalendarDays,
   Camera,
   ChevronDown,
-  ClipboardCheck,
-  ClipboardList,
   Clock3,
   Database,
-  FilePenLine,
-  GraduationCap,
-  MapPinned,
-  Megaphone,
-  MessageSquareText,
-  PhoneCall,
   Radio,
   Route,
   ShieldCheck,
-  Sparkles,
-  Target,
   Timer,
   UsersRound,
   Zap,
@@ -40,7 +27,7 @@ import { getTeamVisits, kstDate, weekRange } from "./visits";
 // 홈 = 실시간 운영 현황판 (2026-09-12 개편, 같은 날 하단부까지 전면 다크 통일)
 // ① 관제 덱: 라이브 시계·시스템 상태·개인 인사(내 이번 주 기록)
 // ② 지표: 오늘/이번 주 기록·방문·키맨 변경·데이터 자산·7일 추이·지역별 주간 기록·팀별 분기 진행률·실시간 피드
-// ③ 피드백 보드(직원 의견 → 개발자 컨펌) → 절약 효과(실측 기반 카운터) → 모듈 그리드 → 릴리스 타임라인 → 온보딩 스테퍼 → 시스템 푸터
+// ③ 피드백 보드(직원 의견 → 개발자 컨펌) → 절약 효과(실측 기반 카운터) → 릴리스 타임라인 → 시스템 푸터
 // 데이터는 전부 anon 읽기 가능한 테이블만. 조회가 실패해도 화면은 뜬다(하단 경고 한 줄).
 // 주의: selectRows는 1,000행에서 잘린다 — 워킨맵(3천 행+)처럼 클 수 있는 조회는 selectAllRowsFast(실사고: 진행률 오표시).
 
@@ -48,55 +35,12 @@ type Screen =
   | "field" | "calendar" | "walkingMap" | "asReception" | "serviceReception" | "happycall" | "promoSend"
   | "okr" | "weekly" | "growth" | "itHistory" | "counterSms" | "selfdev" | "copierNotes" | "operations";
 
-type Module = { key: Screen; title: string; desc: string; icon: LucideIcon; hue: string };
-
-// 기능별 "무엇이 편해지는지" 한 줄 — 길게 설명하지 않는다(요청: 간략히)
-const moduleGroups: Array<{ title: string; blurb: string; items: Module[] }> = [
-  {
-    title: "현장 운영", blurb: "접수에서 현장 완료까지 한 흐름",
-    items: [
-      { key: "serviceReception", title: "서비스접수", desc: "임대리스트 검색 → 접수·일정까지 한 번에", icon: ClipboardList, hue: "from-rose-500/25 to-rose-500/0 text-rose-300" },
-      { key: "asReception", title: "일정리스트", desc: "상세·통화·네비·FIELD 변환이 한 팝업에", icon: CalendarDays, hue: "from-violet-500/25 to-violet-500/0 text-violet-300" },
-      { key: "calendar", title: "CS 캘린더", desc: "팀 일정 등록·완료, 네이버와 자동 동기화", icon: CalendarDays, hue: "from-blue-500/25 to-blue-500/0 text-blue-300" },
-      { key: "walkingMap", title: "워킨맵", desc: "분기 대상·미수·재계약을 지도 위 색으로", icon: MapPinned, hue: "from-emerald-500/25 to-emerald-500/0 text-emerald-300" },
-      { key: "field", title: "FIELD", desc: "원본 붙여넣기 → 양식·사진·방 전송 1분", icon: FilePenLine, hue: "from-slate-400/25 to-slate-400/0 text-slate-200" },
-    ],
-  },
-  {
-    title: "학습·지식", blurb: "한 번 겪은 일은 팀의 자산으로",
-    items: [
-      { key: "copierNotes", title: "복합기 학습·처리이력", desc: "기종별 사례가 쌓여 다음 AS가 빨라진다", icon: GraduationCap, hue: "from-sky-500/25 to-sky-500/0 text-sky-300" },
-      { key: "itHistory", title: "IT 학습·처리이력", desc: "PC 처리이력 검색·기술 퀴즈", icon: GraduationCap, hue: "from-cyan-500/25 to-cyan-500/0 text-cyan-300" },
-      { key: "selfdev", title: "자기개발/지식공유", desc: "독서·배움·칭찬 릴레이", icon: BookOpen, hue: "from-amber-500/25 to-amber-500/0 text-amber-300" },
-    ],
-  },
-  {
-    title: "기록·성과", blurb: "쓴 만큼 저절로 집계된다",
-    items: [
-      { key: "weekly", title: "주간현황판", desc: "일·주·월·분기·연 실적 자동 집계, 주간 목표·병목", icon: BarChart3, hue: "from-indigo-500/25 to-indigo-500/0 text-indigo-300" },
-      { key: "okr", title: "OKR", desc: "월별 목표·달성기준, 파트별 실행결과·종합판정", icon: Target, hue: "from-cyan-500/25 to-cyan-500/0 text-cyan-300" },
-      { key: "growth", title: "골든미팅카드", desc: "분기 결과표·미션·골든미팅카드", icon: Sparkles, hue: "from-fuchsia-500/25 to-fuchsia-500/0 text-fuchsia-300" },
-      { key: "operations", title: "업무관리", desc: "팀 운영 현황·담당자/주소 변경이력", icon: UsersRound, hue: "from-slate-400/25 to-slate-400/0 text-slate-200" },
-      { key: "happycall", title: "해피콜", desc: "방문 후 문자·예약 발송", icon: PhoneCall, hue: "from-rose-500/25 to-rose-500/0 text-rose-300" },
-      { key: "promoSend", title: "홍보물 발송·인쇄", desc: "홍보자료 문자·메일·인쇄", icon: Megaphone, hue: "from-amber-500/25 to-amber-500/0 text-amber-300" },
-      { key: "counterSms", title: "카운터 문자전송", desc: "카톡 목록 → 업체별 카운터 요청 문자", icon: MessageSquareText, hue: "from-emerald-500/25 to-emerald-500/0 text-emerald-300" },
-    ],
-  },
-];
-
 // 절약 근거 — 방문 1건당 반복 업무 약 10분(양식 5~8→1~2, 전송 3~5→1~2, 보고 5~10→자동)
 const MINUTES_SAVED_PER_RECORD = 10;
 const savings = [
   { task: "양식 작성", before: "5~8분", after: "1~2분", how: "카톡 원본 붙여넣기 → 자동 변환" },
   { task: "업무방 전송", before: "3~5분", after: "1~2분", how: "업무 종류 한 번 → 지정 방에 내용·사진" },
   { task: "업무 보고", before: "5~10분", after: "자동", how: "FIELD 기록이 일일·주간 실적으로" },
-];
-
-const manuals = [
-  { id: "start", title: "처음 사용할 때", summary: "접수부터 현장 완료까지", icon: Route, steps: ["서비스접수에서 임대리스트를 검색해 접수하고, 확인 팝업에서 주소·접수자를 점검합니다.", "일정리스트에서 오늘 일정을 확인하고 통화·네비로 이동합니다.", "현장에서 FIELD에 원본을 붙여넣어 양식으로 바꾸고 사진을 붙여 업무방에 전송합니다.", "완료 처리하면 일일방문일지·주간현황판에 자동 집계됩니다."] },
-  { id: "reception", title: "접수 → 일정 → FIELD", summary: "접수 한 번으로 일정·양식까지", icon: ClipboardList, steps: ["접수 저장 시 '일정리스트에도 등록'을 켜두면 오늘 날짜로 일정이 생깁니다.", "일정 상세의 FIELD 버튼을 누르면 접수 원본이 그대로 양식으로 바뀝니다.", "완료 처리하면 접수 상태도 함께 바뀝니다."] },
-  { id: "field", title: "FIELD 작성·전송", summary: "원본 변환, 기기 수정, 사진, 전송", icon: FilePenLine, steps: ["원본 붙여넣기, 사진 변환 또는 거래처 검색으로 양식을 불러옵니다.", "기기 정보·토너·여분을 확인하고 필요한 칸만 고칩니다.", "업무 종류를 고르면 지정된 방으로 내용과 사진이 한 번에 전송됩니다."] },
-  { id: "manage", title: "방문 이후 관리", summary: "이력, 해피콜, 홍보물, 성과 기록", icon: ClipboardCheck, steps: ["통합이력에서 거래처의 점검·AS·불만·미수 등 전체 기록을 찾습니다.", "해피콜·홍보물 발송으로 방문 뒤 고객 접점을 이어갑니다.", "주간현황판·성장기록에서 목표와 실적을 정리합니다."] },
 ];
 
 // ── 실시간 데이터 ────────────────────────────────────────────────────────────
@@ -302,7 +246,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const { data, loading } = useTelemetry();
   const [author, setAuthor] = useState(readAuthor);
   useEffect(() => { const sync = () => setAuthor(readAuthor()); window.addEventListener("focus", sync); window.addEventListener("storage", sync); return () => { window.removeEventListener("focus", sync); window.removeEventListener("storage", sync); }; }, []);
-  const [openManual, setOpenManual] = useState("start");
   const [patchExpanded, setPatchExpanded] = useState(false);
   const go = (screen: Screen) => screen === "field" ? onGoField() : onNavigate?.(screen);
   const openOverdue = () => { try { localStorage.setItem("cs_as_open_overdue", "1"); } catch { /* 무시 */ } go("asReception"); setTimeout(() => window.dispatchEvent(new CustomEvent("cs:open-overdue")), 300); };
@@ -453,35 +396,11 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           </div>
         </div>
 
-        {/* ── ⑤ 모듈 그리드 ── */}
-        <div className="relative border-t border-white/[0.08] px-4 py-5 sm:px-6">
-          <div className="mb-3 flex items-end justify-between"><div><div className={eyebrow}>Modules</div><h3 className="mt-0.5 text-[15px] font-black text-white">전체 기능 — 무엇이 편해지는지 한 줄씩</h3></div><span className="text-[11px] font-bold text-slate-500">{moduleGroups.reduce((s, g) => s + g.items.length, 0)}개 화면</span></div>
-          <div className="space-y-4">
-            {moduleGroups.map((group) => (
-              <div key={group.title}>
-                <div className="mb-2 flex items-baseline gap-2"><span className="text-[12px] font-black text-slate-200">{group.title}</span><span className="text-[11px] font-semibold text-slate-500">{group.blurb}</span></div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                  {group.items.map((m) => {
-                    const Icon = m.icon; const [gradFrom, gradTo, text] = m.hue.split(" ");
-                    return (
-                      <button key={m.key} type="button" onClick={() => go(m.key)} className={`group relative flex items-start gap-3 overflow-hidden p-3 text-left transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${card}`}>
-                        <span className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${gradFrom} ${gradTo} opacity-0 transition group-hover:opacity-100`} />
-                        <span className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] ${text}`}><Icon size={17} strokeWidth={2.2} /></span>
-                        <span className="relative min-w-0"><span className="block truncate text-[12.5px] font-black text-white">{m.title}</span><span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-400">{m.desc}</span></span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <AgentTeamCard />
 
-        {/* ── ⑥ 릴리스 타임라인 + ⑦ 온보딩 ── */}
-        <div className="relative grid grid-cols-1 gap-3 border-t border-white/[0.08] px-4 py-5 sm:px-6 lg:grid-cols-12">
-          <div className={`min-w-0 lg:col-span-5 ${card}`}>
+        {/* ── ⑤ 릴리스 타임라인 ── */}
+        <div className="relative border-t border-white/[0.08] px-4 py-5 sm:px-6">
+          <div className={`min-w-0 ${card}`}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] px-4 py-3.5">
               <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white"><Zap size={15} /></span><div><div className={eyebrow}>Releases</div><h3 className="text-[13.5px] font-black text-white">업데이트</h3></div></div>
               <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-black tabular-nums"><span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-300">누적 {PATCH_NOTES.length}</span>{patchGroups[0] && <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-emerald-300">v{patchGroups[0][0].replaceAll("-", ".")}</span>}</div>
@@ -501,24 +420,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
               ))}
             </ol>
             <button type="button" onClick={() => setPatchExpanded(!patchExpanded)} className="flex w-full items-center justify-center gap-1.5 border-t border-white/[0.08] py-2.5 text-[11.5px] font-black text-slate-400 transition hover:bg-white/[0.04] hover:text-white">{patchExpanded ? "접기" : "최근 배포 더 보기"}<ChevronDown size={14} className={`transition ${patchExpanded ? "rotate-180" : ""}`} /></button>
-          </div>
-
-          <div className={`min-w-0 lg:col-span-7 ${card}`}>
-            <div className="flex items-center gap-2 border-b border-white/[0.08] px-4 py-3.5"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-white"><BookOpen size={15} /></span><div><div className={eyebrow}>Onboarding</div><h3 className="text-[13.5px] font-black text-white">처음 쓰는 분을 위한 4단계</h3></div></div>
-            <div className="grid grid-cols-2 gap-1 p-2 sm:grid-cols-4">
-              {manuals.map((m, i) => { const Icon = m.icon; const open = openManual === m.id; return (
-                <button key={m.id} type="button" aria-expanded={open} onClick={() => setOpenManual(open ? "" : m.id)} className={`flex flex-col items-start gap-2 rounded-xl p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${open ? "bg-white text-slate-950" : "bg-white/[0.04] text-slate-200 hover:bg-white/[0.08]"}`}>
-                  <span className="flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10.5px] font-black ${open ? "bg-blue-600 text-white" : "bg-white/10 text-slate-300"}`}>{i + 1}</span><Icon size={15} className={open ? "text-blue-600" : "text-slate-400"} /></span>
-                  <span className="text-[12.5px] font-black leading-tight">{m.title}</span>
-                  <span className="text-[10.5px] font-semibold leading-4 text-slate-500">{m.summary}</span>
-                </button>
-              ); })}
-            </div>
-            {manuals.filter((m) => m.id === openManual).map((m) => (
-              <ol key={m.id} className="space-y-1.5 border-t border-white/[0.08] px-4 py-3.5">
-                {m.steps.map((step, i) => <li key={step} className="flex gap-2.5 text-[12.5px] font-semibold leading-5 text-slate-300"><span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-blue-600 font-mono text-[9px] font-black text-white">{i + 1}</span>{step}</li>)}
-              </ol>
-            ))}
           </div>
         </div>
 
