@@ -10,6 +10,7 @@ import {
   Camera,
   ChevronDown,
   Clock3,
+  Bot,
   Database,
   Radio,
   Route,
@@ -21,6 +22,8 @@ import {
 } from "lucide-react";
 import FeedbackBoard from "./FeedbackBoard";
 import { PATCH_NOTES } from "./patchNotes";
+import { AGENT_DEPTS } from "./agentTeam";
+import { AGENT_WORK_LOG } from "./agentWorkLog";
 import { countRows, selectAllRowsFast, selectRows } from "./supabase";
 import { getTeamVisits, kstDate, weekRange } from "./visits";
 
@@ -191,18 +194,32 @@ type Tone = "ok" | "warn" | "bad" | "idle";
 const card = "rounded-2xl border border-white/[0.08] bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
 const eyebrow = "text-[10px] font-black uppercase tracking-[0.16em] text-slate-500";
 
-function StatusPill({ tone, icon: Icon, label, value }: { tone: Tone; icon: LucideIcon; label: string; value: string }) {
+function StatusPill({ tone, icon: Icon, label, value, onClick }: { tone: Tone; icon: LucideIcon; label: string; value: string; onClick?: () => void }) {
   const dot = tone === "ok" ? "bg-emerald-400" : tone === "warn" ? "bg-amber-400" : tone === "bad" ? "bg-rose-500" : "bg-slate-500";
-  return (
-    <div className={`flex items-center gap-2.5 px-3 py-2 ${card}`}>
+  const cls = `flex items-center gap-2.5 px-3 py-2 ${card}`;
+  const inner = (
+    <>
       <span className="relative flex h-2.5 w-2.5 shrink-0">
         {tone !== "idle" && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 motion-reduce:hidden ${dot}`} />}
         <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${dot}`} />
       </span>
       <Icon size={14} className="shrink-0 text-slate-400" />
       <span className="min-w-0"><span className={`block ${eyebrow}`}>{label}</span><span className="block truncate text-[12.5px] font-black text-slate-100">{value}</span></span>
-    </div>
+    </>
   );
+  if (onClick) {
+    return <button type="button" onClick={onClick} className={`${cls} text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400`}>{inner}</button>;
+  }
+  return <div className={cls}>{inner}</div>;
+}
+
+// 홈 아래 "AI 에이전트 팀" 카드(#agent-team)로 부드럽게 스크롤 + 카드가 하이라이트하도록 이벤트 발송
+function focusAgentTeam() {
+  const el = document.getElementById("agent-team");
+  if (!el) return;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  el.dispatchEvent(new CustomEvent("agent-team:focus"));
 }
 
 function BigNumber({ value, className = "" }: { value: number; className?: string }) {
@@ -255,6 +272,12 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
   const weekNo = Math.ceil((((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7);
 
+  const agentPillValue = useMemo(() => {
+    const total = AGENT_DEPTS.reduce((n, d) => n + d.roles.length, 0);
+    const today = kstDate();
+    const active = new Set(AGENT_WORK_LOG.filter((w) => w.date === today).map((w) => w.agent)).size;
+    return active > 0 ? `직원 ${total}명 · 오늘 ${active}명 투입` : `직원 ${total}명 출근 중`;
+  }, []);
   const patchGroups = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const p of PATCH_NOTES) map.set(p.date, [...(map.get(p.date) || []), p.note]);
@@ -311,6 +334,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             <StatusPill tone={db.tone} icon={Database} label="데이터베이스" value={db.value} />
             <StatusPill tone={sheet.tone} icon={ShieldCheck} label="시트 동기화" value={sheet.value} />
             <StatusPill tone="ok" icon={Zap} label="최근 배포" value={patchGroups[0] ? `${patchGroups[0][0]} · ${patchGroups[0][1].length}건 반영` : "-"} />
+            <StatusPill tone="ok" icon={Bot} label="FIELD AI 에이전트 팀" value={agentPillValue} onClick={focusAgentTeam} />
             {/* 비용(AI 질문·문자) — 관제 덱 안에(2026-10-11), 누르면 일별·실시간·지금까지 내역 */}
             <CostTile />
           </div>
