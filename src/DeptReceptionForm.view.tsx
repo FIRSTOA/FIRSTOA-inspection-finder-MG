@@ -125,7 +125,6 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
           <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${picked ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}><Building2 size={12} aria-hidden />{picked ? "선택 완료" : "선택 필요"}</div>
-          <div className={`rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${isReady ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{readyCount}/{p.required.length} 필수 입력</div>
           {p.receiverLabel && <div className="max-w-56 truncate text-[11px] font-medium text-slate-400">{p.receiverLabel}</div>}
         </div>
       </div>
