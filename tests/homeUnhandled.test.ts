@@ -70,3 +70,14 @@ describe("홈 미처리 토탈", () => {
     expect(rowsForTab(rows, "물류")).toHaveLength(2);
   });
 });
+
+describe("mergeUnhandled 원격대기 7일 규칙", () => {
+  it("7일 지난 원격대기는 빼고 최근 원격대기·오래된 접수는 둔다", () => {
+    const rows = mergeUnhandled([
+      { ...rec("s1", "원격이관", "A", "2026-09-01"), status: "원격대기" },
+      { ...rec("s2", "원격이관", "A", "2026-10-15"), status: "원격대기" },
+      rec("s3", "원격이관", "A", "2026-09-01"),
+    ], [], today);
+    expect(rows.map((r) => r.receptionId).sort()).toEqual(["s2", "s3"]);
+  });
+});

@@ -3,7 +3,7 @@
 import type { ReceptionRow } from "./ReceptionBoard";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import { fetchOpenReceptions, type OpenReceptionRow } from "./deptReceptionApi";
-import { ageDays, isDeptType, weekCompletionRate } from "./deptReception";
+import { ageDays, isDeptType, isStaleRemote, weekCompletionRate } from "./deptReception";
 import { selectAllRows, selectRows, updateRows } from "./supabase";
 import { fieldTicketVendor } from "./ids";
 import { kstDate } from "./visits";
@@ -20,10 +20,11 @@ export function postponeOf(v: unknown): number {
 /** 현황판 행 + "일정 없음" 표시(복합기 AS 인데 연결 일정이 하나도 없음). ReceptionRow 에 같은 이름 optional 필드가 생기면 그대로 맞물린다. */
 export type BoardRow = ReceptionRow & { noTicket?: boolean };
 
-export function toBoardRows(rows: OpenReceptionRow[], noTicketIds?: ReadonlySet<string>): BoardRow[] {
+export function toBoardRows(rows: OpenReceptionRow[], noTicketIds?: ReadonlySet<string>, today: string = kstDate()): BoardRow[] {
   const out: BoardRow[] = [];
   for (const r of rows) {
     if (!KNOWN_TYPES.has(r.type)) continue;
+    if (isStaleRemote(r, today)) continue; // 7일 지난 원격대기 = 원격팀 처리로 봄
     const dept = isDeptType(r.type);
     const meta = r.remote_meta || {};
     const schedule = dept ? String(meta.schedule_date || "") : "";
@@ -149,11 +150,11 @@ export async function loadBoardData(today: string = kstDate()): Promise<BoardDat
       syncError = `접수와 일정 대조 실패(숫자에 완료된 건이 섞였을 수 있음): ${e instanceof Error ? e.message : String(e)}`;
     }
   }
-  const stillOpen = open.filter((r) => !doneSet.has(r.id));
+  const stillOpen = open.filter((r) => !doneSet.has(r.id) && !isStaleRemote(r, today));
   const sources: Record<string, OpenReceptionRow> = {};
   for (const r of stillOpen) sources[r.id] = r;
   return {
-    rows: toBoardRows(stillOpen, noTicketIds),
+    rows: toBoardRows(stillOpen, noTicketIds, today),
     sources,
     todayCount: week.filter((r) => String(r.receipt_date || "").slice(0, 10) === today).length,
     weekDoneRate: rate.total ? Math.round(rate.rate * 100) : null,

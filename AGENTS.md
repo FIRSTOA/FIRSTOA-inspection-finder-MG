@@ -68,3 +68,4 @@ Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 
 - 2026-10-19 (Claude Code) 피드백 6차: src/datePicker.ts openNativePicker(예정일 4곳), DeptCalendarPanel 시간 칸 제거.
 - 2026-10-19 (Claude Code) 피드백 7차: 작성자 select 제거(SSO 고정 시) 5곳, OverduePanel 종류 칩·물류 안내·색(+src/overdueLogic.ts).
 - 2026-10-19 (Claude Code) 홈 미처리 통합: src/homeUnhandled.ts(mergeUnhandled: 열린 접수 6종 + 물류 일정 전부 + receptionId 없는 AS 일정) + HomeUnhandledPanel.tsx, Home.tsx 2줄. OverduePanel.tsx 는 미사용으로 남음.
+- 2026-10-19 (Claude Code) 원격대기 규칙: deptReception.isStaleRemote(7일 초과 제외) → receptionBoardData·homeUnhandled. 실행 대기 SQL supabase/remote-receptions-close-20261019.sql(54건 일괄 완료).

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEPT_FIELD_CHIPS, DEPT_SHEET_CATEGORY, aggregateVendor, ageDays, boardBuckets, buildDeptReceptionRow, buildDeptSheetPayload,
-  buildDeptTitle, defaultHandler, deptDupKey, deptListState, deptMissing, deptShort, isDeptType, normalizeRegion,
+  buildDeptTitle, defaultHandler, deptDupKey, deptListState, deptMissing, deptShort, isDeptType, isStaleRemote, normalizeRegion,
   scheduledOverdue, weekCompletionRate, type DeptReceptionInput,
 } from "../src/deptReception";
 
@@ -218,5 +218,16 @@ describe("API (fetch 모킹)", () => {
     const { sendDeptReceptionKakao } = await import("../src/deptReceptionApi");
     expect(await sendDeptReceptionKakao("영업팀", "본문")).toEqual({ kakao: "sent", room: "영업방" });
     expect(JSON.parse(bodies[0])).toEqual({ room: "영업방", text: "본문" });
+  });
+});
+
+describe("isStaleRemote", () => {
+  it("원격대기가 접수일 7일을 넘으면 true, 7일 이내면 false", () => {
+    expect(isStaleRemote({ type: "원격이관", status: "원격대기", receipt_date: "2026-10-12" }, "2026-10-20")).toBe(true);
+    expect(isStaleRemote({ type: "원격이관", status: "원격대기", receipt_date: "2026-10-13" }, "2026-10-20")).toBe(false);
+  });
+  it("다른 종류·다른 상태는 오래돼도 false", () => {
+    expect(isStaleRemote({ type: "원격이관", status: "접수", receipt_date: "2026-08-25" }, "2026-10-20")).toBe(false);
+    expect(isStaleRemote({ type: "IT", status: "원격대기", receipt_date: "2026-08-25" }, "2026-10-20")).toBe(false);
   });
 });

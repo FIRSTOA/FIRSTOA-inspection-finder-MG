@@ -2,7 +2,7 @@
  * 홈 "미처리 일정" 칸의 순수 로직 — 접수(6종) 미처리 + 일정(as_tickets) 미처리를 한 목록으로 (2026-10-19).
  * 중복 규칙: AS 일정 중 receptionId 가 열린 접수에 이미 있으면 접수 행으로만 센다. 물류 일정은 전부 넣는다.
  */
-import { normalizeRegion } from "./deptReception";
+import { isStaleRemote, normalizeRegion } from "./deptReception";
 import { overdueKind } from "./overdueLogic";
 
 export type UnhandledKind = "복합기 AS" | "원격이관" | "IT" | "경영지원" | "운영지원" | "영업팀" | "AS일정" | "물류";
@@ -62,6 +62,7 @@ export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInpu
   const out: UnhandledRow[] = [];
   const openIds = new Set<string>();
   for (const r of receptions) {
+    if (isStaleRemote(r, today)) continue; // 7일 지난 원격대기 = 원격팀 처리로 봄
     openIds.add(String(r.id));
     const kind = (FIELD_TYPES.has(r.type) || DEPT_TEAM[r.type] ? r.type : "복합기 AS") as UnhandledKind;
     const date = String(r.receipt_date || r.created_at || "").slice(0, 10);

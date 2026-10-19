@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "16a3c6cb97",
+    "agent": "developer",
+    "summary": "홈 미처리 칸 통합: 접수 6종(경영·운영·영업 포함) + 물류 + 접수 없는 AS 일정을 한 칸에(탭 전체/A~E/경영/운영/영업/물류)"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "06c57053b3",
     "agent": "developer",
     "summary": "홈 미처리 일정 칸: 종류 칩(전체/AS/물류), 물류는 네이버 캘린더에서 완료 안내, 경과일 3일/7일 색, 필터 기준 건수"

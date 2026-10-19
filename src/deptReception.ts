@@ -342,6 +342,13 @@ export function ageDays(receiptDate: string, today: string = kstDate()): number 
   return Math.max(0, Math.round((ymdMs(today.slice(0, 10)) - ymdMs(receiptDate.slice(0, 10))) / 86_400_000));
 }
 
+/** 원격팀은 FIELD 처리 단추를 안 쓰고 자기 시트에서 끝낸다 — 접수일 7일이 지난 '원격대기'는 원격팀 처리(확인 안 됨)로 보고 미처리에서 뺀다. */
+export function isStaleRemote(row: { type?: string | null; status?: string | null; receipt_date?: string | null; created_at?: string | null }, today: string = kstDate()): boolean {
+  if (row.type !== "원격이관" || row.status !== "원격대기") return false;
+  const d = String(row.receipt_date || row.created_at || "").slice(0, 10);
+  return isYmd(d) && isYmd(today) && ageDays(d, today) > 7;
+}
+
 type BoardRow = { status?: string | null; receipt_date?: string; created_at?: string };
 /** 미처리 보드 칸 나누기 — 칸 안은 오래된 순 */
 export function boardBuckets<T extends BoardRow>(rows: T[]): Record<DeptListState, T[]> {
