@@ -10,7 +10,7 @@ import type { OpenReceptionRow } from "../src/deptReceptionApi";
 
 const base = { created_at: "2026-10-01T00:00:00Z", route: "", region: "A", grade: "", lease_no: "", title: "", symptom: "", sheet_row: null };
 const openRows: OpenReceptionRow[] = [
-  { ...base, id: "d1", receipt_date: "2026-10-05", author: "김수인", type: "영업지원", vendor: "가나상사", field: "해지문의", status: "접수", remote_meta: { handler: "박영업", schedule_date: "2026-10-10", postpone_count: "2" } },
+  { ...base, id: "d1", receipt_date: "2026-10-05", author: "김수인", type: "영업팀", vendor: "가나상사", field: "해지문의", status: "접수", remote_meta: { handler: "박영업", schedule_date: "2026-10-10", postpone_count: "2" } },
   { ...base, id: "f1", receipt_date: "2026-10-18", author: "박민", type: "IT", vendor: "다라전자", field: "", title: "PC 느림", status: "진행중", remote_meta: { handler: "무시돼야함", schedule_date: "2026-10-01" } },
   { ...base, id: "r1", receipt_date: "2026-10-19", author: "이원격", type: "원격이관", vendor: "마바", status: "원격대기", remote_meta: null },
   { ...base, id: "x1", receipt_date: "2026-10-19", author: "?", type: "알수없음", vendor: "?", status: "접수" },
@@ -73,9 +73,9 @@ describe("현황판 감싸개", () => {
 
   it("홈 요약: 종류별 건수와 가장 오래된 건", () => {
     const s = summarizeForHome(toBoardRows(openRows), "2026-10-19");
-    expect(s.counts["영업지원"]).toBe(1);
+    expect(s.counts["영업팀"]).toBe(1);
     expect(s.counts["복합기 AS"]).toBe(0);
-    expect(s.oldest).toEqual({ vendor: "가나상사", type: "영업지원", days: 14 });
+    expect(s.oldest).toEqual({ vendor: "가나상사", type: "영업팀", days: 14 });
     expect(summarizeForHome([], "2026-10-19").oldest).toBeNull();
   });
 
@@ -86,7 +86,7 @@ describe("현황판 감싸개", () => {
     expect(summarizeForHome([], "2026-10-19").over7).toBe(0);
   });
 
-  it("loadScheduleOverdue: OverduePanel 과 같은 조건(오늘 이전·180일·완료 제외·매월점검 제외·3000건) + 업체명 정리", async () => {
+  it("loadScheduleOverdue: 물류 미처리 조건(오늘 이전·180일·완료 제외·물류·납품철수교체휴가교육만·3000건) + 업체명 정리", async () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       calls.push(String(url));
@@ -101,7 +101,8 @@ describe("현황판 감싸개", () => {
     expect(u).toContain(`date=gte.${daysBefore("2026-10-19", 180)}`);
     expect(daysBefore("2026-10-19", 180)).toBe("2026-04-22");
     expect(u).toContain(`status=neq.${encodeURIComponent("완료")}`);
-    expect(u).toContain(`scheduleType=neq.${encodeURIComponent("매월점검")}`);
+    expect(u).toContain(`scheduleType=in.(${encodeURIComponent('"물류"')},${encodeURIComponent('"납품철수교체휴가교육"')})`);
+    expect(u).not.toContain(encodeURIComponent("매월점검"));
     expect(u).toContain("order=date.desc,time.asc&limit=3000");
     expect(rows[0]).toMatchObject({ id: "7", team: "B", date: "2026-10-10", status: "접수", scheduleType: "물류" });
     expect(rows[0].time).toBeUndefined();
@@ -115,7 +116,7 @@ describe("현황판 감싸개", () => {
     const s = summarizeForHome(toBoardRows(openRows), "2026-10-19", sched);
     expect(s.scheduleOverdue).toBe(2);
     expect(summarizeForHome([], "2026-10-19").scheduleOverdue).toBe(0);
-    // 접수 3건(영업지원·IT·원격) + 일정 2건; 지원 꺼지면 영업지원 1건 빠짐
+    // 접수 3건(영업팀·IT·원격) + 일정 2건; 지원 꺼지면 영업팀 1건 빠짐
     expect(unhandledTotal(s.counts, 2, true)).toBe(5);
     expect(unhandledTotal(s.counts, 2, false)).toBe(4);
     expect(unhandledTotal(null, 0, true)).toBe(0);

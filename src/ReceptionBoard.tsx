@@ -2,9 +2,10 @@
 // props: rows(열린 건) · today(YYYY-MM-DD) · onSelectType · renderActions(row) · loading · error · todayCount · weekDoneRate(0~100, 없으면 null)
 //        · selectedType(그 종류 열만 넓게) · deptEnabled(기본 true, false 면 지원 3종 숨김)
 //        · compact(오른쪽 기둥용 압축형: 작은 타일 + 세로 스택 + 열마다 접기)
-//        · scheduleRows(일정리스트 미처리 일정 → "일정 미처리" 열, 현장 3종 뒤) · onOpenSchedule(일정리스트로 가는 단추).
+//        · scheduleRows(물류 미처리 → "물류 미처리" 열, 현장 3종 뒤; 숫자 띠 타일을 누르면 그 열만 넓게, 다시 누르면 전체 — 내부 상태)
+//        · onOpenSchedule(일정리스트로 가는 단추 + 카드 자체 클릭).
 // 경과 3일↑ 노랑, 7일↑ 빨강, 예정일 지난 건은 빨간 테두리. 열마다 20장까지만 먼저 보이고 "더 보기"로 펼친다.
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { AlertCircle, CalendarClock, CalendarX2, Check, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 
@@ -75,8 +76,11 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
   const open = rows.filter((r) => (OPEN as readonly string[]).includes(r.status));
+  const [scheduleOnly, setScheduleOnly] = useState(false); // 물류 미처리 열만 넓게 보기(내부 상태)
   const types = RECEPTION_TYPES.filter((m) => deptEnabled || m.group === "현장");
-  const columns = selectedType ? types.filter((m) => m.type === selectedType) : types;
+  const focusSchedule = scheduleOnly && scheduleRows !== undefined && !selectedType;
+  const columns = focusSchedule ? [] : selectedType ? types.filter((m) => m.type === selectedType) : types;
+  const selectType = (t: ReceptionType) => { setScheduleOnly(false); onSelectType(t); };
   const sortOld = (a: ReceptionRow, b: ReceptionRow) => a.receipt_date.localeCompare(b.receipt_date) || a.id.localeCompare(b.id);
   const isLate = (r: ReceptionRow) => Boolean(r.scheduled_date) && String(r.scheduled_date).slice(0, 10) < today;
   const byType = (t: ReceptionType) => open.filter((r) => r.type === t).sort(sortOld);
@@ -85,9 +89,16 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const todayN = todayCount ?? rows.filter((r) => r.receipt_date.slice(0, 10) === today).length;
   const hasData = rows.length > 0;
   // 일정 미처리 열: scheduleRows 가 넘어오고 종류 하나만 보는 중이 아닐 때만
-  const showSchedule = scheduleRows !== undefined && !selectedType;
+  const hasSchedule = scheduleRows !== undefined; // 숫자 띠 타일은 선택과 무관하게 항상 보인다
+  const showSchedule = hasSchedule && !selectedType; // 아래 열만 선택 시 숨김
+  // 물류 타일: 종류가 골라진 상태면 그 선택을 풀고(같은 종류 재호출=해제) 물류 열만 본다
+  const toggleSchedule = () => {
+    if (selectedType) { onSelectType(selectedType); setScheduleOnly(true); return; }
+    setScheduleOnly((v) => !v);
+  };
   const schedAll = [...(scheduleRows ?? [])].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   const openCount = open.filter((r) => types.some((m) => m.type === r.type)).length;
+  const lastFieldTileType = types.filter((m) => m.group === "현장").at(-1)?.type; // 타일 띠는 선택과 무관
   const lastFieldType = columns.filter((m) => m.group === "현장").at(-1)?.type;
 
   if (loading && !hasData) return <div role="status" className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-8 text-sm font-bold text-slate-500"><Loader2 size={16} className="animate-spin" />미처리 접수를 불러오는 중입니다.</div>;
@@ -138,7 +149,8 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const renderScheduleCard = (s: ScheduleRow) => {
     const age = daysBetween(s.date, today);
     return (
-      <li key={s.id} className="rounded-lg border border-slate-300 bg-white px-2 py-1.5">
+      <li key={s.id} {...(onOpenSchedule ? { role: "button", tabIndex: 0, onClick: onOpenSchedule, onKeyDown: (e: KeyboardEvent<HTMLLIElement>) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenSchedule(); } } } : {})}
+        className={`rounded-lg border border-slate-300 bg-white px-2 py-1.5 ${onOpenSchedule ? "cursor-pointer transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-900" : ""}`}>
         <div className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-[12px] font-black text-slate-900">{s.vendor || "업체 미정"}</span>
           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums ${ageBadge(age)}`}>{age === 0 ? "오늘" : `${age}일`}</span>
@@ -209,7 +221,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   );
 
   // ---- 숫자 띠 ----
-  const tileCount = types.length + (showSchedule ? 1 : 0);
+  const tileCount = types.length + (hasSchedule ? 1 : 0);
   const lgCols = tileCount >= 7 ? "lg:grid-cols-7" : tileCount === 6 ? "lg:grid-cols-6" : tileCount === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3";
   const stats = compact ? (
     <div className="grid grid-cols-2 gap-1.5 border-b border-slate-200 bg-slate-50 p-2 min-[430px]:grid-cols-3">
@@ -217,17 +229,17 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
         const Icon = m.icon;
         const on = selectedType === m.type;
         return (
-          <button key={m.type} type="button" aria-pressed={on} onClick={() => onSelectType(m.type)} className={`min-h-11 rounded-lg border px-2 py-1 text-left transition hover:border-slate-400 ${on ? "border-slate-900 bg-white ring-2 ring-slate-900/20" : "border-slate-200 bg-white"}`}>
+          <button key={m.type} type="button" aria-pressed={on} onClick={() => selectType(m.type)} className={`min-h-11 rounded-lg border px-2 py-1 text-left transition hover:border-slate-400 ${on ? "border-slate-900 bg-white ring-2 ring-slate-900/20" : "border-slate-200 bg-white"}`}>
             <div className="flex items-center gap-1 text-[11px] font-black text-slate-800"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${m.dot}`} aria-hidden /><Icon size={12} aria-hidden /><span className="truncate">{m.label}</span></div>
             <div className="mt-0.5 whitespace-nowrap text-[10px] font-bold tabular-nums text-slate-500">접수 {countOf(m.type, "접수")}·진행 {countOf(m.type, "진행중")}·보류 {countOf(m.type, "보류")}</div>
           </button>
         );
       })}
-      {showSchedule && (
-        <div className="flex min-h-11 flex-col justify-center rounded-lg border border-slate-300 bg-white px-2 py-1">
-          <div className="flex items-center gap-1 text-[11px] font-black text-slate-800"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500" aria-hidden /><CalendarX2 size={12} aria-hidden /><span className="truncate">일정 미처리</span></div>
+      {hasSchedule && (
+        <button type="button" aria-pressed={focusSchedule} onClick={toggleSchedule} className={`flex min-h-11 flex-col justify-center rounded-lg border bg-white px-2 py-1 text-left transition hover:border-slate-400 ${focusSchedule ? "border-slate-900 ring-2 ring-slate-900/20" : "border-slate-300"}`}>
+          <div className="flex items-center gap-1 text-[11px] font-black text-slate-800"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500" aria-hidden /><CalendarX2 size={12} aria-hidden /><span className="truncate">물류 미처리</span></div>
           <div className={`mt-0.5 text-[10px] font-bold tabular-nums ${schedAll.length > 0 ? "text-slate-700" : "text-slate-400"}`}>{schedAll.length}건</div>
-        </div>
+        </button>
       )}
     </div>
   ) : (
@@ -238,13 +250,13 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
         const divider = deptEnabled && m.group === "지원" && types[i - 1]?.group === "현장" ? "lg:border-l-4 lg:border-l-slate-300" : "";
         return (
           <div key={m.type} className="contents">
-            {showSchedule && m.type === lastFieldType && (
-              <div className="min-h-11 rounded-xl border border-slate-300 bg-white p-2.5 text-left">
-                <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700"><CalendarX2 size={12} aria-hidden />일정 미처리</div>
+            {hasSchedule && m.type === lastFieldTileType && (
+              <button type="button" aria-pressed={focusSchedule} onClick={toggleSchedule} className={`min-h-11 rounded-xl border bg-white p-2.5 text-left transition hover:border-slate-400 ${focusSchedule ? "border-slate-900 ring-2 ring-slate-900/20" : "border-slate-300"}`}>
+                <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700"><CalendarX2 size={12} aria-hidden />물류 미처리</div>
                 <div className={`mt-1.5 text-lg font-black tabular-nums ${schedAll.length > 0 ? "text-slate-900" : "text-slate-300"}`}>{schedAll.length}<span className="ml-1 text-[10px] font-bold text-slate-400">건</span></div>
-              </div>
+              </button>
             )}
-            <button type="button" aria-pressed={on} onClick={() => onSelectType(m.type)} className={`min-h-11 rounded-xl border p-2.5 text-left transition hover:border-slate-400 ${divider} ${on ? "border-slate-900 bg-white ring-2 ring-slate-900/20" : "border-slate-200 bg-white"}`}>
+            <button type="button" aria-pressed={on} onClick={() => selectType(m.type)} className={`min-h-11 rounded-xl border p-2.5 text-left transition hover:border-slate-400 ${divider} ${on ? "border-slate-900 bg-white ring-2 ring-slate-900/20" : "border-slate-200 bg-white"}`}>
               <div className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-black ${m.badge}`}><Icon size={12} aria-hidden />{m.label}</div>
               <div className="mt-1.5 grid grid-cols-3 text-center">
                 {STAT_COLS.map((s) => (
@@ -288,12 +300,12 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
       );
     };
     const scheduleItem = () =>
-      stackItem(SCHEDULE_KEY, "일정 미처리(물류·AS…)", "bg-slate-500", schedAll.length, scheduleList(schedShown, schedHidden), scheduleButton ? <div className="px-2 pb-2">{scheduleButton}</div> : undefined);
+      stackItem(SCHEDULE_KEY, "물류 미처리", "bg-slate-500", schedAll.length, scheduleList(schedShown, schedHidden), scheduleButton ? <div className="px-2 pb-2">{scheduleButton}</div> : undefined);
     body = (
       <div className="flex flex-col gap-2 p-2">
         {columns.map((m) => (
           <div key={m.type} className="contents">
-            {stackItem(m.type, m.label, m.bar, byType(m.type).length, typeBody(m.type), undefined, selectedType ? undefined : () => onSelectType(m.type))}
+            {stackItem(m.type, m.label, m.bar, byType(m.type).length, typeBody(m.type), undefined, selectedType ? undefined : () => selectType(m.type))}
             {showSchedule && m.type === lastFieldType && scheduleItem()}
           </div>
         ))}
@@ -302,8 +314,22 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     );
   } else {
     // 폰은 세로 쌓기, md 이상은 가로 스크롤(선택 시 그 열만 넓게)
+    const scheduleColumn = (wide: boolean) => (
+      <div className={wide ? "md:w-full" : "md:w-72 md:shrink-0"}>
+        <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-50">
+          <div className="h-1 bg-slate-500" />
+          <div className="flex min-h-11 items-center justify-between px-3">
+            <span className="text-[13px] font-black text-slate-800">물류 미처리</span>
+            <span className="text-[11px] font-black tabular-nums text-slate-400">{schedAll.length}건</span>
+          </div>
+          {scheduleButton && <div className="px-2 pb-2">{scheduleButton}</div>}
+          {schedAll.length === 0 ? <div className="px-3 pb-3 text-[12px] font-black text-emerald-600">없음 ✓</div> : scheduleList(schedShown, schedHidden)}
+        </div>
+      </div>
+    );
     body = (
       <div className="flex flex-col gap-3 p-3 md:flex-row md:overflow-x-auto">
+        {focusSchedule && scheduleColumn(true)}
         {columns.map((m, ci) => {
           const all = byType(m.type);
           const prev = columns[ci - 1];
@@ -313,26 +339,14 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
               <div className={selectedType ? "md:w-full" : "md:w-72 md:shrink-0"}>
                 <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                   <div className={`h-1 ${m.bar}`} />
-                  <button type="button" onClick={() => onSelectType(m.type)} className="flex min-h-11 w-full items-center justify-between px-3 text-left">
+                  <button type="button" onClick={() => selectType(m.type)} className="flex min-h-11 w-full items-center justify-between px-3 text-left">
                     <span className="text-[13px] font-black text-slate-800">{m.label}</span>
                     <span className="text-[11px] font-black tabular-nums text-slate-400">{all.length}건</span>
                   </button>
                   {all.length === 0 ? <div className="px-3 pb-3 text-[12px] font-black text-emerald-600">없음 ✓</div> : typeBody(m.type)}
                 </div>
               </div>
-              {showSchedule && m.type === lastFieldType && (
-                <div className="md:w-72 md:shrink-0">
-                  <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-50">
-                    <div className="h-1 bg-slate-500" />
-                    <div className="flex min-h-11 items-center justify-between px-3">
-                      <span className="text-[13px] font-black text-slate-800">일정 미처리(물류·AS…)</span>
-                      <span className="text-[11px] font-black tabular-nums text-slate-400">{schedAll.length}건</span>
-                    </div>
-                    {scheduleButton && <div className="px-2 pb-2">{scheduleButton}</div>}
-                    {schedAll.length === 0 ? <div className="px-3 pb-3 text-[12px] font-black text-emerald-600">없음 ✓</div> : scheduleList(schedShown, schedHidden)}
-                  </div>
-                </div>
-              )}
+              {showSchedule && m.type === lastFieldType && scheduleColumn(false)}
             </div>
           );
         })}

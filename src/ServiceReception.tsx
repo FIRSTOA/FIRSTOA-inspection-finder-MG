@@ -30,6 +30,10 @@ import DeptReception from "./DeptReceptionScreen";
 import DeptReceptionDetail from "./DeptReceptionDetail";
 import DeptActionBar from "./DeptActionBar";
 import { deptListState, deptShort, isDeptType, type DeptType } from "./deptReception";
+import ReceptionListFilters from "./ReceptionListFilters";
+
+type ListTypeFilter = "전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인" | DeptType; // 접수리스트 종류 필터(2026-10-19 "지원" 묶음 → 부서 3종 각각)
+const LIST_TYPE_FILTERS: readonly ListTypeFilter[] = ["전체", "복합기 AS", "IT", "원격이관", "주소확인", "경영지원", "운영지원", "영업팀"];
 
 type ReceiveRoute = "카카오" | "전화";
 type ReceiveType = "원격이관" | "복합기 AS" | "IT";
@@ -233,7 +237,7 @@ const TYPE_TONE: Record<string, string> = {
   "복합기 AS": "bg-blue-50 text-blue-700",
   IT: "bg-cyan-50 text-cyan-700",
   "원격이관": "bg-violet-50 text-violet-700",
-  경영지원: "bg-fuchsia-50 text-fuchsia-700", 운영지원: "bg-emerald-50 text-emerald-700", 영업지원: "bg-orange-50 text-orange-700", // 지원 3종(ReceptionTypePicker 색과 같음)
+  경영지원: "bg-fuchsia-50 text-fuchsia-700", 운영지원: "bg-emerald-50 text-emerald-700", 영업팀: "bg-orange-50 text-orange-700", // 지원 3종(ReceptionTypePicker 색과 같음)
 };
 
 type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string; 주소: string };
@@ -440,7 +444,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   const [listPeriod, setListPeriod] = useState<ListPeriod>("day");
   const [listRows, setListRows] = useState<ServiceReceptionRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
-  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인" | "지원" | DeptType>("전체");
+  const [listFilter, setListFilter] = useState<ListTypeFilter>("전체");
   const [openRowId, setOpenRowId] = useState("");
   // 듀얼 레이아웃: 좌측 접수폼(복합기 AS/원격/IT 탭) + 우측 접수 리스트 상시
   const [page, setPage] = useState<"copier" | "remote" | "it" | "mgmt" | "ops" | "sales">(() => {
@@ -683,7 +687,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     document.addEventListener("visibilitychange", refresh);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [listDate, listPeriod, loadList, loadRemoteQueue]);
-  const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT", mgmt: "경영지원", ops: "운영지원", sales: "영업지원" } as const;
+  const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT", mgmt: "경영지원", ops: "운영지원", sales: "영업팀" } as const;
   const goPage = (next: keyof typeof PAGE_TYPE) => {
     setPage(next);
     setActionResult("");
@@ -1383,15 +1387,6 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   };
 
   // ---- 통계 ----
-  const counts = useMemo(() => ({
-    total: listRows.length,
-    copier: listRows.filter((r) => r.type === "복합기 AS").length,
-    it: listRows.filter((r) => r.type === "IT").length,
-    remote: listRows.filter((r) => r.type === "원격이관").length,
-    dept: listRows.filter((r) => isDeptType(r.type)).length,
-    remoteWaiting: listRows.filter((r) => r.status === "원격대기").length,
-    addr: listRows.filter((r) => r.address_changed && !r.address_resolved_at).length,
-  }), [listRows]);
   const byAuthor = useMemo(() => {
     const map = new Map<string, { total: number; copier: number; it: number; remote: number; dept: number }>();
     for (const r of listRows) {
@@ -1412,6 +1407,20 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     const carry = remoteQueue.filter((r) => !seen.has(r.id) && !(r.status === "원격완료" || r.status === "완료" || (r.remote_meta?.result || r.remote_meta?.end)));
     return [...carry, ...listRows];
   }, [listRows, remoteQueue]);
+  // 종류 칩 — 상태 칩(statusCounts)과 같은 집합(mergedRows: 날짜 + 이월 미완료 원격·IT)을 센다(2026-10-19 "전체 26 vs 51" 어긋남).
+  // 머리 "오늘 접수 N건"·기간 "· N건" 은 날짜 기준(listRows.length) — 이월 건을 섞지 않는다.
+  const counts = useMemo(() => ({
+    total: mergedRows.length,
+    mgmt: mergedRows.filter((r) => r.type === "경영지원").length,
+    ops: mergedRows.filter((r) => r.type === "운영지원").length,
+    sales: mergedRows.filter((r) => r.type === "영업팀").length,
+    copier: mergedRows.filter((r) => r.type === "복합기 AS").length,
+    it: mergedRows.filter((r) => r.type === "IT").length,
+    remote: mergedRows.filter((r) => r.type === "원격이관").length,
+    dept: mergedRows.filter((r) => isDeptType(r.type)).length,
+    remoteWaiting: mergedRows.filter((r) => r.status === "원격대기").length,
+    addr: mergedRows.filter((r) => r.address_changed && !r.address_resolved_at).length,
+  }), [mergedRows]);
   // 리스트 표시용 상태 (필터·카운트 공용)
   const listStateOf = useCallback((r: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
     if (isDeptType(r.type)) return deptListState(r); // 지원 3종: 보류→진행중, 취소→완료
@@ -1423,7 +1432,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     return r.status === "완료" ? "완료" : r.status === "진행중" ? "진행중" : "접수";
   }, []);
   const typeFilteredRows = useMemo(
-    () => (listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : listFilter === "지원" ? mergedRows.filter((r) => isDeptType(r.type)) : mergedRows.filter((r) => r.type === listFilter)),
+    () => (listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : mergedRows.filter((r) => r.type === listFilter)),
     [mergedRows, listFilter],
   );
   const statusCounts = useMemo(() => {
@@ -1595,7 +1604,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.25)]" />접수 가능
           </span>
           <span className="text-[11px] font-bold text-slate-400">
-            {isToday ? "오늘" : listDate.slice(5)} 접수 <b className="text-white">{counts.total}</b>건
+            {isToday ? "오늘" : listDate.slice(5)} 접수 <b className="text-white">{listRows.length}</b>건
             {remoteQueue.some((row) => remoteStateOf(row) === "진행중") ? <> · 원격 처리중 <b className="text-white">{remoteQueue.filter((row) => remoteStateOf(row) === "진행중").length}</b></> : null}
           </span>
           {counts.addr > 0 && <span className="rounded bg-amber-400/15 px-2 py-0.5 text-[11px] font-black text-amber-300">📍 주소확인 {counts.addr}</span>}
@@ -1995,17 +2004,19 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
 
         {/* ==== 우: 접수 리스트 / 미처리 현황 (상시) ==== */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
-          <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-slate-100 p-1" role="tablist" aria-label="오른쪽 보기">
+          <div className="border-b border-slate-200 bg-slate-50 p-2">
+          <div className="grid h-9 grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="tablist" aria-label="오른쪽 보기">
             {([["list", "접수리스트"], ["board", "미처리 현황"]] as const).map(([v, label]) => {
               const on = rightView === v;
               const n = v === "board" ? unhandledTotal(boardCounts, scheduleCount, deptEnabled) : 0;
               return (
                 <button key={v} type="button" role="tab" aria-selected={on} onClick={() => setRightView(v)}
-                  className={`min-h-10 rounded-lg px-3 text-[12.5px] font-black transition ${on ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
-                  {label}{v === "board" && <span className={`ml-1.5 font-mono tabular-nums ${n ? "text-rose-600" : "text-slate-400"}`}>{n}</span>}
+                  className={`flex items-center justify-center px-3 text-[12px] font-bold transition ${on ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+                  {label}{v === "board" && <span className={`ml-1.5 font-mono tabular-nums ${on ? (n ? "text-rose-300" : "text-white/70") : n ? "text-rose-600" : "text-slate-400"}`}>{n}</span>}
                 </button>
               );
             })}
+          </div>
           </div>
           {/* 현황판은 늘 붙여 둔다(숨김) — 종류 선택기 배지·N 숫자가 접수리스트 보기에서도 살아 있게 */}
           <div className={rightView === "board" ? "p-2" : "hidden"}>
@@ -2015,42 +2026,32 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
               renderDeptActions={(_r, ctx) => (ctx.source ? <DeptActionBar row={ctx.source} compact author={author} onChanged={() => { ctx.onDone(); void loadList(listDate, listPeriod, true); }} /> : null)} />
           </div>
           <div className={rightView === "list" ? "" : "hidden"}>
-          <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-4 py-3">
-            <div>
-              <h3 className="text-sm font-black text-white lg:text-[15px]">접수 리스트</h3>
-              <p className="text-[11px] font-semibold text-slate-400">행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 — 미완료 원격·IT는 날짜와 무관하게 위로 이월</p>
-            </div>
-            <button type="button" onClick={() => { void loadList(listDate, listPeriod); void loadRemoteQueue(); }} className="rounded-full bg-white/10 px-3.5 py-1.5 text-[11px] font-black text-slate-200 transition hover:bg-white/20">새로고침</button>
+          <div className="flex items-center gap-2 bg-[#1E252F] px-4 py-3">
+            <h3 className="text-sm font-black text-white lg:text-[15px]">접수 리스트</h3>
+            <span tabIndex={0} role="img" aria-label="안내: 행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." title="행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." className="cursor-help text-[13px] font-black text-slate-400 hover:text-slate-200">ⓘ</span>
           </div>
-          <div className="border-b border-slate-200 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1">
-                <button type="button" aria-label="이전 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, -1) : listPeriod === "week" ? shiftDate(listDate, -7) : shiftMonths(listDate, listPeriod === "month" ? -1 : -3))} className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50"><ChevronLeft size={16} /></button>
-                <input type="date" value={listDate} onChange={(e) => e.target.value && setListDate(e.target.value)} className="rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                <button type="button" aria-label="다음 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, 1) : listPeriod === "week" ? shiftDate(listDate, 7) : shiftMonths(listDate, listPeriod === "month" ? 1 : 3))} className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50"><ChevronRight size={16} /></button>
-                {!isToday && <button type="button" onClick={() => setListDate(kstDate())} className="rounded-full bg-slate-900 px-3.5 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">오늘</button>}
+          <div className="border-b border-slate-200 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <button type="button" aria-label="이전 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, -1) : listPeriod === "week" ? shiftDate(listDate, -7) : shiftMonths(listDate, listPeriod === "month" ? -1 : -3))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"><ChevronLeft size={16} /></button>
+                <input type="date" value={listDate} onChange={(e) => e.target.value && setListDate(e.target.value)} className="h-9 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-700 outline-none transition focus:border-slate-700" />
+                <button type="button" aria-label="다음 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, 1) : listPeriod === "week" ? shiftDate(listDate, 7) : shiftMonths(listDate, listPeriod === "month" ? 1 : 3))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"><ChevronRight size={16} /></button>
+                {!isToday && <button type="button" onClick={() => setListDate(kstDate())} className="h-9 rounded-lg bg-slate-900 px-3 text-[12px] font-bold text-white transition hover:bg-slate-800">오늘</button>}
               </div>
-              <div className="grid grid-cols-4 rounded-full bg-slate-100 p-1 sm:w-72">
-                {(Object.keys(PERIOD_LABEL) as ListPeriod[]).map((p) => (
-                  <button key={p} type="button" onClick={() => setListPeriod(p)} className={`rounded-full px-2 py-1.5 text-[11px] font-black transition ${listPeriod === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{PERIOD_LABEL[p]}</button>
-                ))}
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <div role="group" aria-label="조회 기간" className="grid h-9 min-w-0 flex-1 grid-cols-4 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:max-w-64">
+                  {(Object.keys(PERIOD_LABEL) as ListPeriod[]).map((p) => (
+                    <button key={p} type="button" aria-pressed={listPeriod === p} onClick={() => setListPeriod(p)} className={`px-2 text-[12px] font-bold transition ${listPeriod === p ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>{PERIOD_LABEL[p]}</button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => { void loadList(listDate, listPeriod); void loadRemoteQueue(); }} className="h-9 shrink-0 rounded-lg border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50">새로고침</button>
               </div>
             </div>
-            {listPeriod !== "day" && <div className="mt-2 text-[11px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {(["전체", "복합기 AS", "IT", "원격이관", ...(deptEnabled || counts.dept ? ["지원"] as const : []), "주소확인"] as const).map((f) => (
-                <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${listFilter === f ? "bg-slate-900 text-white" : f === "주소확인" && counts.addr > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : f === "지원" ? `지원 ${counts.dept}` : `📍주소 ${counts.addr}`}
-                </button>
-              ))}
-              <span className="mx-0.5 self-center text-slate-200">|</span>
-              {(["전체", "접수", "진행중", "완료"] as const).map((state) => (
-                <button key={`st-${state}`} type="button" onClick={() => setStatusFilter(state === "전체" ? "전체" : statusFilter === state ? "전체" : state)}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${statusFilter === state ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                  {state !== "전체" && <span className={`h-1.5 w-1.5 rounded-full ${state === "접수" ? "bg-rose-500" : state === "진행중" ? "bg-amber-400" : "bg-slate-400"}`} />}
-                  {state} {state === "전체" ? typeFilteredRows.length : statusCounts[state]}
-                </button>
-              ))}
+            {listPeriod !== "day" && <div className="mt-2 text-[11px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {listRows.length}건</div>}
+            <div className="mt-2.5">
+              <ReceptionListFilters typeFilter={listFilter} onTypeFilter={(f) => { const v = LIST_TYPE_FILTERS.find((x) => x === f); if (v) setListFilter(v); }}
+                typeCounts={{ 전체: counts.total, "복합기 AS": counts.copier, IT: counts.it, 원격이관: counts.remote, 경영지원: counts.mgmt, 운영지원: counts.ops, 영업팀: counts.sales, 주소확인: counts.addr }}
+                statusFilter={statusFilter} onStatusFilter={setStatusFilter} statusCounts={{ 전체: typeFilteredRows.length, ...statusCounts }} deptEnabled={deptEnabled} />
             </div>
           </div>
 

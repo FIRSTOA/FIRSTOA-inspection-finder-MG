@@ -1,5 +1,5 @@
 /**
- * 부서 접수(경영지원·운영지원·영업지원) 공용 — 타입·상수·순수 함수만. 네트워크 호출은 deptReceptionApi.ts.
+ * 부서 접수(경영지원·운영지원·영업팀) 공용 — 타입·상수·순수 함수만. 네트워크 호출은 deptReceptionApi.ts.
  * 설계: docs/tasks/reception-dept-types.md (3절 데이터, 4-2 폼, 5절 달력·카톡).
  *
  * 저장 위치는 service_receptions 한 표(type = 부서명). 부서 고유 값은 remote_meta 에 **평평한 문자열 키**로 둔다.
@@ -9,22 +9,22 @@ import { md5 } from "./md5";
 import { regionLetter } from "./region";
 import { kstDate } from "./visits";
 
-export const DEPT_TYPES = ["경영지원", "운영지원", "영업지원"] as const;
+export const DEPT_TYPES = ["경영지원", "운영지원", "영업팀"] as const;
 export type DeptType = (typeof DEPT_TYPES)[number];
 export const isDeptType = (t: unknown): t is DeptType => DEPT_TYPES.includes(String(t || "") as DeptType);
 
-export const DEPT_LABEL: Record<DeptType, string> = { 경영지원: "경영지원", 운영지원: "운영지원", 영업지원: "영업지원" };
-const DEPT_SHORT: Record<DeptType, string> = { 경영지원: "경영", 운영지원: "운영", 영업지원: "영업" };
+export const DEPT_LABEL: Record<DeptType, string> = { 경영지원: "경영지원", 운영지원: "운영지원", 영업팀: "영업팀" };
+const DEPT_SHORT: Record<DeptType, string> = { 경영지원: "경영", 운영지원: "운영", 영업팀: "영업" };
 export const deptShort = (t: string): string => (isDeptType(t) ? DEPT_SHORT[t] : t);
 // 목록 배지 색 — 기존 blue(복합기)·cyan(IT)·violet(원격)과 겹치지 않게. 디자인실 값이 오면 여기만 바꾼다.
 export const DEPT_TONE: Record<DeptType, string> = {
   경영지원: "bg-amber-50 text-amber-700",
   운영지원: "bg-emerald-50 text-emerald-700",
-  영업지원: "bg-rose-50 text-rose-700",
+  영업팀: "bg-rose-50 text-rose-700",
 };
 export type DeptSheetCategory = "reception_sales" | "reception_mgmt";
 export const DEPT_SHEET_CATEGORY: Record<DeptType, DeptSheetCategory | null> = {
-  영업지원: "reception_sales",
+  영업팀: "reception_sales",
   경영지원: "reception_mgmt",
   운영지원: null, // 시트 없음 — 잡을 만들지 않는다(sheet_state 'none')
 };
@@ -38,7 +38,7 @@ export const defaultRoute = (dept: DeptType): DeptRoute => (dept === "경영지�
 
 // 접수분야 칩(설계 4-2 표). 마지막 '기타' 뒤의 '직접 입력'은 화면이 붙인다.
 export const DEPT_FIELD_CHIPS: Record<DeptType, readonly string[]> = {
-  영업지원: [
+  영업팀: [
     "신규/추가 렌탈", "렌탈문의", "현장/단기 렌탈", "현장/단기 철수", "해지문의", "해지/위약금", "반출문의",
     "계약문의", "재계약/연장", "기기교체/사양변경", "요금관련/초과료", "매수상향/조정", "견적문의", "기타",
   ],
@@ -96,7 +96,7 @@ export function regionLabelOf(region: DeptRegion): string {
 
 // ── 처리자 기본값(설계 Q4) ─────────────────────────────
 const HANDLER_TABLE: Record<DeptType, { A: string; B: string; C: string; DE: string; none: string }> = {
-  영업지원: { A: "이찬우", B: "박민", C: "이정현", DE: "김수인", none: "박진영" },
+  영업팀: { A: "이찬우", B: "박민", C: "이정현", DE: "김수인", none: "박진영" },
   경영지원: { A: "이윤아", B: "박수민", C: "", DE: "김슬기", none: "" },
   운영지원: { A: "", B: "", C: "", DE: "", none: "" },
 };
@@ -393,7 +393,12 @@ function mode(values: string[]): string {
  * vendor_info 행들 → 업체 요약. 지역은 '관리 담당자'(팀 배정 정답 열) → '담당지역' 순으로 읽어 정규화한 최빈값.
  * _hidden 행은 센다에서 뺀다.
  */
-export function aggregateVendor(rows: VendorInfoLite[]): { grade: string; region: DeptRegion; deviceCount: number; address: string } {
+/**
+ * 업체 행 묶음 요약. 숫자 기준(2026-10-19):
+ * - leasingCount = 숨김 아닌 행 중 임대여부 '임대중' 행 수(지금 쓰는 기기)
+ * - totalCount   = 숨김 아닌 계약 행 전체(종료 포함)
+ */
+export function aggregateVendor(rows: VendorInfoLite[]): { grade: string; region: DeptRegion; leasingCount: number; totalCount: number; address: string } {
   const live = rows.filter((r) => r && r._hidden !== true);
   const val = (r: VendorInfoLite, ...keys: string[]) => {
     for (const k of keys) {
@@ -405,7 +410,8 @@ export function aggregateVendor(rows: VendorInfoLite[]): { grade: string; region
   return {
     grade: mode(live.map((r) => val(r, "등급"))),
     region: mode(live.map((r) => normalizeRegion(val(r, "관리 담당자", "담당지역", "region")))) as DeptRegion,
-    deviceCount: live.length,
+    leasingCount: live.filter((r) => val(r, "임대여부") === "임대중").length,
+    totalCount: live.length,
     address: live.map((r) => val(r, "주소상세주소", "주소(실납품주소,도로명주소)", "주소")).find(Boolean) || "",
   };
 }

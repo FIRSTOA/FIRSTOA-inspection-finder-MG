@@ -33,7 +33,7 @@ export async function searchVendorMaster(q: string): Promise<VendorMasterHit[]> 
   return rows.map((r) => ({ ...r, aliases: Array.isArray(r.aliases) ? r.aliases.map(String) : [] }));
 }
 
-const VENDOR_INFO_COLS = ["id", "코드", "순번", "_업체명", "등급", "시/구", "주소상세주소", "기번", "자산번호", "모델명", "_hidden", "_raw"];
+const VENDOR_INFO_COLS = ["id", "코드", "순번", "_업체명", "등급", "시/구", "주소상세주소", "기번", "자산번호", "모델명", "임대여부", "_hidden", "_raw"];
 /**
  * 업체의 임대리스트 행들. code 는 vendor_info."코드"(임대 코드 5자리)다 — vendor_master.code(10자리)와 체계가 다르다.
  * 마스터에서 왔으면 names 에 마스터 이름·별칭을 넘긴다(임대리스트 _업체명 표기 그대로라 정확히 붙는다, entity360 과 같은 방식).
@@ -41,12 +41,13 @@ const VENDOR_INFO_COLS = ["id", "코드", "순번", "_업체명", "등급", "시
  */
 export async function vendorInfoByCode(code: string, names: string[] = []): Promise<VendorInfoLite[]> {
   const c = String(code || "").trim();
-  const nameList = Array.from(new Set(names.map((n) => String(n || "").trim()).filter(Boolean))).slice(0, 25);
+  const nameList = Array.from(new Set(names.map((n) => String(n || "").trim()).filter(Boolean))).slice(0, 40); // 별칭이 37개까지 있다(2026-10-19 실측)
   if (!c && !nameList.length) return [];
-  const select = `select=${VENDOR_INFO_COLS.map(col).join(",")}&_hidden=not.is.true&limit=500`;
+  // 전량(페이지) 조회 — 계약 전체 건수를 화면에 보이므로 500행에서 자르지 않는다(뉴트리원 592행, 2026-10-19 실측)
+  const select = `select=${VENDOR_INFO_COLS.map(col).join(",")}&_hidden=not.is.true&order=id.asc`;
   const [byCode, byName] = await Promise.all([
-    c ? selectRows<VendorInfoLite>("vendor_info", `${select}&${col("코드")}=eq.${enc(c)}`) : Promise.resolve([] as VendorInfoLite[]),
-    nameList.length ? selectRows<VendorInfoLite>("vendor_info", `${select}&${col("_업체명")}=${inList(nameList)}`) : Promise.resolve([] as VendorInfoLite[]),
+    c ? selectAllRows<VendorInfoLite>("vendor_info", `${select}&${col("코드")}=eq.${enc(c)}`) : Promise.resolve([] as VendorInfoLite[]),
+    nameList.length ? selectAllRows<VendorInfoLite>("vendor_info", `${select}&${col("_업체명")}=${inList(nameList)}`) : Promise.resolve([] as VendorInfoLite[]),
   ]);
   const seen = new Set<string>();
   return [...byCode, ...byName].filter((r) => {
@@ -178,7 +179,7 @@ export async function deleteDeptCalendar(receptionId: string): Promise<void> {
 }
 
 // ── 카톡(구조만 — 방 매핑 없으면 보내지 않는다, 폴백 금지) ─────
-export const DEPT_ROOM_KEY: Record<DeptType, string> = { 경영지원: "경영접수|*", 운영지원: "운영접수|*", 영업지원: "영업접수|*" };
+export const DEPT_ROOM_KEY: Record<DeptType, string> = { 경영지원: "경영접수|*", 운영지원: "운영접수|*", 영업팀: "영업접수|*" };
 export type DeptKakaoResult = { kakao: "sent" | "no_room" | "test"; room: string };
 /**
  * TEST_MODE 면 테스트방('test'), 매핑 있으면 그 방('sent'), 없으면 보내지 않고 'no_room'.

@@ -1,5 +1,5 @@
 /**
- * 부서 접수(경영·운영·영업지원) 흐름 — 저장 6단계와 처리 단추 5개를 한 곳에 모은다.
+ * 부서 접수(경영·운영·영업팀) 흐름 — 저장 6단계와 처리 단추 5개를 한 곳에 모은다.
  * 화면(DeptReception·DeptReceptionDetail·DeptActionBar)은 이 함수만 부르고, 네트워크는 deptReceptionApi.ts(→ supabase.ts 래퍼)만 쓴다.
  * 설계: docs/tasks/reception-dept-types.md 4-1(단추 표)·4-3(폼 저장).
  *
@@ -133,7 +133,7 @@ export async function runDeptSave(input: DeptReceptionInput, extraMeta: Record<s
         if (res.row) {
           try { await setDeptSheetRow(id, res.row); } catch (e) { warnings.push(`시트 행 번호 기록 실패: ${(e as Error).message}`); }
         }
-        sheetMsg = `${input.dept === "영업지원" ? "영업" : "경영"}시트 ${res.row ? `${res.row}행` : "반영"}`;
+        sheetMsg = `${input.dept === "영업팀" ? "영업" : "경영"}시트 ${res.row ? `${res.row}행` : "반영"}`;
       } else if (res.state === "failed") {
         sheetState = "failed";
         patch.sheet_state = "failed";
@@ -262,7 +262,7 @@ export async function runDeptAction(row0: DeptRowLike, kind: DeptActionKind, opt
   if (!text && progress === undefined) throw new Error("메모 내용을 입력해 주세요");
   const patch: Record<string, string> = {};
   if (text) patch.memo_log = prependMemo(meta.memo_log, memoLine(by, text));
-  if (progress !== undefined && dept === "영업지원") patch.progress = progress;
+  if (progress !== undefined && dept === "영업팀") patch.progress = progress;
   await updateDeptHandling(row.id, patch);
   const next: DeptRowLike = { ...row, remote_meta: { ...meta, ...patch } };
   if (patch.progress !== undefined && patch.progress !== (meta.progress || "")) await pushSheetUpdate(next, warnings);
@@ -279,7 +279,7 @@ export async function saveDeptHandlingForm(
   const meta = row.remote_meta || {};
   const warnings: string[] = [];
   const patch: Record<string, string> = { handler: form.handler.trim(), handled: form.handled.trim() };
-  if (row.type === "영업지원") patch.progress = form.progress.trim();
+  if (row.type === "영업팀") patch.progress = form.progress.trim();
   const wasDone = row.status === "완료";
   const nowDone = form.status === "완료";
   const done = nowDone && !wasDone ? { at: new Date().toISOString(), by: by || "미지정" } : !nowDone && wasDone ? { at: null, by: "" } : undefined;

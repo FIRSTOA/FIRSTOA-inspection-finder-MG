@@ -80,14 +80,18 @@ export function daysBefore(today: string, n: number): string {
   return new Date(t - n * 86_400_000).toISOString().slice(0, 10);
 }
 
+/** 물류 미처리로 세는 일정 유형 */
+export const LOGISTICS_SCHEDULE_TYPES = ["물류", "납품철수교체휴가교육"] as const;
+
 /**
- * 일정 미처리(물류·AS·납품 등) — 홈 OverduePanel 과 같은 규칙:
- * as_tickets 중 날짜가 오늘 이전·180일 이내, 상태 완료 아님, 매월점검 제외, 최근 날짜 순 최대 3000건.
+ * 물류 미처리 — as_tickets 중 유형이 물류·납품철수교체휴가교육(일정리스트 '납품' 칸)만,
+ * 날짜가 오늘 이전·180일 이내, 상태 완료 아님, 최근 날짜 순 최대 3000건.
+ * (2026-10-19 사용자 요청으로 AS 를 빼고 물류만. 매월점검은 유형 조건으로 자연히 빠진다.)
  * 업체명은 fieldTicketVendor 로 정리(구분 꼬리 제거). 실패는 throw.
  */
 export async function loadScheduleOverdue(today: string = kstDate()): Promise<ScheduleOverdueRow[]> {
   const from = daysBefore(today, 180);
-  const rows = await selectRows<ScheduleOverdueRow>("as_tickets", `select=id,team,date,time,vendor,assignee,status,scheduleType&date=lt.${today}&date=gte.${from}&status=neq.${encodeURIComponent("완료")}&scheduleType=neq.${encodeURIComponent("매월점검")}&order=date.desc,time.asc&limit=3000`);
+  const rows = await selectRows<ScheduleOverdueRow>("as_tickets", `select=id,team,date,time,vendor,assignee,status,scheduleType&date=lt.${today}&date=gte.${from}&status=neq.${encodeURIComponent("완료")}&scheduleType=in.(${LOGISTICS_SCHEDULE_TYPES.map((t) => encodeURIComponent(`"${t}"`)).join(",")})&order=date.desc,time.asc&limit=3000`);
   return rows.map((r) => {
     const raw = String(r.vendor || "");
     return { id: String(r.id), vendor: fieldTicketVendor(raw).vendor || raw, scheduleType: String(r.scheduleType || ""), team: String(r.team || ""), assignee: String(r.assignee || ""), date: String(r.date || "").slice(0, 10), time: r.time ? String(r.time) : undefined, status: String(r.status || "") };

@@ -26,7 +26,7 @@ const firstIndex = (method: string, table: string) => calls.findIndex((c) => c.m
 const touched = (table: string) => calls.some((c) => c.table === table);
 
 const base = (over: Partial<DeptReceptionInput> = {}): DeptReceptionInput => ({
-  dept: "영업지원", author: "김수인", route: "전화", vendor: "퍼스트오에이", leaseNo: "1234", region: "수도권C",
+  dept: "영업팀", author: "김수인", route: "전화", vendor: "퍼스트오에이", leaseNo: "1234", region: "수도권C",
   field: "렌탈문의", content: "한 대 추가 렌탈 문의", ...over,
 });
 
@@ -54,7 +54,7 @@ beforeEach(() => { invalidateConfigCaches(); });
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("저장 6단계 (runDeptSave)", () => {
-  it("영업지원 + 예정일 + 방 매핑: 접수 → 시트 잡 → 달력 → 카톡 순서", async () => {
+  it("영업팀 + 예정일 + 방 매핑: 접수 → 시트 잡 → 달력 → 카톡 순서", async () => {
     mockFetch(standard([{ category: "영업접수", region: "*", room: "영업방" }]));
     const res = await runDeptSave(base({ scheduleDate: "2026-10-22" }), { unit: "device" });
     const order = [firstIndex("POST", "service_receptions"), firstIndex("POST", "field_sheet_sync_jobs"), firstIndex("POST", "team_calendar_events"), firstIndex("POST", "outbox")];
@@ -70,7 +70,7 @@ describe("저장 6단계 (runDeptSave)", () => {
     expect(job._dupKey).toBe("dept:r1:append");
     // 접수 행: 부가 meta 가 실렸고 웹푸시(push-send)는 부르지 않는다
     const row = calls[firstIndex("POST", "service_receptions")].body as { type: string; remote_meta: Record<string, string> };
-    expect(row.type).toBe("영업지원");
+    expect(row.type).toBe("영업팀");
     expect(row.remote_meta.unit).toBe("device");
     expect(touched("fn:push-send")).toBe(false);
     // 마지막 병합: calendar_id·kakao
@@ -113,11 +113,11 @@ describe("저장 6단계 (runDeptSave)", () => {
 });
 
 describe("처리 단추 (runDeptAction)", () => {
-  const stored = { id: "r9", type: "영업지원", status: "접수", vendor: "가나상사", author: "박민", field: "해지문의", symptom: "해지 문의", remote_meta: { postpone_count: "1", memo_log: "10/18 10:00 박민: 첫 메모" } };
+  const stored = { id: "r9", type: "영업팀", status: "접수", vendor: "가나상사", author: "박민", field: "해지문의", symptom: "해지 문의", remote_meta: { postpone_count: "1", memo_log: "10/18 10:00 박민: 첫 메모" } };
 
   it("내일로: 금요일이면 월요일, 미룸+1, 접수→진행중, 달력 upsert", async () => {
     mockFetch(standard([], (c) => (c.method === "GET" && c.table === "service_receptions" ? { body: [stored] } : undefined)));
-    const res = await runDeptAction({ id: "r9", type: "영업지원", vendor: "가나상사", author: "박민" }, "tomorrow", { by: "박민", today: "2026-10-23" });
+    const res = await runDeptAction({ id: "r9", type: "영업팀", vendor: "가나상사", author: "박민" }, "tomorrow", { by: "박민", today: "2026-10-23" });
     const first = calls.find((c) => c.table === "rpc/merge_reception_handling")!.body as { p_meta: Record<string, string>; p_status?: string };
     expect(first.p_meta).toEqual({ schedule_date: "2026-10-26", postpone_count: "2" });
     expect(first.p_status).toBe("진행중");
@@ -128,7 +128,7 @@ describe("처리 단추 (runDeptAction)", () => {
 
   it("메모: 최신 행의 memo_log 위에 쌓는다", async () => {
     mockFetch(standard([], (c) => (c.method === "GET" && c.table === "service_receptions" ? { body: [stored] } : undefined)));
-    const res = await runDeptAction({ id: "r9", type: "영업지원", vendor: "가나상사", author: "박민" }, "memo", { by: "이정현", text: "견적 보냄" });
+    const res = await runDeptAction({ id: "r9", type: "영업팀", vendor: "가나상사", author: "박민" }, "memo", { by: "이정현", text: "견적 보냄" });
     const lines = String(res.row.remote_meta?.memo_log).split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2} 이정현: 견적 보냄$/);

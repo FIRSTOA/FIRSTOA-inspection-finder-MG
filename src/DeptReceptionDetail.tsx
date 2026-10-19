@@ -1,4 +1,4 @@
-// 접수리스트에서 부서 접수(경영·운영·영업지원) 행을 펼쳤을 때의 상세(설계 4-4).
+// 접수리스트에서 부서 접수(경영·운영·영업팀) 행을 펼쳤을 때의 상세(설계 4-4).
 // 자동값 요약 · 접수내용 · 메모 기록 · 진행상태 칩 · 처리자 · 진행 메모(영업) · 처리내용 · [처리 저장] · 처리 단추 줄 · 시트/카톡 상태.
 import { useMemo, useState } from "react";
 import { Loader2, RotateCw, Save } from "lucide-react";
@@ -41,7 +41,7 @@ export default function DeptReceptionDetail({ row, onChanged, author }: Props) {
     return [{ value: "", label: "미정" }, ...nameOptions(members, extras)];
   }, [members, handler, dept, row.region]);
 
-  const dirty = status !== (row.status || "접수") || handler !== (meta.handler || "") || handled !== (meta.handled || "") || (dept === "영업지원" && progress !== (meta.progress || ""));
+  const dirty = status !== (row.status || "접수") || handler !== (meta.handler || "") || handled !== (meta.handled || "") || (dept === "영업팀" && progress !== (meta.progress || ""));
 
   const save = async () => {
     if (saving) return;
@@ -131,7 +131,7 @@ export default function DeptReceptionDetail({ row, onChanged, author }: Props) {
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <div><div className={label}>처리자</div><div className="mt-1"><PortalSelect value={handler} onChange={setHandler} options={handlerOptions} placeholder="처리자" width={200} className="w-full" /></div></div>
-          {dept === "영업지원" && (
+          {dept === "영업팀" && (
             <div>
               <div className={label}>진행 메모</div>
               <div className="mt-1 flex flex-wrap gap-1">

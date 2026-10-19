@@ -1,6 +1,6 @@
 // 홈 관제 덱 "미처리 접수" 카드 감싸개. 표시는 HomeReceptionCard(윤화면 틀).
 // 홈을 열 때 1번 + 5분마다 읽고, 숨은 탭에서는 쉰다. 누르면 서비스접수 탭의 오른쪽 기둥이 "미처리 현황"으로 열린다.
-// 일정 미처리(as_tickets, OverduePanel 과 같은 규칙) 건수도 같이 읽어 카드에 넘긴다.
+// 물류 미처리(as_tickets 중 물류·납품철수교체휴가교육, 지난 날짜·완료 아님) 건수도 같이 읽어 카드에 넘긴다.
 import { useCallback, useEffect, useRef, useState } from "react";
 import HomeReceptionCard from "./HomeReceptionCard";
 import { fetchOpenReceptions } from "./deptReceptionApi";
@@ -16,9 +16,9 @@ export default function HomeReceptionPanel({ onOpen }: { onOpen: () => void }) {
   const refresh = useCallback(async () => {
     try {
       const day = kstDate();
-      const [open, schedule] = await Promise.all([fetchOpenReceptions(90), loadScheduleOverdue(day)]);
+      const [open, logistics] = await Promise.all([fetchOpenReceptions(90), loadScheduleOverdue(day)]);
       if (!alive.current) return;
-      setSummary(summarizeForHome(toBoardRows(open), day, schedule));
+      setSummary(summarizeForHome(toBoardRows(open), day, logistics));
       setError("");
     } catch (e) {
       if (alive.current) setError(e instanceof Error ? e.message : String(e));

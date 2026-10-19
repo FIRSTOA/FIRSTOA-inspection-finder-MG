@@ -1,4 +1,4 @@
-// 부서 접수(경영·운영·영업지원) 폼 로직 — 표시 틀 DeptReceptionForm.view 를 감싼다(설계 4-3). 설계안 이름은 DeptReception.tsx 였으나 deptReception.ts 와 대소문자만 달라 Windows에서 충돌해 이 이름으로 둔다.
+// 부서 접수(경영·운영·영업팀) 폼 로직 — 표시 틀 DeptReceptionForm.view 를 감싼다(설계 4-3). 설계안 이름은 DeptReception.tsx 였으나 deptReception.ts 와 대소문자만 달라 Windows에서 충돌해 이 이름으로 둔다.
 // 기기/업체 전환 · 순번/업체명 검색(숫자+Enter = 순 정확 일치) · 자동 채움 · 처리자 기본값 · 저장 6단계(deptReceptionFlow.runDeptSave) · 결과 줄.
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { CalendarDays, X } from "lucide-react";
@@ -27,7 +27,7 @@ type Props = {
   onSaved?: (result: DeptSaveResult) => void;
 };
 
-type VendorPick = { hit: VendorMasterHit; vendorName: string; grade: string; region: DeptRegion; deviceCount: number; address: string };
+type VendorPick = { hit: VendorMasterHit; vendorName: string; grade: string; region: DeptRegion; leasingCount: number; totalCount: number; address: string };
 const STORE_KEY = "reception_dept_v1";
 const REGION_CHIPS: Array<[DeptRegion, string]> = [["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"], ["E", "E"], ["지방", "지방"], ["", "미정"]];
 const seqOf = (h: LeaseHit) => pickLease(h, "순", "순번");
@@ -121,7 +121,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
     try {
       const rows = await vendorInfoByCode("", [hit.name, ...hit.aliases]);
       const agg = aggregateVendor(rows);
-      setVendorPick({ hit, vendorName: pickVendorAlias(rows, hit.name), grade: agg.grade, region: agg.region, deviceCount: hit.device_count || agg.deviceCount, address: agg.address });
+      setVendorPick({ hit, vendorName: pickVendorAlias(rows, hit.name), grade: agg.grade, region: agg.region, leasingCount: agg.leasingCount, totalCount: agg.totalCount, address: agg.address });
       setMasterHits([]); setResult(null);
     } catch (e) {
       setSearchError((e as Error).message);
@@ -184,7 +184,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
         </div>
       )}
       {mode === "device" && !isNew && lease && selectedBox(vendorName || "업체 미기재", [seqOf(lease) && `순 ${seqOf(lease)}`, pickLease(lease, "모델명", "기종"), pickLease(lease, "자산번호")].filter(Boolean).join(" · "), () => setLease(null))}
-      {mode === "vendor" && vendorPick && selectedBox(vendorPick.hit.name, `${vendorPick.hit.code} · 보유 ${vendorPick.deviceCount}대 · 저장 이름 ${vendorPick.vendorName}`, () => setVendorPick(null))}
+      {mode === "vendor" && vendorPick && selectedBox(vendorPick.hit.name, `${vendorPick.hit.code} · 임대중 ${vendorPick.leasingCount}대 · 계약 전체 ${vendorPick.totalCount}건 · 저장 이름 ${vendorPick.vendorName}`, () => setVendorPick(null))}
       {mode === "device" && !isNew && !lease && leaseHits.length > 0 && (
         <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 bg-white">
           {leaseHits.slice(0, 30).map((h, i) => (
@@ -200,7 +200,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
           {masterHits.map((h) => (
             <button key={h.code} type="button" onClick={() => void chooseMaster(h)} className={hitBtn}>
               <span className="min-w-0 truncate"><b className="text-slate-900">{h.name}</b>{h.aliases.length ? ` · ${h.aliases.slice(0, 2).join(", ")}` : ""}</span>
-              <span className="shrink-0 text-[11px] tabular-nums text-slate-400">{h.device_count || 0}대</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-slate-400">계약 {h.device_count || 0}건</span>
             </button>
           ))}
         </div>
@@ -213,7 +213,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
 
   const preview: Array<[string, string]> | null = mode === "vendor"
     ? (vendorPick ? [
-      ["마스터", vendorPick.hit.name], ["코드", vendorPick.hit.code], ["보유", `${vendorPick.deviceCount}대`],
+      ["마스터", vendorPick.hit.name], ["코드", vendorPick.hit.code], ["기기", `임대중 ${vendorPick.leasingCount}대 · 계약 전체 ${vendorPick.totalCount}건`],
       ["등급", vendorPick.grade], ["지역", regionLabelOf(vendorPick.region) || "미정"], ["주소", vendorPick.address], ["저장 이름", vendorPick.vendorName],
     ] : null)
     : isNew
@@ -264,7 +264,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
     setSaving(true); setResult(null);
     try {
       const extra: Record<string, string> = { unit: mode, author_team: receiver.team };
-      if (mode === "vendor" && vendorPick) { extra.vendor_master_name = vendorPick.hit.name; extra.device_count = String(vendorPick.deviceCount || 0); }
+      if (mode === "vendor" && vendorPick) { extra.vendor_master_name = vendorPick.hit.name; extra.device_count = String(vendorPick.leasingCount || 0); /* 임대중 수(2026-10-19) */ }
       const res = await runDeptSave(input, extra);
       lastSavedRef.current = { sig, id: res.id };
       const bad = res.warnings.filter((w) => warnTone(w) === "error");
@@ -290,16 +290,16 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[12px] font-bold text-slate-600">
+      {!receiver.locked && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[12px] font-bold text-slate-600">
         <span className="font-black text-slate-400">접수자</span>
         <span className="font-black text-slate-900">{receiver.name || "미지정"}</span>
         {receiver.team && <span>· {receiver.team}</span>}
         {receiver.locked
           ? <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">그룹웨어 로그인</span>
           : <span className="ml-auto text-[10px] font-bold text-slate-400">위 작성자 선택으로 바꿀 수 있습니다</span>}
-      </div>
+      </div>}
 
-      <DeptReceptionFormView
+      <DeptReceptionFormView receiverLabel={receiver.locked ? `접수자 ${receiver.name}${receiver.team ? ` · ${receiver.team}` : ""}` : undefined}
         dept={dept} mode={mode} onModeChange={setMode}
         query={query} onQueryChange={setQuery} onSearch={() => void runSearch()} searching={searching} searchError={searchError}
         candidates={candidates} preview={preview}

@@ -25,11 +25,11 @@ export type ReceptionBoardPanelProps = {
   reloadKey?: number;
   /** 데이터를 읽을 때마다 종류별 열린 건수(최근 90일) — 서비스접수 종류 선택기 배지가 현황판과 같은 숫자를 쓴다 */
   onCounts?: (counts: Record<ReceptionType, number>) => void;
-  /** 일정 미처리(as_tickets, 홈 OverduePanel 과 같은 규칙) 건수 — 서비스접수 오른쪽 전환 칸 N 에 더한다 */
+  /** 물류 미처리(as_tickets 중 물류·납품철수교체휴가교육) 건수 — 서비스접수 오른쪽 전환 칸 N 에 더한다 */
   onScheduleCount?: (n: number) => void;
   /** 오른쪽 기둥 안에 들어갈 때 좁은 배치 */
   compact?: boolean;
-  /** 일정 미처리 줄을 눌렀을 때. 안 주면 일정리스트 미처리 탭 열기 신호(localStorage + cs:open-overdue)만 보낸다 */
+  /** 물류 미처리 줄을 눌렀을 때. 안 주면 일정리스트 미처리 탭 열기 신호(localStorage + cs:open-overdue)만 보낸다 */
   onOpenSchedule?: () => void;
 };
 
@@ -40,8 +40,8 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
   useEffect(() => { onCountsRef.current = onCounts; }, [onCounts]);
   const onScheduleCountRef = useRef(onScheduleCount);
   useEffect(() => { onScheduleCountRef.current = onScheduleCount; }, [onScheduleCount]);
-  const [schedule, setSchedule] = useState<ScheduleOverdueRow[] | undefined>(undefined);
-  const scheduleFailed = useRef(false);
+  const [logistics, setLogistics] = useState<ScheduleOverdueRow[] | undefined>(undefined);
+  const logisticsFailed = useRef(false);
   const [innerSelected, setInnerSelected] = useState<ReceptionType | null>(null);
   const selected = selectedType !== undefined ? selectedType : innerSelected;
   const [data, setData] = useState<BoardData | null>(null);
@@ -54,19 +54,19 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
     const my = ++seq.current;
     const day = kstDate();
     try {
-      // 접수 현황과 일정 미처리를 함께 읽는다. 일정 쪽 실패는 접수 현황을 막지 않고, 처음 실패할 때 한 번 알린다(분마다 반복 알림 방지).
-      const [next, sched] = await Promise.all([
+      // 접수 현황과 물류 미처리를 함께 읽는다. 물류 쪽 실패는 접수 현황을 막지 않고, 처음 실패할 때 한 번 알린다(분마다 반복 알림 방지).
+      const [next, logi] = await Promise.all([
         loadBoardData(day),
         loadScheduleOverdue(day).then((r) => ({ ok: true as const, rows: r }), (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) })),
       ]);
       if (!alive.current || my !== seq.current) return;
-      if (sched.ok) {
-        scheduleFailed.current = false;
-        setSchedule(sched.rows);
-        onScheduleCountRef.current?.(sched.rows.length);
-      } else if (!scheduleFailed.current) {
-        scheduleFailed.current = true;
-        notify(`일정 미처리를 못 읽었습니다: ${sched.error}`, "error");
+      if (logi.ok) {
+        logisticsFailed.current = false;
+        setLogistics(logi.rows);
+        onScheduleCountRef.current?.(logi.rows.length);
+      } else if (!logisticsFailed.current) {
+        logisticsFailed.current = true;
+        notify(`물류 미처리를 못 읽었습니다: ${logi.error}`, "error");
       }
       setData(next);
       onCountsRef.current?.(Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, next.rows.filter((r) => r.type === m.type).length])) as Record<ReceptionType, number>);
@@ -121,7 +121,7 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
       todayCount={data?.todayCount}
       weekDoneRate={data?.weekDoneRate ?? null}
       compact={compact}
-      scheduleRows={schedule}
+      scheduleRows={logistics}
       onOpenSchedule={openSchedule}
     />
   );

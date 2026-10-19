@@ -4,7 +4,7 @@
 import type { ComponentType } from "react";
 import { Briefcase, Handshake, Laptop, MonitorSmartphone, Printer, Settings2 } from "lucide-react";
 
-export type ReceptionType = "복합기 AS" | "원격이관" | "IT" | "경영지원" | "운영지원" | "영업지원";
+export type ReceptionType = "복합기 AS" | "원격이관" | "IT" | "경영지원" | "운영지원" | "영업팀";
 
 export type ReceptionTypeMeta = {
   type: ReceptionType;
@@ -31,7 +31,7 @@ export const RECEPTION_TYPES: ReceptionTypeMeta[] = [
   { type: "IT", label: "IT", group: "현장", icon: Laptop, badge: "bg-cyan-50 text-cyan-700", active: "border-cyan-600 bg-cyan-600 text-white", hover: "hover:border-cyan-300 hover:text-cyan-700", bar: "bg-cyan-500", dot: "bg-cyan-400" },
   { type: "경영지원", label: "경영지원", group: "지원", icon: Briefcase, badge: "bg-fuchsia-50 text-fuchsia-700", active: "border-fuchsia-600 bg-fuchsia-600 text-white", hover: "hover:border-fuchsia-300 hover:text-fuchsia-700", bar: "bg-fuchsia-500", dot: "bg-fuchsia-400" },
   { type: "운영지원", label: "운영지원", group: "지원", icon: Settings2, badge: "bg-emerald-50 text-emerald-700", active: "border-emerald-600 bg-emerald-600 text-white", hover: "hover:border-emerald-300 hover:text-emerald-700", bar: "bg-emerald-500", dot: "bg-emerald-400" },
-  { type: "영업지원", label: "영업지원", group: "지원", icon: Handshake, badge: "bg-orange-50 text-orange-700", active: "border-orange-600 bg-orange-600 text-white", hover: "hover:border-orange-300 hover:text-orange-700", bar: "bg-orange-500", dot: "bg-orange-400" },
+  { type: "영업팀", label: "영업팀", group: "지원", icon: Handshake, badge: "bg-orange-50 text-orange-700", active: "border-orange-600 bg-orange-600 text-white", hover: "hover:border-orange-300 hover:text-orange-700", bar: "bg-orange-500", dot: "bg-orange-400" },
 ];
 
 export const RECEPTION_TYPE_META = Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, m])) as Record<ReceptionType, ReceptionTypeMeta>;
@@ -48,8 +48,7 @@ export default function ReceptionTypePicker({ value, onChange, counts, deptEnabl
   return (
     <div className="space-y-2" role="group" aria-label="접수 종류">
       {groups.map((g) => (
-        <div key={g} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
-          <div className="text-[11px] font-black text-slate-400 sm:w-9 sm:shrink-0">{g}</div>
+        <div key={g} className="flex">
           <div className="grid flex-1 grid-cols-3 gap-1.5 sm:gap-2">
             {RECEPTION_TYPES.filter((m) => m.group === g).map((m) => {
               const Icon = m.icon;

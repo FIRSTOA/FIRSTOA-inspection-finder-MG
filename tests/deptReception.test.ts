@@ -6,7 +6,7 @@ import {
 } from "../src/deptReception";
 
 const base: DeptReceptionInput = {
-  dept: "영업지원", author: "김수인", route: "전화", vendor: "퍼스트오에이", leaseNo: "1234", grade: "S",
+  dept: "영업팀", author: "김수인", route: "전화", vendor: "퍼스트오에이", leaseNo: "1234", grade: "S",
   region: "수도권 c", field: "렌탈문의", content: "복합기 한 대 추가 렌탈 문의\n견적 요청", receiverName: "홍길동", receiverPhone: "010-1111-2222",
 };
 
@@ -14,14 +14,14 @@ describe("부서 종류·상수", () => {
   it("isDeptType·deptShort·시트 category", () => {
     expect(isDeptType("경영지원")).toBe(true);
     expect(isDeptType("복합기 AS")).toBe(false);
-    expect(deptShort("영업지원")).toBe("영업");
+    expect(deptShort("영업팀")).toBe("영업");
     expect(deptShort("IT")).toBe("IT");
     expect(DEPT_SHEET_CATEGORY.운영지원).toBeNull();
-    expect(DEPT_SHEET_CATEGORY.영업지원).toBe("reception_sales");
+    expect(DEPT_SHEET_CATEGORY.영업팀).toBe("reception_sales");
     expect(DEPT_SHEET_CATEGORY.경영지원).toBe("reception_mgmt");
   });
   it("접수분야 칩 수(영업·경영 13 + 기타, 운영 4)", () => {
-    expect(DEPT_FIELD_CHIPS.영업지원).toHaveLength(14);
+    expect(DEPT_FIELD_CHIPS.영업팀).toHaveLength(14);
     expect(DEPT_FIELD_CHIPS.경영지원).toHaveLength(14);
     expect(DEPT_FIELD_CHIPS.운영지원).toEqual(["소모품", "배송/택배", "설치", "기타"]);
   });
@@ -44,12 +44,12 @@ describe("normalizeRegion", () => {
 
 describe("defaultHandler", () => {
   it("영업: 지역별 담당, 미정은 박진영", () => {
-    expect(defaultHandler("영업지원", "수도권A")).toBe("이찬우");
-    expect(defaultHandler("영업지원", "B")).toBe("박민");
-    expect(defaultHandler("영업지원", "수도권c")).toBe("이정현");
-    expect(defaultHandler("영업지원", "수도권D")).toBe("김수인");
-    expect(defaultHandler("영업지원", "경상도")).toBe("김수인");
-    expect(defaultHandler("영업지원", "")).toBe("박진영");
+    expect(defaultHandler("영업팀", "수도권A")).toBe("이찬우");
+    expect(defaultHandler("영업팀", "B")).toBe("박민");
+    expect(defaultHandler("영업팀", "수도권c")).toBe("이정현");
+    expect(defaultHandler("영업팀", "수도권D")).toBe("김수인");
+    expect(defaultHandler("영업팀", "경상도")).toBe("김수인");
+    expect(defaultHandler("영업팀", "")).toBe("박진영");
   });
   it("경영: C는 빈값, D/E 김슬기 / 운영: 빈값", () => {
     expect(defaultHandler("경영지원", "A")).toBe("이윤아");
@@ -64,7 +64,7 @@ describe("defaultHandler", () => {
 describe("buildDeptReceptionRow", () => {
   it("필수값·컬럼·remote_meta 구조", () => {
     const row = buildDeptReceptionRow({ ...base, outside: true, scheduleDate: "2026-10-25" });
-    expect(row.type).toBe("영업지원");
+    expect(row.type).toBe("영업팀");
     expect(row.route).toBe("전화");
     expect(row.region).toBe("수도권C");
     expect(row.lease_no).toBe("1234");
@@ -73,7 +73,7 @@ describe("buildDeptReceptionRow", () => {
     expect(row.title).toBe("렌탈문의 · 복합기 한 대 추가 렌탈 문의");
     expect(row.symptom).toContain("견적 요청");
     expect(row.status).toBe("접수");
-    expect(row.report_text).toContain("[영업지원 접수]");
+    expect(row.report_text).toContain("[영업팀 접수]");
     expect(row.remote_meta).toEqual({
       handler: "이정현", via: "", outside: "외근요청", contract_kind: "", progress: "", handled: "", sheet_seq: "",
       sheet_state: "queued", schedule_date: "2026-10-25", calendar_id: "", kakao: "", vendor_code: "",
@@ -95,7 +95,7 @@ describe("buildDeptReceptionRow", () => {
     expect(row.lease_no).toBe("");
     expect(row.region).toBe("");
     expect(row.remote_meta.handler).toBe("박진영");
-    expect(deptMissing({ dept: "영업지원" })).toEqual(["업체", "접수유형", "접수분야", "접수내용", "접수자"]);
+    expect(deptMissing({ dept: "영업팀" })).toEqual(["업체", "접수유형", "접수분야", "접수내용", "접수자"]);
     expect(() => buildDeptReceptionRow({ ...base, content: "  " })).toThrow(/접수내용/);
   });
   it("제목은 분야 · 첫 줄 30자", () => {
@@ -162,15 +162,16 @@ describe("보드·통계", () => {
 });
 
 describe("aggregateVendor", () => {
-  it("등급·지역 최빈, 기기 수, 첫 주소, 숨김 제외", () => {
+  it("등급·지역 최빈, 임대중·계약 전체 수, 첫 주소, 숨김 제외", () => {
     const agg = aggregateVendor([
-      { 등급: "S", 주소상세주소: "", _raw: { "관리 담당자": "수도권c" } },
-      { 등급: "SS", 주소상세주소: "서울 강남구 1", _raw: { "관리 담당자": "수도권C" } },
-      { 등급: "S", 주소상세주소: "서울 강남구 2", _raw: { "관리 담당자": "수도권A" } },
-      { 등급: "V", _hidden: true, _raw: { "관리 담당자": "수도권A" } },
+      { 등급: "S", 주소상세주소: "", 임대여부: "임대중", _raw: { "관리 담당자": "수도권c" } },
+      { 등급: "SS", 주소상세주소: "서울 강남구 1", 임대여부: "종료", _raw: { "관리 담당자": "수도권C" } },
+      { 등급: "S", 주소상세주소: "서울 강남구 2", _raw: { "관리 담당자": "수도권A", 임대여부: "임대중" } },
+      { 등급: "V", _hidden: true, 임대여부: "임대중", _raw: { "관리 담당자": "수도권A" } },
       { 등급: "V", _hidden: true },
     ]);
-    expect(agg).toEqual({ grade: "S", region: "C", deviceCount: 3, address: "서울 강남구 1" });
+    // 임대중 2(컬럼 1 + _raw 1, 숨김 제외) · 계약 전체 3(종료 포함, 숨김 제외)
+    expect(agg).toEqual({ grade: "S", region: "C", leasingCount: 2, totalCount: 3, address: "서울 강남구 1" });
   });
 });
 
@@ -215,7 +216,7 @@ describe("API (fetch 모킹)", () => {
       return new Response("[]", { status: 200 });
     }));
     const { sendDeptReceptionKakao } = await import("../src/deptReceptionApi");
-    expect(await sendDeptReceptionKakao("영업지원", "본문")).toEqual({ kakao: "sent", room: "영업방" });
+    expect(await sendDeptReceptionKakao("영업팀", "본문")).toEqual({ kakao: "sent", room: "영업방" });
     expect(JSON.parse(bodies[0])).toEqual({ room: "영업방", text: "본문" });
   });
 });

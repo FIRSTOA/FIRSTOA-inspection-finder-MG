@@ -228,7 +228,7 @@ export const LOOKUP_CATEGORIES: LookupCategory[] = [
     dateField: "receipt_date", orderField: "created_at", vendorField: "vendor",
     searchFields: ["vendor", "author", "title", "symptom", "serial", "asset_no", "address"],
     filterQuery: "deleted=is.false",
-    chipFilter: { field: "type", options: [["복합기 AS", "복합기"], ["IT", "IT"], ["원격이관", "원격"], ["경영지원", "경영"], ["운영지원", "운영"], ["영업지원", "영업"]] },
+    chipFilter: { field: "type", options: [["복합기 AS", "복합기"], ["IT", "IT"], ["원격이관", "원격"], ["경영지원", "경영"], ["운영지원", "운영"], ["영업팀", "영업"]] },
     columns: [
       { key: "receipt_date", label: "접수일", width: "96px", mono: true },
       { key: "vendor", label: "업체명", width: "minmax(0,1.3fr)", strong: true },

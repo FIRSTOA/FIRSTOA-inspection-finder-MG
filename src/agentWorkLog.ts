@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "e009c9c0a0",
+    "agent": "ui-designer",
+    "summary": "미처리 현황판 2차: 오른쪽 접수리스트 기둥으로 이동(접수리스트|미처리 현황 전환) + 일정 미처리(물류·AS·납품) 합치기 + 관리 탭 스위치"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "e009c9c0a0",
+    "agent": "developer",
+    "summary": "미처리 현황판 2차: 오른쪽 접수리스트 기둥으로 이동(접수리스트|미처리 현황 전환) + 일정 미처리(물류·AS·납품) 합치기 + 관리 탭 스위치"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "e009c9c0a0",
+    "agent": "field-deploy-check",
+    "summary": "미처리 현황판 2차: 오른쪽 접수리스트 기둥으로 이동(접수리스트|미처리 현황 전환) + 일정 미처리(물류·AS·납품) 합치기 + 관리 탭 스위치"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "ea68d6a479",
     "agent": "feature-planner",
     "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"

@@ -1,12 +1,12 @@
 // 부서 접수 폼의 표시 틀(로직 없음). 값·핸들러는 모두 props 로 받는다.
-// props: dept(경영/운영/영업지원) · mode(기기/업체) · 검색 입력 · 후보 슬롯 · 자동 채움 미리보기 · 사람 입력 값들 · required · onSave/saving/result.
+// props: dept(경영/운영/영업팀) · mode(기기/업체) · 검색 입력 · 후보 슬롯 · 자동 채움 미리보기 · 사람 입력 값들 · required · onSave/saving/result.
 // 처리자 select 와 사내 요청자 이름 고르기는 슬롯(ReactNode)으로 받아 로직 쪽에서 PortalSelect 등을 꽂는다.
 import type { ReactNode } from "react";
 import { AlertCircle, Loader2, Save, Search } from "lucide-react";
 import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 
 export type DeptReceptionFormViewProps = {
-  dept: Extract<ReceptionType, "경영지원" | "운영지원" | "영업지원">;
+  dept: Extract<ReceptionType, "경영지원" | "운영지원" | "영업팀">;
   mode: "device" | "vendor";
   onModeChange: (mode: "device" | "vendor") => void;
   // 거래처 검색
@@ -43,6 +43,7 @@ export type DeptReceptionFormViewProps = {
   onContractKind?: (v: string) => void;
   scheduledDate: string;
   onScheduledDate: (v: string) => void;
+  receiverLabel?: string; // 머리 오른쪽 위 작은 글씨(예: "접수자 이민구 · CS"). 없으면 안 보임
   // 필수 점검·저장
   required: Array<[string, boolean]>;
   onSave: () => void;
@@ -65,7 +66,10 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
           <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${meta.badge}`}>{p.dept}</span>
           <div className="text-sm font-black text-white lg:text-[15px]">접수 입력</div>
         </div>
-        <div className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isReady ? "bg-emerald-400/15 text-emerald-300" : "bg-white/10 text-slate-300"}`}>{readyCount}/{p.required.length} 필수 입력</div>
+        <div className="flex flex-col items-end gap-0.5">
+          <div className={`rounded-lg px-2.5 py-1 text-[11px] font-black ${isReady ? "bg-emerald-400/15 text-emerald-300" : "bg-white/10 text-slate-300"}`}>{readyCount}/{p.required.length} 필수 입력</div>
+          {p.receiverLabel && <div className="max-w-56 truncate text-[11px] font-semibold text-slate-400">{p.receiverLabel}</div>}
+        </div>
       </div>
 
       <div className="space-y-4 p-4 lg:p-5">

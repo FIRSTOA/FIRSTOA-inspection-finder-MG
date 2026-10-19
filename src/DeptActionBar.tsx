@@ -109,7 +109,7 @@ export default function DeptActionBar({ row, compact = false, author, onChanged,
 
       {panel === "memo" && (
         <div className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-          {row.type === "영업지원" && (
+          {row.type === "영업팀" && (
             <div className="flex flex-wrap gap-1" role="group" aria-label="진행 메모">
               {DEPT_PROGRESS_CHIPS.map((c) => {
                 const on = (progress ?? meta.progress ?? "") === c;

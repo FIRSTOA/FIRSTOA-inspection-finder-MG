@@ -3522,7 +3522,7 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
         }}
       >
         <span className="truncate">{filled ? value : "작성자 선택"}</span>
-        <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />
+        {!(ssoRequiredCached() && getSsoSession()) && <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />} {/* 그룹웨어 로그인 고정이면 "고르는" 화살표 없이 이름만(내 계정·로그아웃은 눌러서) 2026-10-19 */}
       </button>
       {open && <AuthorPickerModal value={value} onChange={onChange} accent={accent} onClose={() => setOpen(false)} />}
     </>

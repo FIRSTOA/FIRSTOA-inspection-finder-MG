@@ -5,12 +5,13 @@ import { renderToString } from "react-dom/server";
 import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "../src/ReceptionTypePicker";
 import ReceptionBoard, { daysBetween, type ReceptionRow } from "../src/ReceptionBoard";
 import HomeReceptionCard from "../src/HomeReceptionCard";
+import ReceptionListFilters from "../src/ReceptionListFilters";
 import DeptReceptionFormView from "../src/DeptReceptionForm.view";
 
 const noop = () => {};
 const counts = Object.fromEntries(RECEPTION_TYPES.map((m, i) => [m.type, i])) as Record<ReceptionType, number>;
 const rows: ReceptionRow[] = [
-  { id: "a", type: "영업지원", vendor: "가나상사", field: "해지문의", author: "김수인", handler: "", status: "접수", receipt_date: "2026-10-05", scheduled_date: "2026-10-10" },
+  { id: "a", type: "영업팀", vendor: "가나상사", field: "해지문의", author: "김수인", handler: "", status: "접수", receipt_date: "2026-10-05", scheduled_date: "2026-10-10" },
   { id: "b", type: "IT", vendor: "다라전자", field: "", author: "박민", handler: "이찬우", status: "보류", receipt_date: "2026-10-18" },
 ];
 
@@ -18,8 +19,8 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
   it("선택기: 지원 줄은 deptEnabled 일 때만 나온다", () => {
     const on = renderToString(createElement(ReceptionTypePicker, { value: "IT", onChange: noop, counts, deptEnabled: true }));
     const off = renderToString(createElement(ReceptionTypePicker, { value: "IT", onChange: noop, counts, deptEnabled: false }));
-    expect(on).toContain("영업지원");
-    expect(off).not.toContain("영업지원");
+    expect(on).toContain("영업팀");
+    expect(off).not.toContain("영업팀");
     expect(off).toContain("복합기 AS");
   });
 
@@ -37,18 +38,27 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
   });
 
   it("홈 카드: 합계와 가장 오래된 건", () => {
-    const html = renderToString(createElement(HomeReceptionCard, { counts, oldest: { vendor: "가나상사", type: "영업지원", days: 14 }, onClick: noop }));
+    const html = renderToString(createElement(HomeReceptionCard, { counts, oldest: { vendor: "가나상사", type: "영업팀", days: 14 }, onClick: noop }));
     expect(html).toContain("미처리 접수 15건");
     expect(html).toContain("가나상사");
   });
 
   it("현황판: selectedType 이면 그 열만, deptEnabled=false 면 지원 3종 숨김", () => {
-    const sel = renderToString(createElement(ReceptionBoard, { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, selectedType: "영업지원" }));
+    const sel = renderToString(createElement(ReceptionBoard, { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, selectedType: "영업팀" }));
     expect(sel).toMatch(/예정일 지남 (<!-- -->)?1/);
     expect(sel).not.toContain("다라전자");
     const off = renderToString(createElement(ReceptionBoard, { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, deptEnabled: false }));
-    expect(off).not.toContain("영업지원");
+    expect(off).not.toContain("영업팀");
     expect(off).toContain("다라전자");
+  });
+
+  it("현황판: 종류를 골라도 숫자 띠 타일 7개(물류 포함)는 유지된다", () => {
+    const scheduleRows = [{ id: "s1", vendor: "마바물류", scheduleType: "납품철수교체휴가교육", team: "A팀", assignee: "최기사", date: "2026-10-12", status: "미완료" }];
+    const html = renderToString(createElement(ReceptionBoard, { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, scheduleRows, selectedType: "IT" }));
+    expect((html.match(/aria-pressed/g) ?? []).length).toBe(7);
+    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
+    expect(html).toContain("물류 미처리");
+    expect(html).not.toContain("마바물류");
   });
 
   it("홈 카드: over7 이 1 이상일 때만 7일↑ 가 보인다", () => {
@@ -69,7 +79,8 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     const scheduleRows = [{ id: "s1", vendor: "마바물류", scheduleType: "납품철수교체휴가교육", team: "A팀", assignee: "최기사", date: "2026-10-12", status: "미완료" }];
     const base = { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, scheduleRows, onOpenSchedule: noop };
     const html = renderToString(createElement(ReceptionBoard, base));
-    expect(html).toContain("일정 미처리");
+    expect(html).toContain("물류 미처리");
+    expect(html).not.toContain("일정 미처리");
     expect(html).toContain("마바물류");
     expect(html).toContain("납품");
     expect(html).toContain("일정리스트에서 처리");
@@ -79,8 +90,21 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
 
   it("홈 카드: scheduleOverdue 가 있으면 일정 미처리 줄이 나온다", () => {
     const base = { counts, oldest: null, onClick: noop };
-    expect(renderToString(createElement(HomeReceptionCard, { ...base, scheduleOverdue: 4 }))).toContain("일정 미처리");
-    expect(renderToString(createElement(HomeReceptionCard, base))).not.toContain("일정 미처리");
+    expect(renderToString(createElement(HomeReceptionCard, { ...base, scheduleOverdue: 4 }))).toContain("물류 미처리");
+    expect(renderToString(createElement(HomeReceptionCard, base))).not.toContain("물류 미처리");
+  });
+
+  it("접수리스트 필터: 영업 칸·deptEnabled=false 숨김·숫자·주소 강조", () => {
+    const base = { typeFilter: "전체", onTypeFilter: noop, typeCounts: { 전체: 26, "복합기 AS": 26, 영업팀: 3, 주소확인: 5 }, statusFilter: "전체" as const, onStatusFilter: noop, statusCounts: { 전체: 26, 접수: 4, 진행중: 2, 완료: 20 } };
+    const on = renderToString(createElement(ReceptionListFilters, base));
+    const off = renderToString(createElement(ReceptionListFilters, { ...base, deptEnabled: false }));
+    expect(on).toContain("영업");
+    expect(on).toContain("진행중");
+    expect(on).toContain("📍주소");
+    expect(on).toContain("bg-amber-50");
+    expect(off).not.toContain("영업");
+    expect(off).not.toContain("경영");
+    expect(off).toContain("복합기");
   });
 
   it("부서 폼 틀: 경영지원만 계약서구분이 보인다", () => {
@@ -91,7 +115,7 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
       handlerSlot: null, outside: false, onOutside: noop, scheduledDate: "", onScheduledDate: noop, required: [["업체", false], ["접수내용", true]] as Array<[string, boolean]>, onSave: noop,
     };
     const mgmt = renderToString(createElement(DeptReceptionFormView, { ...base, contractKind: "", onContractKind: noop }));
-    const sales = renderToString(createElement(DeptReceptionFormView, { ...base, dept: "영업지원" }));
+    const sales = renderToString(createElement(DeptReceptionFormView, { ...base, dept: "영업팀" }));
     expect(mgmt).toContain("계약서구분");
     expect(sales).not.toContain("계약서구분");
     expect(mgmt).toContain("기기로 접수");

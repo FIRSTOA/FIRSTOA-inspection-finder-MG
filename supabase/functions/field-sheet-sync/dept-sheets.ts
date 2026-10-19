@@ -1,5 +1,5 @@
 /**
- * 지원 부서 시트(영업지원 reception_sales · 경영지원 reception_mgmt) 기입 경로 — 2026-10-19.
+ * 지원 부서 시트(영업팀 reception_sales · 경영지원 reception_mgmt) 기입 경로 — 2026-10-19.
  *
  * 기존 appendViaSheetsApi(머리 이름 매칭)와 따로 둔 이유: 경영 시트는 '자산번호' 머리가 두 곳(T·BB)이고
  * 3행에 도우미 머리가 있어 이름 매칭이 틀린 열·행을 잡는다. 여기서는 dept-sheet-spec.ts 의 열 번호로 쓰고

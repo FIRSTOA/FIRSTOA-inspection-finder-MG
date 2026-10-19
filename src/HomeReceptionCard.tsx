@@ -38,7 +38,7 @@ export default function HomeReceptionCard({ counts, oldest, onClick, loading, er
           </div>
           {scheduleOverdue !== undefined && (
             <div className="mt-1 flex items-center gap-1.5 text-[11px] font-black text-slate-400">
-              <span className={`h-2 w-2 rounded-full ${scheduleOverdue >= 1 ? "bg-red-500" : "bg-slate-600"}`} aria-hidden />일정 미처리 <span className={`tabular-nums ${scheduleOverdue >= 1 ? "text-red-300" : "text-slate-500"}`}>{scheduleOverdue}</span>건
+              <span className={`h-2 w-2 rounded-full ${scheduleOverdue >= 1 ? "bg-red-500" : "bg-slate-600"}`} aria-hidden />물류 미처리 <span className={`tabular-nums ${scheduleOverdue >= 1 ? "text-red-300" : "text-slate-500"}`}>{scheduleOverdue}</span>건
             </div>
           )}
           <div className="mt-3 grid grid-cols-3 gap-x-2 gap-y-1.5">

@@ -1,5 +1,5 @@
 /**
- * 지원 부서 시트(영업지원·경영지원) 열 사양 — 순수 TS(Deno API 없음). vitest·deno test 양쪽에서 import 한다.
+ * 지원 부서 시트(영업팀·경영지원) 열 사양 — 순수 TS(Deno API 없음). vitest·deno test 양쪽에서 import 한다.
  *
  * 왜 열 번호 고정인가: 경영 시트는 '자산번호' 머리가 T(20)·BB(54) 두 곳이고, 3행에도 도우미 머리가 있다.
  * 기존 엔진(sheets-api.ts)처럼 머리 이름으로 찾으면 엉뚱한 열·행에 쓴다. 그래서 열 번호로 쓰고,
@@ -144,7 +144,7 @@ const MGMT_COLUMNS: DeptColumn[] = [
 
 export const DEPT_SHEET_SPECS: Record<DeptSheetCategory, DeptSheetSpec> = {
   reception_sales: {
-    category: "reception_sales", label: "영업지원", headerRow: 5, indexRow: 6, dataStart: 7,
+    category: "reception_sales", label: "영업팀", headerRow: 5, indexRow: 6, dataStart: 7,
     lastCol: 33, markerCols: [2, 4, 5],
     fingerprintKeys: ["date", "time", "author", "leaseNo", "symptom"],
     columns: SALES_COLUMNS,
