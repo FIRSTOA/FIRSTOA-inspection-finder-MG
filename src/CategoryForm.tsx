@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import { useAuthorBook } from "./authors";
+import { getSsoSession, ssoRequiredCached } from "./sso";
 import { CATEGORY_SCHEMAS, type FieldDef } from "./categoryForms";
 
 type Keyman = { label: string; name: string; phone: string };
@@ -93,11 +94,11 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
       return (
         <label key={f.key} className="block">
           <span className="text-xs font-medium text-slate-500">{f.label}</span>
-          <select value={author} onChange={(e) => setAuthor(e.target.value)}
+          {ssoRequiredCached() && getSsoSession() ? <div className="mt-0.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{author}</div> : <select value={author} onChange={(e) => setAuthor(e.target.value)}
             className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400">
             <option value="">선택</option>
             {authors.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
+          </select>}
         </label>
       );
     }

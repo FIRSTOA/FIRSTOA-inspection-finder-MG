@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuthorBook } from "./authors";
+import { getSsoSession, ssoRequiredCached } from "./sso";
 import { GRADE_OPTIONS } from "./formOptions";
 
 export type CopierExpansionFormState = {
@@ -167,11 +168,11 @@ export default function CopierExpansionForm({ form, setForm, author, setAuthor, 
 
       <label className="block">
         <span className="text-xs font-medium text-slate-500">작성자</span>
-        <select value={author} onChange={(e) => setAuthor(e.target.value)}
+        {ssoRequiredCached() && getSsoSession() ? <div className="mt-0.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{author}</div> : <select value={author} onChange={(e) => setAuthor(e.target.value)}
           className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
           <option value="">선택</option>
           {authors.map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
+        </select>}
       </label>
 
       <div className="text-[11px] font-bold text-slate-400">■ 기본 정보</div>

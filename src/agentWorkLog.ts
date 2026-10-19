@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "81b565bad9",
+    "agent": "developer",
+    "summary": "부서 접수·달력: 예정일 입력 어디를 눌러도 달력 열림(showPicker) + 부서 일정 모달 시간 칸 제거"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "6efc6eeccd",
     "agent": "ui-designer",
     "summary": "서비스접수 피드백 5차: 부서 일정 수정·삭제·추가(캘린더·일정리스트) + 부서 접수 수정·삭제 + 거래처 선택을 복합기와 동일하게"

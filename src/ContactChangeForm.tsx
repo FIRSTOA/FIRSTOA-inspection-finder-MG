@@ -1,4 +1,5 @@
 import { useAuthorBook } from "./authors";
+import { getSsoSession, ssoRequiredCached } from "./sso";
 import type { ContactChangeFormState } from "./contactChange";
 
 type Keyman = { label: string; name: string; phone: string };
@@ -59,10 +60,10 @@ export default function ContactChangeForm({ form, setForm, author, setAuthor, on
       <Field label="업체명(본사/지점 등)" value={form.company} onChange={(value) => set("company", value)} />
       <label className="block">
         <span className="text-xs font-black text-slate-500">퍼스트전산직원</span>
-        <select value={author} onChange={(event) => setAuthor(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300">
+        {ssoRequiredCached() && getSsoSession() ? <div className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700">{author}</div> : <select value={author} onChange={(event) => setAuthor(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300">
           <option value="">선택</option>
           {authors.map((name) => <option key={name} value={name}>{name}</option>)}
-        </select>
+        </select>}
       </label>
       <Field label="수도권지역" value={form.region} onChange={(value) => set("region", value)} />
       <Field label="구분" value={form.category} onChange={(value) => set("category", value)} />
