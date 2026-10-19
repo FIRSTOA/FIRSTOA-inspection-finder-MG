@@ -92,20 +92,24 @@ export function filterUnhandled(rows: UnhandledRow[], team: UnhandledTeam | null
   return rows.filter((r) => (team === null || r.team === team) && (kind === null || r.kind === kind));
 }
 
-export type UnhandledTab = "전체" | "A" | "B" | "C" | "D" | "E" | "경영" | "운영" | "영업" | "물류";
-export const UNHANDLED_TABS: UnhandledTab[] = ["전체", "A", "B", "C", "D", "E", "경영", "운영", "영업", "물류"];
+export type UnhandledTab = "전체" | "A" | "B" | "C" | "D" | "E" | "경영" | "운영" | "영업";
+export const UNHANDLED_TABS: UnhandledTab[] = ["전체", "A", "B", "C", "D", "E", "경영", "운영", "영업"];
 
-/** 탭 → 필터 인자 */
+/** 탭 → 팀 필터 (전체는 null) */
 export function tabFilter(tab: UnhandledTab): [UnhandledTeam | null, UnhandledKind | null] {
   if (tab === "전체") return [null, null];
-  if (tab === "물류") return [null, "물류"];
   return [tab, null];
 }
 
+/** 팀 탭 건수 = 그 팀의 접수+AS+물류 전부 (팀 합 = 전체, 2026-10-20) */
 export function rowsForTab(rows: UnhandledRow[], tab: UnhandledTab): UnhandledRow[] {
   const [team, kind] = tabFilter(tab);
-  // 탭은 서로 겹치지 않게: 팀 탭(A~E)은 물류를 빼고, 물류 탭만 물류를 모은다 → A+B+C+D+E+경영+운영+영업+물류 = 전체 (2026-10-20 사용자 지적)
-  return filterUnhandled(rows, team, kind).filter((r) => tab === "전체" || tab === "물류" || r.kind !== "물류");
+  return filterUnhandled(rows, team, kind);
+}
+
+/** 목록을 접수·AS 묶음과 물류 묶음으로 가른다 */
+export function splitByGroup(rows: UnhandledRow[]): { work: UnhandledRow[]; logistics: UnhandledRow[] } {
+  return { work: rows.filter((r) => r.kind !== "물류"), logistics: rows.filter((r) => r.kind === "물류") };
 }
 
 /** 탭별 건수 */
