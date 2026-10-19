@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "7a54c3a988",
+    "agent": "developer",
+    "summary": "그룹웨어 로그인 고정이면 작성자 고르기 전부 제거: 서비스접수 머리띠 select + 양식 4곳(카테고리·담당자변경·복합기확장성·PC) 이름 글자만"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "81b565bad9",
     "agent": "developer",
     "summary": "부서 접수·달력: 예정일 입력 어디를 눌러도 달력 열림(showPicker) + 부서 일정 모달 시간 칸 제거"
