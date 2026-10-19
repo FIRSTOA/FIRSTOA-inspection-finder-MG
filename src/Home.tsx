@@ -1,6 +1,6 @@
 import { teamLabel } from "./authors";
 import CostTile from "./CostTile";
-import OverduePanel from "./OverduePanel";
+import HomeUnhandledPanel from "./HomeUnhandledPanel";
 import LiveSendBoard from "./LiveSendBoard";
 import AgentTeamCard from "./AgentTeamCard";
 import HomeReceptionPanel from "./HomeReceptionPanel";
@@ -358,8 +358,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         {/* ── ③ 지표 ── */}
         <div className="relative grid grid-cols-1 gap-3 px-4 py-4 sm:px-6 lg:grid-cols-12 lg:items-start">
           <div className="grid min-w-0 auto-rows-min grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-8">
-            {/* 미처리 일정 — 팀 탭(A~E). 오른쪽 기둥이 길어 비던 왼쪽 공간을 채운다(2026-10-13) */}
-            <OverduePanel onOpen={openOverdue} />
+            {/* 미처리 토탈 — 접수 6종 + 지난 일정, 팀·부서·물류 탭(2026-10-19) */}
+            <HomeUnhandledPanel onOpenOverdue={openOverdue} onOpenReception={() => go("serviceReception")} />
             <Metric label="오늘 현장 기록" icon={Activity} accent="text-emerald-300" loading={loading} value={data ? data.todayInspections + data.todayAs : null} sub={data ? `점검 ${data.todayInspections} · AS ${data.todayAs} · 이번 주 ${fmt(weekRecords)}건` : undefined} />
             <Metric label="이번 주 방문" icon={Route} accent="text-blue-300" loading={loading} value={data ? data.weekVisits : null} sub={data ? `${Math.round(data.weekMinutes / 60)}시간 현장 · 작성자 ${new Set(data.weekRows.map((r) => r.작성자).filter(Boolean)).size}명` : undefined} />
             <Metric label="키맨·주소 변경 7일" icon={UsersRound} accent="text-amber-300" loading={loading} value={data ? data.keymanChanges7d : null} sub={data ? (data.keymanGreetWaiting ? `인사 대기 ${data.keymanGreetWaiting}건 — 워킨맵에서 체크` : "인사 대기 없음") : undefined} />

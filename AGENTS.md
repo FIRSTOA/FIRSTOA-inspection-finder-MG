@@ -67,3 +67,4 @@ Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 
 - 2026-10-19 (Claude Code) 피드백 5차: DeptCalendarPanel 편집·삭제·추가(team_calendar_events CRUD, 접수 schedule_date 동기화), DeptReceptionDetail [수정][삭제], DeptReceptionForm.view 거래처 블록 = 복합기(DeptCandidateList/Row·selectedSummary·custKind), DeptReceptionScreen 연결, ServiceReception 1줄(onDeleted). vitest 는 대문자 C:\ 경로에서 돌릴 것(소문자 /c/ 는 이중 로드 오류).
 - 2026-10-19 (Claude Code) 피드백 6차: src/datePicker.ts openNativePicker(예정일 4곳), DeptCalendarPanel 시간 칸 제거.
 - 2026-10-19 (Claude Code) 피드백 7차: 작성자 select 제거(SSO 고정 시) 5곳, OverduePanel 종류 칩·물류 안내·색(+src/overdueLogic.ts).
+- 2026-10-19 (Claude Code) 홈 미처리 통합: src/homeUnhandled.ts(mergeUnhandled: 열린 접수 6종 + 물류 일정 전부 + receptionId 없는 AS 일정) + HomeUnhandledPanel.tsx, Home.tsx 2줄. OverduePanel.tsx 는 미사용으로 남음.
