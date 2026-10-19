@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "6efc6eeccd",
+    "agent": "ui-designer",
+    "summary": "서비스접수 피드백 5차: 부서 일정 수정·삭제·추가(캘린더·일정리스트) + 부서 접수 수정·삭제 + 거래처 선택을 복합기와 동일하게"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "6efc6eeccd",
+    "agent": "developer",
+    "summary": "서비스접수 피드백 5차: 부서 일정 수정·삭제·추가(캘린더·일정리스트) + 부서 접수 수정·삭제 + 거래처 선택을 복합기와 동일하게"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "6efc6eeccd",
+    "agent": "qa-checker",
+    "summary": "서비스접수 피드백 5차: 부서 일정 수정·삭제·추가(캘린더·일정리스트) + 부서 접수 수정·삭제 + 거래처 선택을 복합기와 동일하게"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "6794f0a0a2",
     "agent": "ui-designer",
     "summary": "서비스접수 피드백 4차: 네이버 완료→접수 완료 동기화(원인 수정) + 자가 치유 + 부서 달력을 캘린더·일정리스트 팀 칩으로 + 상단 이름 글자만 + 업체 모드 제거"

@@ -13,6 +13,7 @@ import {
 import { askConfirm } from "./confirmModal";
 import { useMembers } from "./authors";
 import { notify } from "./toast";
+import { openNativePicker } from "./datePicker";
 
 type Props = {
   row: DeptRowLike & { model?: string; asset_no?: string; serial?: string; report_text?: string };
@@ -178,7 +179,7 @@ export default function DeptReceptionDetail({ row, onChanged, onDeleted, author 
             <textarea value={edit.notes} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} rows={2} className={textArea} />
           </label>
           <label className="block"><span className={label}>예정일 (비우면 부서 달력 일정도 지웁니다)</span>
-            <input type="date" value={edit.schedule_date} onChange={(e) => setEdit({ ...edit, schedule_date: e.target.value })} className={`${field} mt-1`} />
+            <input type="date" value={edit.schedule_date} onChange={(e) => setEdit({ ...edit, schedule_date: e.target.value })} onClick={openNativePicker} className={`${field} mt-1`} />
           </label>
           <div className="flex justify-end gap-1.5">
             <button type="button" onClick={() => setEdit(null)} className="inline-flex min-h-11 items-center rounded-full border border-slate-300 bg-white px-4 text-[12px] font-black text-slate-600 sm:min-h-9">취소</button>

@@ -1,7 +1,7 @@
 /**
  * 캘린더 탭·일정리스트 팀 칩 — 부서 달력(경영·운영·영업). 원본은 team_calendar_events(네이버 미러 없음).
  * 서비스접수의 예정일이 이 표에 1건씩 올라온다(deptReceptionApi.upsertDeptCalendar).
- * 2026-10-19: 상세에서 제목·메모·날짜·시간 수정·삭제, 빈 칸 더블클릭/[이 날에 추가]로 새 부서 일정(reception_id 없음).
+ * 2026-10-19: 상세에서 제목·메모·날짜 수정(시간 칸 없음)·삭제, 빈 칸 더블클릭/[이 날에 추가]로 새 부서 일정(reception_id 없음).
  * 접수에서 온 일정은 날짜를 바꾸면 접수 예정일도, 지우면 접수 예정일이 비워진다(deptReceptionFlow.saveDeptCalEdit/deleteDeptCalEdit).
  * as_tickets·네이버 캘린더와는 섞지 않는다.
  */
@@ -17,6 +17,7 @@ import {
 import { deleteDeptCalEdit, resolveActor, saveDeptCalEdit, warnTone } from "./deptReceptionFlow";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
+import { openNativePicker } from "./datePicker";
 
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const dayLabel = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))} (${WEEK[new Date(`${ymd}T12:00:00`).getDay()]})`;
@@ -64,7 +65,7 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
 
   const save = async () => {
     if (!edit || busy) return;
-    const checked = deptCalEditPatch(edit.form);
+    const checked = deptCalEditPatch({ ...edit.form, time: "" });
     if (!checked.ok) { notify(checked.error, "error"); return; }
     setBusy(true);
     try {
@@ -225,12 +226,9 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
             {!!edit.ev?.receptionId && (
               <div className={`rounded-lg px-3 py-2.5 text-xs font-bold ${meta.badge}`}>접수에서 온 일정: 날짜를 바꾸면 접수 예정일도 바뀝니다. 지우면 접수 예정일이 비워집니다(접수는 남음).</div>
             )}
-            <div className="grid grid-cols-[1fr_6.5rem] gap-2">
+            <div>
               <label className="block"><span className="text-[11px] font-bold text-slate-500">예정일</span>
-                <input type="date" value={edit.form.date} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, date: e.target.value } })} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none focus:border-blue-500" />
-              </label>
-              <label className="block"><span className="text-[11px] font-bold text-slate-500">시간</span>
-                <input type="time" value={edit.form.time} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, time: e.target.value } })} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-2 text-sm font-bold outline-none focus:border-blue-500" />
+                <input type="date" value={edit.form.date} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, date: e.target.value } })} onClick={openNativePicker} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none focus:border-blue-500" />
               </label>
             </div>
             <label className="block"><span className="text-[11px] font-bold text-slate-500">제목</span>

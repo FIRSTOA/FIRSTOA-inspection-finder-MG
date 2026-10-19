@@ -6,6 +6,7 @@ import { CalendarDays, Check, ChevronsRight, Loader2, Pause, StickyNote } from "
 import { DEPT_PROGRESS_CHIPS } from "./deptReception";
 import { nextWeekday, resolveActor, runDeptAction, warnTone, type DeptActionKind, type DeptRowLike } from "./deptReceptionFlow";
 import { notify } from "./toast";
+import { openNativePicker } from "./datePicker";
 import { kstDate } from "./visits";
 
 export type DeptActionBarProps = {
@@ -102,7 +103,7 @@ export default function DeptActionBar({ row, compact = false, author, onChanged,
 
       {panel === "date" && (
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-          <input type="date" value={date} min={kstDate()} onChange={(e) => setDate(e.target.value)} aria-label="예정일" className={`${input} w-auto flex-1`} />
+          <input type="date" value={date} min={kstDate()} onChange={(e) => setDate(e.target.value)} aria-label="예정일" onClick={openNativePicker} className={`${input} w-auto flex-1`} />
           <button type="button" disabled={!!busy || !date} onClick={() => void run("date", { date })} className={`${btn} border-slate-900 bg-slate-900 text-white`}>{spin("date")}예정일 저장</button>
         </div>
       )}
