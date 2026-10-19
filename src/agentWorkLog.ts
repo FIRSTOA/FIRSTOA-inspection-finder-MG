@@ -4,6 +4,48 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "ea68d6a479",
+    "agent": "feature-planner",
+    "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "ea68d6a479",
+    "agent": "ui-designer",
+    "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "ea68d6a479",
+    "agent": "db-schema",
+    "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "ea68d6a479",
+    "agent": "developer",
+    "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "ea68d6a479",
+    "agent": "qa-checker",
+    "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "ea68d6a479",
+    "agent": "field-deploy-check",
+    "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "ea68d6a479",
+    "agent": "sql-review",
+    "summary": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "57639e1498",
     "agent": "sql-review",
     "summary": "카톡봇 심박 끄기 SQL 머리 주석 갱신(2026-10-19 사용자 결정으로 다시 끄기, 권한나 실행 가능)"

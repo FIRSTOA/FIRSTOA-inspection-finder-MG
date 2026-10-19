@@ -11,9 +11,10 @@ type Props = {
   loading?: boolean;
   error?: string;
   over7?: number;
+  scheduleOverdue?: number; // 일정리스트 미처리 일정 건수(있으면 큰 숫자 아래 한 줄)
 };
 
-export default function HomeReceptionCard({ counts, oldest, onClick, loading, error, over7 }: Props) {
+export default function HomeReceptionCard({ counts, oldest, onClick, loading, error, over7, scheduleOverdue }: Props) {
   const total = RECEPTION_TYPES.reduce((s, m) => s + (counts[m.type] ?? 0), 0);
   const ageTone = oldest && oldest.days >= 7 ? "text-red-300" : oldest && oldest.days >= 3 ? "text-amber-300" : "text-slate-400";
   return (
@@ -35,6 +36,11 @@ export default function HomeReceptionCard({ counts, oldest, onClick, loading, er
             {total === 0 && <span className="ml-1 text-xs font-black text-emerald-300">모두 처리됨 ✓</span>}
             {(over7 ?? 0) > 0 && <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-black text-red-300"><span className="h-2 w-2 rounded-full bg-red-500" aria-hidden />7일↑ {over7}건</span>}
           </div>
+          {scheduleOverdue !== undefined && (
+            <div className="mt-1 flex items-center gap-1.5 text-[11px] font-black text-slate-400">
+              <span className={`h-2 w-2 rounded-full ${scheduleOverdue >= 1 ? "bg-red-500" : "bg-slate-600"}`} aria-hidden />일정 미처리 <span className={`tabular-nums ${scheduleOverdue >= 1 ? "text-red-300" : "text-slate-500"}`}>{scheduleOverdue}</span>건
+            </div>
+          )}
           <div className="mt-3 grid grid-cols-3 gap-x-2 gap-y-1.5">
             {RECEPTION_TYPES.map((m) => (
               <div key={m.type} className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">

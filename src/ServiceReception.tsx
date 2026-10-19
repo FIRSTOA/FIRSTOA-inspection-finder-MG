@@ -24,6 +24,8 @@ import UnifiedHistory from "./UnifiedHistory";
 import { notify } from "./toast";
 import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import ReceptionBoardPanel from "./ReceptionBoardPanel";
+import { requestOpenOverdue } from "./receptionBoardData";
+import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT, parseRightView, unhandledTotal, type ReceptionRightView } from "./receptionRightView";
 import DeptReception from "./DeptReceptionScreen";
 import DeptReceptionDetail from "./DeptReceptionDetail";
 import DeptActionBar from "./DeptActionBar";
@@ -292,7 +294,7 @@ export function splitCityDistrict(address: string): { city: string; district: st
   return { city, district: district === cityToken ? "" : district };
 }
 
-export default function ServiceReception({ author: globalAuthor }: { author: string }) {
+export default function ServiceReception({ author: globalAuthor, onOpenSchedule }: { author: string; onOpenSchedule?: () => void }) {
   // 접수 화면 전용 작성자 선택 — 원격팀 등 다른 직원이 사이드바 이름을 안 바꾸고도
   // 자기 이름으로 접수할 수 있게 한다 (기본값은 전역 작성자, 조직도 로그인 전 임시)
   const { book } = useAuthorBook();
@@ -447,6 +449,11 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   const [statusFilter, setStatusFilter] = useState<"전체" | "접수" | "진행중" | "완료">("전체");
   useEffect(() => { try { localStorage.setItem("reception_page_v1", page); } catch { /* 무시 */ } }, [page]);
   const [boardFocus, setBoardFocus] = useState<ReceptionType | null>(null); const [boardReload, setBoardReload] = useState(0); const [boardCounts, setBoardCounts] = useState<Record<ReceptionType, number> | null>(null); // 현황판 포커스·다시 읽기(지원 접수 저장 뒤)
+  // 오른쪽 기둥 보기: 접수리스트(기본) ↔ 미처리 현황(접수 + 일정). 홈 카드에서 들어오면 board 로 열린다.
+  const [rightView, setRightView] = useState<ReceptionRightView>(() => { try { return parseRightView(localStorage.getItem(RECEPTION_RIGHT_KEY)); } catch { return "list"; } });
+  useEffect(() => { try { localStorage.setItem(RECEPTION_RIGHT_KEY, rightView); } catch { /* 무시 */ } }, [rightView]);
+  useEffect(() => { const show = () => setRightView("board"); window.addEventListener(SHOW_BOARD_EVENT, show); return () => window.removeEventListener(SHOW_BOARD_EVENT, show); }, []);
+  const [scheduleCount, setScheduleCount] = useState(0);
   const [deptEnabled, setDeptEnabled] = useState(false); useEffect(() => { getConfig().then((c) => { const on = String(c.DEPT_RECEPTION_ENABLED || "").toLowerCase() === "true"; setDeptEnabled(on); if (!on && isDeptType(PAGE_TYPE[page])) goPage("copier"); }).catch(() => { setDeptEnabled(false); if (isDeptType(PAGE_TYPE[page])) goPage("copier"); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 마운트 때 한 번만. 설정을 못 읽으면 지원 줄을 숨긴 채(안전한 쪽) 둔다
   // 원격·IT 작업 보드는 기간과 무관하게 최근 30일 건을 모아 본다 (어제 미완료 건이 사라지면 안 된다)
   const [remoteQueue, setRemoteQueue] = useState<ServiceReceptionRow[]>([]);
@@ -1606,10 +1613,6 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
             counts={boardCounts || Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, mergedRows.filter((r) => r.type === m.type && listStateOf(r) !== "완료").length])) as Record<ReceptionType, number>} />
         </div>
       </section>
-      <ReceptionBoardPanel deptEnabled={deptEnabled} reloadKey={boardReload} onCounts={setBoardCounts} selectedType={boardFocus} onSelectedTypeChange={setBoardFocus}
-        onSelectType={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
-        onOpenFieldRow={(r) => { if (r.type === "복합기 AS") setListFilter("복합기 AS"); else goPage(r.type === "IT" ? "it" : "remote"); setOpenRowId(r.id); }}
-        renderDeptActions={(_r, ctx) => (ctx.source ? <DeptActionBar row={ctx.source} compact author={author} onChanged={() => { ctx.onDone(); void loadList(listDate, listPeriod, true); }} /> : null)} />
 
       <div className="space-y-4 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_minmax(430px,600px)] 2xl:items-start 2xl:gap-4 2xl:space-y-0">
         {/* ==== 좌: 접수 작성 ==== */}
@@ -1990,8 +1993,28 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
           </>}
         </div>
 
-        {/* ==== 우: 접수 리스트 (상시) ==== */}
+        {/* ==== 우: 접수 리스트 / 미처리 현황 (상시) ==== */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
+          <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-slate-100 p-1" role="tablist" aria-label="오른쪽 보기">
+            {([["list", "접수리스트"], ["board", "미처리 현황"]] as const).map(([v, label]) => {
+              const on = rightView === v;
+              const n = v === "board" ? unhandledTotal(boardCounts, scheduleCount, deptEnabled) : 0;
+              return (
+                <button key={v} type="button" role="tab" aria-selected={on} onClick={() => setRightView(v)}
+                  className={`min-h-10 rounded-lg px-3 text-[12.5px] font-black transition ${on ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                  {label}{v === "board" && <span className={`ml-1.5 font-mono tabular-nums ${n ? "text-rose-600" : "text-slate-400"}`}>{n}</span>}
+                </button>
+              );
+            })}
+          </div>
+          {/* 현황판은 늘 붙여 둔다(숨김) — 종류 선택기 배지·N 숫자가 접수리스트 보기에서도 살아 있게 */}
+          <div className={rightView === "board" ? "p-2" : "hidden"}>
+            <ReceptionBoardPanel compact onOpenSchedule={onOpenSchedule ? () => { requestOpenOverdue(); onOpenSchedule(); } : undefined} deptEnabled={deptEnabled} reloadKey={boardReload} onCounts={setBoardCounts} onScheduleCount={setScheduleCount} selectedType={boardFocus} onSelectedTypeChange={setBoardFocus}
+              onSelectType={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
+              onOpenFieldRow={(r) => { if (r.type === "복합기 AS") setListFilter("복합기 AS"); else goPage(r.type === "IT" ? "it" : "remote"); setOpenRowId(r.id); setRightView("list"); }}
+              renderDeptActions={(_r, ctx) => (ctx.source ? <DeptActionBar row={ctx.source} compact author={author} onChanged={() => { ctx.onDone(); void loadList(listDate, listPeriod, true); }} /> : null)} />
+          </div>
+          <div className={rightView === "list" ? "" : "hidden"}>
           <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-4 py-3">
             <div>
               <h3 className="text-sm font-black text-white lg:text-[15px]">접수 리스트</h3>
@@ -2067,6 +2090,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
               ))}
             </div>
           </div>}
+          </div>
         </section>
       </div>
       {dupeConfirm && (

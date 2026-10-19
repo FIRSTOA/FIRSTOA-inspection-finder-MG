@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import ReceptionBoardPanel from "../src/ReceptionBoardPanel";
-import { loadBoardData, postponeOf, summarizeForHome, toBoardRows, weekStartOf } from "../src/receptionBoardData";
+import { daysBefore, loadBoardData, loadScheduleOverdue, postponeOf, summarizeForHome, toBoardRows, weekStartOf, type ScheduleOverdueRow } from "../src/receptionBoardData";
+import { parseRightView, unhandledTotal } from "../src/receptionRightView";
 import HomeReceptionPanel from "../src/HomeReceptionPanel";
 import type { OpenReceptionRow } from "../src/deptReceptionApi";
 
@@ -83,6 +84,43 @@ describe("현황판 감싸개", () => {
     expect(summarizeForHome(rows, "2026-10-19").over7).toBe(1);
     expect(summarizeForHome(rows, "2026-10-25").over7).toBe(2); // 10-18 이 7일째
     expect(summarizeForHome([], "2026-10-19").over7).toBe(0);
+  });
+
+  it("loadScheduleOverdue: OverduePanel 과 같은 조건(오늘 이전·180일·완료 제외·매월점검 제외·3000건) + 업체명 정리", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      calls.push(String(url));
+      return { ok: true, status: 200, json: async () => [{ id: 7, team: "B", date: "2026-10-10", time: "", vendor: "가나상사 (물류)", assignee: "", status: "접수", scheduleType: "물류" }], text: async () => "" } as unknown as Response;
+    }));
+    const rows = await loadScheduleOverdue("2026-10-19");
+    expect(calls).toHaveLength(1);
+    const u = calls[0];
+    expect(u).toContain("/as_tickets?");
+    expect(u).toContain("select=id,team,date,time,vendor,assignee,status,scheduleType");
+    expect(u).toContain("date=lt.2026-10-19");
+    expect(u).toContain(`date=gte.${daysBefore("2026-10-19", 180)}`);
+    expect(daysBefore("2026-10-19", 180)).toBe("2026-04-22");
+    expect(u).toContain(`status=neq.${encodeURIComponent("완료")}`);
+    expect(u).toContain(`scheduleType=neq.${encodeURIComponent("매월점검")}`);
+    expect(u).toContain("order=date.desc,time.asc&limit=3000");
+    expect(rows[0]).toMatchObject({ id: "7", team: "B", date: "2026-10-10", status: "접수", scheduleType: "물류" });
+    expect(rows[0].time).toBeUndefined();
+  });
+
+  it("홈 요약 scheduleOverdue 와 전환 칸 N 합산", () => {
+    const sched: ScheduleOverdueRow[] = [
+      { id: "1", vendor: "a", scheduleType: "AS", team: "A", assignee: "", date: "2026-10-01", status: "접수" },
+      { id: "2", vendor: "b", scheduleType: "물류", team: "C", assignee: "", date: "2026-10-18", status: "진행중" },
+    ];
+    const s = summarizeForHome(toBoardRows(openRows), "2026-10-19", sched);
+    expect(s.scheduleOverdue).toBe(2);
+    expect(summarizeForHome([], "2026-10-19").scheduleOverdue).toBe(0);
+    // 접수 3건(영업지원·IT·원격) + 일정 2건; 지원 꺼지면 영업지원 1건 빠짐
+    expect(unhandledTotal(s.counts, 2, true)).toBe(5);
+    expect(unhandledTotal(s.counts, 2, false)).toBe(4);
+    expect(unhandledTotal(null, 0, true)).toBe(0);
+    expect(parseRightView("board")).toBe("board");
+    expect(parseRightView(null)).toBe("list");
   });
 
   it("서버 렌더: 첫 화면은 불러오는 중", () => {

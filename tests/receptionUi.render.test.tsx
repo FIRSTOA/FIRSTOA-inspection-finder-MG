@@ -57,6 +57,32 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(renderToString(createElement(HomeReceptionCard, { ...base, over7: 0 }))).not.toContain("7일↑");
   });
 
+  it("현황판 compact: 접기 열·빈 열·예정일 지남 유지", () => {
+    const html = renderToString(createElement(ReceptionBoard, { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, compact: true }));
+    expect(html).toContain("가나상사");
+    expect(html).toContain("없음 ✓");
+    expect(html).toContain("aria-expanded");
+    expect(html).toMatch(/예정일 지남 (<!-- -->)?1/);
+  });
+
+  it("현황판 scheduleRows: 일정 미처리 열·단추, 종류 선택 시 숨김", () => {
+    const scheduleRows = [{ id: "s1", vendor: "마바물류", scheduleType: "납품철수교체휴가교육", team: "A팀", assignee: "최기사", date: "2026-10-12", status: "미완료" }];
+    const base = { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, scheduleRows, onOpenSchedule: noop };
+    const html = renderToString(createElement(ReceptionBoard, base));
+    expect(html).toContain("일정 미처리");
+    expect(html).toContain("마바물류");
+    expect(html).toContain("납품");
+    expect(html).toContain("일정리스트에서 처리");
+    expect(renderToString(createElement(ReceptionBoard, { ...base, selectedType: "IT" }))).not.toContain("마바물류");
+    expect(renderToString(createElement(ReceptionBoard, { ...base, compact: true }))).toContain("마바물류");
+  });
+
+  it("홈 카드: scheduleOverdue 가 있으면 일정 미처리 줄이 나온다", () => {
+    const base = { counts, oldest: null, onClick: noop };
+    expect(renderToString(createElement(HomeReceptionCard, { ...base, scheduleOverdue: 4 }))).toContain("일정 미처리");
+    expect(renderToString(createElement(HomeReceptionCard, base))).not.toContain("일정 미처리");
+  });
+
   it("부서 폼 틀: 경영지원만 계약서구분이 보인다", () => {
     const base = {
       dept: "경영지원" as const, mode: "device" as const, onModeChange: noop, query: "", onQueryChange: noop, onSearch: noop, candidates: null, preview: null,

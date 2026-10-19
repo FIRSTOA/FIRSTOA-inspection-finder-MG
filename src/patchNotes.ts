@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ea68d6a479",
+    "date": "2026-10-19",
+    "note": "서비스접수 전사 확대: 경영지원·운영지원·영업지원 3종 + 미처리 현황판 + 홈 카드 + 부서 시트 자동 기입"
+  },
+  {
     "hash": "d3a75f91ae",
     "date": "2026-10-19",
     "note": "4분기 평가용 작업 기록 파일 신설(docs/eval/2026-Q4-worklog.md) + CLAUDE.md 에 작업마다 평가용 항목 적는 규칙"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b621d7ff2b",
     "date": "2026-09-18",
     "note": "조회 탭 미수 CS체크 목록 — 불러오는 중에는 팀 건수를 0이 아니라 '…'로, 표가 없을 때와 구분해 표시 (느린 기기에서 C팀 0으로 보이던 것)"
-  },
-  {
-    "hash": "bf67a63cab",
-    "date": "2026-09-18",
-    "note": "자동일정 — 4분기 첫 조회가 시간 초과로 실패하고 10초 뒤엔 되던 현상: 시간 초과·일시 오류면 1.5초·3초 뒤 자동으로 두 번 더 시도한다"
   }
 ];

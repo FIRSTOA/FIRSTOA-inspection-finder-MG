@@ -4,7 +4,8 @@ import type { ReceptionRow } from "./ReceptionBoard";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import { fetchOpenReceptions, type OpenReceptionRow } from "./deptReceptionApi";
 import { ageDays, isDeptType, weekCompletionRate } from "./deptReception";
-import { selectAllRows } from "./supabase";
+import { selectAllRows, selectRows } from "./supabase";
+import { fieldTicketVendor } from "./ids";
 import { kstDate } from "./visits";
 
 const KNOWN_TYPES = new Set<string>(RECEPTION_TYPES.map((m) => m.type));
@@ -70,10 +71,39 @@ export async function loadBoardData(today: string = kstDate()): Promise<BoardDat
   };
 }
 
-export type HomeReceptionSummary = { counts: Record<ReceptionType, number>; oldest: { vendor: string; type: ReceptionType; days: number } | null; over7: number };
+/** 일정 미처리 한 줄 — ReceptionBoard 의 ScheduleRow 와 같은 모양(구조 호환) */
+export type ScheduleOverdueRow = { id: string; vendor: string; scheduleType: string; team: string; assignee: string; date: string; time?: string; status: string };
 
-/** 현황판 행 → 홈 카드 숫자(종류별 건수 + 가장 오래된 1건 + 경과 7일 이상 건수). */
-export function summarizeForHome(rows: ReceptionRow[], today: string): HomeReceptionSummary {
+/** today 기준 n일 전(YYYY-MM-DD). today 는 kstDate() 값. */
+export function daysBefore(today: string, n: number): string {
+  const t = Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)));
+  return new Date(t - n * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * 일정 미처리(물류·AS·납품 등) — 홈 OverduePanel 과 같은 규칙:
+ * as_tickets 중 날짜가 오늘 이전·180일 이내, 상태 완료 아님, 매월점검 제외, 최근 날짜 순 최대 3000건.
+ * 업체명은 fieldTicketVendor 로 정리(구분 꼬리 제거). 실패는 throw.
+ */
+export async function loadScheduleOverdue(today: string = kstDate()): Promise<ScheduleOverdueRow[]> {
+  const from = daysBefore(today, 180);
+  const rows = await selectRows<ScheduleOverdueRow>("as_tickets", `select=id,team,date,time,vendor,assignee,status,scheduleType&date=lt.${today}&date=gte.${from}&status=neq.${encodeURIComponent("완료")}&scheduleType=neq.${encodeURIComponent("매월점검")}&order=date.desc,time.asc&limit=3000`);
+  return rows.map((r) => {
+    const raw = String(r.vendor || "");
+    return { id: String(r.id), vendor: fieldTicketVendor(raw).vendor || raw, scheduleType: String(r.scheduleType || ""), team: String(r.team || ""), assignee: String(r.assignee || ""), date: String(r.date || "").slice(0, 10), time: r.time ? String(r.time) : undefined, status: String(r.status || "") };
+  });
+}
+
+/** 일정리스트의 미처리 탭 열기 예약(Home.tsx openOverdue 와 같은 신호). 탭 전환은 부르는 쪽이 한다. */
+export function requestOpenOverdue() {
+  try { localStorage.setItem("cs_as_open_overdue", "1"); } catch { /* 저장 못 해도 이벤트로 연다 */ }
+  window.setTimeout(() => window.dispatchEvent(new CustomEvent("cs:open-overdue")), 300);
+}
+
+export type HomeReceptionSummary = { counts: Record<ReceptionType, number>; oldest: { vendor: string; type: ReceptionType; days: number } | null; over7: number; scheduleOverdue: number };
+
+/** 현황판 행 → 홈 카드 숫자(종류별 건수 + 가장 오래된 1건 + 경과 7일 이상 건수 + 일정 미처리 건수). */
+export function summarizeForHome(rows: ReceptionRow[], today: string, schedule: ScheduleOverdueRow[] = []): HomeReceptionSummary {
   const counts = Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, 0])) as Record<ReceptionType, number>;
   let oldest: ReceptionRow | null = null;
   let over7 = 0;
@@ -82,5 +112,5 @@ export function summarizeForHome(rows: ReceptionRow[], today: string): HomeRecep
     if (r.receipt_date && ageDays(r.receipt_date, today) >= 7) over7 += 1;
     if (r.receipt_date && (!oldest || r.receipt_date < oldest.receipt_date)) oldest = r;
   }
-  return { counts, oldest: oldest ? { vendor: oldest.vendor, type: oldest.type, days: ageDays(oldest.receipt_date, today) } : null, over7 };
+  return { counts, oldest: oldest ? { vendor: oldest.vendor, type: oldest.type, days: ageDays(oldest.receipt_date, today) } : null, over7, scheduleOverdue: schedule.filter((r) => r.date && r.date < today).length };
 }

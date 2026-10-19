@@ -6592,7 +6592,7 @@ export default function App() {
         {screen === "foodMap" && <FoodMap author={author} team={(() => { const t = teamForAuthor(author); return /^[A-E]$/.test(t) ? t : ""; })()} />}
         {visited.has("calendar") && <KeepAlive active={screen === "calendar"}><CsCalendar /></KeepAlive>}
         {visited.has("asReception") && <KeepAlive active={screen === "asReception"}><AsReception author={author} onUseField={openAsTicketInField} onSelfRequest={openSelfRequestInField} onLoadForm={openFormInField} onLogistics={openLogisticsTicketInField} /></KeepAlive>}
-        {visited.has("serviceReception") && <KeepAlive active={screen === "serviceReception"}><ServiceReception author={author} /></KeepAlive>}
+        {visited.has("serviceReception") && <KeepAlive active={screen === "serviceReception"}><ServiceReception author={author} onOpenSchedule={() => setScreen("asReception")} /></KeepAlive>}
         {screen === "recontract" && (
           <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm font-bold text-slate-400">재계약 준비를 불러오는 중…</div>}>
             <RecontractPrep author={author} />
