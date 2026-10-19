@@ -81,6 +81,18 @@ export async function updateDeptHandling(id: string, patch: Partial<DeptMeta>, s
   if (done) await updateRows("service_receptions", `id=eq.${enc(id)}`, { completed_at: done.at, completed_by: done.by });
 }
 
+/** 접수 수정 — 사람이 넣은 칸만(field·symptom·receiver_name·receiver_phone·notes). 거래처는 바꾸지 않는다. 실패는 throw. */
+export type DeptReceptionEditPatch = { field: string; symptom: string; receiver_name: string; receiver_phone: string; notes: string };
+export async function updateDeptReceptionFields(id: string, patch: DeptReceptionEditPatch): Promise<void> {
+  await updateRows("service_receptions", `id=eq.${enc(id)}`, patch);
+}
+
+/** 접수 삭제 — 소프트(deleted=true). 복합기 접수 삭제(ServiceReception removeReception → updateServiceReception)와 같은 방식. */
+export async function softDeleteDeptReception(id: string): Promise<void> {
+  if (!id) throw new Error("접수 id 가 없습니다");
+  await updateRows("service_receptions", `id=eq.${enc(id)}`, { deleted: true });
+}
+
 /** 접수 시 받은 시트 행 번호 기록 */
 export async function setDeptSheetRow(id: string, sheetRow: number): Promise<void> {
   await updateRows("service_receptions", `id=eq.${enc(id)}`, { sheet_row: sheetRow });
@@ -176,6 +188,20 @@ export async function completeDeptCalendar(receptionId: string): Promise<void> {
 export async function deleteDeptCalendar(receptionId: string): Promise<void> {
   if (!receptionId) return;
   await deleteRows("team_calendar_events", `reception_id=eq.${enc(receptionId)}`);
+}
+
+/** 부서 달력 일정 직접 편집(캘린더 탭·일정리스트 칩 상세) — id 로 한 건. 실패는 throw. */
+export async function updateDeptCalEvent(id: string, patch: { date: string; time: string; title: string; memo: string }): Promise<void> {
+  if (!id) throw new Error("일정 id 가 없습니다");
+  await updateRows("team_calendar_events", `id=eq.${enc(id)}`, { ...patch, updated_at: new Date().toISOString() });
+}
+export async function insertDeptCalEvent(team: DeptType, patch: { date: string; time: string; title: string; memo: string }, author: string): Promise<string> {
+  const saved = await insertRowReturning<{ id?: string }>("team_calendar_events", { ...patch, team, author, updated_at: new Date().toISOString() });
+  return String(saved?.id || "");
+}
+export async function deleteDeptCalEvent(id: string): Promise<void> {
+  if (!id) throw new Error("일정 id 가 없습니다");
+  await deleteRows("team_calendar_events", `id=eq.${enc(id)}`);
 }
 
 // ── 카톡(구조만 — 방 매핑 없으면 보내지 않는다, 폴백 금지) ─────

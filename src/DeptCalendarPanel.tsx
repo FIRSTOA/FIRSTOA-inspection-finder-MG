@@ -1,14 +1,22 @@
 /**
- * 캘린더 탭 — 부서 달력(경영·운영·영업) 읽기 전용 보기. 원본은 team_calendar_events(네이버 미러 없음).
- * 서비스접수의 예정일이 이 표에 1건씩 올라온다(deptReceptionApi.upsertDeptCalendar). 처리·수정은 접수 화면에서만.
- * as_tickets·네이버 캘린더와는 섞지 않는다 — 일정 추가·완료·배정 단추가 없다.
+ * 캘린더 탭·일정리스트 팀 칩 — 부서 달력(경영·운영·영업). 원본은 team_calendar_events(네이버 미러 없음).
+ * 서비스접수의 예정일이 이 표에 1건씩 올라온다(deptReceptionApi.upsertDeptCalendar).
+ * 2026-10-19: 상세에서 제목·메모·날짜·시간 수정·삭제, 빈 칸 더블클릭/[이 날에 추가]로 새 부서 일정(reception_id 없음).
+ * 접수에서 온 일정은 날짜를 바꾸면 접수 예정일도, 지우면 접수 예정일이 비워진다(deptReceptionFlow.saveDeptCalEdit/deleteDeptCalEdit).
+ * as_tickets·네이버 캘린더와는 섞지 않는다.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Loader2, Plus, Trash2 } from "lucide-react";
 import { selectRows } from "./supabase";
 import FormModal from "./FormModal";
 import { RECEPTION_TYPE_META } from "./ReceptionTypePicker";
-import { DEPT_CAL_LABEL, deptCalQuery, groupDeptEventsByDate, toDeptCalEvent, type DeptCalEvent, type DeptCalTeam } from "./deptCalendarView";
+import {
+  DEPT_CAL_LABEL, deptCalEditPatch, deptCalFormOf, deptCalQuery, emptyDeptCalForm, groupDeptEventsByDate, toDeptCalEvent,
+  type DeptCalEvent, type DeptCalForm, type DeptCalTeam,
+} from "./deptCalendarView";
+import { deleteDeptCalEdit, resolveActor, saveDeptCalEdit, warnTone } from "./deptReceptionFlow";
+import { askConfirm } from "./confirmModal";
+import { notify } from "./toast";
 
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const dayLabel = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))} (${WEEK[new Date(`${ymd}T12:00:00`).getDay()]})`;
@@ -28,7 +36,11 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(today);
-  const [detail, setDetail] = useState<DeptCalEvent | null>(null);
+  // 편집 모달 — ev 가 null 이면 새 일정
+  const [edit, setEdit] = useState<{ ev: DeptCalEvent | null; form: DeptCalForm } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const setDetail = (ev: DeptCalEvent) => setEdit({ ev, form: deptCalFormOf(ev) });
+  const openNew = (date: string) => { setSelected(date); setEdit({ ev: null, form: emptyDeptCalForm(date) }); };
   const from = days[0];
   const to = days[days.length - 1];
 
@@ -49,6 +61,41 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
     void load(signal);
     return () => { signal.stale = true; };
   }, [load, reloadTick]);
+
+  const save = async () => {
+    if (!edit || busy) return;
+    const checked = deptCalEditPatch(edit.form);
+    if (!checked.ok) { notify(checked.error, "error"); return; }
+    setBusy(true);
+    try {
+      const res = await saveDeptCalEdit(team, edit.ev, checked.patch, resolveActor());
+      res.warnings.forEach((w) => notify(w, warnTone(w)));
+      if (!res.warnings.length) notify(edit.ev ? "일정을 수정했습니다." : `${label} 부서 달력에 추가했습니다.`, "success");
+      setEdit(null);
+      setSelected(checked.patch.date);
+      await load({ stale: false });
+    } catch (e) {
+      notify(`일정 저장 실패: ${(e as Error).message}`, "error");
+    } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    const ev = edit?.ev;
+    if (!ev || busy) return;
+    const msg = ev.receptionId
+      ? `"${ev.title || "일정"}" 일정을 지울까요?\n접수에서 온 일정이라 접수의 예정일도 비워집니다(접수는 남습니다).`
+      : `"${ev.title || "일정"}" 일정을 지울까요?`;
+    if (!(await askConfirm(msg, { danger: true, okLabel: "지우기" }))) return;
+    setBusy(true);
+    try {
+      const res = await deleteDeptCalEdit(ev);
+      res.warnings.forEach((w) => notify(w, warnTone(w)));
+      if (!res.warnings.length) notify("일정을 지웠습니다.", "success");
+      setEdit(null);
+      await load({ stale: false });
+    } catch (e) {
+      notify(`일정 삭제 실패: ${(e as Error).message}`, "error");
+    } finally { setBusy(false); }
+  };
 
   const byDate = useMemo(() => groupDeptEventsByDate(events), [events]);
   const monthKey = month.slice(0, 7);
@@ -76,8 +123,10 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
           </span>
         )}
         <span className={`h-2 w-2 shrink-0 rounded-full ${meta.bar}`} />
-        <span className="min-w-0 flex-1">{label} 부서 달력 · 서비스접수 예정일(읽기 전용, 처리는 접수에서)</span>
+        <span className="min-w-0 flex-1">{label} 부서 달력 · 서비스접수 예정일 + 부서 일정</span>
         <span className="shrink-0 tabular-nums text-slate-400">{loading ? "불러오는 중" : `이달 ${monthEvents.length}건`}</span>
+        <button type="button" onClick={() => openNew(selected.slice(0, 7) === monthKey ? selected : today.slice(0, 7) === monthKey ? today : month)}
+          className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full bg-blue-600 px-2.5 text-[11px] font-black text-white hover:bg-blue-700"><Plus size={12} aria-hidden />추가</button>
       </div>
       {!!error && <div className="mx-3 mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 sm:mx-4">{error}</div>}
 
@@ -107,7 +156,7 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                 const list = byDate.get(date) || [];
                 const inMonth = date.slice(0, 7) === monthKey;
                 return (
-                  <button key={date} type="button" onClick={() => setSelected(date)}
+                  <button key={date} type="button" onClick={() => setSelected(date)} onDoubleClick={() => openNew(date)}
                     className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? "bg-white" : "bg-slate-50"} ${date === selected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
                     <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${date === today ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</span>
                     <span className="mt-1 flex flex-wrap gap-0.5">
@@ -118,7 +167,10 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
               })}
             </div>
             <div className="border-t border-slate-200 bg-slate-50 p-3">
-              <div className="mb-2 text-sm font-black text-slate-900">{Number(selected.slice(5, 7))}월 {Number(selected.slice(8, 10))}일 · {selectedList.length}건</div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-sm font-black text-slate-900">{Number(selected.slice(5, 7))}월 {Number(selected.slice(8, 10))}일 · {selectedList.length}건</span>
+                <button type="button" onClick={() => openNew(selected)} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-black text-slate-600 hover:bg-slate-100"><Plus size={12} aria-hidden />이 날에 추가</button>
+              </div>
               <div className="space-y-1.5">
                 {selectedList.map(row)}
                 {!selectedList.length && <div className="py-4 text-center text-xs font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
@@ -136,7 +188,8 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                   const list = byDate.get(date) || [];
                   const inMonth = date.slice(0, 7) === monthKey;
                   return (
-                    <div key={date} className={`min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 2xl:min-h-40 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
+                    <div key={date} onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) openNew(date); }} title="빈 곳을 두 번 누르면 이 날에 일정 추가"
+                      className={`min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 2xl:min-h-40 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
                       <div className={`mb-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black tabular-nums ${date === today ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</div>
                       <div className="max-h-36 space-y-1 overflow-y-auto">
                         {list.map((ev) => (
@@ -155,18 +208,42 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
         </>
       )}
 
-      {detail && (
-        <FormModal title={detail.title || "(제목 없음)"} subtitle={`${label} 부서 달력 · 읽기 전용`} icon={<CalendarDays size={17} />}
-          onClose={() => setDetail(null)}
-          footer={<button type="button" onClick={() => setDetail(null)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">닫기</button>}>
-          <dl className="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-2 text-sm">
-            <dt className="font-bold text-slate-400">예정일</dt><dd className="font-black text-slate-900">{dayLabel(detail.date)}{detail.time && ` ${detail.time}`}</dd>
-            <dt className="font-bold text-slate-400">작성자</dt><dd className="font-bold text-slate-800">{detail.author || "-"}</dd>
-            <dt className="font-bold text-slate-400">메모</dt><dd className="whitespace-pre-wrap font-semibold text-slate-700">{detail.memo || "-"}</dd>
-          </dl>
-          {!!detail.receptionId && (
-            <div className={`rounded-lg px-3 py-2.5 text-xs font-bold ${meta.badge}`}>서비스접수에서 온 일정입니다. 완료·수정은 접수 화면({team})에서 처리하세요.</div>
-          )}
+      {edit && (
+        <FormModal title={edit.ev ? (edit.ev.title || "(제목 없음)") : `${label} 부서 일정 추가`}
+          subtitle={`${label} 부서 달력 · ${edit.ev ? "수정" : "새 일정"}${edit.ev?.author ? ` · 작성 ${edit.ev.author}` : ""}`} icon={<CalendarDays size={17} />}
+          onClose={() => { if (!busy) setEdit(null); }}
+          footer={(
+            <div className="flex w-full items-center gap-2">
+              {edit.ev && (
+                <button type="button" disabled={busy} onClick={() => void remove()} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-600 hover:bg-rose-50 disabled:opacity-40"><Trash2 size={13} aria-hidden />삭제</button>
+              )}
+              <button type="button" disabled={busy} onClick={() => setEdit(null)} className="ml-auto rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-40">취소</button>
+              <button type="button" disabled={busy} onClick={() => void save()} className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-40">{busy && <Loader2 size={13} className="animate-spin" aria-hidden />}{edit.ev ? "저장" : "추가"}</button>
+            </div>
+          )}>
+          <div className="space-y-2">
+            {!!edit.ev?.receptionId && (
+              <div className={`rounded-lg px-3 py-2.5 text-xs font-bold ${meta.badge}`}>접수에서 온 일정: 날짜를 바꾸면 접수 예정일도 바뀝니다. 지우면 접수 예정일이 비워집니다(접수는 남음).</div>
+            )}
+            <div className="grid grid-cols-[1fr_6.5rem] gap-2">
+              <label className="block"><span className="text-[11px] font-bold text-slate-500">예정일</span>
+                <input type="date" value={edit.form.date} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, date: e.target.value } })} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none focus:border-blue-500" />
+              </label>
+              <label className="block"><span className="text-[11px] font-bold text-slate-500">시간</span>
+                <input type="time" value={edit.form.time} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, time: e.target.value } })} className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-2 text-sm font-bold outline-none focus:border-blue-500" />
+              </label>
+            </div>
+            <label className="block"><span className="text-[11px] font-bold text-slate-500">제목</span>
+              <input value={edit.form.title} autoFocus={!edit.ev} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, title: e.target.value } })} placeholder="예: 가나상사 계약서 회수"
+                className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none focus:border-blue-500" />
+            </label>
+            <label className="block"><span className="text-[11px] font-bold text-slate-500">메모</span>
+              <textarea value={edit.form.memo} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, memo: e.target.value } })} rows={3}
+                className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold leading-5 outline-none focus:border-blue-500" />
+            </label>
+            {!!edit.ev?.receptionId && <div className="text-[11px] font-semibold text-slate-400">제목·메모는 접수에서 예정일·분야·내용을 다시 저장하면 접수 내용으로 다시 맞춰집니다.</div>}
+            {edit.ev && <div className="text-[11px] font-semibold text-slate-400">현재: {dayLabel(edit.ev.date)}{edit.ev.time && ` ${edit.ev.time}`}</div>}
+          </div>
         </FormModal>
       )}
     </div>

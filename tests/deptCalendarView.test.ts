@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deptCalQuery, groupDeptEventsByDate, isDeptCalTeam, toDeptCalEvent } from "../src/deptCalendarView";
+import { deptCalEditPatch, deptCalFormOf, deptCalQuery, groupDeptEventsByDate, isDeptCalTeam, toDeptCalEvent } from "../src/deptCalendarView";
 
 describe("부서 달력 보기", () => {
   it("부서 3종만 부서 팀으로 본다", () => {
@@ -41,5 +41,18 @@ describe("일정리스트 팀 칩 해석", () => {
     expect(splitTeamPick("ALL")).toEqual({ dept: null, team: "ALL" });
     expect(splitTeamPick("E")).toEqual({ dept: null, team: "E" });
     expect(splitTeamPick("종일")).toEqual({ dept: null, team: "종일" });
+  });
+});
+
+describe("부서 달력 편집 행 변환", () => {
+  it("폼 → PATCH 본문: 다듬고, 제목·날짜·시간 형식을 검사한다", () => {
+    const ev = toDeptCalEvent({ id: "1", team: "영업팀", date: "2026-10-20", time: "09:30:00", title: "[영업] 가나 · 견적", memo: "메모", reception_id: "r1" })!;
+    expect(deptCalFormOf(ev)).toEqual({ date: "2026-10-20", time: "09:30", title: "[영업] 가나 · 견적", memo: "메모" });
+    expect(deptCalEditPatch({ date: "2026-10-22", time: "", title: "  견적 방문 ", memo: " 2층 \n" }))
+      .toEqual({ ok: true, patch: { date: "2026-10-22", time: "", title: "견적 방문", memo: "2층" } });
+    expect(deptCalEditPatch({ date: "2026-10-22", time: "14:05", title: "x", memo: "" })).toMatchObject({ ok: true, patch: { time: "14:05" } });
+    expect(deptCalEditPatch({ date: "2026-10-22", time: "", title: "  ", memo: "" })).toEqual({ ok: false, error: "제목을 적어 주세요" });
+    expect(deptCalEditPatch({ date: "", time: "", title: "x", memo: "" }).ok).toBe(false);
+    expect(deptCalEditPatch({ date: "2026-10-22", time: "9시", title: "x", memo: "" }).ok).toBe(false);
   });
 });

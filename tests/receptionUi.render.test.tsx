@@ -121,6 +121,16 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(mgmt).toContain("계약서구분");
     expect(sales).not.toContain("계약서구분");
     expect(mgmt).not.toContain("업체로 접수");
-    expect(mgmt).toContain("시트에 자동으로 기입됩니다");
+    expect(mgmt).toContain("임대리스트 검색 — 업체명 / 자산기번 / 순번");
+    expect(mgmt).toContain("순번 하나로 업체 정보가 자동 채워집니다");
+    expect(mgmt).not.toContain("시트에 자동 기입됩니다");
+    const picked = renderToString(createElement(DeptReceptionFormView, { ...base, custKind: "기존" as const, onCustKind: noop, onClearVendor: noop,
+      selectedSummary: { name: "가나다상사", fields: [["순", "12", "num"], ["모델", "X1"]] as Array<[string, string, ("num" | "mono" | "")?]> } }));
+    expect(picked).toContain("시트에 자동 기입됩니다");
+    expect(picked).toContain("다시 검색");
+    expect(picked).toContain("가나다상사");
+    const fresh = renderToString(createElement(DeptReceptionFormView, { ...base, custKind: "신규" as const, onCustKind: noop, onNewRegion: noop, newVendorName: "" }));
+    expect(fresh).toContain("신규 거래처 업체명");
+    expect(fresh).toContain("지역(팀)");
   });
 });

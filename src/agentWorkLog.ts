@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "6794f0a0a2",
+    "agent": "ui-designer",
+    "summary": "서비스접수 피드백 4차: 네이버 완료→접수 완료 동기화(원인 수정) + 자가 치유 + 부서 달력을 캘린더·일정리스트 팀 칩으로 + 상단 이름 글자만 + 업체 모드 제거"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "6794f0a0a2",
+    "agent": "developer",
+    "summary": "서비스접수 피드백 4차: 네이버 완료→접수 완료 동기화(원인 수정) + 자가 치유 + 부서 달력을 캘린더·일정리스트 팀 칩으로 + 상단 이름 글자만 + 업체 모드 제거"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "6794f0a0a2",
+    "agent": "qa-checker",
+    "summary": "서비스접수 피드백 4차: 네이버 완료→접수 완료 동기화(원인 수정) + 자가 치유 + 부서 달력을 캘린더·일정리스트 팀 칩으로 + 상단 이름 글자만 + 업체 모드 제거"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "3a49c3afba",
     "agent": "ui-designer",
     "summary": "서비스접수 화면 구조 재설계: 한 줄 종류 탭 + 종이 한 장 폼 + 오른쪽 패널 한 장 (로직 무변경) + 팀장용 시스템 제안서"

@@ -1,6 +1,6 @@
 // 부서 접수 저장 6단계·처리 단추 흐름 — fetch 모킹으로 호출 순서와 분기를 확인한다(src/deptReceptionFlow.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatPhone, memoLine, nextWeekday, pickVendorAlias, prependMemo, resolveReceiver, runDeptAction, runDeptSave } from "../src/deptReceptionFlow";
+import { deleteDeptReception, formatPhone, memoLine, nextWeekday, pickVendorAlias, prependMemo, resolveReceiver, runDeptAction, runDeptSave, saveDeptReceptionEdit } from "../src/deptReceptionFlow";
 import { isCheckConstraintError } from "../src/deptReceptionApi";
 import { invalidateConfigCaches } from "../src/supabase";
 import type { DeptReceptionInput } from "../src/deptReception";
@@ -19,7 +19,8 @@ function mockFetch(handler: Handler) {
     const res = handler(call) || {};
     const status = res.status ?? 200;
     const text = res.body === undefined ? "" : typeof res.body === "string" ? res.body : JSON.stringify(res.body);
-    return new Response(text, { status, headers: { "Content-Type": "application/json" } });
+    // 204 는 본문이 있으면 Response 가 거부한다
+    return new Response(status === 204 ? null : text, { status, headers: { "Content-Type": "application/json" } });
   }));
 }
 const firstIndex = (method: string, table: string) => calls.findIndex((c) => c.method === method && c.table === table);
@@ -133,6 +134,43 @@ describe("처리 단추 (runDeptAction)", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2} 이정현: 견적 보냄$/);
     expect(lines[1]).toBe("10/18 10:00 박민: 첫 메모");
+  });
+});
+
+describe("접수 수정·삭제", () => {
+  const stored = { id: "r9", type: "영업팀", status: "접수", vendor: "가나상사", author: "박민", field: "해지문의", symptom: "해지 문의", receiver_name: "", receiver_phone: "", notes: "",
+    sheet_row: 12, remote_meta: { schedule_date: "2026-10-20", sheet_seq: "5", calendar_id: "c0" } };
+
+  it("수정: service_receptions PATCH(사람 입력 칸) → 예정일 병합 → 달력 → 시트 갱신 잡", async () => {
+    mockFetch(standard([], (c) => (c.method === "GET" && c.table === "service_receptions" ? { body: [stored] } : undefined)));
+    const res = await saveDeptReceptionEdit({ id: "r9", type: "영업팀", vendor: "가나상사", author: "박민" },
+      { field: "렌탈문의", symptom: " 한 대 추가 ", receiver_name: "김담당", receiver_phone: "010-1111-2222", notes: "", schedule_date: "2026-10-22" });
+    const patch = calls.find((c) => c.method === "PATCH" && c.table === "service_receptions")!;
+    expect(patch.url).toContain("id=eq.r9");
+    expect(patch.body).toEqual({ field: "렌탈문의", symptom: "한 대 추가", receiver_name: "김담당", receiver_phone: "010-1111-2222", notes: "" });
+    const merges = calls.filter((c) => c.table === "rpc/merge_reception_handling").map((c) => (c.body as { p_meta: Record<string, string> }).p_meta);
+    expect(merges[0]).toEqual({ schedule_date: "2026-10-22" });
+    expect(touched("team_calendar_events")).toBe(true);
+    const job = calls.find((c) => c.method === "POST" && c.table === "field_sheet_sync_jobs")!.body as { payload: { data: Record<string, string> } };
+    expect(job.payload.data._updateOnly).toBe("1");
+    expect(job.payload.data._updateRow).toBe("12");
+    expect(res.row.field).toBe("렌탈문의");
+    expect(res.row.remote_meta?.schedule_date).toBe("2026-10-22");
+    expect(res.warnings).toEqual([]);
+  });
+
+  it("삭제: deleted=true 소프트 PATCH 뒤 그 접수의 달력 일정 DELETE(행 DELETE 는 없음)", async () => {
+    mockFetch(standard([], (c) => (c.method === "DELETE" ? { status: 204 } : undefined)));
+    const res = await deleteDeptReception({ id: "r9", type: "영업팀", vendor: "가나상사", author: "박민" });
+    const patchAt = calls.findIndex((c) => c.method === "PATCH" && c.table === "service_receptions");
+    expect(patchAt).toBeGreaterThanOrEqual(0);
+    expect(calls[patchAt].body).toEqual({ deleted: true });
+    expect(calls[patchAt].url).toContain("id=eq.r9");
+    const delAt = calls.findIndex((c) => c.method === "DELETE" && c.table === "team_calendar_events");
+    expect(delAt).toBeGreaterThan(patchAt);
+    expect(calls[delAt].url).toContain("reception_id=eq.r9");
+    expect(calls.some((c) => c.method === "DELETE" && c.table === "service_receptions")).toBe(false);
+    expect(res.warnings).toEqual([]);
   });
 });
 

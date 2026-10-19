@@ -46,3 +46,25 @@ export function groupDeptEventsByDate(events: DeptCalEvent[]): Map<string, DeptC
 export function splitTeamPick(value: string): { dept: DeptCalTeam; team: null } | { dept: null; team: string } {
   return isDeptCalTeam(value) ? { dept: value, team: null } : { dept: null, team: value };
 }
+
+// ── 편집(2026-10-19: 읽기 전용 → 수정·삭제·추가) ─────
+export type DeptCalForm = { date: string; time: string; title: string; memo: string };
+export type DeptCalPatch = { date: string; time: string; title: string; memo: string };
+
+/** 빈 칸 추가용 폼 / 기존 일정 수정용 폼 */
+export const emptyDeptCalForm = (date: string): DeptCalForm => ({ date, time: "", title: "", memo: "" });
+export const deptCalFormOf = (ev: DeptCalEvent): DeptCalForm => ({ date: ev.date, time: ev.time, title: ev.title, memo: ev.memo });
+
+/**
+ * 편집 폼 → team_calendar_events PATCH/insert 본문. 제목·날짜가 없거나 형식이 틀리면 error.
+ * time 은 text 컬럼 — "HH:MM" 또는 "" 만 보낸다.
+ */
+export function deptCalEditPatch(form: DeptCalForm): { ok: true; patch: DeptCalPatch } | { ok: false; error: string } {
+  const date = String(form.date || "").trim();
+  const title = String(form.title || "").trim();
+  const time = String(form.time || "").trim().slice(0, 5);
+  if (!title) return { ok: false, error: "제목을 적어 주세요" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "날짜를 골라 주세요" };
+  if (time && !/^\d{2}:\d{2}$/.test(time)) return { ok: false, error: "시간 형식이 맞지 않습니다(예: 14:30)" };
+  return { ok: true, patch: { date, time, title: title.slice(0, 120), memo: String(form.memo || "").trim() } };
+}

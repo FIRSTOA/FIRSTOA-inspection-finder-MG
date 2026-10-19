@@ -1499,7 +1499,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                     {(() => { const state = displayStatusOf(row); return <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${DISPLAY_STATUS_TONE[state]}`}>{state}</span>; })()}
                   </span>
                 </button>
-                {openRowId === row.id && isDeptType(row.type) && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3"><DeptReceptionDetail row={row} author={author} onChanged={(next) => { setListRows((cur) => cur.map((r) => (r.id === next.id ? { ...r, ...next } as ServiceReceptionRow : r))); setBoardReload((n) => n + 1); }} /></div>}
+                {openRowId === row.id && isDeptType(row.type) && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3"><DeptReceptionDetail row={row} author={author} onChanged={(next) => { setListRows((cur) => cur.map((r) => (r.id === next.id ? { ...r, ...next } as ServiceReceptionRow : r))); setBoardReload((n) => n + 1); }} onDeleted={(id) => { deletedIdsRef.current.add(id); setListRows((cur) => cur.filter((r) => r.id !== id)); setOpenRowId(""); setBoardReload((n) => n + 1); }} /></div>}
                 {openRowId === row.id && !isDeptType(row.type) && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-semibold">
                     <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>

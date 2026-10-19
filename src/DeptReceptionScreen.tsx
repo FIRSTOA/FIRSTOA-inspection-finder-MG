@@ -2,8 +2,7 @@
 // 기존(임대리스트 검색: 숫자+Enter = 순 정확 일치) / 신규(업체명·지역 직접) · 자동 채움 · 처리자 기본값 · 저장 6단계(deptReceptionFlow.runDeptSave) · 결과 줄.
 // 2026-10-19: "업체로 접수"(vendor_master 검색) 모드와 폼 안 부서 달력을 뺐다 — 복합기 AS 처럼 기존/신규만, 달력은 캘린더 탭에서.
 import { useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
-import DeptReceptionFormView from "./DeptReceptionForm.view";
+import DeptReceptionFormView, { DeptCandidateList, DeptCandidateRow } from "./DeptReceptionForm.view";
 import PortalSelect from "./PortalSelect";
 import { searchLeaseList, type LeaseHit } from "./api";
 import {
@@ -26,8 +25,9 @@ type Props = {
   onSaved?: (result: DeptSaveResult) => void;
 };
 
-const REGION_CHIPS: Array<[DeptRegion, string]> = [["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"], ["E", "E"], ["지방", "지방"], ["", "미정"]];
 const seqOf = (h: LeaseHit) => pickLease(h, "순", "순번");
+const firstLine = (v: string) => v.split(/_x000d_|\r|\n/)[0].trim();
+const vendorKey = (h: LeaseHit) => firstLine(pickLease(h, "_업체명", "거래처명"));
 
 export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) {
   const members = useMembers();
@@ -98,7 +98,13 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
   ];
 
   // ── 검색 ──
-  const chooseLease = (h: LeaseHit) => { setLease(h); setIsNew(false); setLeaseHits([]); setResult(null); };
+  // 고를 때 후보 목록은 남겨 둔다 — 요약의 × (onClearVendor)로 비우면 같은 검색 결과가 다시 보인다(복합기 AS 처럼 다시 검색)
+  const chooseLease = (h: LeaseHit) => { setLease(h); setIsNew(false); setResult(null); };
+  const clearVendor = () => { setLease(null); setResult(null); }; // 거래처 구분(기존)·검색어·후보는 유지
+  const changeCustKind = (k: "기존" | "신규") => {
+    // 복합기 AS(ServiceReception setCustKind)와 같이 선택·검색어·결과·신규 입력을 비운다
+    setIsNew(k === "신규"); setLease(null); setQuery(""); setLeaseHits([]); setSearched(false); setSearchError(""); setNewVendor(""); setNewRegion(""); setResult(null);
+  };
   const runSearch = async () => {
     const kw = query.trim();
     if (!kw || searching) return;
@@ -107,71 +113,49 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
       const numeric = /^\d+$/.test(kw);
       const hits = await searchLeaseList(kw);
       const exact = numeric ? hits.filter((h) => seqOf(h) === kw) : [];
-      if (exact.length === 1) { chooseLease(exact[0]); }
-      else setLeaseHits(numeric && exact.length ? exact : hits);
+      setLease(null);
+      setLeaseHits(numeric && exact.length ? exact : hits);
+      if (exact.length === 1) chooseLease(exact[0]);
       setSearched(true);
     } catch (e) {
       setSearchError((e as Error).message);
     } finally { setSearching(false); }
   };
 
-  const hitBtn = "flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2 text-left text-[12px] font-bold text-slate-700 transition hover:bg-blue-50";
-  const selectedBox = (title: string, sub: string, onClear: () => void) => (
-    <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-      <div className="min-w-0"><div className="truncate text-[13px] font-black text-slate-900">{title}</div><div className="truncate text-[11px] font-bold text-slate-500">{sub}</div></div>
-      <button type="button" onClick={onClear} aria-label="다시 고르기" className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-black text-slate-500"><X size={12} aria-hidden />다시 고르기</button>
-    </div>
-  );
+  // 같은 업체 기기 수(검색 결과 기준) — 후보 행의 "기기 N대" 칩과 선택 요약의 임대중 경고
+  const vendorCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const h of leaseHits) m.set(vendorKey(h), (m.get(vendorKey(h)) || 0) + 1);
+    return m;
+  }, [leaseHits]);
+  const endedOf = (h: LeaseHit) => { const st = pickLease(h, "임대여부"); return st && st !== "임대중" ? st : ""; };
 
-  const candidates = (
-    <div className="space-y-2">
-      <div className="flex h-9 w-max divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="group" aria-label="거래처 구분">
-        {([[false, "기존"], [true, "신규"]] as const).map(([v, t]) => (
-          <button key={t} type="button" aria-pressed={isNew === v} onClick={() => { setIsNew(v); if (v) { setLease(null); setLeaseHits([]); } }}
-            className={`whitespace-nowrap px-4 text-[12px] font-bold transition ${isNew === v ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}>{t}</button>
-        ))}
-      </div>
-      {isNew && (
-        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
-          <input value={newVendor} onChange={(e) => setNewVendor(e.target.value)} placeholder="업체명(필수)" aria-label="신규 업체명"
-            className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-slate-700" />
-          <div className="flex flex-wrap gap-1" role="group" aria-label="지역">
-            {REGION_CHIPS.map(([r, t]) => (
-              <button key={t} type="button" aria-pressed={newRegion === r} onClick={() => setNewRegion(r)}
-                className={`min-h-9 rounded-full border px-3 text-[11px] font-black ${newRegion === r ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500"}`}>{t}</button>
-            ))}
-          </div>
-        </div>
-      )}
-      {!isNew && lease && selectedBox(vendorName || "업체 미기재", [seqOf(lease) && `순 ${seqOf(lease)}`, pickLease(lease, "모델명", "기종"), pickLease(lease, "자산번호")].filter(Boolean).join(" · "), () => setLease(null))}
-      {!isNew && !lease && leaseHits.length > 0 && (
-        <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 bg-white">
-          {leaseHits.slice(0, 30).map((h, i) => (
-            <button key={`${seqOf(h)}-${i}`} type="button" onClick={() => chooseLease(h)} className={hitBtn}>
-              <span className="min-w-0 truncate"><b className="text-slate-900">{pickLease(h, "거래처명", "_업체명").split(/_x000d_|\r|\n/)[0]}</b> · {pickLease(h, "모델명", "기종") || "-"} · {pickLease(h, "자산번호") || "-"}</span>
-              <span className="shrink-0 text-[11px] tabular-nums text-slate-400">순 {seqOf(h) || "-"}{leaseRegionOf(h) ? ` · ${leaseRegionOf(h)}` : ""}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {searched && !searching && !searchError && !isNew && !lease && !leaseHits.length && (
-        <div className="text-[12px] font-bold text-slate-400">찾는 거래처가 없습니다. 임대리스트에 없는 업체면 '신규'를 눌러 업체명·지역을 직접 넣어 주세요.</div>
-      )}
-    </div>
-  );
+  const candidates = isNew || lease ? null : leaseHits.length > 0 ? (
+    <DeptCandidateList>
+      {leaseHits.slice(0, 30).map((h, i) => (
+        <DeptCandidateRow key={`${seqOf(h)}-${i}`} name={firstLine(pickLease(h, "거래처명", "_업체명"))} ended={endedOf(h) || undefined}
+          sameVendor={vendorCounts.get(vendorKey(h)) || 0} no={seqOf(h) || "-"} model={pickLease(h, "모델명", "기종")} asset={pickLease(h, "자산번호")}
+          serial={pickLease(h, "시리얼번호(기번)", "기번")} region={regionLabelOf(leaseRegionOf(h) as DeptRegion)} onPick={() => chooseLease(h)} />
+      ))}
+    </DeptCandidateList>
+  ) : searched && !searching && !searchError ? <div className="mt-2 text-xs font-bold text-slate-400">검색 결과가 없습니다.</div> : null;
 
-  const preview: Array<[string, string]> | null = isNew
-      ? (newVendor.trim() ? [["업체명", newVendor.trim()], ["지역", regionLabelOf(newRegion) || "미정"], ["순", "신규(빈 칸)"]] : null)
-      : lease ? [
-        ["업체명", vendorName], ["등급", pickLease(lease, "등급")], ["지역", regionLabelOf(normalizeRegion(region)) || "미정"],
-        ["임대여부", pickLease(lease, "임대여부")], ["자산번호", pickLease(lease, "자산번호")], ["모델명", pickLease(lease, "모델명", "기종")],
-        ["계약기간", [pickLease(lease, "계약일", "첫계약일"), pickLease(lease, "종료일")].filter(Boolean).join(" ~ ")],
-        ["남은개월", pickLease(lease, "남은개월", "남은개월수")], ["미수개월", pickLease(lease, "미수개월수", "미수개월")],
-        ["기본금액", pickLease(lease, "기본금액", "기본임대료")], ["주소", pickLease(lease, "주소(실납품주소,도로명주소)", "주소")],
-        ...(dept === "경영지원" ? [
-          ["마감담당", pickLease(lease, "담당자(마감담당)", "마감담당", "마감 담당자")], ["일반전화", pickLease(lease, "일반전화")], ["확장성", pickLease(lease, "확장성")],
-        ] as Array<[string, string]> : []),
-      ] : null;
+  // 선택된 거래처 한 줄 요약 — 복합기 AS 요약과 같은 순서(순·모델·자산번호·기번·등급·지역·종료일·미수), 경영지원은 마감담당·일반전화·확장성을 뒤에 붙인다
+  const activeSame = lease ? leaseHits.filter((h) => vendorKey(h) === vendorKey(lease) && pickLease(h, "임대여부") === "임대중").length : 0;
+  const selectedSummary = !isNew && lease ? {
+    name: vendorName || "업체 미기재",
+    badge: endedOf(lease) ? `${endedOf(lease)} 기기` : undefined,
+    fields: [
+      ["순", seqOf(lease) || "-", "num"], ["모델", pickLease(lease, "모델명", "기종") || "-", ""],
+      ["자산번호", pickLease(lease, "자산번호") || "-", "mono"], ["기번", pickLease(lease, "시리얼번호(기번)", "기번") || "-", "mono"],
+      ["등급", pickLease(lease, "등급") || "-", ""], ["지역", regionLabelOf(normalizeRegion(region)) || "-", ""],
+      ["종료일", pickLease(lease, "종료일") || "-", "num"], ["미수", `${pickLease(lease, "미수개월수", "미수개월") || "0"}개월`, "num"],
+      ...(dept === "경영지원" ? ([
+        ["마감담당", pickLease(lease, "담당자(마감담당)", "마감담당", "마감 담당자"), ""], ["일반전화", pickLease(lease, "일반전화"), "num"], ["확장성", pickLease(lease, "확장성"), ""],
+      ] as Array<[string, string, ("num" | "mono" | "")?]>).filter(([, v]) => v) : []),
+    ] as Array<[string, string, ("num" | "mono" | "")?]>,
+    warn: activeSame > 1 ? `임대중 ${activeSame}대(검색 결과 기준) — 접수할 기기의 자산·기번이 맞는지 확인하세요` : undefined,
+  } : null;
 
   const memberOpts = useMemo(() => nameOptions(members), [members]);
   const handlerOptions = useMemo(() => {
@@ -245,7 +229,11 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
       <DeptReceptionFormView receiverLabel={receiver.locked ? `접수자 ${receiver.name}${receiver.team ? ` · ${receiver.team}` : ""}` : undefined}
         dept={dept} mode="device" onModeChange={() => undefined /* 업체로 접수 제거(2026-10-19) — View 의 토글은 윤화면이 뺀다 */}
         query={query} onQueryChange={setQuery} onSearch={() => void runSearch()} searching={searching} searchError={searchError}
-        candidates={candidates} preview={preview}
+        candidates={candidates}
+        custKind={isNew ? "신규" : "기존"} onCustKind={changeCustKind}
+        newVendorName={newVendor} onNewVendorName={setNewVendor}
+        newRegion={regionLabelOf(newRegion)} onNewRegion={(v) => setNewRegion(normalizeRegion(v))}
+        selectedSummary={selectedSummary} onClearVendor={clearVendor}
         routeOptions={DEPT_ROUTES.map((r) => DEPT_ROUTE_LABEL[r])} route={DEPT_ROUTE_LABEL[route]}
         onRoute={(label) => { const r = DEPT_ROUTES.find((k) => DEPT_ROUTE_LABEL[k] === label); if (r) setRoute(r); }}
         viaSlot={viaSlot}

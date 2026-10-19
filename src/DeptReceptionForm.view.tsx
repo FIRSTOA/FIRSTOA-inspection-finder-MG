@@ -2,7 +2,7 @@
 // props: dept(경영/운영/영업팀) · mode(기기/업체) · 검색 입력 · 후보 슬롯 · 자동 채움 미리보기 · 사람 입력 값들 · required · onSave/saving/result.
 // 처리자 select 와 사내 요청자 이름 고르기는 슬롯(ReactNode)으로 받아 로직 쪽에서 PortalSelect 등을 꽂는다.
 import type { ReactNode } from "react";
-import { AlertCircle, Loader2, Save, Search } from "lucide-react";
+import { AlertCircle, Building2, ChevronRight, Loader2, Save, Search } from "lucide-react";
 import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 
 export type DeptReceptionFormViewProps = {
@@ -15,9 +15,25 @@ export type DeptReceptionFormViewProps = {
   onSearch: () => void;
   searching?: boolean;
   searchError?: string;
-  candidates: ReactNode;
-  // 자동 채움 미리보기: [라벨, 값] 목록. null 이면 아직 고른 거래처가 없음
-  preview: Array<[string, string]> | null;
+  candidates: ReactNode; // 검색 결과 목록(행 모양은 export 한 DeptCandidateList/DeptCandidateRow 사용)
+  // 기존|신규 분할 막대 (복합기 AS 와 동일). onCustKind 가 없으면 막대가 안 보임
+  custKind?: "기존" | "신규";
+  onCustKind?: (k: "기존" | "신규") => void;
+  newVendorName?: string; // 신규일 때 업체명 입력
+  onNewVendorName?: (v: string) => void;
+  newRegion?: string; // "수도권A" 형식(복합기와 같음). 같은 칩을 누르면 onNewRegion("")
+  onNewRegion?: (v: string) => void;
+  // 선택된 거래처 한 줄 요약(복합기와 같은 모양). 없으면 요약 줄이 안 보임
+  selectedSummary?: {
+    name: string;
+    badge?: string; // 예: "해지 기기" (빨강 칩)
+    extra?: ReactNode; // 이름 줄 오른쪽(예: 알림 칩)
+    fields: Array<[string, string, ("num" | "mono" | "")?]>; // [라벨, 값, 글꼴]
+    warn?: string; // 노랑 한 줄(예: 임대중 3대 …)
+  } | null;
+  onClearVendor?: () => void; // 요약의 × (다시 검색)
+  // (구) 자동 채움 미리보기. selectedSummary 가 없을 때만 같은 한 줄 요약 모양으로 대신 보여준다
+  preview?: Array<[string, string]> | null;
   // 사람 입력
   routeOptions: string[];
   route: string;
@@ -61,19 +77,53 @@ const area = "mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white p
 const label = "text-[11px] font-semibold text-slate-500";
 const section = "text-[11px] font-bold uppercase tracking-wider text-slate-400";
 
+// 검색 결과 목록 — ServiceReception 복합기 AS 와 같은 마크업. 행 하나는 DeptCandidateRow.
+export function DeptCandidateList({ children }: { children: ReactNode }) {
+  return <div className="mt-2 max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">{children}</div>;
+}
+export function DeptCandidateRow(p: { name: string; ended?: string; sameVendor?: number; no: string; model: string; asset: string; serial: string; region: string; onPick: () => void }) {
+  return (
+    <button type="button" onClick={p.onPick} className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-blue-50/50 ${p.ended ? "opacity-60" : ""}`}>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <b className="truncate text-[14px] font-black text-slate-900">{p.name}</b>
+          {p.ended && <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{p.ended}</span>}
+          {(p.sameVendor || 0) > 1 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">기기 {p.sameVendor}대</span>}
+        </span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] font-bold text-slate-500">
+          <span className="text-slate-400">순 <span className="tabular-nums text-slate-600">{p.no}</span></span>
+          <span>{p.model || "-"}</span>
+          <span className="text-slate-400">자산 <span className="font-mono text-slate-600">{p.asset || "-"}</span></span>
+          <span className="text-slate-400">기번 <span className="font-mono text-slate-600">{p.serial || "-"}</span></span>
+          <span>{p.region}</span>
+        </span>
+      </span>
+      <ChevronRight size={16} className="shrink-0 text-slate-300" aria-hidden />
+    </button>
+  );
+}
+
 export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
   const meta = RECEPTION_TYPE_META[p.dept];
+  const custKind = p.custKind ?? "기존";
+  const sum = p.selectedSummary
+    ?? (p.preview ? { name: p.preview.find(([k]) => k === "업체명")?.[1] || "", fields: p.preview.filter(([k]) => k !== "업체명").map(([k, v]) => [k, v || "-", ""] as [string, string, ""]) } : null);
+  const picked = !!sum || (custKind === "신규" && !!p.newVendorName?.trim());
   const readyCount = p.required.filter(([, ok]) => ok).length;
   const isReady = readyCount === p.required.length;
   return (
     // 한 장의 종이: 거래처 선택 + 접수 내용 입력 — 어두운 머리띠 없이 작은 섹션 라벨과 구분선으로만 나눈다
     <section className="rounded-xl border border-slate-200 bg-white" aria-label={`${p.dept} 접수`}>
       <div className="flex items-start justify-between gap-3 px-4 pt-4 lg:px-5">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.badge}`}><span aria-hidden className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{p.dept}</span>
-          <span className={section}>거래처 선택</span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.badge}`}><span aria-hidden className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{p.dept}</span>
+            <span className={section}>거래처 선택</span>
+          </div>
+          <div className="mt-0.5 truncate text-[12px] font-medium text-slate-500">순번 하나로 업체 정보가 자동 채워집니다.</div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${picked ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}><Building2 size={12} aria-hidden />{picked ? "선택 완료" : "선택 필요"}</div>
           <div className={`rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${isReady ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{readyCount}/{p.required.length} 필수 입력</div>
           {p.receiverLabel && <div className="max-w-56 truncate text-[11px] font-medium text-slate-400">{p.receiverLabel}</div>}
         </div>
@@ -81,33 +131,60 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
 
       {/* 1. 거래처: 큰 검색창 하나 + 오른쪽 끝 접수 방식 토글, 검색 단추는 창 안에 */}
       <div className="space-y-2 px-4 pb-4 pt-2.5 lg:px-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-48 flex-1">
+        <div className="flex items-center gap-2">
+          {custKind === "기존" && <div className="relative min-w-0 flex-1">
             <input value={p.query} onChange={(e) => p.onQueryChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") p.onSearch(); }}
-              placeholder="순 또는 자산번호·기번" aria-label="거래처 검색" className={`${input} pr-24`} />
-            <button type="button" onClick={p.onSearch} disabled={p.searching} className="absolute right-1 top-1 inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-[12px] font-bold text-white transition hover:bg-blue-700 disabled:opacity-40"><Search size={14} aria-hidden />{p.searching ? "검색 중" : "검색"}</button>
-          </div>
+              placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" aria-label="거래처 검색" className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-3.5 pr-24 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            <button type="button" onClick={p.onSearch} disabled={p.searching} className="absolute right-1 top-1 inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-[12px] font-bold text-white transition hover:bg-blue-700 disabled:opacity-40"><Search size={14} aria-hidden />{p.searching ? "검색중" : "검색"}</button>
+          </div>}
+          {custKind === "신규" && <label className="block min-w-0 flex-1"><span className="sr-only">업체명</span>
+            <input value={p.newVendorName ?? ""} onChange={(e) => p.onNewVendorName?.(e.target.value)} placeholder="신규 거래처 업체명" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          </label>}
+          {p.onCustKind && <span className="flex h-9 shrink-0 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="group" aria-label="거래처 구분">
+            {(["기존", "신규"] as const).map((k) => (
+              <button key={k} type="button" aria-pressed={custKind === k} onClick={() => p.onCustKind?.(k)} className={`px-3 text-[12px] font-bold transition ${custKind === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}>{k}</button>
+            ))}
+          </span>}
         </div>
         {p.searchError && <div role="alert" className="flex items-start gap-1.5 text-[12px] font-bold text-red-600"><AlertCircle size={14} className="mt-0.5 shrink-0" />검색하지 못했습니다. 잠시 뒤 다시 시도해 주세요. ({p.searchError})</div>}
         {p.searching && <div role="status" className="flex items-center gap-1.5 text-[12px] font-bold text-slate-500"><Loader2 size={14} className="animate-spin" />거래처를 찾는 중입니다.</div>}
         {p.candidates}
 
-        {/* 2. 자동 채움 요약 — 상자 대신 옅은 바탕 한 장 */}
-        <div className="rounded-lg bg-slate-50 px-3 py-2">
-          {p.preview === null ? (
-            <div className="text-[12px] font-medium text-slate-400">거래처를 고르시면 업체 정보가 여기에 자동으로 채워집니다.</div>
-          ) : (
-            <dl className="flex flex-wrap gap-x-3 gap-y-0.5">
-              {p.preview.map(([k, v]) => (
-                <div key={k} className="flex min-w-0 items-baseline gap-1">
-                  <dt className="shrink-0 text-[11px] font-medium text-slate-400">{k}</dt>
-                  <dd className="min-w-0 wrap-break-word text-[12px] font-bold text-slate-800">{v || "-"}</dd>
-                </div>
+        {/* 신규: 지역 칩 (복합기와 같은 칩) */}
+        {custKind === "신규" && p.onNewRegion && (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-amber-50/60 p-3">
+            <span className="text-[11px] font-black text-slate-500">지역(팀)</span>
+            {["A", "B", "C", "D", "E"].map((t) => (
+              <button key={t} type="button" aria-pressed={p.newRegion === `수도권${t}`} onClick={() => p.onNewRegion?.(p.newRegion === `수도권${t}` ? "" : `수도권${t}`)}
+                className={`min-h-8 rounded-full border px-3 py-1 text-[11px] font-black transition ${p.newRegion === `수도권${t}` ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{t}</button>
+            ))}
+            <span className="text-[10px] font-bold text-slate-400">지역에 따라 팀 방·일정이 정해집니다</span>
+          </div>
+        )}
+
+        {/* 선택된 거래처 한 줄 요약 (복합기 AS 와 같은 모양) */}
+        {sum && custKind === "기존" && (
+          <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                <span className="truncate text-[14px] font-bold text-slate-950">{sum.name}</span>
+                {sum.extra}
+                {sum.badge && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600">{sum.badge}</span>}
+              </div>
+              {p.onClearVendor && <button type="button" onClick={p.onClearVendor} title="다시 검색" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"><span aria-hidden className="text-base leading-none">×</span><span className="sr-only">다시 검색</span></button>}
+            </div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              {sum.fields.map(([k, v, kind]) => (
+                <span key={k} className="inline-flex min-w-0 items-baseline gap-1">
+                  <span className="text-[11px] font-medium text-slate-400">{k}</span>
+                  <span className={`truncate text-[12px] font-bold text-slate-800 ${kind === "mono" ? "font-mono" : kind === "num" ? "tabular-nums" : ""}`} title={v}>{v || "-"}</span>
+                </span>
               ))}
-            </dl>
-          )}
-          <div className="mt-1 text-[11px] font-medium text-slate-400">이 값은 시트에 자동으로 기입됩니다. 직접 고치지 않으셔도 됩니다.</div>
-        </div>
+            </div>
+            {sum.warn && <div className="mt-1 text-[11px] font-bold text-amber-700">{sum.warn}</div>}
+            <div className="mt-1 text-[11px] font-medium text-slate-400">이 값은 시트에 자동 기입됩니다.</div>
+          </div>
+        )}
       </div>
 
       <div className="mx-4 border-t border-slate-100 lg:mx-5" />

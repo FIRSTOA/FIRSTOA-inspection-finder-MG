@@ -11,9 +11,11 @@ import {
   type DeptReceptionInput, type DeptType,
 } from "./deptReception";
 import {
-  completeDeptCalendar, deptSheetCategoryOf, enqueueDeptSheetJob, saveDeptReception, sendDeptReceptionKakao,
-  setDeptSheetRow, updateDeptHandling, upsertDeptCalendar,
+  completeDeptCalendar, deleteDeptCalEvent, deleteDeptCalendar, deptSheetCategoryOf, enqueueDeptSheetJob, insertDeptCalEvent,
+  saveDeptReception, sendDeptReceptionKakao, setDeptSheetRow, softDeleteDeptReception, updateDeptCalEvent,
+  updateDeptHandling, updateDeptReceptionFields, upsertDeptCalendar,
 } from "./deptReceptionApi";
+import type { DeptCalEvent, DeptCalPatch, DeptCalTeam } from "./deptCalendarView";
 import { getServiceReceptionById } from "./api";
 import { getSsoSession, ssoRequiredCached } from "./sso";
 import { kstDate } from "./visits";
@@ -317,6 +319,87 @@ export async function retryDeptSheetAppend(row0: DeptRowLike): Promise<DeptActio
   if (res.row) await setDeptSheetRow(row.id, res.row);
   const warnings = res.state === "failed" ? [`시트 미반영: ${res.message}`] : [];
   return { row: { ...row, sheet_row: res.row ?? row.sheet_row, remote_meta: { ...meta, ...patch } }, warnings };
+}
+
+// ── 접수 수정·삭제(상세 [수정]·[삭제]) ─────────────────
+export type DeptEditForm = { field: string; symptom: string; receiver_name: string; receiver_phone: string; notes: string; schedule_date: string };
+
+/**
+ * 접수 수정 — service_receptions PATCH(사람 입력 칸) + 예정일(remote_meta.schedule_date) + 부서 달력 + 시트 갱신(영업·경영).
+ * 접수 행 PATCH 실패는 throw, 달력·시트 실패는 warnings. 거래처는 바꾸지 않는다(삭제 후 다시 접수).
+ */
+export async function saveDeptReceptionEdit(row0: DeptRowLike, form: DeptEditForm): Promise<DeptActionResult> {
+  const row = await freshRow(row0);
+  if (!isDeptType(row.type)) throw new Error("부서 접수가 아닙니다");
+  const meta = row.remote_meta || {};
+  const warnings: string[] = [];
+  const patch = {
+    field: form.field.trim(), symptom: form.symptom.trim(), receiver_name: form.receiver_name.trim(),
+    receiver_phone: form.receiver_phone.trim(), notes: form.notes.trim(),
+  };
+  if (!patch.field) throw new Error("접수분야를 골라 주세요");
+  if (!patch.symptom) throw new Error("접수내용을 적어 주세요");
+  const date = form.schedule_date.trim();
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("예정일 형식이 맞지 않습니다");
+  await updateDeptReceptionFields(row.id, patch);
+  const dateChanged = date !== (meta.schedule_date || "");
+  if (dateChanged) await updateDeptHandling(row.id, { schedule_date: date });
+  const next: DeptRowLike = { ...row, ...patch, remote_meta: { ...meta, schedule_date: date } };
+  // 달력: 예정일이 바뀌었거나, 일정이 있는데 제목·메모 재료(분야·내용)가 바뀌었으면 다시 맞춘다(예정일 비우면 일정 삭제)
+  const calStale = dateChanged || (!!date && (patch.field !== (row.field || "") || patch.symptom !== (row.symptom || "")));
+  if (calStale) {
+    try {
+      const calId = await upsertDeptCalendar({ id: row.id, type: row.type, vendor: row.vendor, field: patch.field, symptom: patch.symptom, author: row.author, remote_meta: next.remote_meta || {} });
+      if (calId && row.status === "완료") await completeDeptCalendar(row.id); // 다시 맞춘 제목에도 ✅
+      if (calId !== (meta.calendar_id || "")) {
+        await updateDeptHandling(row.id, { calendar_id: calId });
+        next.remote_meta = { ...(next.remote_meta || {}), calendar_id: calId };
+      }
+    } catch (e) { warnings.push(`부서 달력 반영 실패: ${(e as Error).message}`); }
+  }
+  const sheetChanged = (["field", "symptom", "receiver_name", "receiver_phone", "notes"] as const)
+    .some((k) => patch[k] !== String(row[k] || ""));
+  if (sheetChanged) await pushSheetUpdate(next, warnings);
+  return { row: next, warnings };
+}
+
+/** 접수 삭제 — 소프트(deleted=true) 뒤 연결된 부서 달력 일정 삭제. 접수 PATCH 실패는 throw, 달력 실패는 warnings. 시트 행은 남는다. */
+export async function deleteDeptReception(row: DeptRowLike): Promise<{ warnings: string[] }> {
+  await softDeleteDeptReception(row.id);
+  const warnings: string[] = [];
+  try { await deleteDeptCalendar(row.id); } catch (e) { warnings.push(`부서 달력 일정 삭제 실패: ${(e as Error).message}`); }
+  return { warnings };
+}
+
+// ── 부서 달력 직접 편집(DeptCalendarPanel) ─────────────
+/**
+ * 일정 저장 — ev 가 없으면 새 일정(reception_id 없음), 있으면 PATCH.
+ * 접수에서 온 일정(receptionId)이고 날짜가 바뀌면 접수의 remote_meta.schedule_date 도 같은 날로 맞춘다.
+ * 일정 저장 실패는 throw, 접수 예정일 맞추기 실패는 warnings.
+ */
+export async function saveDeptCalEdit(team: DeptCalTeam, ev: DeptCalEvent | null, patch: DeptCalPatch, author: string): Promise<{ id: string; warnings: string[] }> {
+  const warnings: string[] = [];
+  if (!ev) {
+    const id = await insertDeptCalEvent(team, patch, author);
+    return { id, warnings };
+  }
+  await updateDeptCalEvent(ev.id, patch);
+  if (ev.receptionId && patch.date !== ev.date) {
+    try { await updateDeptHandling(ev.receptionId, { schedule_date: patch.date }); }
+    catch (e) { warnings.push(`접수 예정일 맞추기 실패: ${(e as Error).message}`); }
+  }
+  return { id: ev.id, warnings };
+}
+
+/** 일정 삭제 — 접수에서 온 일정이면 접수 예정일·calendar_id 를 비운다(접수 자체는 남김). */
+export async function deleteDeptCalEdit(ev: DeptCalEvent): Promise<{ warnings: string[] }> {
+  await deleteDeptCalEvent(ev.id);
+  const warnings: string[] = [];
+  if (ev.receptionId) {
+    try { await updateDeptHandling(ev.receptionId, { schedule_date: "", calendar_id: "" }); }
+    catch (e) { warnings.push(`접수 예정일 비우기 실패: ${(e as Error).message}`); }
+  }
+  return { warnings };
 }
 
 /** 사람 고르기 목록 — 전 인원(부서별 묶음) + 꼭 보여야 할 이름(기본 처리자·현재 값). 중복 제거. */
