@@ -3622,11 +3622,7 @@ function ProcessingFormPanel({
       <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)_4.5rem]" : "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)]"}`} style={{ background: bgSoft }}>
         <div>
           <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
-          <AuthorPicker
-            value={author}
-            onChange={setAuthor}
-            accent={accent}
-          />
+          {ssoRequiredCached() && getSsoSession() ? <div className="truncate rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-slate-900">{author}</div> /* 그룹웨어 로그인 고정이면 이름만 글자로(2026-10-19 사용자 "없애라") */ : <AuthorPicker value={author} onChange={setAuthor} accent={accent} />}
         </div>
         <div className="min-w-0">
           <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">지역</div>
@@ -4004,11 +4000,7 @@ function AirPurifierFormPanel({
       {/* 작성자 */}
       <div className="mb-2">
         <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
-        <AuthorPicker
-          value={author}
-          onChange={setAuthor}
-          accent={accent}
-        />
+        {ssoRequiredCached() && getSsoSession() ? <div className="truncate rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-slate-900">{author}</div> /* 그룹웨어 로그인 고정이면 이름만 글자로(2026-10-19 사용자 "없애라") */ : <AuthorPicker value={author} onChange={setAuthor} accent={accent} />}
       </div>
 
       {/* 필터리셋 / 필터교체 */}

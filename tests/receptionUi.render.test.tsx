@@ -83,7 +83,9 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(html).not.toContain("일정 미처리");
     expect(html).toContain("마바물류");
     expect(html).toContain("납품");
-    expect(html).toContain("일정리스트에서 처리");
+    expect(html).toContain("네이버 캘린더에서 완료 처리하면 다음 동기화(1분) 뒤 사라집니다");
+    expect(html).not.toContain("일정리스트에서 처리");
+    expect(html).not.toContain('role="button"');
     expect(renderToString(createElement(ReceptionBoard, { ...base, selectedType: "IT" }))).not.toContain("마바물류");
     expect(renderToString(createElement(ReceptionBoard, { ...base, compact: true }))).toContain("마바물류");
   });
@@ -118,7 +120,7 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     const sales = renderToString(createElement(DeptReceptionFormView, { ...base, dept: "영업팀" }));
     expect(mgmt).toContain("계약서구분");
     expect(sales).not.toContain("계약서구분");
-    expect(mgmt).toContain("기기로 접수");
+    expect(mgmt).not.toContain("업체로 접수");
     expect(mgmt).toContain("시트에 자동으로 기입됩니다");
   });
 });

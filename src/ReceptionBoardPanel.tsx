@@ -42,6 +42,7 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
   useEffect(() => { onScheduleCountRef.current = onScheduleCount; }, [onScheduleCount]);
   const [logistics, setLogistics] = useState<ScheduleOverdueRow[] | undefined>(undefined);
   const logisticsFailed = useRef(false);
+  const syncFailed = useRef(false);
   const [innerSelected, setInnerSelected] = useState<ReceptionType | null>(null);
   const selected = selectedType !== undefined ? selectedType : innerSelected;
   const [data, setData] = useState<BoardData | null>(null);
@@ -68,6 +69,10 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
         logisticsFailed.current = true;
         notify(`물류 미처리를 못 읽었습니다: ${logi.error}`, "error");
       }
+      // 일정 대조·자가 치유 실패는 현황판을 막지 않고 처음 한 번만 알린다(분마다 반복 방지)
+      if (next.syncError) { if (!syncFailed.current) { syncFailed.current = true; notify(next.syncError, "error"); } }
+      else syncFailed.current = false;
+      if (next.healed) notify(`일정이 완료된 복합기 AS 접수 ${next.healed}건을 완료로 맞췄습니다`, "success");
       setData(next);
       onCountsRef.current?.(Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, next.rows.filter((r) => r.type === m.type).length])) as Record<ReceptionType, number>);
       setToday(day);

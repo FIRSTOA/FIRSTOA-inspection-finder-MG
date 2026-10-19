@@ -7,8 +7,8 @@ import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 
 export type DeptReceptionFormViewProps = {
   dept: Extract<ReceptionType, "경영지원" | "운영지원" | "영업팀">;
-  mode: "device" | "vendor";
-  onModeChange: (mode: "device" | "vendor") => void;
+  mode?: "device" | "vendor"; // 화면에는 쓰지 않음(기기 접수만)
+  onModeChange?: (mode: "device" | "vendor") => void;
   // 거래처 검색
   query: string;
   onQueryChange: (v: string) => void;
@@ -52,9 +52,10 @@ export type DeptReceptionFormViewProps = {
 };
 
 // 공통 토큰: 컨트롤 rounded-lg · 테두리 slate-200 한 겹 · 입력 40px · 라벨 11px. 선택지는 칩 대신 한 줄 분할 막대(h-9).
-const seg = (on: boolean) => `whitespace-nowrap px-3 text-[12px] font-bold transition ${on ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-blue-700"}`;
-const segBar = "flex h-9 w-max divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white";
-const segScroll = "mt-1 max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+// 폰: 한 줄 분할 막대 + 가로 스크롤 / sm 이상: 칸마다 테두리를 두르고 줄바꿈(잘림 없음)
+const seg = (on: boolean) => `h-9 whitespace-nowrap px-3 text-[12px] font-bold transition sm:rounded-lg sm:border sm:border-slate-200 ${on ? "bg-blue-600 text-white sm:border-blue-600" : "bg-white text-slate-500 hover:bg-slate-50 hover:text-blue-700"}`;
+const segBar = "flex h-9 w-max divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:h-auto sm:w-auto sm:flex-wrap sm:gap-1.5 sm:divide-x-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent";
+const segScroll = "mt-1 max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:overflow-visible";
 const input = "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
 const area = "mt-1 w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
 const label = "text-[11px] font-semibold text-slate-500";
@@ -83,13 +84,8 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-48 flex-1">
             <input value={p.query} onChange={(e) => p.onQueryChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") p.onSearch(); }}
-              placeholder={p.mode === "device" ? "순 또는 자산번호·기번" : "순 또는 업체명"} aria-label="거래처 검색" className={`${input} pr-24`} />
+              placeholder="순 또는 자산번호·기번" aria-label="거래처 검색" className={`${input} pr-24`} />
             <button type="button" onClick={p.onSearch} disabled={p.searching} className="absolute right-1 top-1 inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-[12px] font-bold text-white transition hover:bg-blue-700 disabled:opacity-40"><Search size={14} aria-hidden />{p.searching ? "검색 중" : "검색"}</button>
-          </div>
-          <div className="flex h-9 shrink-0 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="group" aria-label="접수 방식">
-            {([["device", "기기로 접수"], ["vendor", "업체로 접수"]] as const).map(([k, t]) => (
-              <button key={k} type="button" aria-pressed={p.mode === k} onClick={() => p.onModeChange(k)} className={`whitespace-nowrap px-3 text-[12px] font-bold transition ${p.mode === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}>{t}</button>
-            ))}
           </div>
         </div>
         {p.searchError && <div role="alert" className="flex items-start gap-1.5 text-[12px] font-bold text-red-600"><AlertCircle size={14} className="mt-0.5 shrink-0" />검색하지 못했습니다. 잠시 뒤 다시 시도해 주세요. ({p.searchError})</div>}

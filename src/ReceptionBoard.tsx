@@ -3,9 +3,9 @@
 //        · selectedType(그 종류 열만 넓게) · deptEnabled(기본 true, false 면 지원 3종 숨김)
 //        · compact(오른쪽 기둥용 압축형: 작은 타일 + 세로 스택 + 열마다 접기)
 //        · scheduleRows(물류 미처리 → "물류 미처리" 열, 현장 3종 뒤; 숫자 띠 타일을 누르면 그 열만 넓게, 다시 누르면 전체 — 내부 상태)
-//        · onOpenSchedule(일정리스트로 가는 단추 + 카드 자체 클릭).
+//        · onOpenSchedule(호환용으로 남김, 쓰지 않음 — 물류 카드는 읽기 전용, 처리는 네이버 캘린더에서).
 // 경과 3일↑ 노랑, 7일↑ 빨강, 예정일 지난 건은 빨간 테두리. 열마다 20장까지만 먼저 보이고 "더 보기"로 펼친다.
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AlertCircle, CalendarClock, CalendarX2, Check, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 
@@ -20,6 +20,7 @@ export type ReceptionRow = {
   receipt_date: string;
   scheduled_date?: string | null;
   postponeCount?: number;
+  noTicket?: boolean; // 복합기 AS 접수인데 일정 등록이 없는 건
 };
 
 export type ScheduleRow = {
@@ -72,7 +73,7 @@ function scheduleTypeLabel(t: string): string {
   return t === "납품철수교체휴가교육" ? "납품" : t || "일정";
 }
 
-export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, onOpenSchedule }: Props) {
+export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
   const open = rows.filter((r) => (OPEN as readonly string[]).includes(r.status));
@@ -114,6 +115,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
           <div className="flex items-center gap-1.5 text-[12px]">
             <span className="min-w-0 truncate font-black text-slate-900">{r.vendor || "업체 미정"}</span>
             <span className="min-w-0 shrink truncate font-bold text-slate-500">· {r.field || "분야 미입력"}</span>
+            {r.noTicket && <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] font-black text-slate-500">일정 없음</span>}
             {r.status === "보류" && <span className="shrink-0 rounded bg-slate-200 px-1 text-[10px] font-black text-slate-600">보류</span>}
             {r.status === "원격대기" && <span className="shrink-0 text-[10px] font-black text-violet-600">원격대기</span>}
             {(r.postponeCount ?? 0) >= 1 && <span className="shrink-0 rounded bg-amber-50 px-1 text-[10px] font-black text-amber-700">미룸 {r.postponeCount}회</span>}
@@ -132,6 +134,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
         </div>
         <div className="mt-0.5 wrap-break-word text-[12px] font-bold text-slate-600">
           {r.field || "분야 미입력"}
+          {r.noTicket && <span className="ml-1.5 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-black text-slate-500">일정 없음</span>}
           {r.status === "보류" && <span className="ml-1.5 rounded bg-slate-200 px-1 py-0.5 text-[10px] font-black text-slate-600">보류</span>}
           {r.status === "원격대기" && <span className="ml-1.5 text-[10px] font-black text-violet-600">원격대기</span>}
           {(r.postponeCount ?? 0) >= 1 && <span className="ml-1.5 rounded bg-amber-50 px-1 py-0.5 text-[10px] font-black text-amber-700">미룸 {r.postponeCount}회</span>}
@@ -149,8 +152,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const renderScheduleCard = (s: ScheduleRow) => {
     const age = daysBetween(s.date, today);
     return (
-      <li key={s.id} {...(onOpenSchedule ? { role: "button", tabIndex: 0, onClick: onOpenSchedule, onKeyDown: (e: KeyboardEvent<HTMLLIElement>) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenSchedule(); } } } : {})}
-        className={`${compact ? "px-3 py-2" : "rounded-lg border border-slate-300 bg-white px-2 py-1.5"} ${onOpenSchedule ? "cursor-pointer transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-900" : ""}`}>
+      <li key={s.id} className={compact ? "px-3 py-2" : "rounded-lg border border-slate-300 bg-white px-2 py-1.5"}>
         <div className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-[12px] font-black text-slate-900">{s.vendor || "업체 미정"}</span>
           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums ${ageBadge(age)}`}>{age === 0 ? "오늘" : `${age}일`}</span>
@@ -165,11 +167,8 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     );
   };
 
-  const scheduleButton = onOpenSchedule ? (
-    <button type="button" onClick={onOpenSchedule} className="inline-flex min-h-11 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-3 text-[12px] font-black text-slate-700 transition hover:bg-slate-100">
-      <CalendarX2 size={14} aria-hidden />일정리스트에서 처리
-    </button>
-  ) : null;
+  // 물류 미처리는 읽기 전용: 일정리스트는 네이버 캘린더에 관여하지 않으므로 처리 단추 없이 안내만 둔다
+  const scheduleNote = <p className="text-[11px] font-bold leading-snug text-slate-500">네이버 캘린더에서 완료 처리하면 다음 동기화(1분) 뒤 사라집니다</p>;
 
   const scheduleList = (shown: ScheduleRow[], hidden: number) => (
     <div className={compact ? "pb-1" : "space-y-2 px-2 pb-2"}>
@@ -300,7 +299,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
       );
     };
     const scheduleItem = () =>
-      stackItem(SCHEDULE_KEY, "물류 미처리", "bg-slate-500", schedAll.length, scheduleList(schedShown, schedHidden), scheduleButton ? <div className="px-3 pb-2">{scheduleButton}</div> : undefined);
+      stackItem(SCHEDULE_KEY, "물류 미처리", "bg-slate-500", schedAll.length, scheduleList(schedShown, schedHidden), <div className="px-3 pb-2">{scheduleNote}</div>);
     body = (
       <div className="flex flex-col">
         {columns.map((m) => (
@@ -322,7 +321,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
             <span className="text-[13px] font-black text-slate-800">물류 미처리</span>
             <span className="text-[11px] font-black tabular-nums text-slate-400">{schedAll.length}건</span>
           </div>
-          {scheduleButton && <div className="px-2 pb-2">{scheduleButton}</div>}
+          <div className="px-3 pb-2">{scheduleNote}</div>
           {schedAll.length === 0 ? <div className="px-3 pb-3 text-[12px] font-black text-emerald-600">없음 ✓</div> : scheduleList(schedShown, schedHidden)}
         </div>
       </div>

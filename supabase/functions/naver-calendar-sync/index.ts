@@ -293,7 +293,7 @@ Deno.serve(async (req) => {
     const changed = listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).slice(0, 80);
 
     // 웹앱 일정에 연결된 uid(미러+승격) — 표시 목록에서 제외 + 네이버에서 옮긴 날짜·시간을 티켓에 반영
-    const ticketRows = await restAll<{ id: string; date: string; time: string; status: string; naverUid: string; assignee?: string; calendarTitle?: string; vendor?: string }>(`as_tickets?select=id,date,time,status,naverUid,assignee,"calendarTitle",vendor&naverUid=not.is.null`);
+    const ticketRows = await restAll<{ id: string; date: string; time: string; status: string; naverUid: string; assignee?: string; calendarTitle?: string; vendor?: string; receptionId?: string | null }>(`as_tickets?select=id,date,time,status,naverUid,assignee,"calendarTitle",vendor,"receptionId"&naverUid=not.is.null`);
     const ticketUids = new Set(ticketRows.map((t) => t.naverUid).filter(Boolean));
     const ticketByUid = new Map(ticketRows.map((t) => [t.naverUid, t]));
 
@@ -332,6 +332,14 @@ Deno.serve(async (req) => {
             body: JSON.stringify(patchBody),
           });
           if (patch.ok) ticketUpdated += 1;
+          // 네이버 완료로 일정이 닫히면 연결 접수도 완료 — 웹앱 완료 단추만 접수를 바꾸던 탓에
+          // 일정 완료·접수 열림이 12건 쌓였다(2026-10-19 실측). 접수/진행중일 때만(보류·원격대기·이미 완료는 그대로).
+          if (patch.ok && patchBody.status === "완료" && linkedTicket.receptionId) {
+            await fetch(`${rest}/service_receptions?id=eq.${encodeURIComponent(linkedTicket.receptionId)}&status=in.(${encodeURIComponent("접수")},${encodeURIComponent("진행중")})`, {
+              method: "PATCH", headers: { ...restHeaders, Prefer: "return=minimal" },
+              body: JSON.stringify({ status: "완료", completed_at: new Date().toISOString(), completed_by: "일정 완료 동기화" }),
+            }).catch(() => undefined); // 접수 동기화 실패는 일정 동기화를 막지 않는다 — 현황판이 열릴 때 자가 치유로 다시 맞춘다
+          }
         }
       }
 

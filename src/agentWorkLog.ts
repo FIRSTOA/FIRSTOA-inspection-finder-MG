@@ -4,6 +4,18 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "3a49c3afba",
+    "agent": "ui-designer",
+    "summary": "서비스접수 화면 구조 재설계: 한 줄 종류 탭 + 종이 한 장 폼 + 오른쪽 패널 한 장 (로직 무변경) + 팀장용 시스템 제안서"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "3a49c3afba",
+    "agent": "qa-checker",
+    "summary": "서비스접수 화면 구조 재설계: 한 줄 종류 탭 + 종이 한 장 폼 + 오른쪽 패널 한 장 (로직 무변경) + 팀장용 시스템 제안서"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "34eb62746d",
     "agent": "ui-designer",
     "summary": "서비스접수 피드백 3차: 영업팀 이름 + 필터 분할 막대 + 숫자 기준 정리 + 물류 미처리만 + 임대중 대수 + 현황판 타일 버그 + 작성자 UI 정리"

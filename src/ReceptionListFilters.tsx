@@ -32,7 +32,7 @@ function Segment({ cells, value, onPick, counts, label, scroll }: {
   cells: Cell[]; value: string; onPick: (k: string) => void; counts: Record<string, number>; label: string; scroll?: boolean;
 }) {
   return (
-    <div role="group" aria-label={label} className={`flex h-9 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white ${scroll ? "overflow-x-auto" : "overflow-hidden"}`}>
+    <div role="group" aria-label={label} className={`flex h-9 divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white ${scroll ? "overflow-x-auto sm:h-auto sm:flex-wrap sm:gap-1.5 sm:divide-x-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent" : "overflow-hidden"}`}>
       {cells.map((c) => {
         const on = value === c.key;
         const n = counts[c.key] ?? 0;
@@ -40,7 +40,7 @@ function Segment({ cells, value, onPick, counts, label, scroll }: {
         const tone = on ? "bg-slate-900 text-white" : amber ? "bg-amber-50 text-amber-800 hover:bg-amber-100" : "text-slate-600 hover:bg-slate-50";
         return (
           <button key={c.key} type="button" aria-pressed={on} onClick={() => onPick(c.key)}
-            className={`flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 text-[12px] font-bold transition ${scroll ? "" : "flex-1"} ${tone}`}>
+            className={`flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3 text-[12px] font-bold transition ${scroll ? "h-9 sm:rounded-lg sm:border sm:border-slate-200" : "flex-1"} ${tone}`}>
             <span>{c.label}</span>
             <span className={`text-[10px] font-semibold tabular-nums ${on ? "text-white/70" : amber ? "text-amber-700" : n === 0 ? "text-slate-300" : "text-slate-400"}`}>{n}</span>
           </button>

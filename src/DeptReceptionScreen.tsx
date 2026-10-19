@@ -1,24 +1,23 @@
 // 부서 접수(경영·운영·영업팀) 폼 로직 — 표시 틀 DeptReceptionForm.view 를 감싼다(설계 4-3). 설계안 이름은 DeptReception.tsx 였으나 deptReception.ts 와 대소문자만 달라 Windows에서 충돌해 이 이름으로 둔다.
-// 기기/업체 전환 · 순번/업체명 검색(숫자+Enter = 순 정확 일치) · 자동 채움 · 처리자 기본값 · 저장 6단계(deptReceptionFlow.runDeptSave) · 결과 줄.
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
-import { CalendarDays, X } from "lucide-react";
+// 기존(임대리스트 검색: 숫자+Enter = 순 정확 일치) / 신규(업체명·지역 직접) · 자동 채움 · 처리자 기본값 · 저장 6단계(deptReceptionFlow.runDeptSave) · 결과 줄.
+// 2026-10-19: "업체로 접수"(vendor_master 검색) 모드와 폼 안 부서 달력을 뺐다 — 복합기 AS 처럼 기존/신규만, 달력은 캘린더 탭에서.
+import { useMemo, useRef, useState } from "react";
+import { X } from "lucide-react";
 import DeptReceptionFormView from "./DeptReceptionForm.view";
 import PortalSelect from "./PortalSelect";
 import { searchLeaseList, type LeaseHit } from "./api";
 import {
-  DEPT_FIELD_CHIPS, DEPT_ROUTES, DEPT_ROUTE_LABEL, aggregateVendor, defaultHandler, defaultRoute, deptMissing, normalizeRegion,
+  DEPT_FIELD_CHIPS, DEPT_ROUTES, DEPT_ROUTE_LABEL, defaultHandler, defaultRoute, deptMissing, normalizeRegion,
   pickLease, regionLabelOf, type DeptReceptionInput, type DeptRegion, type DeptRoute, type DeptType,
 } from "./deptReception";
-import { isCheckConstraintError, searchVendorMaster, vendorInfoByCode, type VendorMasterHit } from "./deptReceptionApi";
+import { isCheckConstraintError } from "./deptReceptionApi";
 import {
-  formatPhone, leaseRegionOf, nameOptions, pickVendorAlias, resolveReceiver, runDeptSave, warnTone, type DeptSaveResult,
+  formatPhone, leaseRegionOf, nameOptions, resolveReceiver, runDeptSave, warnTone, type DeptSaveResult,
 } from "./deptReceptionFlow";
 import { useMembers } from "./authors";
 import { getSsoSession, ssoRequiredCached } from "./sso";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
-
-const TeamCalendar = lazy(() => import("./TeamCalendar"));
 
 type Props = {
   dept: DeptType;
@@ -27,33 +26,19 @@ type Props = {
   onSaved?: (result: DeptSaveResult) => void;
 };
 
-type VendorPick = { hit: VendorMasterHit; vendorName: string; grade: string; region: DeptRegion; leasingCount: number; totalCount: number; address: string };
-const STORE_KEY = "reception_dept_v1";
 const REGION_CHIPS: Array<[DeptRegion, string]> = [["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"], ["E", "E"], ["지방", "지방"], ["", "미정"]];
 const seqOf = (h: LeaseHit) => pickLease(h, "순", "순번");
-
-function readStore(): { mode?: "device" | "vendor" } {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}") as { mode?: "device" | "vendor" }; } catch { return {}; }
-}
 
 export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) {
   const members = useMembers();
   const receiver = resolveReceiver(ssoRequiredCached(), getSsoSession(), fallbackAuthor);
 
-  const [mode, setModeState] = useState<"device" | "vendor">(() => readStore().mode === "vendor" ? "vendor" : "device");
-  const setMode = (m: "device" | "vendor") => {
-    setModeState(m);
-    setQuery(""); setLeaseHits([]); setMasterHits([]); setSearchError(""); setSearched(false);
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ dept, mode: m })); } catch { /* 무시 */ }
-  };
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [leaseHits, setLeaseHits] = useState<LeaseHit[]>([]);
-  const [masterHits, setMasterHits] = useState<VendorMasterHit[]>([]);
   const [lease, setLease] = useState<LeaseHit | null>(null);
-  const [vendorPick, setVendorPick] = useState<VendorPick | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [newVendor, setNewVendor] = useState("");
   const [newRegion, setNewRegion] = useState<DeptRegion>("");
@@ -73,7 +58,6 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
   const [scheduleDate, setScheduleDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
-  const [calOpen, setCalOpen] = useState(false);
   const savingRef = useRef(false);
   const lastSavedRef = useRef<{ sig: string; id: string } | null>(null);
 
@@ -82,26 +66,25 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
   if (prevDept !== dept) {
     setPrevDept(dept);
     setRoute(defaultRoute(dept)); setField(""); setFieldCustom(""); setContractKind(""); setHandlerTouched(false); setResult(null);
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ dept, mode })); } catch { /* 무시 */ }
   }
 
   // ── 거래처에서 나오는 값 ──
-  const region: DeptRegion = mode === "vendor" ? (vendorPick?.region || "") : isNew ? newRegion : (leaseRegionOf(lease) as DeptRegion);
-  const vendorName = mode === "vendor" ? (vendorPick?.vendorName || "") : isNew ? newVendor.trim() : pickLease(lease, "거래처명", "_업체명").split(/_x000d_|\r|\n/)[0].trim();
+  const region: DeptRegion = isNew ? newRegion : (leaseRegionOf(lease) as DeptRegion);
+  const vendorName = isNew ? newVendor.trim() : pickLease(lease, "거래처명", "_업체명").split(/_x000d_|\r|\n/)[0].trim();
   // 처리자: 사용자가 손대지 않은 동안은 지역 기본값을 따라간다
   const effectiveHandler = handlerTouched ? handler : defaultHandler(dept, region);
   const fieldFinal = field === "직접입력" ? fieldCustom.trim() : field;
 
   const input: DeptReceptionInput = {
     dept, author: receiver.name, route, via, vendor: vendorName,
-    vendorCode: mode === "vendor" ? vendorPick?.hit.code || "" : "",
-    leaseNo: mode === "device" && !isNew ? seqOf(lease || {}) : "",
-    grade: mode === "vendor" ? vendorPick?.grade || "" : isNew ? "" : pickLease(lease, "등급"),
+    vendorCode: "",
+    leaseNo: !isNew ? seqOf(lease || {}) : "",
+    grade: isNew ? "" : pickLease(lease, "등급"),
     region,
-    assetNo: mode === "device" && !isNew ? pickLease(lease, "자산번호") : "",
-    serial: mode === "device" && !isNew ? pickLease(lease, "시리얼번호(기번)", "기번") : "",
-    model: mode === "device" && !isNew ? pickLease(lease, "모델명", "기종") : "",
-    address: mode === "vendor" ? vendorPick?.address || "" : isNew ? "" : pickLease(lease, "주소(실납품주소,도로명주소)", "주소"),
+    assetNo: !isNew ? pickLease(lease, "자산번호") : "",
+    serial: !isNew ? pickLease(lease, "시리얼번호(기번)", "기번") : "",
+    model: !isNew ? pickLease(lease, "모델명", "기종") : "",
+    address: isNew ? "" : pickLease(lease, "주소(실납품주소,도로명주소)", "주소"),
     field: fieldFinal, content: symptom, notes, receiverName, receiverPhone,
     handler: effectiveHandler, outside, contractKind: dept === "경영지원" ? contractKind : "", scheduleDate,
   };
@@ -116,39 +99,16 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
 
   // ── 검색 ──
   const chooseLease = (h: LeaseHit) => { setLease(h); setIsNew(false); setLeaseHits([]); setResult(null); };
-  const chooseMaster = async (hit: VendorMasterHit) => {
-    setSearching(true); setSearchError("");
-    try {
-      const rows = await vendorInfoByCode("", [hit.name, ...hit.aliases]);
-      const agg = aggregateVendor(rows);
-      setVendorPick({ hit, vendorName: pickVendorAlias(rows, hit.name), grade: agg.grade, region: agg.region, leasingCount: agg.leasingCount, totalCount: agg.totalCount, address: agg.address });
-      setMasterHits([]); setResult(null);
-    } catch (e) {
-      setSearchError((e as Error).message);
-    } finally { setSearching(false); }
-  };
   const runSearch = async () => {
     const kw = query.trim();
     if (!kw || searching) return;
     setSearching(true); setSearchError(""); setSearched(false);
     try {
       const numeric = /^\d+$/.test(kw);
-      if (mode === "device") {
-        const hits = await searchLeaseList(kw);
-        const exact = numeric ? hits.filter((h) => seqOf(h) === kw) : [];
-        if (exact.length === 1) { chooseLease(exact[0]); }
-        else setLeaseHits(numeric && exact.length ? exact : hits);
-      } else {
-        let q = kw;
-        if (numeric) {
-          const hits = await searchLeaseList(kw);
-          const exact = hits.find((h) => seqOf(h) === kw);
-          q = exact ? pickLease(exact, "_업체명", "거래처명") : "";
-        }
-        const hits = q ? await searchVendorMaster(q) : [];
-        if (numeric && hits.length === 1) { setSearching(false); await chooseMaster(hits[0]); return; }
-        setMasterHits(hits);
-      }
+      const hits = await searchLeaseList(kw);
+      const exact = numeric ? hits.filter((h) => seqOf(h) === kw) : [];
+      if (exact.length === 1) { chooseLease(exact[0]); }
+      else setLeaseHits(numeric && exact.length ? exact : hits);
       setSearched(true);
     } catch (e) {
       setSearchError((e as Error).message);
@@ -165,13 +125,13 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
 
   const candidates = (
     <div className="space-y-2">
-      {mode === "device" && (
-        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[12px] font-black text-slate-600 sm:min-h-9">
-          <input type="checkbox" checked={isNew} onChange={(e) => { setIsNew(e.target.checked); if (e.target.checked) { setLease(null); setLeaseHits([]); } }} className="h-4 w-4" />
-          순번 없음(신규)
-        </label>
-      )}
-      {mode === "device" && isNew && (
+      <div className="flex h-9 w-max divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="group" aria-label="거래처 구분">
+        {([[false, "기존"], [true, "신규"]] as const).map(([v, t]) => (
+          <button key={t} type="button" aria-pressed={isNew === v} onClick={() => { setIsNew(v); if (v) { setLease(null); setLeaseHits([]); } }}
+            className={`whitespace-nowrap px-4 text-[12px] font-bold transition ${isNew === v ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}>{t}</button>
+        ))}
+      </div>
+      {isNew && (
         <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
           <input value={newVendor} onChange={(e) => setNewVendor(e.target.value)} placeholder="업체명(필수)" aria-label="신규 업체명"
             className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-slate-700" />
@@ -183,9 +143,8 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
           </div>
         </div>
       )}
-      {mode === "device" && !isNew && lease && selectedBox(vendorName || "업체 미기재", [seqOf(lease) && `순 ${seqOf(lease)}`, pickLease(lease, "모델명", "기종"), pickLease(lease, "자산번호")].filter(Boolean).join(" · "), () => setLease(null))}
-      {mode === "vendor" && vendorPick && selectedBox(vendorPick.hit.name, `${vendorPick.hit.code} · 임대중 ${vendorPick.leasingCount}대 · 계약 전체 ${vendorPick.totalCount}건 · 저장 이름 ${vendorPick.vendorName}`, () => setVendorPick(null))}
-      {mode === "device" && !isNew && !lease && leaseHits.length > 0 && (
+      {!isNew && lease && selectedBox(vendorName || "업체 미기재", [seqOf(lease) && `순 ${seqOf(lease)}`, pickLease(lease, "모델명", "기종"), pickLease(lease, "자산번호")].filter(Boolean).join(" · "), () => setLease(null))}
+      {!isNew && !lease && leaseHits.length > 0 && (
         <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 bg-white">
           {leaseHits.slice(0, 30).map((h, i) => (
             <button key={`${seqOf(h)}-${i}`} type="button" onClick={() => chooseLease(h)} className={hitBtn}>
@@ -195,28 +154,13 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
           ))}
         </div>
       )}
-      {mode === "vendor" && !vendorPick && masterHits.length > 0 && (
-        <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 bg-white">
-          {masterHits.map((h) => (
-            <button key={h.code} type="button" onClick={() => void chooseMaster(h)} className={hitBtn}>
-              <span className="min-w-0 truncate"><b className="text-slate-900">{h.name}</b>{h.aliases.length ? ` · ${h.aliases.slice(0, 2).join(", ")}` : ""}</span>
-              <span className="shrink-0 text-[11px] tabular-nums text-slate-400">계약 {h.device_count || 0}건</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {searched && !searching && !searchError && ((mode === "device" && !isNew && !lease && !leaseHits.length) || (mode === "vendor" && !vendorPick && !masterHits.length)) && (
-        <div className="text-[12px] font-bold text-slate-400">찾는 거래처가 없습니다.{mode === "device" ? " 신규면 '순번 없음(신규)'을 켜 주세요." : " 업체명 일부로 다시 찾아 보세요."}</div>
+      {searched && !searching && !searchError && !isNew && !lease && !leaseHits.length && (
+        <div className="text-[12px] font-bold text-slate-400">찾는 거래처가 없습니다. 임대리스트에 없는 업체면 '신규'를 눌러 업체명·지역을 직접 넣어 주세요.</div>
       )}
     </div>
   );
 
-  const preview: Array<[string, string]> | null = mode === "vendor"
-    ? (vendorPick ? [
-      ["마스터", vendorPick.hit.name], ["코드", vendorPick.hit.code], ["기기", `임대중 ${vendorPick.leasingCount}대 · 계약 전체 ${vendorPick.totalCount}건`],
-      ["등급", vendorPick.grade], ["지역", regionLabelOf(vendorPick.region) || "미정"], ["주소", vendorPick.address], ["저장 이름", vendorPick.vendorName],
-    ] : null)
-    : isNew
+  const preview: Array<[string, string]> | null = isNew
       ? (newVendor.trim() ? [["업체명", newVendor.trim()], ["지역", regionLabelOf(newRegion) || "미정"], ["순", "신규(빈 칸)"]] : null)
       : lease ? [
         ["업체명", vendorName], ["등급", pickLease(lease, "등급")], ["지역", regionLabelOf(normalizeRegion(region)) || "미정"],
@@ -247,7 +191,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
   ) : undefined;
 
   const resetForm = () => {
-    setQuery(""); setLeaseHits([]); setMasterHits([]); setSearched(false); setLease(null); setVendorPick(null); setIsNew(false); setNewVendor(""); setNewRegion("");
+    setQuery(""); setLeaseHits([]); setSearched(false); setLease(null); setIsNew(false); setNewVendor(""); setNewRegion("");
     setRoute(defaultRoute(dept)); setVia(""); setField(""); setFieldCustom(""); setReceiverName(""); setReceiverPhone(""); setSymptom(""); setNotes("");
     setHandler(""); setHandlerTouched(false); setOutside(false); setContractKind(""); setScheduleDate("");
   };
@@ -263,8 +207,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
     savingRef.current = true;
     setSaving(true); setResult(null);
     try {
-      const extra: Record<string, string> = { unit: mode, author_team: receiver.team };
-      if (mode === "vendor" && vendorPick) { extra.vendor_master_name = vendorPick.hit.name; extra.device_count = String(vendorPick.leasingCount || 0); /* 임대중 수(2026-10-19) */ }
+      const extra: Record<string, string> = { unit: "device", author_team: receiver.team };
       const res = await runDeptSave(input, extra);
       lastSavedRef.current = { sig, id: res.id };
       const bad = res.warnings.filter((w) => warnTone(w) === "error");
@@ -300,7 +243,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
       </div>}
 
       <DeptReceptionFormView receiverLabel={receiver.locked ? `접수자 ${receiver.name}${receiver.team ? ` · ${receiver.team}` : ""}` : undefined}
-        dept={dept} mode={mode} onModeChange={setMode}
+        dept={dept} mode="device" onModeChange={() => undefined /* 업체로 접수 제거(2026-10-19) — View 의 토글은 윤화면이 뺀다 */}
         query={query} onQueryChange={setQuery} onSearch={() => void runSearch()} searching={searching} searchError={searchError}
         candidates={candidates} preview={preview}
         routeOptions={DEPT_ROUTES.map((r) => DEPT_ROUTE_LABEL[r])} route={DEPT_ROUTE_LABEL[route]}
@@ -315,19 +258,6 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
         scheduledDate={scheduleDate} onScheduledDate={setScheduleDate}
         required={required} onSave={() => void save()} saving={saving} result={result}
       />
-
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <button type="button" aria-expanded={calOpen} onClick={() => setCalOpen(!calOpen)} className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-[13px] font-black text-slate-700">
-          <CalendarDays size={15} aria-hidden />{dept} 달력<span className="ml-auto text-[11px] font-bold text-slate-400">{calOpen ? "접기" : "펼치기"}</span>
-        </button>
-        {calOpen && (
-          <div className="border-t border-slate-100 p-3">
-            <Suspense fallback={<div className="p-4 text-center text-xs font-bold text-slate-400">달력 불러오는 중…</div>}>
-              <TeamCalendar team={dept} author={receiver.name} />
-            </Suspense>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

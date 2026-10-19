@@ -3,8 +3,7 @@
 // 물류 미처리(as_tickets 중 물류·납품철수교체휴가교육, 지난 날짜·완료 아님) 건수도 같이 읽어 카드에 넘긴다.
 import { useCallback, useEffect, useRef, useState } from "react";
 import HomeReceptionCard from "./HomeReceptionCard";
-import { fetchOpenReceptions } from "./deptReceptionApi";
-import { loadScheduleOverdue, summarizeForHome, toBoardRows, type HomeReceptionSummary } from "./receptionBoardData";
+import { loadBoardData, loadScheduleOverdue, summarizeForHome, type HomeReceptionSummary } from "./receptionBoardData";
 import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
 import { kstDate } from "./visits";
 
@@ -16,9 +15,10 @@ export default function HomeReceptionPanel({ onOpen }: { onOpen: () => void }) {
   const refresh = useCallback(async () => {
     try {
       const day = kstDate();
-      const [open, logistics] = await Promise.all([fetchOpenReceptions(90), loadScheduleOverdue(day)]);
+      // 현황판과 같은 재료(일정 완료된 복합기 AS 접수는 빼고 자가 치유) — 홈 숫자와 현황판 숫자가 어긋나지 않게
+      const [board, logistics] = await Promise.all([loadBoardData(day), loadScheduleOverdue(day)]);
       if (!alive.current) return;
-      setSummary(summarizeForHome(toBoardRows(open), day, logistics));
+      setSummary(summarizeForHome(board.rows, day, logistics));
       setError("");
     } catch (e) {
       if (alive.current) setError(e instanceof Error ? e.message : String(e));

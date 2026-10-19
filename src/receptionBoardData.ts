@@ -4,7 +4,7 @@ import type { ReceptionRow } from "./ReceptionBoard";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import { fetchOpenReceptions, type OpenReceptionRow } from "./deptReceptionApi";
 import { ageDays, isDeptType, weekCompletionRate } from "./deptReception";
-import { selectAllRows, selectRows } from "./supabase";
+import { selectAllRows, selectRows, updateRows } from "./supabase";
 import { fieldTicketVendor } from "./ids";
 import { kstDate } from "./visits";
 
@@ -17,8 +17,11 @@ export function postponeOf(v: unknown): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-export function toBoardRows(rows: OpenReceptionRow[]): ReceptionRow[] {
-  const out: ReceptionRow[] = [];
+/** 현황판 행 + "일정 없음" 표시(복합기 AS 인데 연결 일정이 하나도 없음). ReceptionRow 에 같은 이름 optional 필드가 생기면 그대로 맞물린다. */
+export type BoardRow = ReceptionRow & { noTicket?: boolean };
+
+export function toBoardRows(rows: OpenReceptionRow[], noTicketIds?: ReadonlySet<string>): BoardRow[] {
+  const out: BoardRow[] = [];
   for (const r of rows) {
     if (!KNOWN_TYPES.has(r.type)) continue;
     const dept = isDeptType(r.type);
@@ -35,6 +38,7 @@ export function toBoardRows(rows: OpenReceptionRow[]): ReceptionRow[] {
       receipt_date: String(r.receipt_date || "").slice(0, 10),
       scheduled_date: /^\d{4}-\d{2}-\d{2}/.test(schedule) ? schedule.slice(0, 10) : null,
       postponeCount: dept ? postponeOf(meta.postpone_count) : 0,
+      ...(noTicketIds?.has(r.id) ? { noTicket: true } : {}),
     });
   }
   return out;
@@ -48,7 +52,67 @@ export function weekStartOf(today: string): string {
 }
 
 type WeekRow = { status: string; receipt_date: string };
-export type BoardData = { rows: ReceptionRow[]; sources: Record<string, OpenReceptionRow>; todayCount: number; weekDoneRate: number | null };
+export type BoardData = {
+  rows: BoardRow[]; sources: Record<string, OpenReceptionRow>; todayCount: number; weekDoneRate: number | null;
+  /** 일정 완료인데 접수가 열려 있어 이번에 완료로 고친 건수 */
+  healed: number;
+  /** 일정 대조·자가 치유 실패 메시지(화면은 계속, 패널이 한 번 알린다). 없으면 "" */
+  syncError: string;
+};
+
+/** 일정(as_tickets)과 대조하는 접수 종류·상태. 보류·원격대기는 사람이 일부러 둔 상태라 건드리지 않는다. */
+const TICKET_LINKED_TYPE = "복합기 AS";
+const HEALABLE_STATUS = new Set(["접수", "진행중"]);
+export const TICKET_SYNC_BY = "일정 완료 동기화";
+
+type LinkedTicket = { id?: string; receptionId: string | null; status: string | null };
+
+/**
+ * 열린 복합기 AS 접수 ↔ 연결 일정 대조(순수).
+ * - 연결 일정 중 하나라도 '완료'면 doneIds(열린 건에서 빼고 DB 를 완료로 고칠 것) — CsAsWorkspace 의 "최고 단계" 집계와 같은 규칙.
+ * - 연결 일정이 하나도 없으면 noTicketIds(접수만 하고 일정 등록을 안 한 건 — 열린 건 그대로).
+ * 대상은 복합기 AS · 상태 접수/진행중만.
+ */
+export function reconcileWithTickets(rows: OpenReceptionRow[], tickets: LinkedTicket[]): { doneIds: string[]; noTicketIds: Set<string> } {
+  const byReception = new Map<string, string[]>();
+  for (const t of tickets) {
+    const rid = String(t.receptionId || "");
+    if (!rid) continue;
+    const list = byReception.get(rid) || [];
+    list.push(String(t.status || ""));
+    byReception.set(rid, list);
+  }
+  const doneIds: string[] = [];
+  const noTicketIds = new Set<string>();
+  for (const r of rows) {
+    if (r.type !== TICKET_LINKED_TYPE || !HEALABLE_STATUS.has(String(r.status || ""))) continue;
+    const st = byReception.get(r.id);
+    if (!st || !st.length) noTicketIds.add(r.id);
+    else if (st.includes("완료")) doneIds.push(r.id);
+  }
+  return { doneIds, noTicketIds };
+}
+
+const inList = (ids: string[]) => ids.map((i) => encodeURIComponent(`"${i}"`)).join(",");
+
+/** 접수 id 묶음 → 연결 일정(id·receptionId·status). URL 길이 때문에 100개씩. 실패는 throw. */
+async function fetchLinkedTickets(ids: string[]): Promise<LinkedTicket[]> {
+  const out: LinkedTicket[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const part = ids.slice(i, i + 100);
+    out.push(...await selectRows<LinkedTicket>("as_tickets", `select=id,receptionId,status&receptionId=in.(${inList(part)})&limit=1000`));
+  }
+  return out;
+}
+
+/** 일정은 완료됐는데 접수가 접수/진행중으로 남은 건을 완료로 고친다(조건에 상태를 다시 걸어 그 사이 사람이 바꾼 건은 건드리지 않음). 실패는 throw. */
+export async function healDoneReceptions(ids: string[], now: string = new Date().toISOString()): Promise<void> {
+  for (let i = 0; i < ids.length; i += 100) {
+    const part = ids.slice(i, i + 100);
+    await updateRows("service_receptions", `id=in.(${inList(part)})&status=in.(${[...HEALABLE_STATUS].map((s) => encodeURIComponent(s)).join(",")})`,
+      { status: "완료", completed_at: now, completed_by: TICKET_SYNC_BY });
+  }
+}
 
 /**
  * 현황판 재료 한 번 읽기: 열린 건(90일) + 이번 주 접수 전체(완료율·오늘 접수 수용, 최소 컬럼).
@@ -61,13 +125,40 @@ export async function loadBoardData(today: string = kstDate()): Promise<BoardDat
     selectAllRows<WeekRow>("service_receptions", `select=status,receipt_date&receipt_date=gte.${weekStart}&deleted=eq.false`),
   ]);
   const rate = weekCompletionRate(week, today);
+  // 복합기 AS 접수 ↔ 일정 대조: 일정 완료면 열린 건에서 빼고 DB 도 완료로(자가 치유), 일정 없으면 "일정 없음" 표시.
+  // 대조·치유 실패는 화면을 막지 않는다 — 대조 실패면 원래 상태 그대로 보여 주고 syncError 로 알린다.
+  let syncError = "";
+  let healed = 0;
+  let doneSet = new Set<string>();
+  let noTicketIds = new Set<string>();
+  const linkedIds = open.filter((r) => r.type === TICKET_LINKED_TYPE && HEALABLE_STATUS.has(String(r.status || ""))).map((r) => r.id);
+  if (linkedIds.length) {
+    try {
+      const rec = reconcileWithTickets(open, await fetchLinkedTickets(linkedIds));
+      doneSet = new Set(rec.doneIds);
+      noTicketIds = rec.noTicketIds;
+      if (rec.doneIds.length) {
+        try {
+          await healDoneReceptions(rec.doneIds);
+          healed = rec.doneIds.length;
+        } catch (e) {
+          syncError = `일정 완료 ${rec.doneIds.length}건을 접수에 반영하지 못했습니다: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+    } catch (e) {
+      syncError = `접수와 일정 대조 실패(숫자에 완료된 건이 섞였을 수 있음): ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+  const stillOpen = open.filter((r) => !doneSet.has(r.id));
   const sources: Record<string, OpenReceptionRow> = {};
-  for (const r of open) sources[r.id] = r;
+  for (const r of stillOpen) sources[r.id] = r;
   return {
-    rows: toBoardRows(open),
+    rows: toBoardRows(stillOpen, noTicketIds),
     sources,
     todayCount: week.filter((r) => String(r.receipt_date || "").slice(0, 10) === today).length,
     weekDoneRate: rate.total ? Math.round(rate.rate * 100) : null,
+    healed,
+    syncError,
   };
 }
 
