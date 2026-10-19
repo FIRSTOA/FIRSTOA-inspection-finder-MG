@@ -58,10 +58,10 @@ describe("홈 미처리 토탈", () => {
     const c = countUnhandledTabs(rows);
     expect(c["전체"]).toBe(8);
     expect(c.A).toBe(1);
-    expect(c.B).toBe(1);
+    expect(c.B).toBe(0); // t4(물류·B)는 물류 탭에만
     expect(c.C).toBe(1);
     expect(c.D).toBe(1);
-    expect(c.E).toBe(2);
+    expect(c.E).toBe(1); // t5(물류·E)는 물류 탭에만
     expect(c["경영"]).toBe(1);
     expect(c["운영"]).toBe(0);
     expect(c["영업"]).toBe(1);
@@ -79,5 +79,21 @@ describe("mergeUnhandled 원격대기 7일 규칙", () => {
       rec("s3", "원격이관", "A", "2026-09-01"),
     ], [], today);
     expect(rows.map((r) => r.receptionId).sort()).toEqual(["s2", "s3"]);
+  });
+});
+
+import { describe as d2, expect as e2, it as i2 } from "vitest";
+import { countUnhandledTabs as countTabs2, type UnhandledRow as Row2 } from "../src/homeUnhandled";
+d2("홈 미처리 탭은 서로 겹치지 않는다", () => {
+  i2("팀 탭에는 물류가 안 들어가고, 탭 합계 = 전체", () => {
+    const base = { source: "ticket" as const, date: "2026-10-01", vendor: "v", title: "", assignee: "", status: "접수", ageDays: 1 };
+    const rows: Row2[] = [
+      { ...base, key: "1", kind: "물류", team: "A" },
+      { ...base, key: "2", kind: "AS일정", team: "A" },
+      { ...base, key: "3", source: "reception", kind: "경영지원", team: "경영" },
+    ];
+    const c = countTabs2(rows);
+    e2(c.A).toBe(1); e2(c.물류).toBe(1); e2(c.경영).toBe(1);
+    e2(c.A + c.B + c.C + c.D + c.E + c.경영 + c.운영 + c.영업 + c.물류).toBe(c.전체);
   });
 });

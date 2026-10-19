@@ -104,7 +104,8 @@ export function tabFilter(tab: UnhandledTab): [UnhandledTeam | null, UnhandledKi
 
 export function rowsForTab(rows: UnhandledRow[], tab: UnhandledTab): UnhandledRow[] {
   const [team, kind] = tabFilter(tab);
-  return filterUnhandled(rows, team, kind);
+  // 탭은 서로 겹치지 않게: 팀 탭(A~E)은 물류를 빼고, 물류 탭만 물류를 모은다 → A+B+C+D+E+경영+운영+영업+물류 = 전체 (2026-10-20 사용자 지적)
+  return filterUnhandled(rows, team, kind).filter((r) => tab === "전체" || tab === "물류" || r.kind !== "물류");
 }
 
 /** 탭별 건수 */
