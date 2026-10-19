@@ -3,6 +3,7 @@ import CostTile from "./CostTile";
 import OverduePanel from "./OverduePanel";
 import LiveSendBoard from "./LiveSendBoard";
 import AgentTeamCard from "./AgentTeamCard";
+import HomeReceptionPanel from "./HomeReceptionPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -347,6 +348,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             <StatusPill tone="ok" icon={Bot} label="FIELD AI 에이전트 팀" value={agentPillValue} onClick={focusAgentTeam} />
             {/* 비용(AI 질문·문자) — 관제 덱 안에(2026-10-11), 누르면 일별·실시간·지금까지 내역 */}
             <CostTile />
+            <HomeReceptionPanel onOpen={() => go("serviceReception")} />
           </div>
         </div>
 

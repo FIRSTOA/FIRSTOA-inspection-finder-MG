@@ -373,7 +373,7 @@ export async function enqueueOutbox(room: string, text: string): Promise<"queued
   return "queued";
 }
 
-export type FieldSheetSyncCategory = "expansion_it" | "expansion_copier" | "contact_change" | "complaint" | "praise" | "reception_copier" | "reception_copier_new" | "reception_remote";
+export type FieldSheetSyncCategory = "expansion_it" | "expansion_copier" | "contact_change" | "complaint" | "praise" | "reception_copier" | "reception_copier_new" | "reception_remote" | "reception_sales" | "reception_mgmt";
 
 export async function enqueueFieldSheetSyncJob(job: {
   id: string;

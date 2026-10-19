@@ -22,6 +22,12 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
 import { notify } from "./toast";
+import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
+import ReceptionBoardPanel from "./ReceptionBoardPanel";
+import DeptReception from "./DeptReceptionScreen";
+import DeptReceptionDetail from "./DeptReceptionDetail";
+import DeptActionBar from "./DeptActionBar";
+import { deptListState, deptShort, isDeptType, type DeptType } from "./deptReception";
 
 type ReceiveRoute = "카카오" | "전화";
 type ReceiveType = "원격이관" | "복합기 AS" | "IT";
@@ -225,6 +231,7 @@ const TYPE_TONE: Record<string, string> = {
   "복합기 AS": "bg-blue-50 text-blue-700",
   IT: "bg-cyan-50 text-cyan-700",
   "원격이관": "bg-violet-50 text-violet-700",
+  경영지원: "bg-fuchsia-50 text-fuchsia-700", 운영지원: "bg-emerald-50 text-emerald-700", 영업지원: "bg-orange-50 text-orange-700", // 지원 3종(ReceptionTypePicker 색과 같음)
 };
 
 type Manual = { 접수자성함: string; 접수자연락처: string; 제목: string; 증상: string; 유상무상: string; 참고사항: string; 교체이력: string; 주소: string };
@@ -431,14 +438,16 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   const [listPeriod, setListPeriod] = useState<ListPeriod>("day");
   const [listRows, setListRows] = useState<ServiceReceptionRow[]>([]);
   const [listLoading, setListLoading] = useState(false);
-  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인">("전체");
+  const [listFilter, setListFilter] = useState<"전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인" | "지원" | DeptType>("전체");
   const [openRowId, setOpenRowId] = useState("");
   // 듀얼 레이아웃: 좌측 접수폼(복합기 AS/원격/IT 탭) + 우측 접수 리스트 상시
-  const [page, setPage] = useState<"copier" | "remote" | "it">(() => {
-    try { const saved = localStorage.getItem("reception_page_v1"); return saved === "remote" || saved === "it" ? saved : "copier"; } catch { return "copier"; }
+  const [page, setPage] = useState<"copier" | "remote" | "it" | "mgmt" | "ops" | "sales">(() => {
+    try { const saved = localStorage.getItem("reception_page_v1"); return saved === "remote" || saved === "it" || saved === "mgmt" || saved === "ops" || saved === "sales" ? saved : "copier"; } catch { return "copier"; }
   });
   const [statusFilter, setStatusFilter] = useState<"전체" | "접수" | "진행중" | "완료">("전체");
   useEffect(() => { try { localStorage.setItem("reception_page_v1", page); } catch { /* 무시 */ } }, [page]);
+  const [boardFocus, setBoardFocus] = useState<ReceptionType | null>(null); const [boardReload, setBoardReload] = useState(0); const [boardCounts, setBoardCounts] = useState<Record<ReceptionType, number> | null>(null); // 현황판 포커스·다시 읽기(지원 접수 저장 뒤)
+  const [deptEnabled, setDeptEnabled] = useState(false); useEffect(() => { getConfig().then((c) => { const on = String(c.DEPT_RECEPTION_ENABLED || "").toLowerCase() === "true"; setDeptEnabled(on); if (!on && isDeptType(PAGE_TYPE[page])) goPage("copier"); }).catch(() => { setDeptEnabled(false); if (isDeptType(PAGE_TYPE[page])) goPage("copier"); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 마운트 때 한 번만. 설정을 못 읽으면 지원 줄을 숨긴 채(안전한 쪽) 둔다
   // 원격·IT 작업 보드는 기간과 무관하게 최근 30일 건을 모아 본다 (어제 미완료 건이 사라지면 안 된다)
   const [remoteQueue, setRemoteQueue] = useState<ServiceReceptionRow[]>([]);
   // 이 세션에서 삭제한 건 — 삭제 직전에 출발한 재조회 응답이 늦게 도착해 행을 되살리는 경쟁 방지
@@ -667,15 +676,15 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     document.addEventListener("visibilitychange", refresh);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [listDate, listPeriod, loadList, loadRemoteQueue]);
-  const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT" } as const;
-  const goPage = (next: "copier" | "remote" | "it") => {
+  const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT", mgmt: "경영지원", ops: "운영지원", sales: "영업지원" } as const;
+  const goPage = (next: keyof typeof PAGE_TYPE) => {
     setPage(next);
     setActionResult("");
-    setType(PAGE_TYPE[next]);
+    if (!isDeptType(PAGE_TYPE[next])) setType(PAGE_TYPE[next] as ReceiveType); // 지원 page 는 현장 폼 유형을 건드리지 않고 목록 필터만
     setListFilter(PAGE_TYPE[next]); // 우측 리스트도 탭 유형으로 (필요하면 전체로 바꿀 수 있음)
   };
   // 저장된 탭으로 재진입 시 폼 유형·리스트 필터를 탭에 맞춘다
-  useEffect(() => { setType(PAGE_TYPE[page]); setListFilter(PAGE_TYPE[page]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!isDeptType(PAGE_TYPE[page])) setType(PAGE_TYPE[page] as ReceiveType); setListFilter(PAGE_TYPE[page]); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     const onFocus = () => { void loadList(listDate, listPeriod); };
@@ -1372,17 +1381,19 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     copier: listRows.filter((r) => r.type === "복합기 AS").length,
     it: listRows.filter((r) => r.type === "IT").length,
     remote: listRows.filter((r) => r.type === "원격이관").length,
+    dept: listRows.filter((r) => isDeptType(r.type)).length,
     remoteWaiting: listRows.filter((r) => r.status === "원격대기").length,
     addr: listRows.filter((r) => r.address_changed && !r.address_resolved_at).length,
   }), [listRows]);
   const byAuthor = useMemo(() => {
-    const map = new Map<string, { total: number; copier: number; it: number; remote: number }>();
+    const map = new Map<string, { total: number; copier: number; it: number; remote: number; dept: number }>();
     for (const r of listRows) {
       const key = r.author || "미지정";
-      const entry = map.get(key) || { total: 0, copier: 0, it: 0, remote: 0 };
+      const entry = map.get(key) || { total: 0, copier: 0, it: 0, remote: 0, dept: 0 };
       entry.total += 1;
       if (r.type === "복합기 AS") entry.copier += 1;
       else if (r.type === "IT") entry.it += 1;
+      else if (isDeptType(r.type)) entry.dept += 1; // 지원 3종이 원격으로 잘못 세이던 것 분리
       else entry.remote += 1;
       map.set(key, entry);
     }
@@ -1396,6 +1407,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   }, [listRows, remoteQueue]);
   // 리스트 표시용 상태 (필터·카운트 공용)
   const listStateOf = useCallback((r: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
+    if (isDeptType(r.type)) return deptListState(r); // 지원 3종: 보류→진행중, 취소→완료
     if (r.type === "IT" || r.type === "원격이관") {
       if (r.status === "원격완료" || r.status === "완료") return "완료";
       const meta = r.remote_meta || {}; // 저장된 값만 — 초안으로 상태가 미리 바뀌지 않게
@@ -1404,7 +1416,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
     return r.status === "완료" ? "완료" : r.status === "진행중" ? "진행중" : "접수";
   }, []);
   const typeFilteredRows = useMemo(
-    () => (listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : mergedRows.filter((r) => r.type === listFilter)),
+    () => (listFilter === "전체" ? mergedRows : listFilter === "주소확인" ? mergedRows.filter((r) => r.address_changed && !r.address_resolved_at) : listFilter === "지원" ? mergedRows.filter((r) => isDeptType(r.type)) : mergedRows.filter((r) => r.type === listFilter)),
     [mergedRows, listFilter],
   );
   const statusCounts = useMemo(() => {
@@ -1441,6 +1453,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
   };
   /** 접수 리스트 공용 상태 — 복합기AS는 일정리스트 연동값, 원격·IT는 시작/끝 스탬프 기준 */
   const displayStatusOf = (row: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
+    if (isDeptType(row.type)) return deptListState(row); // 지원 3종(상태 점과 같은 기준)
     if (row.type === "IT" || row.type === "원격이관") {
       const state = remoteStateOf(row);
       if (state === "대기") return row.status === "진행중" ? "진행중" : "접수"; // IT 방문(일정 배정) 경로 반영
@@ -1458,7 +1471,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                   <span className="w-12 shrink-0 text-center">
                     <span className="block text-[13px] font-black tabular-nums leading-tight text-slate-900">{kstTime(row.created_at)}</span>
                     {listPeriod !== "day" && <span className="block text-[10px] font-bold tabular-nums text-slate-400">{row.receipt_date.slice(5).replace("-", "/")}</span>}
-                    <span className={`mt-1 block rounded px-1 py-0.5 text-[9px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
+                    <span className={`mt-1 block rounded px-1 py-0.5 text-[9px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{isDeptType(row.type) ? deptShort(row.type) : row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
                   </span>
                   <span className="min-w-0">
                     <b className="block truncate text-[15px] font-black leading-snug text-slate-950">{row.vendor || "업체 미기재"}</b>
@@ -1470,7 +1483,8 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                     {(() => { const state = displayStatusOf(row); return <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${DISPLAY_STATUS_TONE[state]}`}>{state}</span>; })()}
                   </span>
                 </button>
-                {openRowId === row.id && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
+                {openRowId === row.id && isDeptType(row.type) && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3"><DeptReceptionDetail row={row} author={author} onChanged={(next) => { setListRows((cur) => cur.map((r) => (r.id === next.id ? { ...r, ...next } as ServiceReceptionRow : r))); setBoardReload((n) => n + 1); }} /></div>}
+                {openRowId === row.id && !isDeptType(row.type) && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-600">
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-semibold">
                     <span>경로 {row.route}</span><span>지역 {row.region || "-"}</span>
                     <span>모델 {row.model || "-"}</span><span>기번 {row.serial || "-"}</span>
@@ -1587,20 +1601,20 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
             <span className="text-xs font-bold tabular-nums text-slate-300">{clock}</span>
           </span>
         </div>
-        <div className="flex border-b border-slate-200">
-          {([["copier", "복합기 AS", counts.copier], ["remote", "원격", counts.remote], ["it", "IT", counts.it]] as ["copier" | "remote" | "it", string, number][]).map(([key, label, count]) => (
-            <button key={key} type="button" onClick={() => goPage(key)}
-              className={`relative flex-1 px-3 py-3.5 text-[13px] font-black transition sm:text-[15px] ${page === key ? "text-slate-950 after:absolute after:inset-x-0 after:-bottom-px after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>
-              {label}
-              {count > 0 && <span className={`ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${page === key ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400"}`}>{count}</span>}
-            </button>
-          ))}
+        <div className="border-b border-slate-200 p-3">
+          <ReceptionTypePicker value={PAGE_TYPE[page]} deptEnabled={deptEnabled} onChange={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
+            counts={boardCounts || Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, mergedRows.filter((r) => r.type === m.type && listStateOf(r) !== "완료").length])) as Record<ReceptionType, number>} />
         </div>
       </section>
+      <ReceptionBoardPanel deptEnabled={deptEnabled} reloadKey={boardReload} onCounts={setBoardCounts} selectedType={boardFocus} onSelectedTypeChange={setBoardFocus}
+        onSelectType={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
+        onOpenFieldRow={(r) => { if (r.type === "복합기 AS") setListFilter("복합기 AS"); else goPage(r.type === "IT" ? "it" : "remote"); setOpenRowId(r.id); }}
+        renderDeptActions={(_r, ctx) => (ctx.source ? <DeptActionBar row={ctx.source} compact author={author} onChanged={() => { ctx.onDone(); void loadList(listDate, listPeriod, true); }} /> : null)} />
 
       <div className="space-y-4 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_minmax(430px,600px)] 2xl:items-start 2xl:gap-4 2xl:space-y-0">
         {/* ==== 좌: 접수 작성 ==== */}
         <div className="space-y-4">
+          {deptEnabled && isDeptType(PAGE_TYPE[page]) ? <DeptReception dept={PAGE_TYPE[page] as DeptType} fallbackAuthor={author} onSaved={() => { void loadList(listDate, listPeriod, true); setBoardReload((n) => n + 1); }} /> : <>
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
             <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-4 py-3">
               <div className="flex items-center gap-2.5">
@@ -1973,7 +1987,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
                 </div>
               );
             })()}
-
+          </>}
         </div>
 
         {/* ==== 우: 접수 리스트 (상시) ==== */}
@@ -2001,9 +2015,9 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
             </div>
             {listPeriod !== "day" && <div className="mt-2 text-[11px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {counts.total}건</div>}
             <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {(["전체", "복합기 AS", "IT", "원격이관", "주소확인"] as const).map((f) => (
+              {(["전체", "복합기 AS", "IT", "원격이관", ...(deptEnabled || counts.dept ? ["지원"] as const : []), "주소확인"] as const).map((f) => (
                 <button key={f} type="button" onClick={() => setListFilter(f)} className={`rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${listFilter === f ? "bg-slate-900 text-white" : f === "주소확인" && counts.addr > 0 ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : `📍주소 ${counts.addr}`}
+                  {f === "전체" ? `전체 ${counts.total}` : f === "복합기 AS" ? `복합기 ${counts.copier}` : f === "IT" ? `IT ${counts.it}` : f === "원격이관" ? `원격 ${counts.remote}` : f === "지원" ? `지원 ${counts.dept}` : `📍주소 ${counts.addr}`}
                 </button>
               ))}
               <span className="mx-0.5 self-center text-slate-200">|</span>
@@ -2048,7 +2062,7 @@ export default function ServiceReception({ author: globalAuthor }: { author: str
               {byAuthor.map(([name, stat]) => (
                 <div key={name} className="flex items-center justify-between text-xs">
                   <span className="font-black text-slate-700">{name}</span>
-                  <span className="font-bold text-slate-500">총 {stat.total} <span className="text-blue-600">복합기 {stat.copier}</span> · <span className="text-cyan-600">IT {stat.it}</span> · <span className="text-violet-600">원격 {stat.remote}</span></span>
+                  <span className="font-bold text-slate-500">총 {stat.total} <span className="text-blue-600">복합기 {stat.copier}</span> · <span className="text-cyan-600">IT {stat.it}</span> · <span className="text-violet-600">원격 {stat.remote}</span>{stat.dept > 0 && <> · <span className="text-fuchsia-600">지원 {stat.dept}</span></>}</span>
                 </div>
               ))}
             </div>

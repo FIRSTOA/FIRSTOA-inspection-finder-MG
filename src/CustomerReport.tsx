@@ -175,7 +175,7 @@ export default function CustomerReport({ author }: { author: string }) {
         .sort((a, b) => (/복합기|프린터|플로터/.test(b.cat) ? 1 : 0) - (/복합기|프린터|플로터/.test(a.cat) ? 1 : 0));
       // ② 기간 내 접수 (AS·원격·IT)
       const receptions = (await selectRows<Record<string, unknown>>(
-        "service_receptions", `select=id,receipt_date,type,vendor,model,serial,asset_no,symptom,status&vendor=ilike.*${core}*&deleted=not.is.true&receipt_date=gte.${range.start}&receipt_date=lte.${range.end}&limit=200`,
+        "service_receptions", `select=id,receipt_date,type,vendor,model,serial,asset_no,symptom,status&vendor=ilike.*${core}*&type=in.(${encodeURIComponent('"복합기 AS","원격이관","IT"')})&deleted=not.is.true&receipt_date=gte.${range.start}&receipt_date=lte.${range.end}&limit=200`,
       ).catch(() => [])).filter((r) => vendorMatchKey(String(r.vendor || "")) === key);
       // 처리내용: 접수에 연결된 일정의 note(FIELD 전송 양식)에서
       const ids = receptions.map((r) => String(r.id));

@@ -26,6 +26,9 @@ export const FIELD_SHEETS: Record<string, { spreadsheetId: string; sheetId: numb
   reception_copier: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 1181394897 },
   reception_copier_new: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 1181394897 },
   reception_remote: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 916322987 },
+  // 지원 부서 시트(2026-10-19) — 기입은 dept-sheets.ts(열 번호 고정). 여기 항목은 peek 진단·문서 ID 공유용
+  reception_sales: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 174566767 },
+  reception_mgmt: { spreadsheetId: "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g", sheetId: 899183889 },
 };
 
 export type SheetApiRequest = {
@@ -107,7 +110,7 @@ async function accessToken(): Promise<string> {
 }
 
 // ── Sheets REST 헬퍼 ──────────────────────────────────────────────────────
-async function gapi(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+export async function gapi(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
   const token = await accessToken();
   const res = await fetch(`${SHEETS_BASE}${path}`, {
     ...init,
@@ -123,12 +126,12 @@ function colA1(col: number): string {
   while (col > 0) { const r = (col - 1) % 26; out = String.fromCharCode(65 + r) + out; col = Math.floor((col - 1) / 26); }
   return out;
 }
-const quoteTitle = (title: string) => `'${title.replace(/'/g, "''")}'`;
+export const quoteTitle = (title: string) => `'${title.replace(/'/g, "''")}'`;
 
 type SheetMeta = { title: string; maxRows: number; maxCols: number };
 const metaCache = new Map<string, { at: number; sheets: Map<number, SheetMeta>; byTitle: Map<string, SheetMeta & { sheetId: number }> }>();
 
-async function spreadsheetMeta(spreadsheetId: string) {
+export async function spreadsheetMeta(spreadsheetId: string) {
   const cached = metaCache.get(spreadsheetId);
   if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached;
   const data = await gapi(`/${spreadsheetId}?fields=sheets(properties(sheetId,title,gridProperties(rowCount,columnCount)))`);
@@ -144,12 +147,12 @@ async function spreadsheetMeta(spreadsheetId: string) {
   return entry;
 }
 
-async function getValues(spreadsheetId: string, range: string, render: "FORMATTED_VALUE" | "FORMULA" = "FORMATTED_VALUE"): Promise<string[][]> {
+export async function getValues(spreadsheetId: string, range: string, render: "FORMATTED_VALUE" | "FORMULA" = "FORMATTED_VALUE"): Promise<string[][]> {
   const data = await gapi(`/${spreadsheetId}/values/${encodeURIComponent(range)}?valueRenderOption=${render}`);
   return ((data.values as string[][]) || []).map((row) => row.map((v) => String(v ?? "")));
 }
 
-async function batchGetValues(spreadsheetId: string, ranges: string[]): Promise<Map<string, string[][]>> {
+export async function batchGetValues(spreadsheetId: string, ranges: string[]): Promise<Map<string, string[][]>> {
   if (!ranges.length) return new Map();
   const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const data = await gapi(`/${spreadsheetId}/values:batchGet?${qs}&valueRenderOption=FORMATTED_VALUE`);
@@ -168,7 +171,7 @@ async function setValues(spreadsheetId: string, range: string, values: (string |
   });
 }
 
-async function batchSetValues(spreadsheetId: string, entries: Array<{ range: string; values: (string | number)[][] }>): Promise<void> {
+export async function batchSetValues(spreadsheetId: string, entries: Array<{ range: string; values: (string | number)[][] }>): Promise<void> {
   if (!entries.length) return;
   await gapi(`/${spreadsheetId}/values:batchUpdate`, {
     method: "POST",
@@ -176,14 +179,14 @@ async function batchSetValues(spreadsheetId: string, entries: Array<{ range: str
   });
 }
 
-async function batchUpdate(spreadsheetId: string, requests: unknown[]): Promise<void> {
+export async function batchUpdate(spreadsheetId: string, requests: unknown[]): Promise<void> {
   if (!requests.length) return;
   await gapi(`/${spreadsheetId}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests }) });
 }
 
 // ── 분산 잠금: app_config 행을 조건부 갱신으로 선점 (GAS LockService 대체) ──
 // 같은 시트에 두 인스턴스가 동시에 행을 잡는 것 방지. 90초 넘은 잠금은 고아로 보고 뺏는다.
-async function acquireLock(rest: string, headers: Record<string, string>): Promise<string> {
+export async function acquireLock(rest: string, headers: Record<string, string>): Promise<string> {
   const key = "SHEET_WRITE_LOCK";
   const mine = `${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
   await fetch(`${rest}/app_config`, {
@@ -216,7 +219,7 @@ async function acquireLock(rest: string, headers: Record<string, string>): Promi
   throw new Error("시트 기입 잠금 대기 초과");
 }
 
-async function releaseLock(rest: string, headers: Record<string, string>, mine: string): Promise<void> {
+export async function releaseLock(rest: string, headers: Record<string, string>, mine: string): Promise<void> {
   await fetch(`${rest}/app_config?key=eq.SHEET_WRITE_LOCK&value=eq.${encodeURIComponent(mine)}`, {
     method: "PATCH",
     headers: { ...headers, Prefer: "return=minimal" },
@@ -414,7 +417,7 @@ function fieldValue(
 }
 
 /** 열번호→값 맵을 연속 구간으로 묶어 batch 기입 (GAS writeRowValues_ 이식) */
-function segmentsOf(row: number, title: string, valueByCol: Record<number, string>): Array<{ range: string; values: string[][] }> {
+export function segmentsOf(row: number, title: string, valueByCol: Record<number, string>): Array<{ range: string; values: string[][] }> {
   const cols = Object.keys(valueByCol).map(Number).sort((a, b) => a - b);
   const out: Array<{ range: string; values: string[][] }> = [];
   let start = -1, prev = -1, buffer: string[] = [];

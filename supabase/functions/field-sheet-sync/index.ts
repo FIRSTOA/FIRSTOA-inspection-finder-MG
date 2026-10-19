@@ -1,5 +1,7 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 import { appendViaSheetsApi, peekSheet, sheetsApiConfigured } from "./sheets-api.ts";
+import { appendDeptRow } from "./dept-sheets.ts";
+import { isDeptSheetCategory } from "./dept-sheet-spec.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -250,7 +252,7 @@ Deno.serve(async (req) => {
 });
 
 // 단일 잡 처리 — 성공 시 synced 마킹, 실패 시 last_error/attempts 기록(+한도 도달 시 failed 마킹) 후 throw
-async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promise<{ status: string; row?: number | null; sheet?: string }> {
+async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promise<{ status: string; row?: number | null; sheet?: string; seq?: number | null; duplicate?: boolean }> {
   const { rest, headers, webhookUrl, webhookSecret, openAiKey } = env;
   // 실패 시 last_error/attempts를 job에 남긴다 — 예전엔 실패가 어디에도 기록되지 않아 영구 pending으로 방치됐다.
   const recordFailure = async (message: string) => {
@@ -273,6 +275,23 @@ async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promis
     const config = Object.fromEntries((configRows || []).map((row: { key: string; value: string }) => [row.key, row.value]));
     if (!enabled(config.FIELD_SHEET_SYNC_ENABLED)) {
       return { status: "held" };
+    }
+    // 지원 부서 시트(영업·경영): 시트 API 직행만. GAS 폴백 없음 — 실패는 throw → recordFailure → retry_pending 재시도
+    if (isDeptSheetCategory(job.category)) {
+      if (enabled(config.FIELD_SHEET_TEST_MODE)) return { status: "held" }; // 테스트 모드에서 실제 부서 시트에 쓰지 않는다
+      if (!sheetsApiConfigured()) throw new Error("GOOGLE_SERVICE_ACCOUNT 설정이 없어 부서 시트에 쓸 수 없습니다(GAS 폴백 없음)");
+      const dept = await appendDeptRow({
+        category: String(job.category), jobId: String(job.id), author: String(job.author || ""),
+        submittedAt: String(job.created_at || ""),
+        payload: (job.payload && typeof job.payload === "object" ? job.payload : {}) as { data?: Record<string, unknown> },
+      }, { rest, headers });
+      const markDept = await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { ...headers, Prefer: "return=minimal" },
+        body: JSON.stringify({ sheet_status: "synced", sheet_row: dept.row || null, synced_at: new Date().toISOString(), last_error: null, attempts: Number(job.attempts || 0) + 1 }),
+      });
+      if (!markDept.ok) throw new Error(`synced 마킹 실패(${markDept.status}) — 시트에는 기록됨(행 ${dept.row || "?"}, 순번 ${dept.seq ?? "?"})`);
+      return { status: "synced", row: dept.row, sheet: dept.sheet, seq: dept.seq, duplicate: !!dept.duplicate };
     }
     if (!webhookUrl || !webhookSecret) throw new Error("시트 웹훅 Secret 설정이 없습니다.");
 
