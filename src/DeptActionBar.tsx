@@ -61,7 +61,7 @@ export default function DeptActionBar({ row, compact = false, author, onChanged,
   };
 
   const btn = compact
-    ? "inline-flex min-h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-black transition disabled:opacity-40"
+    ? "inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold transition disabled:opacity-40"
     : "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-[12px] font-black transition disabled:opacity-40 sm:min-h-9";
   const plain = "border-slate-200 bg-white text-slate-600 hover:border-slate-400";
   const icon = compact ? 13 : 14;

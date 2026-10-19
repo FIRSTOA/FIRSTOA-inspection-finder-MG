@@ -110,7 +110,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     const ageText = age === 0 ? "오늘" : `${age}일`;
     if (compact) {
       return (
-        <li key={r.id} className={`rounded-lg border bg-white px-2 py-1.5 ${late ? "border-red-400 ring-1 ring-red-200" : "border-slate-200"}`}>
+        <li key={r.id} className={`px-3 py-2 ${late ? "border-l-2 border-l-red-500 bg-red-50/40" : ""}`}>
           <div className="flex items-center gap-1.5 text-[12px]">
             <span className="min-w-0 truncate font-black text-slate-900">{r.vendor || "업체 미정"}</span>
             <span className="min-w-0 shrink truncate font-bold text-slate-500">· {r.field || "분야 미입력"}</span>
@@ -150,7 +150,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     const age = daysBetween(s.date, today);
     return (
       <li key={s.id} {...(onOpenSchedule ? { role: "button", tabIndex: 0, onClick: onOpenSchedule, onKeyDown: (e: KeyboardEvent<HTMLLIElement>) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenSchedule(); } } } : {})}
-        className={`rounded-lg border border-slate-300 bg-white px-2 py-1.5 ${onOpenSchedule ? "cursor-pointer transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-900" : ""}`}>
+        className={`${compact ? "px-3 py-2" : "rounded-lg border border-slate-300 bg-white px-2 py-1.5"} ${onOpenSchedule ? "cursor-pointer transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-slate-900" : ""}`}>
         <div className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-[12px] font-black text-slate-900">{s.vendor || "업체 미정"}</span>
           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums ${ageBadge(age)}`}>{age === 0 ? "오늘" : `${age}일`}</span>
@@ -172,9 +172,9 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   ) : null;
 
   const scheduleList = (shown: ScheduleRow[], hidden: number) => (
-    <div className="space-y-2 px-2 pb-2">
-      <ul className="space-y-2">{shown.map(renderScheduleCard)}</ul>
-      {hidden > 0 && <button type="button" onClick={() => setExpanded((e) => ({ ...e, [SCHEDULE_KEY]: true }))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white text-[12px] font-black text-slate-600 transition hover:bg-slate-100">더 보기 {hidden}</button>}
+    <div className={compact ? "pb-1" : "space-y-2 px-2 pb-2"}>
+      <ul className={compact ? "divide-y divide-slate-100" : "space-y-2"}>{shown.map(renderScheduleCard)}</ul>
+      {hidden > 0 && <button type="button" onClick={() => setExpanded((e) => ({ ...e, [SCHEDULE_KEY]: true }))} className={compact ? "min-h-11 w-full border-t border-slate-100 text-[12px] font-bold text-slate-500 transition hover:bg-slate-50" : "min-h-11 w-full rounded-lg border border-slate-300 bg-white text-[12px] font-black text-slate-600 transition hover:bg-slate-100"}>더 보기 {hidden}</button>}
     </div>
   );
 
@@ -188,15 +188,15 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     const shownLate = shown.filter(isLate);
     const shownRest = shown.filter((r) => !isLate(r));
     return (
-      <div className="space-y-2 px-2 pb-2">
+      <div className={compact ? "pb-1" : "space-y-2 px-2 pb-2"}>
         {shownLate.length > 0 && (
           <div>
-            <div className="mb-1 rounded bg-red-600 px-2 py-1 text-[11px] font-black text-white">예정일 지남 {late.length}</div>
-            <ul className="space-y-2">{shownLate.map(renderCard)}</ul>
+            <div className={compact ? "bg-red-50 px-3 py-1 text-[11px] font-black text-red-600" : "mb-1 rounded bg-red-600 px-2 py-1 text-[11px] font-black text-white"}>예정일 지남 {late.length}</div>
+            <ul className={compact ? "divide-y divide-slate-100" : "space-y-2"}>{shownLate.map(renderCard)}</ul>
           </div>
         )}
-        {shownRest.length > 0 && <ul className="space-y-2">{shownRest.map(renderCard)}</ul>}
-        {hidden > 0 && <button type="button" onClick={() => setExpanded((e) => ({ ...e, [type]: true }))} className="min-h-11 w-full rounded-lg border border-slate-300 bg-white text-[12px] font-black text-slate-600 transition hover:bg-slate-100">더 보기 {hidden}</button>}
+        {shownRest.length > 0 && <ul className={compact ? `divide-y divide-slate-100 ${shownLate.length > 0 ? "border-t border-slate-100" : ""}` : "space-y-2"}>{shownRest.map(renderCard)}</ul>}
+        {hidden > 0 && <button type="button" onClick={() => setExpanded((e) => ({ ...e, [type]: true }))} className={compact ? "min-h-11 w-full border-t border-slate-100 text-[12px] font-bold text-slate-500 transition hover:bg-slate-50" : "min-h-11 w-full rounded-lg border border-slate-300 bg-white text-[12px] font-black text-slate-600 transition hover:bg-slate-100"}>더 보기 {hidden}</button>}
       </div>
     );
   };
@@ -206,9 +206,9 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
 
   // ---- 머리띠 ----
   const header = compact ? (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 bg-[#1E252F] px-3 py-2">
-      <div className="text-[13px] font-black text-white">미처리 접수 <span className="ml-0.5 tabular-nums text-slate-400">{openCount}건</span></div>
-      <div className="text-[10px] font-bold text-slate-300">오늘 접수 <b className="tabular-nums text-white">{todayN}</b> · 완료율 <b className="tabular-nums text-white">{weekDoneRate == null ? "-" : `${weekDoneRate}%`}</b></div>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2">
+      <div className="text-[13px] font-bold text-slate-900">미처리 접수 <span className="ml-0.5 tabular-nums text-slate-400">{openCount}건</span></div>
+      <div className="text-[11px] font-medium text-slate-500">오늘 접수 <b className="tabular-nums text-slate-900">{todayN}</b> · 완료율 <b className="tabular-nums text-slate-900">{weekDoneRate == null ? "-" : `${weekDoneRate}%`}</b></div>
     </div>
   ) : (
     <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-4 py-3">
@@ -224,19 +224,19 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const tileCount = types.length + (hasSchedule ? 1 : 0);
   const lgCols = tileCount >= 7 ? "lg:grid-cols-7" : tileCount === 6 ? "lg:grid-cols-6" : tileCount === 4 ? "lg:grid-cols-4" : "lg:grid-cols-3";
   const stats = compact ? (
-    <div className="grid grid-cols-2 gap-1.5 border-b border-slate-200 bg-slate-50 p-2 min-[430px]:grid-cols-3">
+    <div className="grid grid-cols-2 gap-1.5 border-b border-slate-100 px-3 pb-3 min-[430px]:grid-cols-3">
       {types.map((m) => {
         const Icon = m.icon;
         const on = selectedType === m.type;
         return (
-          <button key={m.type} type="button" aria-pressed={on} onClick={() => selectType(m.type)} className={`min-h-11 rounded-lg border px-2 py-1 text-left transition hover:border-slate-400 ${on ? "border-slate-900 bg-white ring-2 ring-slate-900/20" : "border-slate-200 bg-white"}`}>
+          <button key={m.type} type="button" aria-pressed={on} onClick={() => selectType(m.type)} className={`min-h-11 rounded-lg border px-2 py-1 text-left transition hover:border-slate-300 ${on ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>
             <div className="flex items-center gap-1 text-[11px] font-black text-slate-800"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${m.dot}`} aria-hidden /><Icon size={12} aria-hidden /><span className="truncate">{m.label}</span></div>
             <div className="mt-0.5 whitespace-nowrap text-[10px] font-bold tabular-nums text-slate-500">접수 {countOf(m.type, "접수")}·진행 {countOf(m.type, "진행중")}·보류 {countOf(m.type, "보류")}</div>
           </button>
         );
       })}
       {hasSchedule && (
-        <button type="button" aria-pressed={focusSchedule} onClick={toggleSchedule} className={`flex min-h-11 flex-col justify-center rounded-lg border bg-white px-2 py-1 text-left transition hover:border-slate-400 ${focusSchedule ? "border-slate-900 ring-2 ring-slate-900/20" : "border-slate-300"}`}>
+        <button type="button" aria-pressed={focusSchedule} onClick={toggleSchedule} className={`flex min-h-11 flex-col justify-center rounded-lg border px-2 py-1 text-left transition hover:border-slate-300 ${focusSchedule ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"}`}>
           <div className="flex items-center gap-1 text-[11px] font-black text-slate-800"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500" aria-hidden /><CalendarX2 size={12} aria-hidden /><span className="truncate">물류 미처리</span></div>
           <div className={`mt-0.5 text-[10px] font-bold tabular-nums ${schedAll.length > 0 ? "text-slate-700" : "text-slate-400"}`}>{schedAll.length}건</div>
         </button>
@@ -283,12 +283,12 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     const stackItem = (key: string, label: string, bar: string, count: number, content: ReactNode, extra?: ReactNode, onTitle?: () => void) => {
       const isOpen = count > 0 && (folded[key] ?? true);
       return (
-        <div key={key} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-          <div className={`h-0.5 ${bar}`} />
+        <div key={key} className="border-b border-slate-100 last:border-b-0">
           <div className="flex min-h-11 items-center">
-            <button type="button" aria-expanded={isOpen} disabled={count === 0} onClick={() => setFolded((f) => ({ ...f, [key]: !isOpen }))} className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 px-2.5 text-left disabled:cursor-default">
+            <button type="button" aria-expanded={isOpen} disabled={count === 0} onClick={() => setFolded((f) => ({ ...f, [key]: !isOpen }))} className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 px-3 text-left disabled:cursor-default">
               {count > 0 ? (isOpen ? <ChevronDown size={14} className="shrink-0 text-slate-400" aria-hidden /> : <ChevronRight size={14} className="shrink-0 text-slate-400" aria-hidden />) : <Check size={14} className="shrink-0 text-emerald-600" aria-hidden />}
-              <span className="truncate text-[13px] font-black text-slate-800">{label}</span>
+              <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${bar}`} />
+              <span className="truncate text-[13px] font-bold text-slate-800">{label}</span>
               <span className="text-[11px] font-black tabular-nums text-slate-400">{count}건</span>
               {count === 0 && <span className="ml-auto text-[12px] font-black text-emerald-600">없음 ✓</span>}
             </button>
@@ -300,9 +300,9 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
       );
     };
     const scheduleItem = () =>
-      stackItem(SCHEDULE_KEY, "물류 미처리", "bg-slate-500", schedAll.length, scheduleList(schedShown, schedHidden), scheduleButton ? <div className="px-2 pb-2">{scheduleButton}</div> : undefined);
+      stackItem(SCHEDULE_KEY, "물류 미처리", "bg-slate-500", schedAll.length, scheduleList(schedShown, schedHidden), scheduleButton ? <div className="px-3 pb-2">{scheduleButton}</div> : undefined);
     body = (
-      <div className="flex flex-col gap-2 p-2">
+      <div className="flex flex-col">
         {columns.map((m) => (
           <div key={m.type} className="contents">
             {stackItem(m.type, m.label, m.bar, byType(m.type).length, typeBody(m.type), undefined, selectedType ? undefined : () => selectType(m.type))}
@@ -355,7 +355,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label="미처리 접수 현황판">
+    <section className={compact ? "bg-white" : "overflow-hidden rounded-2xl border border-slate-200 bg-white"} aria-label="미처리 접수 현황판">
       {header}
       {loading && <div role="status" className="flex items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[11px] font-bold text-slate-500"><Loader2 size={12} className="animate-spin" />새로고침 중…</div>}
       {error && <div role="alert" className="flex items-center gap-1.5 border-b border-red-200 bg-red-50 px-4 py-1.5 text-[11px] font-black text-red-600"><AlertCircle size={12} />최신 조회 실패 — 이전 데이터 표시</div>}

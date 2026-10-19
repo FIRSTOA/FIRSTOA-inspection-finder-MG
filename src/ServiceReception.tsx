@@ -1487,7 +1487,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                   <span className="w-12 shrink-0 text-center">
                     <span className="block text-[13px] font-black tabular-nums leading-tight text-slate-900">{kstTime(row.created_at)}</span>
                     {listPeriod !== "day" && <span className="block text-[10px] font-bold tabular-nums text-slate-400">{row.receipt_date.slice(5).replace("-", "/")}</span>}
-                    <span className={`mt-1 block rounded px-1 py-0.5 text-[9px] font-black ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"}`}>{isDeptType(row.type) ? deptShort(row.type) : row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
+                    <span className={`mt-1 inline-flex items-center justify-center gap-1 whitespace-nowrap text-[10px] font-bold ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"} bg-transparent!`}><span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{isDeptType(row.type) ? deptShort(row.type) : row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
                   </span>
                   <span className="min-w-0">
                     <b className="block truncate text-[15px] font-black leading-snug text-slate-950">{row.vendor || "업체 미기재"}</b>
@@ -1597,9 +1597,9 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
       {/* 사진 보기 — 화면 맨 바깥 한 곳에만(목록 줄 안에 두면 줄마다 겹치고 목록 갱신 때 그린 게 사라졌다, 2026-10-14) */}
       {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
       {/* 헤더 + 탭 — 한 번에 한 가지 일만 보이게 나눈다 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {/* 다크 상태바 — 오늘 상황과 현재 시각을 한 줄로 (제목은 상단 헤더에 이미 있다) */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-[#151A23] px-4 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-[#151A23] px-4 py-2">
           <span className="flex items-center gap-1.5 text-[13px] font-black text-white">
             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.25)]" />접수 가능
           </span>
@@ -1617,44 +1617,42 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
             <span className="text-xs font-bold tabular-nums text-slate-300">{clock}</span>
           </span>
         </div>
-        <div className="border-b border-slate-200 p-3">
+        <div className="px-3 py-2.5">
           <ReceptionTypePicker value={PAGE_TYPE[page]} deptEnabled={deptEnabled} onChange={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
             counts={boardCounts || Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, mergedRows.filter((r) => r.type === m.type && listStateOf(r) !== "완료").length])) as Record<ReceptionType, number>} />
         </div>
       </section>
 
-      <div className="space-y-4 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_minmax(430px,600px)] 2xl:items-start 2xl:gap-4 2xl:space-y-0">
+      <div className="space-y-3 2xl:grid 2xl:grid-cols-[minmax(0,1fr)_minmax(430px,600px)] 2xl:items-start 2xl:gap-3 2xl:space-y-0">
         {/* ==== 좌: 접수 작성 ==== */}
         <div className="space-y-4">
           {deptEnabled && isDeptType(PAGE_TYPE[page]) ? <DeptReception dept={PAGE_TYPE[page] as DeptType} fallbackAuthor={author} onSaved={() => { void loadList(listDate, listPeriod, true); setBoardReload((n) => n + 1); }} /> : <>
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/10 text-xs font-black text-white">1</span>
-                <div>
-                  <div className="text-sm font-black text-white lg:text-[15px]">거래처 선택</div>
-                  <div className="text-[11px] font-semibold text-slate-400">{page === "remote" ? "원격 처리할 거래처를 고릅니다." : "AS 대상 기기를 정확히 고릅니다."}</div>
-                </div>
+          {/* 한 장의 종이: 거래처 선택 + 접수 내용 입력 — 어두운 번호 띠 대신 작은 섹션 라벨과 구분선으로만 나눈다 */}
+          <section className="rounded-xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-3 px-4 pt-4 lg:px-5">
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">거래처 선택</div>
+                <div className="truncate text-[12px] font-medium text-slate-500">{page === "remote" ? "원격 처리할 거래처를 고릅니다." : "AS 대상 기기를 정확히 고릅니다."}</div>
               </div>
-              <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-black ${lease || (custKind === "신규" && manualVendor.trim()) ? "bg-emerald-400/15 text-emerald-300" : "bg-white/10 text-slate-300"}`}>
-                <Building2 size={13} /> {lease || (custKind === "신규" && manualVendor.trim()) ? "선택 완료" : "선택 필요"}
+              <div className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${lease || (custKind === "신규" && manualVendor.trim()) ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                <Building2 size={12} /> {lease || (custKind === "신규" && manualVendor.trim()) ? "선택 완료" : "선택 필요"}
               </div>
             </div>
-            <div className="p-4 lg:p-5">
+            <div className="px-4 pb-4 pt-2.5 lg:px-5">
             <div className="flex items-center gap-2">
-              <span className="flex rounded-full bg-slate-100 p-1">
+            {custKind === "기존" && <div className="relative min-w-0 flex-1">
+              <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-3.5 pr-24 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              <button type="button" onClick={() => void runSearch()} disabled={searching} className="absolute right-1 top-1 inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-[12px] font-bold text-white transition hover:bg-blue-700 disabled:opacity-40"><Search size={14} />{searching ? "검색중" : "검색"}</button>
+            </div>}
+            {custKind === "신규" && <label className="block min-w-0 flex-1"><span className="sr-only">업체명</span>
+              <input value={manualVendor} onChange={(e) => setManualVendor(e.target.value)} placeholder="신규 거래처 업체명" className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+            </label>}
+              <span className="flex h-9 shrink-0 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="group" aria-label="거래처 구분">
                 {(["기존", "신규"] as const).map((k) => (
-                  <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`rounded-full px-5 py-2 text-xs font-black transition ${custKind === k ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{k}</button>
+                  <button key={k} type="button" onClick={() => { setCustKind(k); setLease(null); setQuery(""); setResults([]); setSearched(false); setManualVendor(""); setAsHistory([]); setSnapshots([]); setDeviceSummary({ active: 0, items: [] }); }} className={`px-3 text-[12px] font-bold transition ${custKind === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}>{k}</button>
                 ))}
               </span>
             </div>
-            {custKind === "기존" && <div className="mt-3 flex gap-2">
-              <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3.5 py-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-              <button type="button" onClick={() => void runSearch()} disabled={searching} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-blue-600 px-5 py-3 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40"><Search size={15} />{searching ? "검색중" : "검색"}</button>
-            </div>}
-            {custKind === "신규" && <label className="mt-3 block text-[11px] font-black text-slate-500">업체명
-              <input value={manualVendor} onChange={(e) => setManualVendor(e.target.value)} placeholder="신규 거래처 업체명" className="mt-1 w-full rounded-lg border border-slate-300 px-3.5 py-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-            </label>}
             {searched && !results.length && !lease && <div className="mt-2 text-xs font-bold text-slate-400">검색 결과가 없습니다.</div>}
             {results.length > 0 && <div className="mt-2 max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
               {results.map((hit, index) => {
@@ -1682,91 +1680,93 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                 );
               })}
             </div>}
-            {lease && <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="truncate text-base font-black text-slate-950 lg:text-lg">{pick(lease, "거래처명", "_업체명")}</span>
+            {lease && <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                  <span className="truncate text-[14px] font-bold text-slate-950">{pick(lease, "거래처명", "_업체명")}</span>
                   <VendorAlertChip flags={vendorAlert} onOpen={() => setHistVendor(historyCoreName(vendorName))} />
-                  {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{pick(lease, "임대여부")} 기기</span>}
+                  {pick(lease, "임대여부") && pick(lease, "임대여부") !== "임대중" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-600">{pick(lease, "임대여부")} 기기</span>}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {asHistory.length > 0 && <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-600">AS 기기 {asHistory.filter((h) => h.serialMatch).length}회 · 업체 {asHistory.length}회</span>}
-                  <button type="button" onClick={resetForm} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500 transition hover:border-slate-400 hover:text-slate-700">다시 검색</button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {asHistory.length > 0 && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600">AS 기기 {asHistory.filter((h) => h.serialMatch).length}회 · 업체 {asHistory.length}회</span>}
+                  <button type="button" onClick={resetForm} title="다시 검색" className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"><span aria-hidden className="text-base leading-none">×</span><span className="sr-only">다시 검색</span></button>
                 </div>
               </div>
-              {deviceSummary.active > 1 && <div className="border-b border-slate-100 bg-amber-50/70 px-4 py-2 text-[11px] font-bold text-amber-800">
-                임대중 {deviceSummary.active}대({deviceSummary.items.map(([item, n]) => `${item} ${n}`).join(" · ")}) — 접수할 기기의 자산·기번이 맞는지 확인하세요
-              </div>}
-              {/* 값을 칩으로 흘려놓으면 기번·자산을 눈으로 대조하기 어렵다 — 라벨/값 표로 세운다 */}
-              <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 2xl:grid-cols-8">
+              {/* 값을 칩으로 흘려놓으면 기번·자산을 눈으로 대조하기 어렵다 — 라벨 바로 옆에 값을 붙인 한 줄 요약으로 둔다 */}
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                 {([["순", pick(lease, "순") || "-", "num"], ["모델", pick(lease, "모델명") || "-", ""], ["자산번호", pick(lease, "자산번호") || "-", "mono"], ["기번", pick(lease, "시리얼번호(기번)") || "-", "mono"], ["등급", pick(lease, "등급") || "-", ""], ["지역", region || "-", ""], ["종료일", pick(lease, "종료일") || "-", "num"], ["미수", `${pick(lease, "미수개월수") || "0"}개월`, "num"]] as [string, string, string][]).map(([label, value, kind]) => (
-                  <div key={label} className="min-w-0 px-3 py-2.5">
-                    <div className="text-[10px] font-bold text-slate-400">{label}</div>
-                    <div className={`mt-0.5 truncate text-[13px] font-black text-slate-900 ${kind === "mono" ? "font-mono" : kind === "num" ? "tabular-nums" : ""}`} title={value}>{value}</div>
-                  </div>
+                  <span key={label} className="inline-flex min-w-0 items-baseline gap-1">
+                    <span className="text-[11px] font-medium text-slate-400">{label}</span>
+                    <span className={`truncate text-[12px] font-bold text-slate-800 ${kind === "mono" ? "font-mono" : kind === "num" ? "tabular-nums" : ""}`} title={value}>{value}</span>
+                  </span>
                 ))}
               </div>
+              {deviceSummary.active > 1 && <div className="mt-1 text-[11px] font-bold text-amber-700">
+                임대중 {deviceSummary.active}대({deviceSummary.items.map(([item, n]) => `${item} ${n}`).join(" · ")}) — 접수할 기기의 자산·기번이 맞는지 확인하세요
+              </div>}
               {/* 자동 입력값 — 임대리스트에서 채워진 값. 틀렸으면 여기서 바로 고치면 보고양식·시트에 반영 */}
-              <details className="border-t border-slate-100 bg-slate-50/60">
-                <summary className="cursor-pointer select-none px-4 py-2.5 text-[11px] font-black text-slate-500 transition hover:text-slate-700">⚙️ 자동 입력값 수정 <span className="font-bold text-slate-400">— 임대리스트에서 채워짐 · 틀리면 펼쳐서 바로 고치세요</span></summary>
-                <div className="grid grid-cols-2 gap-1.5 px-4 pb-3 sm:grid-cols-3 2xl:grid-cols-4">
+              <details className="mt-1.5 border-t border-slate-200/70">
+                <summary className="cursor-pointer select-none pt-1.5 text-[11px] font-bold text-slate-500 transition hover:text-slate-700">⚙️ 자동 입력값 수정 <span className="font-medium text-slate-400">— 임대리스트에서 채워짐 · 틀리면 펼쳐서 바로 고치세요</span></summary>
+                <div className="grid grid-cols-2 gap-1.5 pb-1 pt-2 sm:grid-cols-3 2xl:grid-cols-4">
                   {([["거래처명", "거래처명"], ["모델명", "모델명"], ["시리얼번호(기번)", "시리얼(기번)"], ["자산번호", "자산번호"], ["등급", "등급"], ["관리 담당자", "담당팀(AV열)"], ["담당지역", "권역"], ["종료일", "종료일"], ["일반전화", "일반전화"], ["키맨", "키맨"], ["미수개월수", "미수개월"], ["주소(실납품주소,도로명주소)", "임대리스트 주소"], ["코드", "한조코드"]] as [string, string][]).map(([col, label]) => (
-                    <label key={col} className="text-[10px] font-bold text-slate-500">{label}
+                    <label key={col} className="text-[11px] font-medium text-slate-500">{label}
                       <input value={String(lease[col] ?? "")} onChange={(e) => setLease({ ...lease, [col]: e.target.value })}
-                        className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                        className="mt-0.5 h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-[12px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                     </label>
                   ))}
                 </div>
               </details>
             </div>}
             </div>
-          </section>
 
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/10 text-xs font-black text-white">2</span>
-                <div>
-                  <div className="text-sm font-black text-white lg:text-[15px]">접수 내용 입력</div>
-                  <div className="text-[11px] font-semibold text-slate-400">고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</div>
-                </div>
+            <div className="mx-4 border-t border-slate-100 lg:mx-5" />
+            <div className="flex items-center justify-between gap-3 px-4 pt-4 lg:px-5">
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">접수 내용 입력</div>
+                <div className="truncate text-[12px] font-medium text-slate-500">고객이 말한 증상과 기사 방문 정보를 먼저 남깁니다.</div>
               </div>
-              <div className={`rounded-full px-2.5 py-1 text-[11px] font-black ${isReady ? "bg-emerald-400/15 text-emerald-300" : "bg-white/10 text-slate-300"}`}>{readyCount}/{requiredItems.length} 필수 입력</div>
+              <div className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${isReady ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{readyCount}/{requiredItems.length} 필수 입력</div>
             </div>
-            <div className="p-4 lg:p-5">
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="px-4 pb-4 pt-2.5 lg:px-5 lg:pb-5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div className="flex items-center gap-2">
                   <div className="sr-only">접수유형</div>
-                  <div className="flex rounded-full bg-white p-1 ring-1 ring-slate-200">
+                  <div className="flex h-9 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
                     {(["카카오", "전화"] as ReceiveRoute[]).map((r) => (
-                      <button key={r} type="button" onClick={() => setRoute(r)} className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${route === r ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-700"}`}>{r}</button>
+                      <button key={r} type="button" onClick={() => setRoute(r)} className={`px-3.5 text-[12px] font-bold transition ${route === r ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"}`}>{r}</button>
                     ))}
                   </div>
                 </div>
-                {custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-black text-slate-500">임대리스트 순번
-                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-8 w-28 rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-black text-slate-900 outline-none focus:border-slate-700" />
+                {custKind === "기존" && <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-500">임대리스트 순번
+                  <input value={firstNo} onChange={(e) => setFirstNo(e.target.value)} placeholder="예: 1234" className="h-9 w-28 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-bold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>}
-                {type === "복합기 AS" && <div className="flex flex-wrap items-center gap-2 sm:ml-4">
-                  <span className="shrink-0 text-[11px] font-black text-slate-500">접수분야</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <button key={v} type="button" onClick={() => setFieldChoice(v)} className={`rounded-full border px-3.5 py-1.5 text-[11px] font-black transition ${fieldChoice === v ? "border-blue-600 bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{v}</button>)}
-                    {fieldChoice === "직접기재" && <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} placeholder="분야 입력" className="h-8 w-44 rounded-lg border border-slate-400 bg-white px-2.5 text-[11px] font-bold text-slate-900 outline-none focus:border-slate-900" />}
+                {type === "복합기 AS" && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                  <span className="shrink-0 text-[11px] font-semibold text-slate-500">접수분야</span>
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
+                    <div className="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div className="flex h-9 w-max divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <button key={v} type="button" onClick={() => setFieldChoice(v)} className={`whitespace-nowrap px-3 text-[12px] font-bold transition ${fieldChoice === v ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-blue-700"}`}>{v}</button>)}
+                    </div>
+                    </div>
+                    {fieldChoice === "직접기재" && <input value={fieldCustom} onChange={(e) => setFieldCustom(e.target.value)} placeholder="분야 입력" className="h-9 w-44 rounded-lg border border-slate-200 bg-white px-2.5 text-[12px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}
                   </div>
                   <select aria-label="접수분야" value={fieldChoice} onChange={(e) => setFieldChoice(e.target.value)} className="sr-only">
                     {["A/S", "점검요청", "여분요청", "세팅요청", "불만", "미수", "해지방어", "직접기재"].map((v) => <option key={v}>{v}</option>)}
                   </select>
                 </div>}
-                {isRemoteType && <div className="flex flex-wrap items-center gap-2 sm:ml-4">
-                  <span className="shrink-0 text-[11px] font-black text-slate-500">한조처리</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button type="button" onClick={() => { setType("원격이관"); setRemote({ ...remote, hanjoDirect: false }); }} className={`rounded-full border px-3.5 py-1.5 text-[11px] font-black transition ${!remote.hanjoDirect && type === "원격이관" ? "border-blue-600 bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>원격이관</button>
-                    <button type="button" onClick={() => { setType("IT"); setRemote({ ...remote, hanjoDirect: false }); }} className={`rounded-full border px-3.5 py-1.5 text-[11px] font-black transition ${!remote.hanjoDirect && type === "IT" ? "border-blue-600 bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>IT</button>
-                    <button type="button" onClick={() => setRemote({ ...remote, hanjoDirect: true })} className={`rounded-full border px-3.5 py-1.5 text-[11px] font-black transition ${remote.hanjoDirect ? "border-blue-600 bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]" : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>직접기재</button>
-                    {remote.hanjoDirect && <input autoFocus value={remote.hanjoCustom} onChange={(e) => setRemote({ ...remote, hanjoCustom: e.target.value })} placeholder="한조처리 입력" className="h-8 w-32 rounded-lg border border-slate-400 bg-white px-2.5 text-[11px] font-bold text-slate-900 outline-none focus:border-slate-900" />}
+                {isRemoteType && <div className="flex flex-wrap items-center gap-2">
+                  <span className="shrink-0 text-[11px] font-semibold text-slate-500">한조처리</span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex h-9 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    <button type="button" onClick={() => { setType("원격이관"); setRemote({ ...remote, hanjoDirect: false }); }} className={`whitespace-nowrap px-3 text-[12px] font-bold transition ${!remote.hanjoDirect && type === "원격이관" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-blue-700"}`}>원격이관</button>
+                    <button type="button" onClick={() => { setType("IT"); setRemote({ ...remote, hanjoDirect: false }); }} className={`whitespace-nowrap px-3 text-[12px] font-bold transition ${!remote.hanjoDirect && type === "IT" ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-blue-700"}`}>IT</button>
+                    <button type="button" onClick={() => setRemote({ ...remote, hanjoDirect: true })} className={`whitespace-nowrap px-3 text-[12px] font-bold transition ${remote.hanjoDirect ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-blue-700"}`}>직접기재</button>
+                    </div>
+                    {remote.hanjoDirect && <input autoFocus value={remote.hanjoCustom} onChange={(e) => setRemote({ ...remote, hanjoCustom: e.target.value })} placeholder="한조처리 입력" className="h-9 w-32 rounded-lg border border-slate-200 bg-white px-2.5 text-[12px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}
                   </div>
                 </div>}
               </div>
-              {isRemoteType && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
+              {isRemoteType && custKind === "신규" && <div className="mt-3 space-y-1.5 rounded-lg bg-amber-50/60 p-3">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 순번 함수가 못 채우는 열이라 여기 값이 원격 시트에 그대로 기입됩니다 (아는 것만)</div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] font-black text-slate-500">지역(팀)</span>
@@ -1790,7 +1790,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                   </label>
                 </div>
               </div>}
-              {type === "복합기 AS" && custKind === "신규" && <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/40 p-2.5">
+              {type === "복합기 AS" && custKind === "신규" && <div className="mt-3 space-y-1.5 rounded-lg bg-amber-50/60 p-3">
                 <div className="text-[11px] font-black text-amber-700">신규 거래처 정보 — 아는 것만 채우면 됩니다 (빈 칸은 시트에도 빈 칸)</div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] font-black text-slate-500">지역(팀)</span>
@@ -1803,7 +1803,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                 {NEW_LEASE_SECTIONS.map((sec) => {
                   const filled = sec.fields.filter(([key]) => (newLease[key] || "").trim()).length;
                   return (
-                    <details key={sec.label} open={sec.label === "기본"} className="rounded-lg border border-amber-100 bg-white/70">
+                    <details key={sec.label} open={sec.label === "기본"} className="rounded-lg bg-white/80">
                       <summary className="cursor-pointer px-2.5 py-2 text-xs font-black text-slate-600">
                         {sec.label} <span className={`ml-1 text-[10px] ${filled ? "text-blue-600" : "text-slate-300"}`}>{filled}/{sec.fields.length}</span>
                       </summary>
@@ -1829,49 +1829,49 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                   );
                 })}
               </div>}
-              <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 sm:[&>label:nth-of-type(3)]:col-span-2">
                 {([["접수자성함", "접수자 성함"], ["접수자연락처", "접수자 연락처"], ["제목", "제목(짧게)"]] as [keyof Manual, string][]).map(([key, label]) => (
-                  <label key={key} className="text-[11px] font-black text-slate-500">{label}
-                    <input value={manual[key]} onChange={(e) => setManual({ ...manual, [key]: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  <label key={key} className="text-[11px] font-semibold text-slate-500">{label}
+                    <input value={manual[key]} onChange={(e) => setManual({ ...manual, [key]: e.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                   </label>
                 ))}
-                <label className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상/내용
-                  <textarea value={manual.증상} onChange={(e) => setManual({ ...manual, 증상: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                <label className="text-[11px] font-semibold text-slate-500 sm:col-span-2">증상/내용
+                  <textarea value={manual.증상} onChange={(e) => setManual({ ...manual, 증상: e.target.value })} rows={2} className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                 </label>
-                {type !== "원격이관" && <div className="sm:col-span-2 lg:col-span-3">
+                {type !== "원격이관" && <div className="sm:col-span-2">
                   <div className="flex flex-wrap items-end gap-2">
-                    <label className="min-w-[220px] flex-1 text-[11px] font-black text-slate-500">방문 주소 <span className="font-bold text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
-                      <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 w-full rounded-lg border px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-300 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
+                    <label className="min-w-[220px] flex-1 text-[11px] font-semibold text-slate-500">방문 주소 <span className="font-medium text-slate-400">실제 방문하는 주소 — 임대리스트와 다르면 꼭 수정</span>
+                      <input value={manual.주소} onChange={(e) => setManual({ ...manual, 주소: e.target.value })} placeholder="주소를 입력하세요" className={`mt-1 h-10 w-full rounded-lg border px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:ring-4 ${manual.주소.trim() ? "border-slate-200 focus:border-blue-500 focus:ring-blue-500/10" : "border-rose-300 bg-rose-50/40 focus:border-rose-400 focus:ring-rose-500/10"}`} />
                     </label>
                   </div>
+                  {!manual.주소.trim() && <span className="mt-1 block text-[11px] font-bold text-rose-600">· 방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요.</span>}
                   {/* 팀 지역 — 어느 팀 방·일정으로 갈지. 임대리스트가 옛 지역이거나 권역 칸만 채워진 건을
                       여기서 한 번 눌러 바로잡는다. 기본은 자동 판정값(관리 담당자 → 권역 → 주소). */}
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-2">
-                    <span className="mr-0.5 text-[11px] font-black text-slate-500">팀 지역</span>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="mr-0.5 text-[11px] font-semibold text-slate-500">팀 지역</span>
                     <button type="button" onClick={() => setRegionPick("")}
-                      className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${!regionPick
-                        ? (region ? "bg-slate-900 text-white shadow-sm" : "bg-amber-500 text-white shadow-sm")
+                      className={`h-8 rounded-lg px-3 text-[12px] font-bold transition ${!regionPick
+                        ? (region ? "bg-slate-900 text-white" : "bg-amber-500 text-white")
                         : "bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-700"}`}>
                       자동{region ? ` · ${region.replace("수도권", "")}` : " · 판정 불가"}
                     </button>
                     <span className="mx-0.5 h-4 w-px bg-slate-200" />
                     {(["A", "B", "C", "D", "E"] as const).map((letter) => (
                       <button key={letter} type="button" onClick={() => setRegionPick(letter)}
-                        className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${regionPick === letter
-                          ? "bg-blue-600 text-white shadow-[0_2px_8px_rgba(37,99,235,0.35)]"
-                          : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
+                        className={`h-8 rounded-lg px-2.5 text-[12px] font-bold transition ${regionPick === letter
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"}`}>
                         {letter} <span className={regionPick === letter ? "text-blue-100" : "text-slate-400"}>{REGION_TEAM_LABEL[letter]}</span>
                       </button>
                     ))}
                   </div>
-                  {!manual.주소.trim() && <span className="mt-1 block text-[11px] font-black text-rose-600">· 방문 주소가 비어 있습니다 — 방문 일정에 꼭 필요하니 입력해 주세요.</span>}
                   {regionPick
                     ? <span className="mt-1 block text-[11px] font-black text-blue-700">· 지역을 {regionPick}로 지정했습니다 — 접수 시트·일정·카톡방이 이 팀으로 갑니다{leaseRegionLabel && leaseRegionLabel !== region ? ` (임대리스트: ${leaseRegionLabel})` : ""}</span>
                     : leaseRegionLabel === "지방" && addressRegionLabel && addressRegionLabel !== "지방"
                       ? <span className="mt-1 block text-[11px] font-black text-amber-700">· 임대리스트는 "지방"인데 주소는 {addressRegionLabel} 권역입니다 — {addressRegionLabel}로 접수합니다. 다르면 팀 지역에서 고르세요</span>
                       : null}
                 </div>}
-                {type !== "원격이관" && <div className="text-[11px] font-black text-slate-500 sm:col-span-2 lg:col-span-3">증상 사진 (최대 6장)
+                {type !== "원격이관" && <div className="text-[11px] font-semibold text-slate-500 sm:col-span-2">증상 사진 (최대 6장)
                   <div tabIndex={0} onPaste={(e) => { void describePaste(e); const files = Array.from(e.clipboardData.files).filter((file) => file.type.startsWith("image/")); if (files.length) { e.preventDefault(); void handlePhotoPick(files); } }} className="mt-1 flex flex-wrap items-center gap-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-200">
                     {photos.map((photo, index) => {
                       // 썸네일 크기(저화질)·작은 사진은 타일에 크기를 붙여 보낸 사람이 바로 알아보게
@@ -1894,24 +1894,24 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                   </div>
                 </div>}
                 {type === "복합기 AS" && <>
-                  <label className="text-[11px] font-black text-slate-500">유상/무상
+                  <label className="text-[11px] font-semibold text-slate-500">유상/무상
                     {manual.유상무상 === "직접기재"
                       ? <span className="mt-1 flex gap-1">
-                          <input autoFocus value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="min-w-0 flex-1 rounded-lg border border-slate-400 px-2.5 py-2 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                          <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="shrink-0 rounded-full border border-slate-300 px-2 text-[11px] font-black text-slate-400 hover:text-slate-700 transition hover:bg-slate-50">↺</button>
+                          <input autoFocus value={paidCustom} onChange={(e) => setPaidCustom(e.target.value)} placeholder="직접 입력" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                          <button type="button" title="선택으로 되돌리기" onClick={() => { setManual({ ...manual, 유상무상: "" }); setPaidCustom(""); }} className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 text-[12px] font-bold text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">↺</button>
                         </span>
-                      : <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>}
+                      : <select value={manual.유상무상} onChange={(e) => setManual({ ...manual, 유상무상: e.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"><option value="">선택</option>{["무상", "유상", "직접기재"].map((v) => <option key={v}>{v}</option>)}</select>}
                   </label>
-                  <label className="text-[11px] font-black text-slate-500">교체이력 (예: 1회)
-                    <input value={manual.교체이력} onChange={(e) => setManual({ ...manual, 교체이력: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  <label className="text-[11px] font-semibold text-slate-500">교체이력 (예: 1회)
+                    <input value={manual.교체이력} onChange={(e) => setManual({ ...manual, 교체이력: e.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                   </label>
-                  <label className="text-[11px] font-black text-slate-500">참고사항
-                    <input value={manual.참고사항} onChange={(e) => setManual({ ...manual, 참고사항: e.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+                  <label className="text-[11px] font-semibold text-slate-500 sm:col-span-2">참고사항
+                    <input value={manual.참고사항} onChange={(e) => setManual({ ...manual, 참고사항: e.target.value })} className="mt-1 h-10 w-full rounded-lg border border-slate-200 px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                   </label>
                 </>}
               </div>
-              {type !== "원격이관" && !!report && <div className="mt-3 border-t border-slate-100 pt-3">
-                {!region && <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-black text-rose-600">⚠ 지역이 비어 있습니다 — 지역이 있어야 팀 AS방으로 전송됩니다. 자동 입력값 수정(신규는 지역 칩)에서 입력하세요.</div>}
+              {type !== "원격이관" && !!report && <div className="mt-4 border-t border-slate-100 pt-3">
+                {!region && <div className="mb-2 rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-600">⚠ 지역이 비어 있습니다 — 지역이 있어야 팀 AS방으로 전송됩니다. 자동 입력값 수정(신규는 지역 칩)에서 입력하세요.</div>}
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-black text-slate-400">카톡 보고용 양식</div>
                   <button type="button" onClick={() => void copyReport()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white transition hover:bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700"><Copy size={13} />{copied ? "복사됨 ✓" : "복사"}</button>
@@ -1919,25 +1919,25 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                 <textarea value={report} readOnly rows={12} className="mt-2 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] leading-5 text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               </div>}
 
-              <div className="sticky bottom-2 z-10 -mx-4 mt-4 border-t border-slate-200 bg-white/95 px-4 pb-2 pt-3 backdrop-blur lg:mx-0 lg:rounded-2xl lg:border lg:border-slate-200 lg:px-5 lg:py-4 lg:shadow-[0_10px_30px_rgba(15,23,42,0.12)]">
+              <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 rounded-b-xl border-t border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur lg:-mx-5 lg:-mb-5 lg:px-5">
               <div className="flex flex-wrap items-center gap-2">
                 {requiredItems.map(([label, ok]) => (
-                  <span key={label} className={`rounded-full px-2.5 py-1 text-[10px] font-black ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {label}</span>
+                  <span key={label} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {label}</span>
                 ))}
                 <span className="ml-auto flex flex-wrap items-center gap-1.5">
                   {/* 단계별 실행 — 어떤 순서로 눌러도 접수는 한 번만 저장되고(ensureSaved) 그 위에 단계가 쌓인다 */}
-                  <button type="button" onClick={() => window.open(RECEPTION_SHEET_BASE + RECEPTION_SHEET_GID[type], "_blank", "noopener,noreferrer")} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-500 transition hover:border-slate-400 hover:bg-slate-50"><ExternalLink size={13} />{type === "복합기 AS" ? "시트 열기" : "원격 시트"}</button>
-                  <button type="button" onClick={() => void stepReception()} disabled={busy} className={`rounded-full px-4 py-2 text-xs font-black transition disabled:opacity-40 ${type === "원격이관" ? "bg-blue-600 text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-blue-700" : "border border-slate-400 bg-white text-slate-800 hover:bg-slate-50"}`}>{busy ? "처리중…" : type === "원격이관" ? "접수 (저장+시트)" : "접수"}</button>
-                  {type !== "원격이관" && <button type="button" onClick={() => void stepNaver()} disabled={busy} className="rounded-full border border-emerald-300 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40">네이버 캘린더</button>}
-                  {type !== "원격이관" && <button type="button" onClick={() => void stepKakao()} disabled={busy || !report} className="rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-700 transition hover:bg-amber-50 disabled:opacity-40">카톡 전송</button>}
+                  <button type="button" onClick={() => window.open(RECEPTION_SHEET_BASE + RECEPTION_SHEET_GID[type], "_blank", "noopener,noreferrer")} className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-500 transition hover:border-slate-300 hover:bg-slate-50"><ExternalLink size={13} />{type === "복합기 AS" ? "시트 열기" : "원격 시트"}</button>
+                  <button type="button" onClick={() => void stepReception()} disabled={busy} className={`h-9 rounded-lg px-3.5 text-[12px] font-bold transition disabled:opacity-40 ${type === "원격이관" ? "bg-blue-600 text-white hover:bg-blue-700" : "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50"}`}>{busy ? "처리중…" : type === "원격이관" ? "접수 (저장+시트)" : "접수"}</button>
+                  {type !== "원격이관" && <button type="button" onClick={() => void stepNaver()} disabled={busy} className="h-9 rounded-lg border border-emerald-200 bg-white px-3 text-[12px] font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-40">네이버 캘린더</button>}
+                  {type !== "원격이관" && <button type="button" onClick={() => void stepKakao()} disabled={busy || !report} className="h-9 rounded-lg border border-amber-200 bg-white px-3 text-[12px] font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-40">카톡 전송</button>}
                   {type !== "원격이관" && <span onClick={() => {
                     if (busy || (report && isReady)) return;
                     const missing = requiredItems.filter(([, ok]) => !ok).map(([name]) => name);
                     window.alert(missing.length ? `필수 입력이 비어 있어요: ${missing.join(", ")}\n(사진은 필수가 아닙니다)` : "보고양식이 아직 생성되지 않았습니다.");
-                  }}><button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-xs font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none"><Send size={13} />{busy ? "처리중…" : "⚡ 전체"}</button></span>}
+                  }}><button type="button" onClick={() => setConfirmAction("send")} disabled={busy || !report || !isReady} className="pointer-events-auto inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-[12px] font-bold text-white transition hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-40"><Send size={13} />{busy ? "처리중…" : "⚡ 전체"}</button></span>}
                 </span>
               </div>
-              {(actionResult || sheetNote) && <div className={`mt-2 rounded-lg px-3 py-2 text-[11px] font-black ${(actionResult + sheetNote).includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {(actionResult || sheetNote) && <div className={`mt-2 rounded-lg px-3 py-1.5 text-[11px] font-bold ${(actionResult + sheetNote).includes("실패") ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
                 {actionResult}
                 {sheetNote && <span className={sheetNote.includes("기입 중") || sheetNote.includes("반영 중") ? "text-amber-600" : sheetNote.includes("행") ? "text-emerald-700" : "text-slate-500"}> · {sheetNote}</span>}
               </div>}
@@ -2003,8 +2003,8 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
         </div>
 
         {/* ==== 우: 접수 리스트 / 미처리 현황 (상시) ==== */}
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:rounded-xl">
-          <div className="border-b border-slate-200 bg-slate-50 p-2">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="px-3 pt-3">
           <div className="grid h-9 grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="tablist" aria-label="오른쪽 보기">
             {([["list", "접수리스트"], ["board", "미처리 현황"]] as const).map(([v, label]) => {
               const on = rightView === v;
@@ -2019,18 +2019,16 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
           </div>
           </div>
           {/* 현황판은 늘 붙여 둔다(숨김) — 종류 선택기 배지·N 숫자가 접수리스트 보기에서도 살아 있게 */}
-          <div className={rightView === "board" ? "p-2" : "hidden"}>
+          <div className={rightView === "board" ? "pt-1" : "hidden"}>
             <ReceptionBoardPanel compact onOpenSchedule={onOpenSchedule ? () => { requestOpenOverdue(); onOpenSchedule(); } : undefined} deptEnabled={deptEnabled} reloadKey={boardReload} onCounts={setBoardCounts} onScheduleCount={setScheduleCount} selectedType={boardFocus} onSelectedTypeChange={setBoardFocus}
               onSelectType={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
               onOpenFieldRow={(r) => { if (r.type === "복합기 AS") setListFilter("복합기 AS"); else goPage(r.type === "IT" ? "it" : "remote"); setOpenRowId(r.id); setRightView("list"); }}
               renderDeptActions={(_r, ctx) => (ctx.source ? <DeptActionBar row={ctx.source} compact author={author} onChanged={() => { ctx.onDone(); void loadList(listDate, listPeriod, true); }} /> : null)} />
           </div>
           <div className={rightView === "list" ? "" : "hidden"}>
-          <div className="flex items-center gap-2 bg-[#1E252F] px-4 py-3">
-            <h3 className="text-sm font-black text-white lg:text-[15px]">접수 리스트</h3>
-            <span tabIndex={0} role="img" aria-label="안내: 행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." title="행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." className="cursor-help text-[13px] font-black text-slate-400 hover:text-slate-200">ⓘ</span>
-          </div>
-          <div className="border-b border-slate-200 p-3">
+          {/* 어두운 "접수 리스트" 띠는 없앴다 — 위 전환 막대가 제목 역할. 날짜·기간·새로고침 줄이 패널 첫 줄 */}
+          <div className="border-b border-slate-100 px-3 pb-3 pt-2.5">
+            <h3 className="sr-only">접수 리스트</h3>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <button type="button" aria-label="이전 기간" onClick={() => setListDate(listPeriod === "day" ? shiftDate(listDate, -1) : listPeriod === "week" ? shiftDate(listDate, -7) : shiftMonths(listDate, listPeriod === "month" ? -1 : -3))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"><ChevronLeft size={16} /></button>
@@ -2045,6 +2043,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                   ))}
                 </div>
                 <button type="button" onClick={() => { void loadList(listDate, listPeriod); void loadRemoteQueue(); }} className="h-9 shrink-0 rounded-lg border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-600 transition hover:bg-slate-50">새로고침</button>
+                <span tabIndex={0} role="img" aria-label="안내: 행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." title="행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." className="shrink-0 cursor-help px-0.5 text-[13px] font-black text-slate-400 hover:text-slate-700">ⓘ</span>
               </div>
             </div>
             {listPeriod !== "day" && <div className="mt-2 text-[11px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {listRows.length}건</div>}

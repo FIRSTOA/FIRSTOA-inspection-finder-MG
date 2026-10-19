@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-19",
+    "hash": "34eb62746d",
+    "agent": "ui-designer",
+    "summary": "서비스접수 피드백 3차: 영업팀 이름 + 필터 분할 막대 + 숫자 기준 정리 + 물류 미처리만 + 임대중 대수 + 현황판 타일 버그 + 작성자 UI 정리"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "34eb62746d",
+    "agent": "developer",
+    "summary": "서비스접수 피드백 3차: 영업팀 이름 + 필터 분할 막대 + 숫자 기준 정리 + 물류 미처리만 + 임대중 대수 + 현황판 타일 버그 + 작성자 UI 정리"
+  },
+  {
+    "date": "2026-10-19",
+    "hash": "34eb62746d",
+    "agent": "sql-review",
+    "summary": "서비스접수 피드백 3차: 영업팀 이름 + 필터 분할 막대 + 숫자 기준 정리 + 물류 미처리만 + 임대중 대수 + 현황판 타일 버그 + 작성자 UI 정리"
+  },
+  {
+    "date": "2026-10-19",
     "hash": "e009c9c0a0",
     "agent": "ui-designer",
     "summary": "미처리 현황판 2차: 오른쪽 접수리스트 기둥으로 이동(접수리스트|미처리 현황 전환) + 일정 미처리(물류·AS·납품) 합치기 + 관리 탭 스위치"

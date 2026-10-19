@@ -99,7 +99,7 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
     }
     const hint = fieldHint(row.type);
     return onOpenFieldRow
-      ? <button type="button" onClick={() => onOpenFieldRow(row)} className="min-h-9 rounded-lg border border-slate-200 px-2.5 text-[11px] font-black text-slate-600 transition hover:border-slate-400 hover:text-slate-900">{hint} →</button>
+      ? <button type="button" onClick={() => onOpenFieldRow(row)} className="h-8 rounded-lg border border-slate-200 px-2.5 text-[11px] font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900">{hint} →</button>
       : <span className="text-[11px] font-bold text-slate-400">{hint}</span>;
   };
 

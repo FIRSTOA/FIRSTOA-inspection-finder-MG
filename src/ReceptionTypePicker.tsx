@@ -1,4 +1,4 @@
-// 서비스접수 종류 선택기(표시 전용). 윗줄 "현장" 3종 + 아랫줄 "지원" 3종, 버튼마다 아이콘·이름·열린 건수 배지.
+// 서비스접수 종류 선택기(표시 전용). 한 줄 탭 막대: "현장" 3종 | "지원" 3종, 칸마다 아이콘·이름·열린 건수(숫자만).
 // props: value(선택값) · onChange(종류) · counts(종류별 열린 건수) · deptEnabled(false 면 "지원" 줄 숨김).
 // 종류 메타(이름·아이콘·색)는 ReceptionBoard·HomeReceptionCard 도 함께 쓰도록 여기서 내보낸다.
 import type { ComponentType } from "react";
@@ -43,29 +43,30 @@ type Props = {
   deptEnabled: boolean;
 };
 
+// 한 줄 탭 막대(높이 40px): 현장 3칸 | 얇은 세로 구분 | 지원 3칸. 폰(≤640)은 줄바꿈 없이 가로 스크롤, sm 이상은 칸이 폭을 나눠 가진다.
 export default function ReceptionTypePicker({ value, onChange, counts, deptEnabled }: Props) {
-  const groups: Array<"현장" | "지원"> = deptEnabled ? ["현장", "지원"] : ["현장"];
+  const shown = RECEPTION_TYPES.filter((m) => deptEnabled || m.group === "현장");
   return (
-    <div className="space-y-2" role="group" aria-label="접수 종류">
-      {groups.map((g) => (
-        <div key={g} className="flex">
-          <div className="grid flex-1 grid-cols-3 gap-1.5 sm:gap-2">
-            {RECEPTION_TYPES.filter((m) => m.group === g).map((m) => {
-              const Icon = m.icon;
-              const on = value === m.type;
-              const n = counts[m.type] ?? 0;
-              return (
-                <button key={m.type} type="button" aria-pressed={on} onClick={() => onChange(m.type)}
-                  className={`relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-1.5 py-2 text-[12px] font-black transition sm:flex-row sm:gap-2 sm:px-3 sm:text-[13px] ${on ? `${m.active} shadow-sm` : `border-slate-200 bg-white text-slate-500 ${m.hover}`}`}>
-                  <Icon size={16} aria-hidden />
-                  <span className="whitespace-nowrap">{m.label}</span>
-                  {n > 0 && <span className={`absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] tabular-nums sm:static ${on ? "bg-white/25 text-white" : m.badge}`}>{n}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+    <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex h-10 min-w-max items-stretch gap-1 sm:min-w-0" role="group" aria-label="접수 종류">
+        {shown.map((m, i) => {
+          const Icon = m.icon;
+          const on = value === m.type;
+          const n = counts[m.type] ?? 0;
+          const divider = m.group === "지원" && shown[i - 1]?.group === "현장";
+          return (
+            <div key={m.type} className="contents">
+              {divider && <span aria-hidden className="mx-1 my-2 w-px shrink-0 bg-slate-200" />}
+              <button type="button" aria-pressed={on} onClick={() => onChange(m.type)}
+                className={`flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[13px] font-bold transition sm:min-w-0 sm:flex-1 sm:shrink ${on ? m.active : `border-slate-200 bg-white text-slate-500 ${m.hover}`}`}>
+                <Icon size={15} aria-hidden />
+                <span className="truncate">{m.label}</span>
+                {n > 0 && <span className={`text-[11px] font-semibold tabular-nums ${on ? "text-white/75" : "text-slate-400"}`}>{n}</span>}
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
