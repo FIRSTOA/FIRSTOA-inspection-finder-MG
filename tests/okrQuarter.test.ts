@@ -318,7 +318,9 @@ describe("2차: 주차 목표 덮어쓰기", () => {
     expect(putGoalField(undefined, base[0], "objective", "")).toEqual([{ no: 1, pillar: "P", bottleneck: "", objective: "", criteria: "", html: { objectiveSet: "1" } }]);
     expect(overlayGoals(base, putGoalField(undefined, base[0], "objective", ""))[0].objective).toBe("");
     const emptyCrit = putGoalField(undefined, base[1], "criteria", "");
-    expect(overlayGoals(base, emptyCrit)[1].criteria).toBe("월 기준 2"); // 달성기준만은 비우면 위 층(통합집계) 것이 다시 보인다(2026-10-21 6차)
+    expect(overlayGoals(base, emptyCrit)[1].criteria).toBe("월 기준 2"); // 달성기준만은 비우면 위 층(통합집계) 것이 다시 보인다(2026-10-21 7차, 파트 종합)
+    expect(overlayGoals(base, emptyCrit, true)[1].criteria).toBe(""); // 주차 화면(keepEmptyCriteria)에선 지운 채(8차)
+    expect(overlayGoals(base, [{ no: 2, pillar: "P", bottleneck: "", objective: "", criteria: "" }], true)[1].criteria).toBe("월 기준 2"); // 표시 없는 옛 빈 칸은 주차에서도 위 층
   });
   it("T6(4차) 표시 없는 옛 칸의 criteria는 글이 있을 때만 덮는다", () => {
     const old: OkrGoal[] = [{ no: 1, pillar: "P", bottleneck: "", objective: "옛 목표", criteria: "" }, { no: 2, pillar: "P", bottleneck: "", objective: "", criteria: "옛 기준" }];

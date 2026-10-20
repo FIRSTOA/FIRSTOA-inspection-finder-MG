@@ -464,7 +464,8 @@ export default function OkrHub({ author }: { author: string }) {
   const partOf = (team: OkrTeam) => findReport(reports, team, "");
   // 보이는 목표: 공통(달) → 파트 종합의 달성기준 덮어쓰기(이 주차 기록) → 개인의 덮어쓰기. 목표·Pillar·병목은 늘 공통.
   // 새 구조 달(2026-10-20 2차): 주차 목표도 같은 사슬로 덮는다(overlayGoals — html.objectiveSet 표시가 있는 칸만). 옛 화면은 overlayCriteria 그대로.
-  const overlay = newMonth ? overlayGoals : overlayCriteria;
+  // 주차 화면(파트원)은 지운 달성기준을 빈 채로(keepEmptyCriteria), 파트 종합(월)은 비우면 통합집계 달성기준이 보이게(7차)
+  const overlay = newMonth ? (weekNo !== null ? (b: OkrGoal[], o?: OkrGoal[]) => overlayGoals(b, o, true) : overlayGoals) : overlayCriteria;
   // 8차(2026-10-21 사용자 "파트 종합 달성기준은 파트 종합에만"): 주차 바탕에서 그 달 파트 종합 층을 뺀다.
   //   새 구조 주차 = 월 공통(팀장) → 그 주 파트 행 → 본인. 파트 종합(월 report)은 자기 층에서만 쓰인다(monthParts 는 이제 바탕에 안 들어감).
   const teamGoalsOf = (team: OkrTeam): OkrGoal[] => overlay(commonGoals, partOf(team)?.goals);

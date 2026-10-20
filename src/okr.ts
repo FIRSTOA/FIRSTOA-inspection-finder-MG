@@ -926,16 +926,17 @@ const isObjectiveSet = (g?: OkrGoal) => g?.html?.objectiveSet === "1";
 const isBottleneckSet = (g?: OkrGoal) => g?.html?.bottleneckSet === "1";
 const isCriteriaSet = (g?: OkrGoal) => g?.html?.criteriaSet === "1";
 // 덮은 결과 goal에도 표시를 남긴다(다음 층이 같은 규칙으로 덮는다).
-export function overlayGoals(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
+// keepEmptyCriteria(8차, 주차 화면): 표시(criteriaSet)가 있으면 빈 달성기준도 그 층 값 — 파트원이 지운 건 지운 채(사용자 "삭제하고 다시 들어가면 또 있어").
+//   false(파트 종합 등 월 층): 달성기준은 글이 있을 때만 덮는다(비우면 위 층 = 통합집계 달성기준이 보임, 7차).
+export function overlayGoals(base: OkrGoal[], over?: OkrGoal[], keepEmptyCriteria = false): OkrGoal[] {
   if (!over?.length) return base;
   return base.map((g) => {
     const o = over.find((x) => x.no === g.no);
     if (!o) return g;
     const html: NonNullable<OkrGoal["html"]> = { ...(g.html || {}) };
     let criteria = g.criteria;
-    // 달성기준은 글이 있을 때만 덮는다(표시가 있어도 빈 글이면 위 층 — 사용자 2026-10-21: "통합집계 달성기준이 파트 종합에 들어가야").
-    // 목표·병목현상은 반대로 표시가 있으면 빈 글도 그 층 값(비우면 빈 채 유지).
-    if (o.criteria.trim()) {
+    // 목표·병목현상은 표시가 있으면 빈 글도 그 층 값(비우면 빈 채 유지).
+    if (o.criteria.trim() || (keepEmptyCriteria && isCriteriaSet(o))) {
       criteria = o.criteria;
       delete html.criteria;
       if (o.html?.criteria) html.criteria = o.html.criteria;
