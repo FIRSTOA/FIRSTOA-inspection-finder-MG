@@ -49,6 +49,7 @@ Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 
 - **서비스접수 지원 3종(경영·운영·영업) + 미처리 현황판**: 설계안 2차 docs/tasks/reception-dept-types.md (2026-10-19, feature-planner, 사용자 답 Q1~Q9·팀장 결정 반영). 두 줄 종류 선택기(현장3·지원3), 서비스접수 맨 위 6종 미처리 현황판 + 홈 관제 덱 카드, 지원 3종 완료·내일로·날짜·보류·메모 단추(일정리스트 안 씀), 업체로 접수(vendor_master), 영업·경영 시트 동기화 reception_sales·reception_mgmt(새 경로 dept-sheets.ts). SQL reception-dept-types.sql 미작성. 1차 병렬(표다빈·윤화면·구현서A·B) → 2차(구현서C·D) → 검수아.
 
 ## 작업 기록
+- 2026-10-20 (Claude Code) OKR 분기→월→주차 구조 개편(팀장 모델: 분기 OKR 통합집계 → 월 OKR 파트종합 → 주차 파트원). 상단 필터 [4분기][10월][11월][12월], 분기 표(병목현상·목표·달성기준)·분기 진행 표, 월 통합집계(핵심방향·A~D 판정·조치 파트·개선계획), 파트 종합 + 파트원 주차 칩, 팀장 문서 붙여넣기 모달(goals_prev 되돌리기), 주차 합치기. 8·9월·10월 주차 기록은 옛 경로 보존, SQL 실행 전엔 옛 화면 + 대기 띠(probeOkrQuarterSchema). 팀장 문서 전사본 docs/okr/*.json, 설계안 docs/tasks/okr-quarter-month-week.md. SQL supabase/okr-quarter.sql(백업 표 okr_cycles_bak_20261020·okr_reports_bak_20261020, 되돌리기 okr-quarter-rollback.sql) — 앱 배포 뒤 사용자 실행. 파일: src/okr.ts, src/OkrHub.tsx, src/OkrQuarterView.tsx, src/OkrMonthRollup.tsx, src/OkrPasteModal.tsx, src/OkrCells.tsx, src/okrUi.ts, tests/okrQuarter.test.ts, tests/okrHub.render.test.tsx.
 - 2026-10-18 (Aside) AGENTS.md 신설. `docs/tasks/` 에 병렬 작업 지시서 3건 추가.
 - 2026-10-18 (Aside) `.claude/agents/` 역할 5개 + `CLAUDE.md` 팀장 규칙 추가.
 - 2026-10-18 (Claude Code) 검사기 역할 3개 추가(field-deploy-check·sql-review·kakao-pc-rules). `docs/tasks/` 지시서 3건 삭제(사용자 지시 — 이메일 카운터는 네이버 계정 승인 뒤 재개). 파일: .claude/agents/*.md, AGENTS.md.

@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-20",
+    "hash": "02961cbb85",
+    "agent": "developer",
+    "summary": "홈 미처리: 물류 탭 없애고 팀 탭 안에서 접수·AS / 물류 두 묶음으로(팀 합 = 전체)"
+  },
+  {
+    "date": "2026-10-20",
     "hash": "6ae5cc4166",
     "agent": "developer",
     "summary": "원격대기 7일 초과분은 미처리에서 제외(원격팀은 FIELD 밖에서 처리) + 쌓인 54건 일괄 완료 SQL"

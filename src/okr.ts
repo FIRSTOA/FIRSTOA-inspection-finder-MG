@@ -42,7 +42,7 @@ export type RichField = "actual" | "reason" | "plan" | "evidence";
 export type OkrFeedback = { action?: string; memo: string; memoHtml?: string };
 export type OkrCycle = {
   id: string;
-  kind: "month" | "week";
+  kind: "quarter" | "month" | "week"; // quarter(2026-10-20): 팀장 분기 OKR 한 벌. id `2026-Q4`, month = 분기 첫 달
   title: string;
   year: number;
   month: number;
@@ -52,9 +52,14 @@ export type OkrCycle = {
   parent_id: string | null;
   goals: OkrGoal[];
   feedback: Record<string, OkrFeedback>;
+  // 아래 셋은 supabase/okr-quarter.sql 이후에만 있는 열이다. 서버 행에 열이 없으면 undefined로 두고 저장할 때도 보내지 않는다.
+  direction?: string; // 월: 팀장 ★핵심방향★ 문단, 분기: 메모
+  goals_origin?: OkrGoalsOrigin; // '' 예전 그대로 · 'copy' 미확정 복사본(팀장 월 OKR 대기) · 'import' 팀장 문서 붙여넣기 · 'manual' 손으로 확정 · 'leader' SQL로 적재한 팀장 원본
+  goals_prev?: OkrGoal[] | null; // 붙여넣기로 덮기 직전 goals 한 벌(되돌리기용)
   updated_at?: string;
   updated_by?: string | null;
 };
+export type OkrGoalsOrigin = "" | "copy" | "import" | "manual" | "leader";
 export type OkrResultRow = { no: number; actual: string; judgment: string; reason: string; plan: string; evidence: string; html?: Partial<Record<RichField, string>> };
 export type OkrHeader = { leader: string; author: string; headcount: string; submitted: string };
 export type OkrReport = {
@@ -236,9 +241,11 @@ export async function listOkrResultIndex(): Promise<Set<string>> {
 export const hasResultRows = (rows: OkrResultRow[]) => rows.some((x) => x.actual.trim() || x.judgment.trim());
 
 export function cycleLabel(c: Pick<OkrCycle, "kind" | "year" | "month" | "week_no">): string {
+  if (c.kind === "quarter") return `${c.year}년 ${quarterOf(c.month)}분기`;
   return c.kind === "week" ? `${c.year}년 ${c.month}월 ${c.week_no}주차` : `${c.year}년 ${c.month}월`;
 }
 export function defaultCycleTitle(c: Pick<OkrCycle, "kind" | "year" | "month" | "week_no">): string {
+  if (c.kind === "quarter") return `CS팀 ${quarterOf(c.month)}분기 OKR`;
   return c.kind === "week" ? `CS팀 ${c.month}월 ${c.week_no}주차 OKR 실행결과` : `CS팀 ${c.month}월 OKR 실행결과`;
 }
 
@@ -324,9 +331,13 @@ function normalizeGoals(raw: unknown[]): OkrGoal[] {
 }
 type CycleRow = Partial<OkrCycle> & { id: string };
 function toCycle(r: CycleRow): OkrCycle {
+  const extra: Pick<OkrCycle, "direction" | "goals_origin" | "goals_prev"> = {};
+  if (r.direction !== undefined) extra.direction = String(r.direction || "");
+  if (r.goals_origin !== undefined) extra.goals_origin = toOrigin(r.goals_origin);
+  if (r.goals_prev !== undefined) extra.goals_prev = Array.isArray(r.goals_prev) ? normalizeGoals(r.goals_prev) : null;
   return {
     id: r.id,
-    kind: r.kind === "week" ? "week" : "month",
+    kind: cycleKindOf(r.kind, r.id),
     title: String(r.title || ""),
     year: Number(r.year) || 0,
     month: Number(r.month) || 0,
@@ -338,7 +349,14 @@ function toCycle(r: CycleRow): OkrCycle {
     feedback: r.feedback && typeof r.feedback === "object" ? r.feedback : {},
     updated_at: r.updated_at,
     updated_by: r.updated_by ?? null,
+    ...extra,
   };
+}
+const toOrigin = (v: unknown): OkrGoalsOrigin => (v === "copy" || v === "import" || v === "manual" || v === "leader" ? v : "");
+// 서버 행의 kind → 화면 kind. 분기 행(`2026-Q4`)을 달로 읽지 않게 id 꼴도 함께 본다.
+export function cycleKindOf(kind: unknown, id: string): OkrCycle["kind"] {
+  if (kind === "quarter" || /^\d{4}-Q[1-4]$/.test(String(id || ""))) return "quarter";
+  return kind === "week" ? "week" : "month";
 }
 function toReport(r: Partial<OkrReport> & { cycle_id: string; team: string }): OkrReport {
   const header = { ...emptyHeader(), ...(r.header && typeof r.header === "object" ? r.header : {}) };
@@ -400,7 +418,12 @@ export function mergeFeedback(base: Record<string, OkrFeedback>, local: Record<s
   return out;
 }
 export function mergeCycle(base: OkrCycle, local: OkrCycle, server: OkrCycle): OkrCycle {
-  return { ...local, title: local.title !== base.title ? local.title : server.title, goals: mergeGoals(base.goals, local.goals, server.goals), feedback: mergeFeedback(base.feedback || {}, local.feedback || {}, server.feedback || {}) };
+  const out: OkrCycle = { ...local, title: local.title !== base.title ? local.title : server.title, goals: mergeGoals(base.goals, local.goals, server.goals), feedback: mergeFeedback(base.feedback || {}, local.feedback || {}, server.feedback || {}) };
+  // 분기 구조 열(있을 때만): 내가 고쳤으면 내 것, 아니면 서버 것
+  if (local.direction !== undefined || server.direction !== undefined) out.direction = (local.direction ?? "") !== (base.direction ?? "") ? local.direction ?? "" : server.direction ?? local.direction ?? "";
+  if (local.goals_origin !== undefined || server.goals_origin !== undefined) out.goals_origin = (local.goals_origin ?? "") !== (base.goals_origin ?? "") ? local.goals_origin ?? "" : server.goals_origin ?? local.goals_origin ?? "";
+  if (local.goals_prev !== undefined || server.goals_prev !== undefined) out.goals_prev = !same(local.goals_prev, base.goals_prev) ? local.goals_prev ?? null : server.goals_prev ?? local.goals_prev ?? null;
+  return out;
 }
 export function mergeReport(base: OkrReport, local: OkrReport, server: OkrReport): OkrReport {
   const header = { ...local.header };
@@ -414,12 +437,24 @@ export function mergeReport(base: OkrReport, local: OkrReport, server: OkrReport
   const feedback = mergeFeedback(base.feedback || {}, local.feedback || {}, server.feedback || {});
   return { ...local, header, rows, goals: goals?.length ? goals : undefined, feedback: Object.keys(feedback).length ? feedback : undefined };
 }
-export async function saveOkrCycle(cycle: OkrCycle, by: string): Promise<void> {
-  await upsertRow("okr_cycles", {
+// 저장할 행 — 분기 구조 열(direction·goals_origin·goals_prev)은 값이 있을 때만 보낸다(SQL 실행 전 표에 보내면 400).
+export function okrCyclePayload(cycle: OkrCycle, by: string, nowIso: string): Record<string, unknown> {
+  return {
     id: cycle.id, kind: cycle.kind, title: cycle.title, year: cycle.year, month: cycle.month, week_no: cycle.week_no,
     start_date: cycle.start_date, end_date: cycle.end_date, parent_id: cycle.parent_id, goals: cycle.goals, feedback: cycle.feedback,
-    updated_at: new Date().toISOString(), updated_by: by || null,
-  }, "id");
+    ...(cycle.direction !== undefined ? { direction: cycle.direction } : {}),
+    ...(cycle.goals_origin !== undefined ? { goals_origin: cycle.goals_origin } : {}),
+    ...(cycle.goals_prev !== undefined ? { goals_prev: cycle.goals_prev } : {}),
+    updated_at: nowIso, updated_by: by || null,
+  };
+}
+export async function saveOkrCycle(cycle: OkrCycle, by: string): Promise<void> {
+  await upsertRow("okr_cycles", okrCyclePayload(cycle, by, new Date().toISOString()), "id");
+}
+// 분기 구조 SQL(supabase/okr-quarter.sql)이 실행됐는지 — okr_cycles.direction 열이 없으면 400
+export async function probeOkrQuarterSchema(): Promise<boolean> {
+  try { await selectRows("okr_cycles", "select=direction&limit=1"); return true; }
+  catch (e) { return !/\(400\)/.test((e as Error).message); }
 }
 export async function saveOkrReport(report: OkrReport, by: string): Promise<void> {
   await upsertRow("okr_reports", {
@@ -442,3 +477,299 @@ export async function deleteOkrCycle(cycleId: string): Promise<void> {
   await deleteRows("okr_reports", `cycle_id=eq.${encodeURIComponent(cycleId)}`);
   await deleteRows("okr_cycles", `id=eq.${encodeURIComponent(cycleId)}`);
 }
+
+// ── 분기 → 월 → 주 (2026-10-20, docs/tasks/okr-quarter-month-week.md) ──
+// 분기 OKR(팀장, id `2026-Q4`)과 월 OKR(팀장, id `2026-10`)은 따로 저장한다. 주차는 goals 없이 부모 달 것을 쓴다.
+
+export type OkrQuarter = 1 | 2 | 3 | 4;
+export function quarterOf(month: number): OkrQuarter { return Math.min(4, Math.max(1, Math.ceil(Number(month) / 3))) as OkrQuarter; }
+export const quarterCycleId = (year: number, q: number) => `${year}-Q${q}`;
+export function parseQuarterId(id: string): { year: number; quarter: OkrQuarter } | null {
+  const m = String(id || "").match(/^(\d{4})-Q([1-4])$/);
+  return m ? { year: Number(m[1]), quarter: Number(m[2]) as OkrQuarter } : null;
+}
+// 분기의 세 달 — [{year, month, id:'2026-10'}, …]
+export function monthsOfQuarter(year: number, q: number): Array<{ year: number; month: number; id: string }> {
+  const first = (q - 1) * 3 + 1;
+  return [first, first + 1, first + 2].map((month) => ({ year, month, id: monthCycleId(year, month) }));
+}
+// 달이 든 분기 id
+export const quarterIdOfMonth = (year: number, month: number) => quarterCycleId(year, quarterOf(month));
+
+const lastDayOf = (y: number, m: number) => new Date(y, m, 0).getDate();
+// 새 분기 행 — 9묶음 틀(글 비움). parent 없음, month는 분기 첫 달(DB month CHECK 1..12).
+export function quarterDraft(year: number, q: number): OkrCycle {
+  const months = monthsOfQuarter(year, q);
+  const last = months[2].month;
+  return {
+    id: quarterCycleId(year, q), kind: "quarter", title: "", year, month: months[0].month, week_no: null,
+    start_date: `${year}-${pad(months[0].month)}-01`, end_date: `${year}-${pad(last)}-${pad(lastDayOf(year, last))}`,
+    parent_id: null, goals: blankGoalsLike([]), feedback: {}, direction: "", goals_origin: "",
+  };
+}
+// 새 달 행 — 지난달 복사 대신 분기 틀(Pillar·번호만, 글 빈칸)에 goals_origin 'copy'(팀장 월 OKR 대기).
+// parent_id는 분기 행을 넘겼을 때만 건다(FK: 분기 행이 서버에 있어야 함). quarter를 안 주면 3×3 빈 틀.
+export function monthDraftFromQuarter(year: number, month: number, quarter?: OkrCycle | null): OkrCycle {
+  return {
+    id: monthCycleId(year, month), kind: "month", title: "", year, month, week_no: null,
+    start_date: `${year}-${pad(month)}-01`, end_date: `${year}-${pad(month)}-${pad(lastDayOf(year, month))}`,
+    parent_id: quarter && quarter.kind === "quarter" ? quarter.id : null,
+    goals: blankGoalsLike(quarter?.goals || []), feedback: {}, direction: "", goals_origin: "copy",
+  };
+}
+// 같은 번호·Pillar에 글만 비운 틀(없으면 3×3)
+export function blankGoalsLike(goals: OkrGoal[]): OkrGoal[] {
+  if (!goals.length) return defaultGoalTemplate().map((g) => ({ ...g, bottleneck: "" }));
+  return goals.map((g) => ({ no: g.no, pillar: g.pillar, bottleneck: "", objective: "", criteria: "" }));
+}
+
+// 병목현상 글 — 옛 값처럼 "병목현상 1" 꼬리표뿐이면 빈 글. 글 앞에 꼬리표가 붙어 있으면 떼어 낸다.
+export function bottleneckText(value: string): string {
+  return String(value || "").replace(/^\s*병목\s*현상\s*\d+\s*[.:：)]?\s*/, "").trim();
+}
+const goalHasText = (g: OkrGoal) => !!(bottleneckText(g.bottleneck) || g.objective.trim() || g.criteria.trim());
+
+// 이 기간 goals가 팀장이 정한 것인지(= 그대로 보여 줄지). 복사본('copy')이거나 글이 하나도 없으면 false.
+export function isLeaderGoals(cycle: Pick<OkrCycle, "goals" | "goals_origin"> | null | undefined): boolean {
+  if (!cycle) return false;
+  if (cycle.goals_origin === "copy") return false;
+  return cycle.goals.some(goalHasText);
+}
+// 화면에 쓸 goals — 달이 팀장 월 OKR이면 그 달 것, 아니면 분기 goals(읽기 전용). 분기도 비면 달 것 그대로(복사본이라도).
+// 주차는 부모 달을 cycle로 넘긴다. 분기 행 자체를 넘기면 그 goals 그대로.
+export function effectiveGoals(cycle: OkrCycle | null | undefined, quarter?: OkrCycle | null): OkrGoal[] {
+  if (cycle?.kind === "quarter") return cycle.goals;
+  if (cycle && isLeaderGoals(cycle)) return cycle.goals;
+  if (quarter && quarter.goals.some(goalHasText)) return quarter.goals;
+  return cycle?.goals || [];
+}
+// "팀장 n월 OKR 대기, 아래는 분기 OKR(읽기 전용)" 띠를 띄울지 — 달인데 팀장 goals가 아니고 분기 것을 대신 보여 줄 때
+export function goalsAreFromQuarter(cycle: OkrCycle | null | undefined, quarter?: OkrCycle | null): boolean {
+  return !!cycle && cycle.kind !== "quarter" && !isLeaderGoals(cycle) && !!quarter && quarter.goals.some(goalHasText);
+}
+
+// ── 붙여넣기 파서: 팀장 문서 글 또는 엑셀 표 복사 → direction + 9묶음 ──
+export type OkrPasteResult = { direction: string; goals: OkrGoal[]; warnings: string[] };
+type PasteField = "bottleneck" | "objective" | "criteria";
+const FIELD_NAMES: Record<PasteField, string> = { bottleneck: "병목현상", objective: "목표", criteria: "실행" };
+const RE_DIRECTION = /^\s*★?\s*핵심\s*방향\s*★?\s*[.:：]?\s*(.*)$/;
+const RE_PILLAR = /^\s*Pillar\s*([1-3])(?!\d)\s*[.:：)]?\s*(.*)$/i;
+const RE_GOAL_HEAD = /^\s*(병목\s*현상|목표|실행|달성\s*기준)\s*([1-9])(?!\d)\s*(?:[.:：)]\s*|\s+|$)(.*)$/;
+const BULLET = /^[·•∙ㆍ\-–*▪■□○●]\s*/;
+
+const fieldOf = (word: string): PasteField => { const w = word.replace(/\s+/g, ""); return w === "병목현상" ? "bottleneck" : w === "목표" ? "objective" : "criteria"; };
+const pillarFull = (idx: number, raw = "") => (idx >= 0 && idx < OKR_PILLARS.length ? OKR_PILLARS[idx].full : raw);
+
+export function parseOkrPaste(text: string): OkrPasteResult {
+  const src = String(text || "").replace(/\r\n?/g, "\n");
+  if (isTablePaste(src)) return parseTablePaste(src);
+  return parseDocPaste(src);
+}
+
+function finishGoals(map: Map<number, OkrGoal>, warnings: string[], fieldsSeen: Map<number, Set<PasteField>>, checkFields: PasteField[]): OkrGoal[] {
+  const goals = [...map.values()].sort((a, b) => a.no - b.no);
+  for (const g of goals) {
+    const seen = fieldsSeen.get(g.no) || new Set<PasteField>();
+    const where = `Pillar ${Math.ceil(g.no / 3)} 병목 ${((g.no - 1) % 3) + 1}`;
+    for (const f of checkFields) if (!seen.has(f) || !g[f].trim()) warnings.push(`${where}: ${FIELD_NAMES[f]} 없음`);
+  }
+  if (goals.length && goals.length !== 9) warnings.push(`묶음 ${goals.length}개(9개가 아님)`);
+  return goals;
+}
+
+function parseDocPaste(src: string): OkrPasteResult {
+  const warnings: string[] = [];
+  const map = new Map<number, OkrGoal>();
+  const seen = new Map<number, Set<PasteField>>();
+  const directionLines: string[] = [];
+  let pillarIdx = -1;
+  let target: { kind: "direction" } | { kind: "goal"; no: number; field: PasteField } | null = null;
+  let headers = 0;
+  const push = (no: number, field: PasteField, line: string) => {
+    const g = map.get(no) as OkrGoal;
+    const t = line.trim();
+    if (!t) return;
+    if (field === "criteria" && g.criteria && !BULLET.test(t)) {
+      // 불릿 없는 줄 = 앞 불릿 줄이 접혀 이어진 것
+      const prevIsBullet = BULLET.test(g.criteria.split("\n").pop() || "");
+      g.criteria = prevIsBullet ? `${g.criteria} ${t}` : `${g.criteria}\n${t}`;
+      return;
+    }
+    g[field] = g[field] ? `${g[field]}\n${t}` : t;
+  };
+  for (const line of src.split("\n")) {
+    const dm = line.match(RE_DIRECTION);
+    if (dm) { headers++; target = { kind: "direction" }; if (dm[1].trim()) directionLines.push(dm[1].trim()); continue; }
+    const pm = line.match(RE_PILLAR);
+    if (pm) { headers++; pillarIdx = Number(pm[1]) - 1; target = null; continue; }
+    const gm = line.match(RE_GOAL_HEAD);
+    if (gm) {
+      headers++;
+      const n = Number(gm[2]);
+      const pi = n > 3 ? Math.ceil(n / 3) - 1 : Math.max(0, pillarIdx);
+      const no = n > 3 ? n : pi * 3 + n; // 병목 1~3은 Pillar 안 순번, 4~9면 전체 번호로 본다
+      if (!map.has(no)) map.set(no, { no, pillar: pillarFull(pi), bottleneck: "", objective: "", criteria: "" });
+      const field = fieldOf(gm[1]);
+      if (!seen.has(no)) seen.set(no, new Set());
+      (seen.get(no) as Set<PasteField>).add(field);
+      target = { kind: "goal", no, field };
+      if (gm[3].trim()) push(no, field, gm[3]);
+      continue;
+    }
+    if (!target) continue; // 제목줄 등 머리 앞 글은 버림
+    if (target.kind === "direction") { if (line.trim()) directionLines.push(line.trim()); }
+    else push(target.no, target.field, line);
+  }
+  if (!headers) { warnings.push("머리줄(★핵심방향★·Pillar·병목현상 N·목표 N·실행 N)을 찾지 못했습니다"); return { direction: "", goals: [], warnings }; }
+  const goals = finishGoals(map, warnings, seen, ["bottleneck", "objective", "criteria"]);
+  return { direction: directionLines.join("\n"), goals, warnings };
+}
+
+// 탭 구분 + 머리행에 병목현상·목표가 있으면 엑셀 표 복사로 본다
+function isTablePaste(src: string): boolean {
+  if (!src.includes("\t")) return false;
+  return splitTsv(src).some((cells) => headerColumns(cells) !== null);
+}
+// 엑셀 TSV: 줄바꿈 든 칸은 "…" 로 감싸고 안의 " 는 ""
+export function splitTsv(src: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = []; let cell = ""; let quoted = false; let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"') { if (src[i + 1] === '"') { cell += '"'; i += 2; continue; } quoted = false; i++; continue; }
+      cell += ch; i++; continue;
+    }
+    if (ch === '"' && cell === "") { quoted = true; i++; continue; }
+    if (ch === "\t") { row.push(cell); cell = ""; i++; continue; }
+    if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; i++; continue; }
+    cell += ch; i++;
+  }
+  if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+type PasteCols = { no: number; pillar: number; bottleneck: number; objective: number; criteria: number };
+function headerColumns(cells: string[]): PasteCols | null {
+  const norm = cells.map((c) => c.replace(/\s+/g, ""));
+  const find = (re: RegExp) => norm.findIndex((c) => re.test(c));
+  const cols: PasteCols = { no: find(/^(No\.?|번호)$/i), pillar: find(/^Pillar$/i), bottleneck: find(/^병목(현상)?$/), objective: find(/^목표$/), criteria: find(/^(달성기준|실행|달성기준\(실행\))$/) };
+  return cols.bottleneck >= 0 && cols.objective >= 0 ? cols : null;
+}
+function parseTablePaste(src: string): OkrPasteResult {
+  const warnings: string[] = [];
+  const rows = splitTsv(src);
+  const hi = rows.findIndex((r) => headerColumns(r) !== null);
+  const cols = headerColumns(rows[hi]) as PasteCols;
+  const map = new Map<number, OkrGoal>();
+  const seen = new Map<number, Set<PasteField>>();
+  let pillarIdx = -1; let pillarRaw = "";
+  const cell = (r: string[], i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
+  for (const r of rows.slice(hi + 1)) {
+    const bottleneckCell = cell(r, cols.bottleneck); const objective = cell(r, cols.objective); const criteria = cell(r, cols.criteria);
+    if (!bottleneckCell && !objective && !criteria) continue; // 빈 줄·합계 줄
+    const pCell = cell(r, cols.pillar);
+    if (pCell) { pillarIdx = pillarIndex(pCell); pillarRaw = pCell; } // 병합 셀은 첫 행에만 값 → 아래로 이어 씀
+    const noCell = Number(cell(r, cols.no).replace(/[^\d]/g, ""));
+    const no = noCell >= 1 ? noCell : map.size + 1;
+    const pi = pillarIdx >= 0 ? pillarIdx : Math.ceil(no / 3) - 1;
+    map.set(no, { no, pillar: pillarFull(pi, pillarRaw), bottleneck: bottleneckText(bottleneckCell), objective, criteria });
+    const s = new Set<PasteField>(["bottleneck", "objective"]); if (cols.criteria >= 0) s.add("criteria");
+    seen.set(no, s);
+  }
+  const goals = finishGoals(map, warnings, seen, cols.criteria >= 0 ? ["bottleneck", "objective", "criteria"] : ["bottleneck", "objective"]);
+  if (cols.criteria < 0 && goals.length) warnings.push("달성기준 열이 없어 달성기준은 비워 둡니다(통합집계 표)");
+  return { direction: "", goals, warnings };
+}
+// 붙여넣은 goals를 지금 goals에 덮는다 — 같은 번호 묶음만 바꾸고(결과 행·feedback이 번호로 이어짐), 붙여넣은 달성기준이 비면 지금 것을 둔다.
+export function applyPastedGoals(current: OkrGoal[], pasted: OkrGoal[]): OkrGoal[] {
+  const out = current.map((g) => {
+    const p = pasted.find((x) => x.no === g.no);
+    if (!p) return g;
+    return { no: g.no, pillar: p.pillar || g.pillar, bottleneck: p.bottleneck, objective: p.objective, criteria: p.criteria.trim() ? p.criteria : g.criteria };
+  });
+  for (const p of pasted) if (!out.some((g) => g.no === p.no)) out.push({ ...p });
+  return out.sort((a, b) => a.no - b.no);
+}
+
+// ── 상단 필터: [4분기] [10월] [11월] [12월] ──
+export type OkrFilterItem = { id: string; label: string; kind: "quarter" | "month"; year: number; month: number; exists: boolean; legacy: boolean };
+export const OKR_LEGACY_UNTIL = "2026-09"; // 이 달까지는 분기 행이 없는 옛 구조(월 종합 + 주차) 화면
+export const isLegacyMonthId = (id: string) => /^\d{4}-\d{2}$/.test(id) && id <= OKR_LEGACY_UNTIL;
+// today('YYYY-MM-DD', visits.ts kstDate())가 든 분기, 또는 pick으로 고른 분기의 [분기, 달×3]. 주차는 넣지 않는다.
+export function topFilterItems(cycles: Pick<OkrCycle, "id">[], today: string, pick?: { year: number; quarter: number }): OkrFilterItem[] {
+  const year = pick?.year ?? Number(today.slice(0, 4));
+  const q = pick?.quarter ?? quarterOf(Number(today.slice(5, 7)));
+  const ids = new Set(cycles.map((c) => c.id));
+  const qid = quarterCycleId(year, q);
+  const months = monthsOfQuarter(year, q);
+  return [
+    { id: qid, label: `${q}분기`, kind: "quarter" as const, year, month: months[0].month, exists: ids.has(qid), legacy: months[2].id <= OKR_LEGACY_UNTIL },
+    ...months.map((m) => ({ id: m.id, label: `${m.month}월`, kind: "month" as const, year, month: m.month, exists: ids.has(m.id), legacy: isLegacyMonthId(m.id) })),
+  ];
+}
+// 파트원 박스 아래 주차 칩 — okrWeeksInMonth 그대로에 id·짧은 이름("1주 10/5~9")만 붙임
+export function weeksOfMonth(year: number, month: number): Array<{ id: string; weekNo: number; start: string; end: string; label: string }> {
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  return okrWeeksInMonth(year, month).map((w) => ({
+    id: weekCycleId(year, month, w.weekNo), ...w,
+    label: `${w.weekNo}주 ${md(w.start)}~${w.end.slice(5, 7) === w.start.slice(5, 7) ? Number(w.end.slice(8, 10)) : md(w.end)}`,
+  }));
+}
+
+// ── 집계 ──
+export type OkrTeamJudgments = Record<OkrTeam, OkrJudgment | "">;
+const emptyTeamJudgments = (): OkrTeamJudgments => Object.fromEntries(OKR_TEAMS.map((t) => [t, ""])) as OkrTeamJudgments;
+export type OkrRollupRow = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; byTeam: OkrTeamJudgments; actionTeams: string[]; memo: string };
+// 엑셀 '1.통합집계' — 묶음마다 A~D 파트 종합(member '') 판정과 조치 필요 파트. 묶음 글은 effectiveGoals(분기 대신 보일 때도 같은 번호).
+export function monthlyRollup(cycle: OkrCycle, reports: OkrReport[], quarter?: OkrCycle | null): OkrRollupRow[] {
+  const summary = reports.filter((r) => !r.member && (!r.cycle_id || r.cycle_id === cycle.id));
+  return effectiveGoals(cycle, quarter).map((g) => {
+    const byTeam = emptyTeamJudgments();
+    for (const t of OKR_TEAMS) byTeam[t] = normalizeJudgment(resultRowFor(findReport(summary, t), g.no).judgment);
+    return { no: g.no, pillar: g.pillar, bottleneck: bottleneckText(g.bottleneck), objective: g.objective, criteria: g.criteria, byTeam, actionTeams: actionTeams(summary, g.no), memo: cycle.feedback?.[String(g.no)]?.memo || "" };
+  });
+}
+export type OkrQuarterProgress = {
+  months: Array<{ id: string; month: number; actionTeams: number }>; // 그 달 조치 필요(미흡·미착수) 파트 칸 수
+  rows: Array<{ no: number; pillar: string; bottleneck: string; objective: string; cells: Record<string, OkrTeamJudgments> }>; // cells[달id][파트]
+};
+// 분기 진행 표 — 묶음 × 달 × 파트 판정. 묶음 목록은 분기 goals(없으면 달들의 번호 합).
+export function quarterProgress(monthCycles: OkrCycle[], reportsByCycle: Record<string, OkrReport[]>, quarter?: OkrCycle | null): OkrQuarterProgress {
+  const months = monthCycles.filter((c) => c.kind === "month").sort((a, b) => (a.id < b.id ? -1 : 1));
+  let base: OkrGoal[] = quarter?.goals || [];
+  if (!base.length) {
+    const byNo = new Map<number, OkrGoal>();
+    for (const m of months) for (const g of m.goals) if (!byNo.has(g.no)) byNo.set(g.no, g);
+    base = [...byNo.values()].sort((a, b) => a.no - b.no);
+  }
+  const rollups = new Map(months.map((m) => [m.id, monthlyRollup(m, reportsByCycle[m.id] || [], quarter)]));
+  return {
+    months: months.map((m) => ({ id: m.id, month: m.month, actionTeams: (rollups.get(m.id) || []).reduce((n, r) => n + r.actionTeams.length, 0) })),
+    rows: base.map((g) => ({
+      no: g.no, pillar: g.pillar, bottleneck: bottleneckText(g.bottleneck), objective: g.objective,
+      cells: Object.fromEntries(months.map((m) => [m.id, (rollups.get(m.id) || []).find((x) => x.no === g.no)?.byTeam || emptyTeamJudgments()])),
+    })),
+  };
+}
+const weekNoOfId = (id: string) => { const m = String(id || "").match(/-W(\d+)$/); return m ? Number(m[1]) : 0; };
+// 파트 종합 [✨ 주차 합치기] — 그 달 주차 팀원 기록의 실제결과를 "• 1주 이민구: …"로. 주차 → 이름 순.
+export function mergeMonthActuals(weekReports: OkrReport[], no: number): string {
+  return weekReports
+    .filter((r) => r.member && weekNoOfId(r.cycle_id) > 0)
+    .map((r) => ({ w: weekNoOfId(r.cycle_id), name: r.member, actual: resultRowFor(r, no).actual.trim() }))
+    .filter((x) => x.actual)
+    .sort((a, b) => a.w - b.w || a.name.localeCompare(b.name, "ko"))
+    .map((x) => { const lines = x.actual.split(/\r?\n/); const head = `• ${x.w}주 ${x.name}`; return lines.length === 1 ? `${head}: ${lines[0]}` : `${head}:\n${lines.map((l) => `  ${l}`).join("\n")}`; })
+    .join("\n");
+}
+// 그 달 주차 기록 전체에서 미흡·미착수가 한 번이라도 있는 사람 — { 파트: [이름…] }
+export function actionMembersInMonth(weekReports: OkrReport[], no: number): Record<string, string[]> {
+  const out: Record<string, Set<string>> = {};
+  for (const r of weekReports) {
+    if (!r.member || !isAlert(resultRowFor(r, no).judgment)) continue;
+    (out[r.team] ||= new Set()).add(r.member);
+  }
+  return Object.fromEntries(Object.keys(out).sort().map((t) => [t, [...out[t]].sort((a, b) => a.localeCompare(b, "ko"))]));
+}
+// 그 달 주차 팀원 판정 중 가장 나쁜 것 — 파트 종합판정 제안
+export const worstInMonth = (weekReports: OkrReport[], team: string, no: number) => worstOfJudgments(weekReports.filter((r) => r.team === team && r.member).map((r) => resultRowFor(r, no).judgment));
