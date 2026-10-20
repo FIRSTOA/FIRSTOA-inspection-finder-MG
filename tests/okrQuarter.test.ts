@@ -307,7 +307,7 @@ describe("2차: 주차 목표 덮어쓰기", () => {
     const personView2 = overlayGoals(partView, person2);
     expect(personView2[0]).toMatchObject({ objective: "내 목표", criteria: "내 기준", html: { objective: "<b>내 목표</b>", objectiveSet: "1" } });
   });
-  it("T6(4차) 비우면 빈 채 유지 — 표시는 남고 글만 빈다(위 층으로 되돌아가지 않음), criteria만 고칠 때 같은 칸의 표시를 지킨다", () => {
+  it("T6(4차) 목표·병목은 비우면 빈 채 유지, 달성기준은 비우면 위 층으로 — criteria만 고칠 때 같은 칸의 표시를 지킨다", () => {
     const set = putGoalField(undefined, base[0], "objective", "주 목표", "<i>주 목표</i>");
     const crit = putGoalField(set, base[0], "criteria", "주 기준");
     expect(crit[0]).toEqual({ no: 1, pillar: "P", bottleneck: "", objective: "주 목표", criteria: "주 기준", html: { objective: "<i>주 목표</i>", objectiveSet: "1", criteriaSet: "1" } });
@@ -318,7 +318,7 @@ describe("2차: 주차 목표 덮어쓰기", () => {
     expect(putGoalField(undefined, base[0], "objective", "")).toEqual([{ no: 1, pillar: "P", bottleneck: "", objective: "", criteria: "", html: { objectiveSet: "1" } }]);
     expect(overlayGoals(base, putGoalField(undefined, base[0], "objective", ""))[0].objective).toBe("");
     const emptyCrit = putGoalField(undefined, base[1], "criteria", "");
-    expect(overlayGoals(base, emptyCrit)[1].criteria).toBe(""); // 빈 달성기준도 빈 채
+    expect(overlayGoals(base, emptyCrit)[1].criteria).toBe("월 기준 2"); // 달성기준만은 비우면 위 층(통합집계) 것이 다시 보인다(2026-10-21 6차)
   });
   it("T6(4차) 표시 없는 옛 칸의 criteria는 글이 있을 때만 덮는다", () => {
     const old: OkrGoal[] = [{ no: 1, pillar: "P", bottleneck: "", objective: "옛 목표", criteria: "" }, { no: 2, pillar: "P", bottleneck: "", objective: "", criteria: "옛 기준" }];

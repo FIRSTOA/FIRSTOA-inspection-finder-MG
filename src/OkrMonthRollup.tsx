@@ -86,7 +86,7 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
       {!goals.length && <div className="flex items-center justify-end border-b border-slate-200 px-3 py-1.5"><button type="button" onClick={onTemplate} className={BTN}>3 × 3 빈 틀</button></div>}
       <div className="overflow-x-auto">
         <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: "100%", minWidth: col.total }}>
-          <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
+          <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={col.colStyle(i)} />)}</colgroup>
           <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${thClass(i)}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
           <tbody>
             {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
@@ -153,7 +153,7 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
     </div>}
     <div className="overflow-x-auto">
       <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: "100%", minWidth: col.total }}>
-        <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
+        <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={col.colStyle(i)} />)}</colgroup>
         <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${thClass(i)}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
         <tbody>
           {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>

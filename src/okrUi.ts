@@ -59,7 +59,10 @@ export function useColWidths(storageKey: string, defaults: number[]) {
     document.addEventListener("mouseup", onUp);
   };
   const resetCol = (index: number) => { const next = [...widths]; next[index] = defaults[index]; setWidths(next); persist(next); };
-  return { widths, total: widths.reduce((a, b) => a + b, 0), startDrag, resetCol };
+  // 7차(2026-10-21): 새 구조 표(width 100%)용 — 마지막 열만 폭을 비워 남는 폭을 그 열이 먹는다(다른 열 드래그는 1:1, 끝 여백 없음).
+  // 마지막 열 저장값은 total(=표 minWidth)에만 쓰인다. 옛 표는 colStyle 을 쓰지 않는다(col.total 고정 그대로).
+  const colStyle = (i: number): { width?: number } => (i === widths.length - 1 ? {} : { width: widths[i] });
+  return { widths, total: widths.reduce((a, b) => a + b, 0), startDrag, resetCol, colStyle };
 }
 
 // 연속된 같은 Pillar 목표를 한 묶음으로(막대 하나 + 병목 1·2·3 행)

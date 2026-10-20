@@ -857,7 +857,7 @@ export default function OkrHub({ author }: { author: string }) {
         : isQuarterView
           ? legacyQuarter ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400">분기 OKR 없음(옛 구조) — 위에서 달을 고르세요</div>
             : <OkrQuarterView quarter={cycle} rollup={quarterRollupNow} prevQuarter={prevQuarterSrc} onGoal={goalOps.onGoal} onPaste={() => setPasteOpen(true)} onRestore={() => void restoreGoals()} onCopyPrev={() => void copyPrevQuarter()} onTemplate={() => updateGoalCycle({ goals: blankGoalsLike([]) })}
-                onQuarterJudgment={setCycleJudgment} onPickMonth={(monthId) => openMonthOf(monthId, "all", "")} onFeedback={setFeedback}
+                onQuarterJudgment={setCycleJudgment} onPickMonth={(monthId) => openMonthOf(monthId, "all", "")} onPick={(monthId, team) => { setTab(team as Tab); openMonthOf(monthId, team as Tab, ""); }} onFeedback={setFeedback}
                 onDirection={(t) => updateCycle({ direction: t })} monthReports={progress?.reports || {}} onPickTeam={(t) => openTeamFresh(t)} />
           : tab === "all"
             ? newMonth
@@ -1038,7 +1038,7 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
   // 6차(2026-10-21): 새 구조(fresh)는 OkrHub 흰 카드 안에 들어간다 — 겉 카드 테두리 없이, 사람 박스 대신 알약 줄. 옛 화면은 아래 그대로
   return <section className={fresh ? undefined : "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"}>
     {fresh ? <PeoplePillRow>
-      <PersonPill label="팀원 집계" badge={`${members.length}명`} selected={member === "__sum__"} onClick={() => onMember("__sum__")} />
+      <PersonPill label="팀원 집계" badge={`${memberNames.length}명`} selected={member === "__sum__"} onClick={() => onMember("__sum__")} />
       <PersonPill label="파트 종합" rows={rowsOf(partReport)} total={goals.length} selected={!member} onClick={() => onMember("")} />
       <PillDivider />
       {memberNames.map((name) => <PersonPill key={name} label={name} mine={name === author} rows={fresh.boxRowsOf ? fresh.boxRowsOf(name) : rowsOf(findReport(reports, team, name))} total={goals.length} selected={member === name} onClick={() => onMember(name)} onRemove={() => onRemoveMember(name)} />)}
@@ -1079,7 +1079,7 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
 
     <div className="overflow-x-auto">
       <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={fresh ? { width: "100%", minWidth: col.total } : { width: col.total, minWidth: col.total }}>
-        <colgroup>{cols.map(([label], i) => <col key={label} style={{ width: col.widths[i] }} />)}</colgroup>
+        <colgroup>{cols.map(([label], i) => <col key={label} style={fresh ? col.colStyle(i) : { width: col.widths[i] }} />)}</colgroup>
         <thead className="sticky top-0 z-10 text-[11px] font-bold">
           <tr>{cols.map(([label, , mode], i) => <th key={label} className={`relative ${TH_OF[mode]}`}>{label}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr>
         </thead>

@@ -39,7 +39,7 @@ export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); 
 // html.objectiveSet === "1"(2026-10-20): 주차 덮어쓰기 칸의 objective를 사람이 고쳤다는 표시. 옛 덮어쓰기 칸에는 옛 objective 글이 남아 있어
 // 표시가 있는 칸만 objective를 읽는다(overlayGoals). 표시를 html 안에 두는 건 옛 앱이 html을 통째로 보존하기 때문이다.
 // html.bottleneckSet === "1"(2026-10-21 3차): 같은 규칙으로 주차 덮어쓰기 칸의 bottleneck(병목현상 글)을 사람이 고쳤다는 표시.
-// 4차(2026-10-21): 층별 독립 — 표시가 있으면 빈 글이어도 그 값(비우면 빈 채 유지). criteriaSet 도 같은 뜻. html.bottleneck = 병목현상 글자색(RichCell).
+// 4차(2026-10-21): 층별 독립 — 표시가 있으면 빈 글이어도 그 값(비우면 빈 채 유지). 달성기준은 예외(7차): 빈 글이면 위 층이 보인다. html.bottleneck = 병목현상 글자색(RichCell).
 export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string; bottleneck?: string; objectiveSet?: "1"; bottleneckSet?: "1"; criteriaSet?: "1" } };
 // 글자색(엑셀처럼 검정·빨강·파랑) — 색이 들어간 칸만 html을 함께 둔다. AI·합치기가 평문으로 바꾸면 html은 지운다.
 export type RichField = "actual" | "reason" | "plan" | "evidence";
@@ -920,7 +920,7 @@ export function quarterRollup(quarter: OkrCycle | null, monthCycles: OkrCycle[],
 }
 
 // ── 목표·달성기준 덮어쓰기 사슬(새 구조): 월 공통(effectiveGoals) → 파트 종합(월 report header.goals) → 파트원 주차(header.goals) ──
-// 4차(2026-10-21) 층별 독립: 칸마다 field 별 표시(html.bottleneckSet·objectiveSet·criteriaSet)가 있으면 그 층의 글을 쓴다 — 빈 글이어도(비우면 빈 채 유지).
+// 4차(2026-10-21) 층별 독립: 칸마다 field 별 표시(html.bottleneckSet·objectiveSet·criteriaSet)가 있으면 그 층의 글을 쓴다 — 빈 글이어도(비우면 빈 채 유지). 단 달성기준(criteria)은 7차부터 글이 있을 때만 덮는다(비우면 위 층).
 // 표시가 없으면 위 층 글이 기본으로 보인다. 표시 없는 옛 칸(8월~10월 W3 데이터): objective·bottleneck 은 무시, criteria 는 글이 있을 때만 덮는다.
 const isObjectiveSet = (g?: OkrGoal) => g?.html?.objectiveSet === "1";
 const isBottleneckSet = (g?: OkrGoal) => g?.html?.bottleneckSet === "1";
@@ -933,7 +933,9 @@ export function overlayGoals(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
     if (!o) return g;
     const html: NonNullable<OkrGoal["html"]> = { ...(g.html || {}) };
     let criteria = g.criteria;
-    if (isCriteriaSet(o) || o.criteria.trim()) {
+    // 달성기준은 글이 있을 때만 덮는다(표시가 있어도 빈 글이면 위 층 — 사용자 2026-10-21: "통합집계 달성기준이 파트 종합에 들어가야").
+    // 목표·병목현상은 반대로 표시가 있으면 빈 글도 그 층 값(비우면 빈 채 유지).
+    if (o.criteria.trim()) {
       criteria = o.criteria;
       delete html.criteria;
       if (o.html?.criteria) html.criteria = o.html.criteria;

@@ -52,7 +52,14 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(html).toContain(`판정 1/${quarter.goals.length * 3}`); // 분기 카드 = 3달 합계(전체 = 목표 × 3)
     expect(html).toContain("미흡·미착수 1");
     expect(html).not.toContain("OKR 붙여넣기"); // 6차: 붙여넣기 단추 없음
-    expect(html).toContain("달성기준(실행)");
+    // 7차: 달성기준은 목표 칸 아래 접기(기본 접힘), 달 머리 2단(위 n월 colSpan 5, 아래 A B C D CS)
+    expect(html).toContain("달성기준 ▾");
+    expect(html).not.toContain(">달성기준(실행)<");
+    expect(html).toMatch(/<th colSpan="5"[^>]*>(<button[^>]*>)?10월/);
+    expect((html.match(/colSpan="5"/g) || []).length).toBe(3);
+    for (const t of ["A", "B", "C", "D", "CS"]) expect(html).toMatch(new RegExp(`<th title="[^"]*"[^>]*>${t}<`));
+    expect((html.match(/>CS</g) || []).length).toBe(3);
+    expect(html).toContain('title="A파트 10월 종합"');
     expect(html).toContain("병목현상");
     // 목표 글은 RichCell 칸(effect에서 그림)이라 서버 렌더에 안 나온다 — 열 머리·칸 색으로 확인
     expect(html).toContain("bg-indigo-50");
@@ -61,10 +68,15 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(html).toContain("4분기 종합");
     expect(html).toMatch(/10월(<\/button>)?<span[^>]*>조치 1/); // 조치 수는 달 머리에 남는다
     expect(html).toContain("미흡");
-    // 3차: 범례 없음, 달성기준(실행)은 노랑 입력칸(색은 병목현상·목표만)
+    // 3차: 범례 없음, 색은 병목현상·목표만 / 7차: 달성기준은 접기 안(펼칠 때 노랑 칸), 개선계획 머리는 노랑
     expect(html).not.toContain("결과 입력");
     expect(html).not.toContain("확정 판정");
-    expect(html).toContain("bg-[#FFFBEB]");
+    expect(html).toContain("bg-[#FDECB3]");
+    // 7차: 새 구조 표는 마지막 col 만 폭 없음(남는 폭을 개선계획이 먹고, 다른 열 드래그는 1:1)
+    const qcols = html.match(/<col(?!group)[^>]*>/g) || [];
+    expect(qcols.length).toBe(2 + 3 * 5 + 3);
+    expect(qcols[qcols.length - 1]).not.toContain("width");
+    expect(qcols[0]).toContain("width:220px");
     expect(html).not.toContain("bg-teal-50");
     // 월 통합집계와 같은 꼴의 끝 두 열 — 10월 CS 종합이 미흡이라 "10월"이 조치·확인 필요 달에
     expect(html).toContain("조치·확인 필요 달");
@@ -149,6 +161,8 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     // 6차: 새 구조는 사람 박스 대신 알약(rounded-full), 주차 칩은 짙은 띠가 아닌 연한 줄
     expect(html).toContain("rounded-full px-3 py-1 text-[12px] font-black transition bg-slate-100");
     expect(html).not.toContain("w-[128px]");
+    // 7차: [팀원 집계] 인원 수 = 알약 줄 이름 수(명단 김정민 1명, 기록 없음) — 달 화면에서 0명으로 떨어지지 않는다
+    expect(html).toMatch(/팀원 집계<\/span><span[^>]*>1명</);
     const strip = render(createElement(OkrWeekStrip, { onPick: noop, weeks: weeks.map((w) => ({ ...w, on: w.weekNo === 3, now: w.weekNo === 3, filled: w.weekNo === 1 })) }));
     expect(strip).not.toContain("bg-[#1E252F]"); // 짙은 띠 아님
     expect(strip).toContain("bg-slate-50");
@@ -164,6 +178,10 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
 
     const legacy = render(createElement(TeamView, base));
     expect(legacy).toContain("w-[128px]"); // 6차: 옛 화면은 PersonBox 그대로
+    // 7차: 옛 표는 모든 col 에 폭(col.total 고정), 새 구조 표는 마지막 col 만 폭 없음
+    const lastCol = (h: string) => { const cs = h.match(/<col(?!group)[^>]*>/g) || []; return cs[cs.length - 1] || ""; };
+    expect(lastCol(legacy)).toContain("width");
+    expect(lastCol(html)).not.toContain("width");
     expect(legacy).toContain("rounded-xl border border-slate-200 bg-white shadow-sm");
     expect(legacy).toMatch(/>병목<span/);
     expect(legacy).not.toContain("병목현상");
