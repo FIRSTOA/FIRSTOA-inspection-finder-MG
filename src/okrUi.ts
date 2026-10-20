@@ -34,7 +34,8 @@ export const TD_FIXED = `${TD_CELL} bg-sky-50`; // 고정 목표(전사 공통) 
 export const TD_FIXED_EDIT = `${TD_FIXED} focus-within:ring-2 focus-within:ring-inset focus-within:ring-sky-400`;
 // 새 구조(분기 → 월 → 주, 2026-10-20) 색 — 병목현상·목표 칸(남보라) · 그 밖의 입력(달성기준 포함, TD_WRITE 노랑).
 // 3차(2026-10-21): 색은 병목현상·목표 열만. 주차 쪼개기 청록(TD_SPLIT·TH_SPLIT)은 지웠다. 옛 TD_FIXED(8·9월 화면)는 그대로 둔다.
-export const TD_LEADER = `${TD_CELL} bg-indigo-50`; // 병목현상·목표 — 읽기
+// 병목현상·목표 — 남보라 바탕에 slate-200 테두리는 행 경계가 안 보여 글이 빼곡해 보였다(2026-10-21 사용자) → 테두리를 indigo-300 으로, 글 위아래 여백을 조금 더
+export const TD_LEADER = `border border-indigo-300 align-top p-0 bg-indigo-50 [&_[data-cell-text]]:py-2.5`;
 export const TD_LEADER_EDIT = `${TD_LEADER} focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-400`; // 같은 칸을 고칠 수 있을 때
 export const TH_LEADER = "border border-slate-300 bg-indigo-100 px-2 py-1.5 text-indigo-900";
 export const TH_READ = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-slate-600";
