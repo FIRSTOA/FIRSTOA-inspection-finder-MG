@@ -50,5 +50,35 @@ export function JudgmentDots({ values, titles }: { values: string[]; titles?: st
   </span>;
 }
 
+// 판정 동그라미(새 구조, 2026-10-20) — 채운 ● = 사람이 고른 판정(set), 속 빈 ○ = 아래 단계에서 계산한 제안(suggest), 없으면 —.
+// cell 은 okr.ts 의 OkrJudgedCell 과 같은 모양(구조가 같아 그대로 넘기면 된다). label = 열 머리 이름(툴팁·스크린리더용, 예 "A파트"·"10월").
+export type JudgedCellLike = { judgment: string; source: "set" | "suggest" | "" };
+const DOT_RING: Record<string, string> = { 완료: "border-emerald-500", 해당없음: "border-slate-400", 부분달성: "border-amber-400", 미흡: "border-orange-500", 미착수: "border-rose-500" };
+export function JudgmentDot({ cell, size = 14, onClick, title, label }: { cell: JudgedCellLike; size?: number; onClick?: () => void; title?: string; label?: string }) {
+  const j = normalizeJudgment(cell.judgment);
+  const kind = !j ? "없음" : cell.source === "set" ? "확정" : "제안";
+  const tip = title || [label, j || "기록 없음", j ? kind : ""].filter(Boolean).join(" · ");
+  const shape = !j
+    ? <span className="text-[11px] text-slate-300">—</span>
+    : cell.source === "set"
+      ? <span style={{ width: size, height: size }} className={`inline-block rounded-full ${JUDGMENT_INFO[j].dot}`} />
+      : <span style={{ width: size, height: size }} className={`inline-block rounded-full border-2 bg-white ${DOT_RING[j]}`} />;
+  if (!onClick) return <span title={tip} aria-label={tip} className="inline-flex min-h-6 min-w-6 items-center justify-center">{shape}</span>;
+  // 눌러서 이동하는 점 — 폰에서도 누르기 쉽게 눌림 영역만 키운다(점 크기는 그대로)
+  return <button type="button" title={tip} aria-label={tip} onClick={(e) => { e.stopPropagation(); onClick(); }} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-sky-500 sm:min-h-7 sm:min-w-7">{shape}</button>;
+}
+
+// 범례 — 칸 색 3종 + 판정 점 2종. 새 구조 통합집계·파트 탭 표 위에 둔다(옛 화면에는 두지 않는다). split=false 면 쪼개기색을 뺀다(분기·월 통합집계).
+export function OkrLegend({ split = true }: { split?: boolean }) {
+  const chip = (cls: string, text: string) => <span className="inline-flex items-center gap-1"><span className={`inline-block h-3 w-3 rounded-sm border border-slate-300 ${cls}`} />{text}</span>;
+  return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500" aria-label="색 설명">
+    {chip("bg-indigo-50", "팀장 문서")}
+    {split && chip("bg-teal-50", "파트가 쪼개 적는 칸")}
+    {chip("bg-[#FFFBEB]", "결과 입력")}
+    <span className="inline-flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full bg-slate-500" />확정 판정</span>
+    <span className="inline-flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full border-2 border-slate-500 bg-white" />제안·자동값(마지막 주차 / 파트·달 종합)</span>
+  </div>;
+}
+
 // tbody 안에서 여러 행을 묶는 용도
 export function FragmentRows({ children }: { children: ReactNode }) { return <>{children}</>; }

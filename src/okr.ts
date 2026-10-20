@@ -4,7 +4,7 @@
 //  - okr_reports: 기간 × 파트 × 사람 하나. member=''가 파트 종합(통합집계가 읽는 행), member='이름'이 팀원 개인 기록.
 //    파트 결과는 팀원 기록을 파트장이 모아 쓴다(2026-09-24 사용자: "A~D는 각 팀원 내용을 합친 통계이므로 팀원 그룹도 있어야").
 // 표 생성·초기 데이터: supabase/okr.sql (사용자가 SQL Editor에서 실행).
-import { deleteRows, invokeEdgeFunction, selectRows, upsertRow } from "./supabase";
+import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, upsertRow } from "./supabase";
 
 export const OKR_TEAMS = ["A", "B", "C", "D"] as const; // CSS팀(E)은 OKR 대상이 아니다(2026-09-24)
 export type OkrTeam = (typeof OKR_TEAMS)[number];
@@ -36,10 +36,13 @@ export function pillarIndex(pillar: string): number {
 }
 export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); return i >= 0 ? OKR_PILLARS[i].label : String(pillar || "").replace(/^Pillar\s*\d+\.?\s*/i, "").trim(); };
 
-export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string } };
+// html.objectiveSet === "1"(2026-10-20): 주차 덮어쓰기 칸의 objective를 사람이 고쳤다는 표시. 옛 덮어쓰기 칸에는 옛 objective 글이 남아 있어
+// 표시가 있는 칸만 objective를 읽는다(overlayGoals). 표시를 html 안에 두는 건 옛 앱이 html을 통째로 보존하기 때문이다.
+export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string; objectiveSet?: "1" } };
 // 글자색(엑셀처럼 검정·빨강·파랑) — 색이 들어간 칸만 html을 함께 둔다. AI·합치기가 평문으로 바꾸면 html은 지운다.
 export type RichField = "actual" | "reason" | "plan" | "evidence";
-export type OkrFeedback = { action?: string; memo: string; memoHtml?: string };
+// judgment(2026-10-20): 월 행이면 CS 종합, 분기 행이면 분기 종합을 사람이 고른 값(자동값 덮어쓰기)
+export type OkrFeedback = { action?: string; memo: string; memoHtml?: string; judgment?: string };
 export type OkrCycle = {
   id: string;
   kind: "quarter" | "month" | "week"; // quarter(2026-10-20): 팀장 분기 OKR 한 벌. id `2026-Q4`, month = 분기 첫 달
@@ -70,6 +73,7 @@ export type OkrReport = {
   rows: OkrResultRow[];
   // 달성기준 덮어쓰기 칸(2026-10-01): 고친 번호(no)의 칸만 — 파트 종합 행이면 그 파트 팀원 모두의 기본, 팀원 행이면 그 사람만.
   // 목표(objective)·Pillar·병목은 달의 공통(okr_cycles.goals) 하나라 여기 든 objective는 무시된다. header jsonb 안에 goals로 저장(표 변경 없이).
+  // 예외(2026-10-20 새 경로 overlayGoals): html.objectiveSet === "1"인 칸의 objective만 주차 목표 덮어쓰기로 읽는다.
   goals?: OkrGoal[];
   // 파트장 피드백(팀원 집계의 '미흡항목 피드백 & 다음 달 개선 방향') — 목표 번호별. header jsonb 안에 feedback으로 저장.
   feedback?: Record<string, OkrFeedback>;
@@ -409,11 +413,26 @@ export function mergeGoals(base: OkrGoal[], local: OkrGoal[], server: OkrGoal[])
   if (nos(local) !== nos(base) || nos(server) !== nos(base)) return local; // 번호 구조가 어긋나면(삽입·삭제) 합칠 수 없다 — 내 것
   return local.map((g, i) => (same(g, base[i]) ? server[i] : g));
 }
+// 번호 안에서는 칸(memo·memoHtml·judgment·action) 단위로 합친다(2026-10-20): 팀장이 CS 종합을 고르는 사이 남이 같은 번호 메모를 고쳐도 둘 다 남게.
+// 한쪽에 번호 자체가 없으면(지움·새로 생김) 예전처럼 번호 통째로 고른다.
 export function mergeFeedback(base: Record<string, OkrFeedback>, local: Record<string, OkrFeedback>, server: Record<string, OkrFeedback>): Record<string, OkrFeedback> {
   const out: Record<string, OkrFeedback> = {};
   for (const k of new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(server)])) {
-    const v = same(local[k], base[k]) ? server[k] : local[k];
-    if (v) out[k] = v;
+    const l = local[k]; const b = base[k]; const sv = server[k];
+    if (!l || !sv) {
+      const v = same(l, b) ? sv : l;
+      if (v) out[k] = v;
+      continue;
+    }
+    if (same(l, b)) { out[k] = sv; continue; }
+    if (same(sv, b)) { out[k] = l; continue; }
+    const bb: Partial<OkrFeedback> = b || {};
+    const merged: Partial<OkrFeedback> = {};
+    for (const f of new Set([...Object.keys(bb), ...Object.keys(l), ...Object.keys(sv)]) as Set<keyof OkrFeedback>) {
+      const v = same(l[f], bb[f]) ? sv[f] : l[f];
+      if (v !== undefined) (merged as Record<string, unknown>)[f] = v;
+    }
+    out[k] = { ...merged, memo: String(merged.memo ?? "") };
   }
   return out;
 }
@@ -719,14 +738,19 @@ export function weeksOfMonth(year: number, month: number): Array<{ id: string; w
 // ── 집계 ──
 export type OkrTeamJudgments = Record<OkrTeam, OkrJudgment | "">;
 const emptyTeamJudgments = (): OkrTeamJudgments => Object.fromEntries(OKR_TEAMS.map((t) => [t, ""])) as OkrTeamJudgments;
-export type OkrRollupRow = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; byTeam: OkrTeamJudgments; actionTeams: string[]; memo: string };
+// dots(2026-10-20): A~D 파트 월 종합 동그라미(확정 set / 마지막 주차 제안 suggest), cs: CS 종합(월). byTeam·actionTeams는 예전처럼 확정 판정만.
+export type OkrRollupRow = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; byTeam: OkrTeamJudgments; actionTeams: string[]; memo: string; dots: Record<OkrTeam, OkrJudgedCell>; cs: OkrRolledJudgment };
 // 엑셀 '1.통합집계' — 묶음마다 A~D 파트 종합(member '') 판정과 조치 필요 파트. 묶음 글은 effectiveGoals(분기 대신 보일 때도 같은 번호).
-export function monthlyRollup(cycle: OkrCycle, reports: OkrReport[], quarter?: OkrCycle | null): OkrRollupRow[] {
+// weekReports(그 달 주차 기록)를 주면 판정을 안 고른 파트에 마지막 주차 판정을 제안으로 채운다(dots·cs). 안 주면 제안 없음.
+export function monthlyRollup(cycle: OkrCycle, reports: OkrReport[], quarter?: OkrCycle | null, weekReports?: OkrReport[]): OkrRollupRow[] {
   const summary = reports.filter((r) => !r.member && (!r.cycle_id || r.cycle_id === cycle.id));
+  const weeks = weekReports || [];
   return effectiveGoals(cycle, quarter).map((g) => {
     const byTeam = emptyTeamJudgments();
     for (const t of OKR_TEAMS) byTeam[t] = normalizeJudgment(resultRowFor(findReport(summary, t), g.no).judgment);
-    return { no: g.no, pillar: g.pillar, bottleneck: bottleneckText(g.bottleneck), objective: g.objective, criteria: g.criteria, byTeam, actionTeams: actionTeams(summary, g.no), memo: cycle.feedback?.[String(g.no)]?.memo || "" };
+    const dots = Object.fromEntries(OKR_TEAMS.map((t) => [t, partMonthJudgment(summary, weeks, t, g.no)])) as Record<OkrTeam, OkrJudgedCell>;
+    const fb = cycle.feedback?.[String(g.no)];
+    return { no: g.no, pillar: g.pillar, bottleneck: bottleneckText(g.bottleneck), objective: g.objective, criteria: g.criteria, byTeam, actionTeams: actionTeams(summary, g.no), memo: fb?.memo || "", dots, cs: monthCsJudgment(dots, fb?.judgment) };
   });
 }
 export type OkrQuarterProgress = {
@@ -773,3 +797,180 @@ export function actionMembersInMonth(weekReports: OkrReport[], no: number): Reco
 }
 // 그 달 주차 팀원 판정 중 가장 나쁜 것 — 파트 종합판정 제안
 export const worstInMonth = (weekReports: OkrReport[], team: string, no: number) => worstOfJudgments(weekReports.filter((r) => r.team === team && r.member).map((r) => resultRowFor(r, no).judgment));
+
+// ── 2차 피드백(2026-10-20, docs/tasks/okr-feedback-2.md): 분기 → 월 → 파트 모두 '팀원 집계'와 같은 틀 ──
+// 판정 출처: 'set' 사람이 고른 것 · 'suggest' 아래 단계에서 계산한 제안 · '' 없음
+export type OkrJudgedCell = { judgment: OkrJudgment | ""; source: "set" | "suggest" | "" };
+// judgment = 화면에 보일 값(manual이면 사람이 고른 것, 아니면 auto)
+export type OkrRolledJudgment = { judgment: OkrJudgment | ""; auto: OkrJudgment | ""; manual: boolean };
+
+// 주차 id 순서 — `2026-10-W4`는 `2026-10-W2`보다 늦다(문자열 비교면 W10 < W2가 되므로 숫자로)
+const weekOrderKey = (id: string) => { const m = String(id || "").match(/^(.*)-W(\d+)$/); return m ? { head: m[1], w: Number(m[2]) } : { head: String(id || ""), w: 0 }; };
+const laterWeek = (a: string, b: string) => { const x = weekOrderKey(a); const y = weekOrderKey(b); return x.head !== y.head ? x.head > y.head : x.w > y.w; };
+// 그 달 주차 기록 중 이 파트의 '마지막 기록 주차' 판정 — 그 번호에 판정이 있는 가장 늦은 주차를 찾고,
+// 그 주차 안에서 파트원 판정이 여럿이면 가장 나쁜 것(worstOfJudgments). 파트 행(member '')은 보지 않는다(worstInMonth와 같은 범위).
+export function lastJudgmentInMonth(weekReports: OkrReport[], team: string, no: number): OkrJudgment | "" {
+  const judged = weekReports
+    .filter((r) => r.team === team && r.member)
+    .map((r) => ({ id: r.cycle_id, j: normalizeJudgment(resultRowFor(r, no).judgment) }))
+    .filter((x) => x.j);
+  if (!judged.length) return "";
+  const last = judged.reduce((acc, x) => (laterWeek(x.id, acc) ? x.id : acc), judged[0].id);
+  return worstOfJudgments(judged.filter((x) => x.id === last).map((x) => x.j));
+}
+// 파트 월 종합 칸 — 월 report(member '') 판정이 있으면 set, 없으면 lastJudgmentInMonth를 suggest
+export function partMonthJudgment(monthReports: OkrReport[], weekReports: OkrReport[], team: string, no: number): OkrJudgedCell {
+  const set = normalizeJudgment(resultRowFor(findReport(monthReports.filter((r) => !r.member), team), no).judgment);
+  if (set) return { judgment: set, source: "set" };
+  const suggested = lastJudgmentInMonth(weekReports, team, no);
+  return suggested ? { judgment: suggested, source: "suggest" } : { judgment: "", source: "" };
+}
+const rolled = (auto: OkrJudgment | "", override?: string): OkrRolledJudgment => {
+  const o = normalizeJudgment(override || "");
+  return o ? { judgment: o, auto, manual: true } : { judgment: auto, auto, manual: false };
+};
+// CS 종합(월) — auto = A~D 칸(확정·제안 모두) 중 가장 나쁜 것, override(feedback[no].judgment)가 있으면 그것
+export function monthCsJudgment(cells: Record<OkrTeam, OkrJudgedCell>, override?: string): OkrRolledJudgment {
+  return rolled(worstOfJudgments(OKR_TEAMS.map((t) => cells[t]?.judgment || "")), override);
+}
+// 마지막 값(빈 것 건너뜀) — 분기 종합(달 CS 종합 3개)·파트 분기 종합(파트 월 종합 3개)에 같이 쓴다
+export function lastOfJudgments(values: Array<OkrJudgment | "">): OkrJudgment | "" {
+  for (let i = values.length - 1; i >= 0; i--) { const j = normalizeJudgment(values[i] || ""); if (j) return j; }
+  return "";
+}
+export function quarterCsJudgment(byMonth: Array<OkrJudgment | "">, override?: string): OkrRolledJudgment {
+  return rolled(lastOfJudgments(byMonth), override);
+}
+
+// 분기 통합집계(quarterProgress 대체) — 묶음 × 달 CS 종합 + 분기 종합, 파트별 칸(파트 탭용)도 같이
+export type OkrQuarterRollup = {
+  months: Array<{ id: string; month: number; actionTeams: number }>;
+  rows: Array<{
+    no: number; pillar: string; bottleneck: string; objective: string; criteria: string;
+    byMonth: Record<string, OkrRolledJudgment>; // [달id] CS 종합
+    quarter: OkrRolledJudgment; // 분기 종합(quarter.feedback[no].judgment 덮어쓰기)
+    byTeam: Record<OkrTeam, { byMonth: Record<string, OkrJudgedCell>; quarter: OkrJudgment | "" }>; // 파트 탭
+  }>;
+};
+const emptyRolled = (): OkrRolledJudgment => ({ judgment: "", auto: "", manual: false });
+const emptyCell = (): OkrJudgedCell => ({ judgment: "", source: "" });
+// 묶음 목록은 분기 goals(없으면 달들의 번호 합) — quarterProgress와 같다. 달은 넘긴 월 행만(없는 달은 열이 없다).
+export function quarterRollup(quarter: OkrCycle | null, monthCycles: OkrCycle[], monthReports: Record<string, OkrReport[]>, weekReportsByMonth: Record<string, OkrReport[]>): OkrQuarterRollup {
+  const months = monthCycles.filter((c) => c.kind === "month").sort((a, b) => (a.id < b.id ? -1 : 1));
+  let base: OkrGoal[] = quarter?.goals || [];
+  if (!base.length) {
+    const byNo = new Map<number, OkrGoal>();
+    for (const m of months) for (const g of m.goals) if (!byNo.has(g.no)) byNo.set(g.no, g);
+    base = [...byNo.values()].sort((a, b) => a.no - b.no);
+  }
+  const rollups = new Map(months.map((m) => [m.id, monthlyRollup(m, monthReports[m.id] || [], quarter, weekReportsByMonth[m.id] || [])]));
+  return {
+    months: months.map((m) => ({ id: m.id, month: m.month, actionTeams: (rollups.get(m.id) || []).reduce((n, r) => n + r.actionTeams.length, 0) })),
+    rows: base.map((g) => {
+      const rowOf = (mid: string) => (rollups.get(mid) || []).find((x) => x.no === g.no);
+      const byMonth: Record<string, OkrRolledJudgment> = Object.fromEntries(months.map((m) => [m.id, rowOf(m.id)?.cs || emptyRolled()]));
+      const byTeam = Object.fromEntries(OKR_TEAMS.map((t) => {
+        const cells: Record<string, OkrJudgedCell> = Object.fromEntries(months.map((m) => [m.id, rowOf(m.id)?.dots[t] || emptyCell()]));
+        return [t, { byMonth: cells, quarter: lastOfJudgments(months.map((m) => cells[m.id].judgment)) }];
+      })) as OkrQuarterRollup["rows"][number]["byTeam"];
+      return {
+        no: g.no, pillar: g.pillar, bottleneck: bottleneckText(g.bottleneck), objective: g.objective, criteria: g.criteria,
+        byMonth, quarter: quarterCsJudgment(months.map((m) => byMonth[m.id].judgment), quarter?.feedback?.[String(g.no)]?.judgment), byTeam,
+      };
+    }),
+  };
+}
+
+// ── 주차 목표·달성기준 덮어쓰기 사슬: 월 공통(effectiveGoals) → 주차 파트(member '') → 주차 파트원 ──
+const isObjectiveSet = (g?: OkrGoal) => g?.html?.objectiveSet === "1";
+// overlayCriteria에 목표를 더한 것. objective는 html.objectiveSet === "1"인 칸만 읽는다(옛 칸의 옛 objective 글은 무시).
+// 덮은 결과 goal에도 html.objectiveSet을 남긴다(화면이 '고친 목표'임을 알고 월 목표를 함께 보이게).
+export function overlayGoals(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
+  if (!over?.length) return base;
+  return base.map((g) => {
+    const o = over.find((x) => x.no === g.no);
+    if (!o) return g;
+    const html: NonNullable<OkrGoal["html"]> = { ...(g.html || {}) };
+    delete html.criteria;
+    if (o.html?.criteria) html.criteria = o.html.criteria;
+    let objective = g.objective;
+    if (isObjectiveSet(o)) {
+      objective = o.objective;
+      delete html.objective;
+      if (o.html?.objective) html.objective = o.html.objective;
+      html.objectiveSet = "1";
+    }
+    return { ...g, objective, criteria: o.criteria, html: Object.keys(html).length ? html : undefined };
+  });
+}
+// 덮어쓰기 칸 하나 고치기 — 같은 번호 칸이 있으면 그 칸에 field만 바꿔 얹는다(putCriteria처럼 통째로 바꾸지 않는다: 다른 칸의 표시를 지키려고).
+// 새 칸은 shown(지금 보이는 값)에서 만들되 objectiveSet은 objective를 고칠 때만 붙인다(위 단계 목표 표시를 베껴 굳히지 않게).
+// objective가 빈 글이면 objective 덮어쓰기를 지운다(objective·html.objective·objectiveSet). criteria는 빈 글도 남긴다(지금 규칙).
+export function putGoalField(list: OkrGoal[] | undefined, shown: OkrGoal, field: "objective" | "criteria", text: string, html?: string): OkrGoal[] {
+  const cur = list || [];
+  const existing = cur.find((x) => x.no === shown.no);
+  const clearObjective = field === "objective" && !text.trim();
+  if (!existing && clearObjective) return [...cur];
+  const cell: OkrGoal = existing
+    ? { ...existing }
+    : { no: shown.no, pillar: shown.pillar, bottleneck: shown.bottleneck, objective: shown.objective, criteria: shown.criteria };
+  const h: NonNullable<OkrGoal["html"]> = existing ? { ...(existing.html || {}) } : (shown.html?.criteria ? { criteria: shown.html.criteria } : {});
+  if (field === "criteria") {
+    cell.criteria = text;
+    delete h.criteria;
+    if (html) h.criteria = html;
+  } else if (clearObjective) {
+    cell.objective = "";
+    delete h.objective;
+    delete h.objectiveSet;
+  } else {
+    cell.objective = text;
+    delete h.objective;
+    if (html) h.objective = html;
+    h.objectiveSet = "1";
+  }
+  if (Object.keys(h).length) cell.html = h; else delete cell.html;
+  return [...cur.filter((x) => x.no !== shown.no), cell].sort((a, b) => a.no - b.no);
+}
+// 전주 목표 가져오기 — 같은 달 안의 전주일 때만, 전주 칸에 objectiveSet이 있던 번호만 표시와 함께 돌려준다(달이 바뀌면 월 목표가 바뀌므로 넘기지 않는다).
+// 달성기준은 여기서 정하지 않는다: 호출부가 지금 loadPrevCriteria 규칙(빈 것 제외, 전부)으로 만든 칸에 이 목표를 같은 번호로 얹는다.
+export function prevGoalsToCarry(prevEffective: OkrGoal[], sameMonth: boolean): OkrGoal[] {
+  if (!sameMonth) return [];
+  return prevEffective
+    .filter((p) => isObjectiveSet(p) && p.objective.trim() !== "")
+    .map((p) => ({ ...p, html: { ...(p.html?.objective ? { objective: p.html.objective } : {}), ...(p.html?.criteria ? { criteria: p.html.criteria } : {}), objectiveSet: "1" as const } }));
+}
+
+// 핵심방향 단계 보기 — 첫 줄은 머리글. 나머지 줄은 ", 월말" 같은 경계에서 잘라 주간/월말/분기 낱말로 단계를 고른다. 못 고른 조각은 rest.
+// 단계는 늘 주간 → 월말 → 분기 순으로 돌려준다. 같은 단계가 두 번 나오면 두 번째부터는 rest.
+const DIRECTION_STEPS = [
+  { key: "week" as const, label: "주간 실행", re: /^주간/ },
+  { key: "month" as const, label: "월말 확인", re: /^월말/ },
+  { key: "quarter" as const, label: "분기 정리", re: /^분기/ },
+];
+export function directionSteps(text: string): { headline: string; steps: Array<{ key: "week" | "month" | "quarter"; label: string; text: string }>; rest: string[] } {
+  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n").map((l) => l.trim()).filter(Boolean);
+  const steps: Array<{ key: "week" | "month" | "quarter"; label: string; text: string }> = [];
+  const rest: string[] = [];
+  for (const line of lines.slice(1)) {
+    for (const raw of line.split(/[,，]\s*(?=주간|월말|분기)/)) {
+      const piece = raw.trim().replace(/[,，]\s*$/, "");
+      if (!piece) continue;
+      const def = DIRECTION_STEPS.find((d) => d.re.test(piece));
+      if (def && !steps.some((x) => x.key === def.key)) steps.push({ key: def.key, label: def.label, text: piece });
+      else rest.push(piece);
+    }
+  }
+  const order = (k: string) => DIRECTION_STEPS.findIndex((d) => d.key === k);
+  steps.sort((a, b) => order(a.key) - order(b.key));
+  return { headline: lines[0] || "", steps, rest };
+}
+
+// 여러 기간 기록 한 번에(분기 화면 주차 기록) — cycle_id=in.(…). 빈 목록이면 조회하지 않는다. 실패는 호출부로 던진다.
+export async function getOkrReportsIn(cycleIds: string[]): Promise<OkrReport[]> {
+  const ids = [...new Set(cycleIds.filter(Boolean))];
+  if (!ids.length) return [];
+  const list = encodeURIComponent(ids.map((id) => `"${id}"`).join(","));
+  const rows = await selectAllRows<OkrReport>("okr_reports", `select=*&cycle_id=in.(${list})&order=cycle_id.asc,team.asc,member.asc`);
+  return rows.map(toReport);
+}

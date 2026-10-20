@@ -17,7 +17,8 @@
 //  - 주차(2026-09-29): 달 옆 [월 | 1주 2주 …]. 주차는 결과·판정·피드백을 따로 적는 별도 기록(okr_cycles kind=week, parent_id=달)이고,
 //    목표·달성기준은 달(공통 + 파트 고유)을 그대로 쓴다 — 주차 화면에서 목표를 고치면 달 것이 바뀐다.
 //  - 분기 → 월 → 주(2026-10-20, docs/tasks/okr-quarter-month-week.md): 분기 구조 SQL(okr-quarter.sql)이 실행됐으면 상단은 [n분기][달×3] 칩.
-//    [분기] = 팀장 분기 OKR 표 + 분기 진행 표(OkrQuarterView), [달] 통합집계 = 핵심방향 + 엑셀 통합집계 꼴(OkrMonthRollup),
+//    [분기] = 팀장 분기 OKR 표(9목표 × 10·11·12월 CS 종합 ● ○ + 분기 종합, OkrQuarterView; 파트 탭은 QuarterTeamView), [달] 통합집계 = 핵심방향 띠(OkrDirection) + 9목표 × A~D 파트 ● ○ + CS 종합(OkrMonthRollup),
+//    2차(2026-10-21, docs/tasks/okr-feedback-2.md): ●=사람이 고른 판정, ○=마지막 기록 주차/자동 제안. 주차 화면의 목표·달성기준은 파트·파트원이 쪼개 적는 칸(TD_SPLIT, header.goals objectiveSet), 팀장 문서 칸은 TD_LEADER.
 //    파트 탭 = [파트 종합](월 report) · [팀원 집계](주차 판정 점) · 파트원 박스 → 주차 칩([1주][2주]…) → 지금 주차 화면 그대로.
 //    9월까지(OKR_LEGACY_UNTIL)와 SQL 실행 전에는 위 설명대로의 옛 화면을 그대로 쓴다(코드 경로 그대로).
 //    목표·달성기준의 바탕은 새 구조 달에서 effectiveGoals(달, 분기) — 달이 팀장 월 OKR이 아니면(복사본) 분기 OKR을 읽기 전용으로.
@@ -35,14 +36,14 @@ import { updateRows } from "./supabase";
 import {
   JUDGMENT_INFO, OKR_PILLARS, OKR_TEAMS, achievementRate, actionMembers, actionTeams, blankGoalsLike, bottleneckText, cycleLabel, defaultCycleTitle,
   currentWeekOf, defaultGoalTemplate, deleteOkrReport, effectiveGoals, emptyGoal, emptyReport, emptyResultRow, findReport, getOkrCycle, getOkrReport, getOkrReports, goalsAreFromQuarter, hasResultRows, isAlert, isLeaderGoals, isLegacyMonthId,
-  listOkrCycles, listOkrResultIndex, memberReports, mergeCycle, mergeMemberActuals, mergeMonthActuals, mergeReport, monthCycleId, monthDraftFromQuarter, monthsOfQuarter, needsReasonPlan, normalizeJudgment, okrAssist, okrWeeksInMonth,
-  overlayCriteria, pillarIndex, pillarLabel, probeOkrQuarterSchema, probeOkrSchema, putCriteria, quarterCycleId, quarterDraft, quarterIdOfMonth, quarterOf, quarterProgress, remapFeedback, remapReports,
-  renumberGoals, reportKey, resultRowFor, saveOkrCycle, saveOkrReport, topFilterItems, weekCycleId, weeksOfMonth, worstInMonth, worstJudgment, worstOfJudgments, applyPastedGoals,
-  type OkrCycle, type OkrGoal, type OkrPasteResult, type OkrReport, type OkrResultRow, type OkrTeam, type RichField,
+  getOkrReportsIn, lastJudgmentInMonth, listOkrCycles, listOkrResultIndex, memberReports, mergeCycle, mergeMemberActuals, mergeMonthActuals, mergeReport, monthCycleId, monthDraftFromQuarter, monthsOfQuarter, needsReasonPlan, normalizeJudgment, okrAssist, okrWeeksInMonth,
+  overlayCriteria, overlayGoals, pillarIndex, pillarLabel, prevGoalsToCarry, probeOkrQuarterSchema, probeOkrSchema, putCriteria, putGoalField, quarterCycleId, quarterDraft, quarterIdOfMonth, quarterOf, quarterRollup, remapFeedback, remapReports,
+  renumberGoals, reportKey, resultRowFor, saveOkrCycle, saveOkrReport, topFilterItems, weekCycleId, weeksOfMonth, worstJudgment, worstOfJudgments, applyPastedGoals,
+  type OkrCycle, type OkrJudgment, type OkrGoal, type OkrPasteResult, type OkrReport, type OkrResultRow, type OkrTeam, type RichField,
 } from "./okr";
-import { BottleneckCell, FragmentRows, FreshBottleneckCell, JudgmentBadge, PillarBar, ResizeHandle } from "./OkrCells";
-import { LINK, TD, TD_EDIT, TD_FIXED, TD_FIXED_EDIT, TD_READ, TD_WRITE, TH_READ, TH_WRITE, clearHtml, goalHtml, pillarRuns, shortBottleneck, teamName, useColWidths, withHtml } from "./okrUi";
-import OkrQuarterView from "./OkrQuarterView";
+import { BottleneckCell, FragmentRows, JudgmentBadge, OkrLegend, PillarBar, ResizeHandle } from "./OkrCells";
+import { LINK, TD, TD_EDIT, TD_FIXED, TD_FIXED_EDIT, TD_LEADER, TD_READ, TD_SPLIT, TD_WRITE, TH_LEADER, TH_READ, TH_SPLIT, TH_WRITE, clearHtml, goalHtml, pillarRuns, shortBottleneck, teamName, useColWidths, withHtml } from "./okrUi";
+import OkrQuarterView, { QuarterTeamView } from "./OkrQuarterView";
 import OkrMonthRollup, { MonthTeamSummary } from "./OkrMonthRollup";
 import OkrPasteModal from "./OkrPasteModal";
 
@@ -121,7 +122,8 @@ export default function OkrHub({ author }: { author: string }) {
   const [quarterCycle, setQuarterCycle] = useState<OkrCycle | null>(null); // 열린 달이 든 분기 행(서버에 있을 때만) — 달 화면에서는 읽기만
   const quarterIdRef = useRef("");
   const [weekBook, setWeekBook] = useState<{ monthId: string; rows: OkrReport[] } | null>(null); // 그 달 주차 기록 전부(합치기·팀원 집계·박스 숫자)
-  const [progress, setProgress] = useState<{ months: OkrCycle[]; reports: Record<string, OkrReport[]> } | null>(null); // 분기 진행 표 재료
+  // 분기 통합집계 재료 — 세 달 행(없는 달은 분기 틀 초안)·월 파트 종합 행·주차 기록(정식 id …-Wn). 분기를 열 때 한 번만 읽는다(15초 틱에서는 안 읽음).
+  const [progress, setProgress] = useState<{ months: OkrCycle[]; reports: Record<string, OkrReport[]>; weekReports: Record<string, OkrReport[]> } | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const isFreshMonth = (y: number, m: number) => schemaRef.current === true && !isLegacyMonthId(monthCycleId(y, m));
   const quarterMode = schemaReady === true;
@@ -231,20 +233,31 @@ export default function OkrHub({ author }: { author: string }) {
       finally { if (token === openTokenRef.current) setLoading(false); }
     })();
   };
-  // 분기 열기(새 구조) — 분기 행(없으면 9묶음 빈 틀 초안) + 분기 진행 표 재료(세 달 행·파트 종합 행)
+  // 분기 세 달의 주차 기록 한 번에(cycle_id=in.(…)) — 옛 셈법 행 id(weekIdFor)로 읽고 정식 id(…-Wn)로 바꿔 달별로 나눈다(loadWeekBook과 같은 방식)
+  const loadQuarterWeeks = async (months: Array<{ year: number; month: number; id: string }>): Promise<Record<string, OkrReport[]>> => {
+    const canon = new Map<string, { id: string; monthId: string }>();
+    for (const x of months) for (const w of weeksOfMonth(x.year, x.month)) canon.set(weekIdFor(x.year, x.month, w.weekNo), { id: w.id, monthId: x.id });
+    const rows = await getOkrReportsIn([...canon.keys()]);
+    const out: Record<string, OkrReport[]> = Object.fromEntries(months.map((x) => [x.id, [] as OkrReport[]]));
+    for (const r of rows) { const c = canon.get(r.cycle_id); if (c) out[c.monthId].push({ ...r, cycle_id: c.id }); }
+    return out;
+  };
+  // 분기 열기(새 구조) — 분기 행(없으면 9묶음 빈 틀 초안) + 분기 통합집계 재료. 탭(통합집계·A~D)은 그대로 둔다(필터 = 기간, 탭 = 범위, 설계안 D6)
   const openQuarter = (y: number, q: number) => {
     void flushPending();
     const months = monthsOfQuarter(y, q);
-    setYear(y); setMonth(months[0].month); setWeekNo(null); setView("quarter"); setTab("all");
+    setYear(y); setMonth(months[0].month); setWeekNo(null); setView("quarter");
     const id = quarterCycleId(y, q);
     const token = ++openTokenRef.current;
     setLoading(true);
     void (async () => {
       try {
-        const [found, monthCycles, monthRows] = await Promise.all([
+        const [found, monthCycles, monthRows, weekRows] = await Promise.all([
           getOkrCycle(id),
           Promise.all(months.map((x) => getOkrCycle(x.id))),
           Promise.all(months.map((x) => getOkrReports(x.id, ""))),
+          // 주차 기록은 제안(○)에만 쓴다 — 못 읽으면 알리고 확정 판정만으로 그린다
+          loadQuarterWeeks(months).catch((e) => { notify(`분기 주차 기록을 읽지 못해 제안 판정은 빠집니다: ${(e as Error).message}`, "error"); return {} as Record<string, OkrReport[]>; }),
         ]);
         if (token !== openTokenRef.current) return;
         const c = found || titled(quarterDraft(y, q));
@@ -254,7 +267,7 @@ export default function OkrHub({ author }: { author: string }) {
         if (found) rememberSaved(found);
         quarterIdRef.current = "";
         setQuarterCycle(found);
-        setProgress({ months: monthCycles.filter((x): x is OkrCycle => !!x), reports: Object.fromEntries(months.map((x, i) => [x.id, monthRows[i]])) });
+        setProgress({ months: monthCycles.filter((x): x is OkrCycle => !!x), reports: Object.fromEntries(months.map((x, i) => [x.id, monthRows[i]])), weekReports: weekRows });
         setCycle(c);
         setReports([]);
         loadedCycleRef.current = id;
@@ -431,8 +444,10 @@ export default function OkrHub({ author }: { author: string }) {
   const goalsFromQuarter = newMonth && goalsAreFromQuarter(goalCycle, quarterCycle);
   const partOf = (team: OkrTeam) => findReport(reports, team, "");
   // 보이는 목표: 공통(달) → 파트 종합의 달성기준 덮어쓰기(이 주차 기록) → 개인의 덮어쓰기. 목표·Pillar·병목은 늘 공통.
-  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => overlayCriteria(commonGoals, partOf(team)?.goals);
-  const personGoalsOf = (team: OkrTeam, who: string): OkrGoal[] => (!who || who === "__sum__" ? teamGoalsOf(team) : overlayCriteria(teamGoalsOf(team), findReport(reports, team, who)?.goals));
+  // 새 구조 달(2026-10-20 2차): 주차 목표도 같은 사슬로 덮는다(overlayGoals — html.objectiveSet 표시가 있는 칸만). 옛 화면은 overlayCriteria 그대로.
+  const overlay = newMonth ? overlayGoals : overlayCriteria;
+  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => overlay(commonGoals, partOf(team)?.goals);
+  const personGoalsOf = (team: OkrTeam, who: string): OkrGoal[] => (!who || who === "__sum__" ? teamGoalsOf(team) : overlay(teamGoalsOf(team), findReport(reports, team, who)?.goals));
   const updateCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
   // 목표 쪽 편집은 달에 — 주차를 열어 두었으면 goalSrc(달)로 간다
   const updateGoalCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); if (goalSrc) setGoalSrc((cur) => (cur ? { ...cur, cycle: { ...cur.cycle, ...patch } } : cur)); else setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
@@ -447,7 +462,14 @@ export default function OkrHub({ author }: { author: string }) {
   const setCriteria = (team: OkrTeam, who: string, no: number, criteria: string, html?: string) => {
     const scope = who && who !== "__sum__" ? who : "";
     const shown = personGoalsOf(team, scope).find((g) => g.no === no) || emptyGoal(no);
-    patchReport(team, scope, (r) => ({ ...r, goals: putCriteria(r.goals, [{ ...shown, criteria, html: html ? { criteria: html } : undefined }]) }));
+    if (newMonth) patchReport(team, scope, (r) => ({ ...r, goals: putGoalField(r.goals, shown, "criteria", criteria, html) })); // 같은 칸의 목표 표시(objectiveSet)를 지킨다
+    else patchReport(team, scope, (r) => ({ ...r, goals: putCriteria(r.goals, [{ ...shown, criteria, html: html ? { criteria: html } : undefined }]) }));
+  };
+  // 주차 목표 고치기(새 구조만) — 달성기준과 같은 사슬: 파트('')에서 고치면 그 주 파트원 모두의 기본, 파트원이 고치면 그 사람 칸에만. 비우면 월 목표로 돌아간다.
+  const setObjective = (team: OkrTeam, who: string, no: number, text: string, html?: string) => {
+    const scope = who && who !== "__sum__" ? who : "";
+    const shown = personGoalsOf(team, scope).find((g) => g.no === no) || emptyGoal(no);
+    patchReport(team, scope, (r) => ({ ...r, goals: putGoalField(r.goals, shown, "objective", text, html) }));
   };
   // 전주(또는 지난달 마지막 주) 기간 id — 월 종합(옛 기록)을 보고 있으면 지난달
   const prevCycleId = ((): string | null => {
@@ -471,14 +493,36 @@ export default function OkrHub({ author }: { author: string }) {
       ]);
       // 바탕 = 전주가 든 달의 effectiveGoals(새 구조) — 옛 구조 달·옛 화면은 그 달 goals 그대로
       const prevBase = newMonth ? effectiveGoals(prevMonth, prevQ) : prevMonth?.goals || [];
-      const prevTeam = overlayCriteria(prevBase, findReport(prevRows, team, "")?.goals);
-      const prevEffective = scope ? overlayCriteria(prevTeam, findReport(prevRows, team, scope)?.goals) : prevTeam;
-      const entries = prevEffective.filter((g) => g.criteria.trim()).map((g) => ({ ...g, html: g.html?.criteria ? { criteria: g.html.criteria } : undefined }));
-      if (!entries.length) { setMessage(`${prevCycleLabel}에 적힌 달성기준이 없어요`); return; }
+      const prevTeam = overlay(prevBase, findReport(prevRows, team, "")?.goals);
+      const prevEffective = scope ? overlay(prevTeam, findReport(prevRows, team, scope)?.goals) : prevTeam;
+      const criteriaEntries = prevEffective.filter((g) => g.criteria.trim()).map((g) => ({ ...g, html: g.html?.criteria ? { criteria: g.html.criteria } : undefined }));
+      if (!newMonth) { // 옛 화면 — 그대로
+        const entries = criteriaEntries;
+        if (!entries.length) { setMessage(`${prevCycleLabel}에 적힌 달성기준이 없어요`); return; }
+        const mine = findReport(reports, team, scope)?.goals?.length || 0;
+        if (mine && !(await askConfirm(`이 주차의 달성기준을 ${prevCycleLabel} 것(${entries.length}개)으로 바꿉니다. 결과·판정은 그대로 둡니다.`, { okLabel: "가져오기" }))) return;
+        patchReport(team, scope, (r) => ({ ...r, goals: putCriteria(r.goals, entries) }));
+        setMessage(`${prevCycleLabel} 달성기준 ${entries.length}개를 그대로 가져왔어요 — 바뀐 부분만 고치면 됩니다`);
+        return;
+      }
+      // 새 구조: 달성기준은 위 규칙 그대로 + 같은 달 전주에서 고친 목표(objectiveSet)를 같은 번호 칸에 얹는다. 겹치지 않는 번호는 목표 칸만 따로.
+      const carry = prevGoalsToCarry(prevEffective, prevMonthId === monthCycleId(year, month));
+      const entries = criteriaEntries.map((e) => {
+        const c = carry.find((x) => x.no === e.no);
+        return c ? { ...e, objective: c.objective, html: { ...(e.html || {}), ...(c.html?.objective ? { objective: c.html.objective } : {}), objectiveSet: "1" as const } } : e;
+      });
+      const objectiveOnly = carry.filter((c) => !criteriaEntries.some((e) => e.no === c.no));
+      const total = entries.length + objectiveOnly.length;
+      if (!total) { setMessage(`${prevCycleLabel}에 적힌 목표·달성기준이 없어요`); return; }
       const mine = findReport(reports, team, scope)?.goals?.length || 0;
-      if (mine && !(await askConfirm(`이 주차의 달성기준을 ${prevCycleLabel} 것(${entries.length}개)으로 바꿉니다. 결과·판정은 그대로 둡니다.`, { okLabel: "가져오기" }))) return;
-      patchReport(team, scope, (r) => ({ ...r, goals: putCriteria(r.goals, entries) }));
-      setMessage(`${prevCycleLabel} 달성기준 ${entries.length}개를 그대로 가져왔어요 — 바뀐 부분만 고치면 됩니다`);
+      if (mine && !(await askConfirm(`이 주차의 목표·달성기준을 ${prevCycleLabel} 것(${total}개)으로 바꿉니다. 결과·판정은 그대로 둡니다.`, { okLabel: "가져오기" }))) return;
+      const shownNow = personGoalsOf(team, scope);
+      patchReport(team, scope, (r) => {
+        let goals = putCriteria(r.goals, entries);
+        for (const c of objectiveOnly) goals = putGoalField(goals, shownNow.find((g) => g.no === c.no) || emptyGoal(c.no), "objective", c.objective, c.html?.objective);
+        return { ...r, goals };
+      });
+      setMessage(`${prevCycleLabel} 목표·달성기준 ${total}개를 그대로 가져왔어요 — 바뀐 부분만 고치면 됩니다`);
     } catch (e) { setMessage(`불러오기 실패: ${(e as Error).message}`); }
   };
   // 전주 실제결과 불러오기(2026-10-08): 전주에 이 칸(파트 종합/팀원)에 적힌 실제결과·판정·사유·개선계획·근거를 그대로 가져온다 — 이어지는 일을 다시 안 적게
@@ -507,7 +551,10 @@ export default function OkrHub({ author }: { author: string }) {
   // 번호가 바뀌면(삽입·삭제) 이 달의 기록 전부(달·주차, 파트·팀원)의 결과 행·달성기준 칸을 같이 옮긴다 — 서버에 바로 쓰고 다시 읽는다.
   const goalOps: GoalOps = (() => {
     const current = commonGoals;
-    const write = (next: OkrGoal[]) => updateGoalCycle(newMonth && goalCycle?.goals_origin === "copy" ? { goals: next, goals_origin: "manual" } : { goals: next }); // 새 구조: 복사본 달을 손으로 고치면 확정(manual)
+    // 새 구조: 복사본 달(11·12월처럼 분기 OKR을 대신 보이던 달)을 손으로 고치면 그때 보이던 것(분기 goals, 달성기준 포함)을 월 OKR로 굳힌다(manual).
+    // 굳히기 직전 월 goals(복사본)는 goals_prev에 남겨 [직전 목표로 되돌리기](설계안 3-4).
+    const settle = (): Partial<OkrCycle> => (newMonth && goalCycle?.goals_origin === "copy" ? { goals_origin: "manual", goals_prev: goalCycle.goals.map((g) => ({ ...g })) } : {});
+    const write = (next: OkrGoal[]) => updateGoalCycle({ goals: next, ...settle() });
     const reorder = async (next: OkrGoal[], remap: Map<number, number>) => {
       if (!goalCycle || !cycle) return;
       setSaveStatus("saving"); setLoading(true);
@@ -516,7 +563,7 @@ export default function OkrHub({ author }: { author: string }) {
         const renumbered = renumberGoals(next);
         await ensureCycle(goalCycle);
         if (cycle.id !== goalCycle.id) await ensureCycle(cycle);
-        await saveOkrCycle({ ...goalCycle, goals: renumbered, feedback: remapFeedback(goalCycle.feedback || {}, remap) }, author);
+        await saveOkrCycle({ ...goalCycle, goals: renumbered, feedback: remapFeedback(goalCycle.feedback || {}, remap), ...settle() }, author);
         const ids = Array.from(new Set([goalCycle.id, cycle.id, ...cyclesRef.current.filter((c) => c.year === goalCycle.year && c.month === goalCycle.month).map((c) => c.id)]));
         for (const id of ids) {
           const c = id === cycle.id ? cycle : cyclesRef.current.find((x) => x.id === id);
@@ -700,13 +747,13 @@ export default function OkrHub({ author }: { author: string }) {
     finally { setAiBusy(""); }
   };
 
-  // ✨ 주차 합치기(새 구조 파트 종합) — 그 달 1~5주 파트원 실제결과를 "• 1주 이름: …"로 모아 종합 칸에(다시 누르면 다시 씀), 판정은 빈 칸만 가장 나쁜 것
+  // ✨ 주차 합치기(새 구조 파트 종합) — 그 달 1~5주 파트원 실제결과를 "• 1주 이름: …"로 모아 종합 칸에(다시 누르면 다시 씀), 판정은 빈 칸만 마지막 기록 주차 것(팀장 결정 2026-10-20)
   const mergeWeeks = async (team: OkrTeam) => {
     if (weekNo !== null) return;
     try {
       const rows = (await loadWeekBook(year, month)).filter((r) => r.team === team);
       const part = partOf(team);
-      const items = teamGoalsOf(team).map((g) => ({ no: g.no, actual: mergeMonthActuals(rows, g.no), judgment: worstInMonth(rows, team, g.no) })).filter((x) => x.actual);
+      const items = teamGoalsOf(team).map((g) => ({ no: g.no, actual: mergeMonthActuals(rows, g.no), judgment: lastJudgmentInMonth(rows, team, g.no) })).filter((x) => x.actual);
       if (!items.length) { notify(`${month}월 주차 기록에 적힌 실제결과가 아직 없어요`, "info"); return; }
       const filled = items.filter((x) => resultRowFor(part, x.no).actual.trim()).length;
       if (filled && !(await askConfirm(`${teamName(team)} ${month}월 종합 실제결과 ${filled}칸에 이미 글이 있어요. 주차 기록을 합친 글로 바꿀까요?\n(종합판정은 비어 있는 칸만 채웁니다)`, { okLabel: "바꾸기" }))) return;
@@ -735,6 +782,14 @@ export default function OkrHub({ author }: { author: string }) {
     if (team !== "all" && who) { if (weekNo === null) openCycle(year, month, defaultWeekOf(year, month)); }
     else if (weekNo !== null) openCycle(year, month, null);
   };
+  // 통합집계에서 파트 점·이름을 누르면 그 달 그 파트의 [파트 종합](월 report)
+  const openPartSummary = (team: OkrTeam) => { setTab(team); setMember(""); if (weekNo !== null) openCycle(year, month, null); };
+  // CS 종합(월)·분기 종합 덮어쓰기 — 열린 기간 행의 feedback[no].judgment. ""면 키를 지워 자동값으로 되돌린다(칸 단위 3자 병합, okr.ts mergeFeedback)
+  const setCycleJudgment = (no: number, judgment: string) => {
+    const next = { ...(cycle?.feedback?.[String(no)] || { memo: "" }) };
+    if (judgment) next.judgment = judgment; else delete next.judgment;
+    updateCycle({ feedback: { ...(cycle?.feedback || {}), [String(no)]: next } });
+  };
   // 그 달 주차 기록(정식 id) — 지금 열린 주차는 화면의 최신 값으로 덮어 본다
   const monthWeekRows = (() => {
     const base = weekBook && weekBook.monthId === monthCycleId(year, month) ? weekBook.rows : [];
@@ -754,6 +809,7 @@ export default function OkrHub({ author }: { author: string }) {
   const chip = (on: boolean, now = false) => `relative rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${on ? "bg-white text-slate-950" : now ? "text-white ring-1 ring-inset ring-emerald-400" : "text-slate-300 hover:text-white"}`;
   const draftNote = isQuarterView ? "아직 저장되지 않은 분기 — 붙여넣거나 표에 적는 순간 저장됩니다"
     : newMonth && !weekNo ? "아직 기록이 없는 달 — 팀장 월 OKR을 붙여넣거나 분기 OKR로 시작하세요"
+      : newMonth && weekNo ? "아직 기록이 없는 주차 — 이번 주 목표·달성기준은 월 목표를 쪼개 적고, [전주 목표·달성기준 불러오기]로 이어 쓸 수 있어요. 적는 순간 저장됩니다"
       : weekNo ? "아직 기록이 없는 주차 — 목표는 통합집계 것, 달성기준은 [전주 달성기준 불러오기]로 이어 쓸 수 있어요. 적는 순간 저장됩니다" : commonGoals.some((g) => g.objective) ? "아직 기록이 없는 달 — 지난달 목표를 그대로 가져왔습니다" : "아직 목표가 없는 달 — 표에서 바로 적어 주세요";
   // 파트 탭(새 구조) — 파트원 박스·파트 종합 아래 주차 칩, 박스 숫자는 고른 주차(달 화면이면 기본 주차) 기준
   const freshTeam = (team: OkrTeam) => {
@@ -778,9 +834,19 @@ export default function OkrHub({ author }: { author: string }) {
       boxRowsOf: weekNo === null ? (name: string) => goals.map((g) => resultRowFor(findReport(monthWeekRows.filter((r) => r.cycle_id === boxWeek), team, name), g.no)) : undefined,
       extraNames: [...new Set(monthWeekRows.filter((r) => r.team === team && r.member).map((r) => r.member))],
       onMergeWeeks: () => void mergeWeeks(team),
+      suggestOf: (no: number) => lastJudgmentInMonth(monthWeekRows, team, no), // 파트 종합 판정 제안 = 마지막 기록 주차(주차 합치기·팀원 집계와 같은 기준)
+      onObjective: (no: number, text: string, html?: string) => setObjective(team, member, no, text, html),
+      monthGoalOf: (no: number) => commonGoals.find((g) => g.no === no),
       summary: <MonthTeamSummary team={team} goals={teamGoalsOf(team)} names={[...new Set([...rosterOf(team), ...monthWeekRows.filter((r) => r.team === team && r.member).map((r) => r.member)])]} weeks={weeksOfMonth(year, month)} weekRows={monthWeekRows} partReport={findReport(reports, team, "") || emptyReport(cycleId, team, "")}
         onPick={(name, w) => { setMember(name); openCycle(year, month, w); }} onFeedback={(no, memo, memoHtml) => setTeamFeedback(team, no, memo, memoHtml)} />,
     };
+  };
+
+  // 분기 통합집계(분기 화면에서만) — 분기 행(지금 고치는 중인 것 포함) + 분기를 열 때 읽은 세 달 재료
+  const quarterRollupNow = isQuarterView && cycle?.kind === "quarter" ? quarterRollup(cycle, progress?.months || [], progress?.reports || {}, progress?.weekReports || {}) : quarterRollup(null, [], {}, {});
+  const openMonthOf = (monthId: string, nextTab: Tab, nextMember: string) => {
+    const y = Number(monthId.slice(0, 4)); const m = Number(monthId.slice(5, 7));
+    if (isLegacyMonthId(monthId)) openMonthDefault(y, m); else openMonthView(y, m, nextTab, nextMember);
   };
 
   if (!author) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
@@ -833,13 +899,13 @@ export default function OkrHub({ author }: { author: string }) {
         </div>
         <div className="flex gap-1 overflow-x-auto px-3 pt-2">
           {tabs.map(([key, label]) => {
-            const rep = key === "all" ? undefined : findReport(reports, key, "");
+            const rep = key === "all" || isQuarterView ? undefined : findReport(reports, key, ""); // 분기 화면엔 파트 기록이 없다 — 숫자를 그리지 않는다
             const goals = key === "all" ? commonGoals : teamGoalsOf(key);
             const rows = rep ? goals.map((g) => resultRowFor(rep, g.no)) : [];
             const judged = rows.filter((x) => normalizeJudgment(x.judgment)).length;
             const alerts = rows.filter((x) => isAlert(x.judgment)).length;
             return <button key={key} type="button" onClick={() => (newMonth || isQuarterView ? openTeamFresh(key) : openTeam(key))} className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-black transition ${tab === key ? "border-slate-900 text-slate-950" : "border-transparent text-slate-400 hover:text-slate-700"}`}>
-              {label}{key !== "all" && goals.length > 0 && <span className="text-[11px] font-bold tabular-nums text-slate-400">{judged}/{goals.length}</span>}
+              {label}{key !== "all" && !isQuarterView && goals.length > 0 && <span className="text-[11px] font-bold tabular-nums text-slate-400">{judged}/{goals.length}</span>}
               {alerts > 0 && <span className="text-[11px] font-bold text-rose-600">미흡 {alerts}</span>}
             </button>;
           })}
@@ -850,17 +916,17 @@ export default function OkrHub({ author }: { author: string }) {
         : isQuarterView
           ? legacyQuarter ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400">분기 OKR 없음(옛 구조) — 위에서 달을 고르세요</div>
             : tab === "all"
-              ? <OkrQuarterView quarter={cycle} progress={quarterProgress(progress?.months || [], progress?.reports || {}, cycle)} prevQuarter={prevQuarterSrc} onGoal={goalOps.onGoal} onPaste={() => setPasteOpen(true)} onRestore={() => void restoreGoals()} onCopyPrev={() => void copyPrevQuarter()} onTemplate={() => updateGoalCycle({ goals: blankGoalsLike([]) })}
-                  onPick={(monthId, team) => openMonthView(Number(monthId.slice(0, 4)), Number(monthId.slice(5, 7)), team as Tab, "")} />
-              : <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-8 text-sm font-bold text-slate-400">월을 고르세요
-                {monthsOfQuarter(year, selQuarter).map((x) => <button key={x.id} type="button" onClick={() => (isLegacyMonthId(x.id) ? openMonthDefault(x.year, x.month) : openMonthView(x.year, x.month, tab, member))} className="rounded-full border border-slate-300 px-3 py-1 text-[12px] font-black text-slate-700 hover:bg-slate-100">{x.month}월</button>)}
-              </div>
+              ? <OkrQuarterView quarter={cycle} rollup={quarterRollupNow} prevQuarter={prevQuarterSrc} onGoal={goalOps.onGoal} onPaste={() => setPasteOpen(true)} onRestore={() => void restoreGoals()} onCopyPrev={() => void copyPrevQuarter()} onTemplate={() => updateGoalCycle({ goals: blankGoalsLike([]) })}
+                  onQuarterJudgment={setCycleJudgment} onPickMonth={(monthId) => openMonthOf(monthId, "all", "")} />
+              : <QuarterTeamView team={tab} quarter={cycle} goals={cycle.goals} rollup={quarterRollupNow}
+                  onPick={(monthId) => openMonthOf(monthId, tab, "")} onPickMonthHead={(monthId) => openMonthOf(monthId, tab, rosterOf(tab).includes(author) ? author : "")} />
           : tab === "all"
             ? newMonth
               ? <OkrMonthRollup cycle={cycle} quarter={quarterCycle} goals={commonGoals} goalsOf={teamGoalsOf} fromQuarter={goalsFromQuarter} quarterLabel={quarterCycle ? `${quarterOf(quarterCycle.month)}분기` : "분기"} reports={reports} weekRows={monthWeekRows}
                   otherMonths={cycles.filter((c) => c.kind === "month" && c.id !== goalCycle.id && c.goals.some((g) => g.objective.trim()))}
                   onDirection={(t) => updateCycle({ direction: t })} onFeedback={setFeedback} onPaste={() => setPasteOpen(true)} onStartFromQuarter={quarterCycle && quarterCycle.goals.length ? () => void startFromQuarter() : null}
-                  onCopyGoals={(id) => void copyGoalsFrom(id)} onRestore={() => void restoreGoals()} onTemplate={() => updateGoalCycle({ goals: blankGoalsLike([]) })} ops={goalsFromQuarter ? null : goalOps} />
+                  onCopyGoals={(id) => void copyGoalsFrom(id)} onRestore={() => void restoreGoals()} onTemplate={() => updateGoalCycle({ goals: blankGoalsLike([]) })} ops={goalOps}
+                  onCsJudgment={setCycleJudgment} onPickTeam={openPartSummary} />
               : <SummaryView cycle={cycle} goals={commonGoals} goalsOf={teamGoalsOf} goalCycleId={goalCycle.id} cycles={cycles} reports={reports} aiBusy={aiBusy} prevSource={prevGoalSource} onFeedback={setFeedback} onAiFeedback={(no) => void aiFeedback(no)} onCopyGoals={(id) => void copyGoalsFrom(id)} onTemplate={() => updateGoalCycle({ goals: defaultGoalTemplate() })} {...goalOps} />
             : <TeamView key={newMonth ? "fresh" : "legacy"} fresh={newMonth ? freshTeam(tab) : undefined} team={tab} cycle={cycle} goals={personGoalsOf(tab, member)} reports={reports} member={member} onMember={newMonth ? pickMember : setMember} onRemoveMember={(name) => void removeMember(tab, name)} roster={rosterOf(tab)} author={author} aiBusy={aiBusy}
                 onHeader={(patch) => patchReport(tab, "", (r) => ({ ...r, header: { ...r.header, ...patch } }))}
@@ -889,7 +955,7 @@ function PersonBox({ label, sub, rows, total, selected, onClick, onRemove }: { l
 }
 
 // ── 파트 시트: Pillar 막대 + 병목 1·2·3 행, 열 머리는 엑셀과 같게(No·Pillar 열은 막대로 대신), 격자 셀 ──
-const COLS: Array<[string, number, "read" | "write"]> = [
+const COLS: Array<[string, number, ColMode]> = [
   ["병목", 58, "read"], ["목표", 220, "read"], ["달성기준", 250, "read"],
   ["실제결과", 300, "write"], ["종합판정", 104, "write"], ["사유", 210, "write"], ["개선계획", 210, "write"], ["근거자료", 210, "write"],
 ];
@@ -897,12 +963,25 @@ const COLS: Array<[string, number, "read" | "write"]> = [
 type FreshTeam = {
   level: "month" | "week"; nextMonth: number; weekChips: React.ReactNode; summary: React.ReactNode;
   boxRowsOf?: (name: string) => OkrResultRow[]; extraNames?: string[]; onMergeWeeks: () => void;
+  // 2차(2026-10-20): 파트 종합 판정 제안(마지막 기록 주차) · 주차 목표 고치기 · 주차에서 고친 목표 위에 보일 월 목표
+  suggestOf?: (no: number) => OkrJudgment | ""; onObjective?: (no: number, text: string, html?: string) => void; monthGoalOf?: (no: number) => OkrGoal | undefined;
 };
-// 엑셀 파트 시트 열 그대로(병목현상 글 열), 열 폭 저장 키는 v2(옛 폭이 새 열에 붙지 않게)
-const freshCols = (f: FreshTeam): Array<[string, number, "read" | "write"]> => [
-  ["병목현상", 150, "read"], ["목표", 200, "read"], [f.level === "month" ? "달성기준" : "이번 주 달성기준", 230, "read"],
+type ColMode = "read" | "write" | "leader" | "split";
+// 엑셀 파트 시트 열 그대로(병목현상 글 열), 열 폭 저장 키는 v2(옛 폭이 새 열에 붙지 않게).
+// 색: 병목현상은 늘 팀장 문서(남색, 읽기), 목표·달성기준은 파트 종합(월)이면 팀장 문서 읽기, 주차면 쪼개 적는 칸(청록)
+const freshCols = (f: FreshTeam): Array<[string, number, ColMode]> => [
+  ["병목현상", 150, "leader"], [f.level === "month" ? "목표" : "이번 주 목표", 200, f.level === "month" ? "leader" : "split"], [f.level === "month" ? "달성기준" : "이번 주 달성기준", 230, f.level === "month" ? "leader" : "split"],
   ["실제결과", 300, "write"], ["종합판정", 104, "write"], ["사유", 200, "write"], [f.level === "month" ? `개선계획(${f.nextMonth}월 전략)` : "개선계획", 200, "write"], ["근거자료", 200, "write"],
 ];
+const TH_OF: Record<ColMode, string> = { read: TH_READ, write: TH_WRITE, leader: TH_LEADER, split: TH_SPLIT };
+// 병목현상 칸(새 구조 파트 탭) — 팀장 문서색 읽기. 위 작은 "병목 n" + 병목현상 글(옛 꼬리표뿐이면 빈 글)
+function LeaderBottleneckCell({ goals, goal, alert, alertTone }: { goals: OkrGoal[]; goal: OkrGoal; alert: boolean; alertTone: string }) {
+  const text = bottleneckText(goal.bottleneck);
+  return <td className={`${TD_LEADER} px-2 py-1.5 ${alert ? `border-l-4 ${alertTone}` : ""}`}>
+    <div className="text-[10px] font-bold text-indigo-400">{shortBottleneck(goals, goal.no)}</div>
+    {text && <div className="whitespace-pre-wrap text-[11px] leading-snug text-slate-700">{text}</div>}
+  </td>;
+}
 
 export function TeamView({ fresh, team, cycle, goals, reports, member, onMember, onRemoveMember, roster, author, aiBusy, onHeader, onResult, onMerge, onAiMerge, onAiFormat, onTeamFeedback, onAiTeamFeedback, onCriteria, onLoadPrev, onLoadPrevResults, prevLabel }: {
   fresh?: FreshTeam;
@@ -949,6 +1028,12 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
     {monthPart ? <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
       <span>{teamName(team)} {cycle.month}월 파트 제출 — 통합집계에 반영됩니다</span>
       <button type="button" onClick={fresh?.onMergeWeeks} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100">✨ 주차 합치기</button>
+    </div> : fresh ? <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
+      <span>{member ? `${member}의 이번 주 목표·달성기준 — 파트 것이 기본으로 보이고, 여기서 고친 건 ${member} 칸에만 남습니다` : `${teamName(team)} 이번 주 목표·달성기준 — 여기서 고치면 파트원 모두에게 기본으로 보입니다 (목표를 비우면 월 목표로 돌아갑니다)`}</span>
+      {prevLabel && <span className="flex flex-wrap gap-1.5">
+        <button type="button" onClick={onLoadPrev} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100">↩ {prevLabel} 목표·달성기준 불러오기</button>
+        <button type="button" onClick={onLoadPrevResults} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100">↩ {prevLabel} 실제결과 불러오기</button>
+      </span>}
     </div> : <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 text-[11px] font-semibold text-slate-500">
       <span>{member ? `${member}의 달성기준 — 파트 종합 것이 기본으로 보이고, 여기서 고친 건 ${member} 칸에만 남습니다` : `${teamName(team)} 달성기준 — 여기서 고치면 팀원 모두에게 기본으로 보입니다 (목표는 통합집계에서만)`}</span>
       {prevLabel && <span className="flex flex-wrap gap-1.5">
@@ -963,12 +1048,13 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
         <input type={type} value={partReport.header[key]} onChange={(e) => onHeader({ [key]: e.target.value })} placeholder={key === "headcount" ? String(memberNames.length || "") : ""} className="min-w-0 flex-1 rounded bg-[#FFFBEB] px-2 py-1 text-[12px] font-semibold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-inset focus:ring-slate-400" />
       </label>)}
     </div>}
+    {fresh && <div className="border-b border-slate-100 px-3 py-1.5"><OkrLegend split={!monthPart} /></div>}
 
     <div className="overflow-x-auto">
       <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
         <colgroup>{cols.map(([label], i) => <col key={label} style={{ width: col.widths[i] }} />)}</colgroup>
         <thead className="sticky top-0 z-10 text-[11px] font-bold">
-          <tr>{cols.map(([label, , mode], i) => <th key={label} className={`relative ${mode === "write" ? TH_WRITE : TH_READ}`}>{label}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr>
+          <tr>{cols.map(([label, , mode], i) => <th key={label} className={`relative ${TH_OF[mode]}`}>{label}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr>
         </thead>
         <tbody>
           {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
@@ -976,7 +1062,10 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
             {run.goals.map((goal) => {
               const row = resultRowFor(current, goal.no);
               const j = normalizeJudgment(row.judgment);
-              const suggested = worstJudgment(row.actual);
+              // 판정 제안 — 새 구조 파트 종합(월)은 마지막 기록 주차 판정(주차 합치기와 같은 기준), 나머지는 실제결과 글에서
+              const fromWeeks = monthPart && !!fresh?.suggestOf;
+              const suggested = fromWeeks && fresh?.suggestOf ? fresh.suggestOf(goal.no) : worstJudgment(row.actual);
+              const hasBasis = fromWeeks || !!row.actual.trim();
               const alert = isAlert(row.judgment);
               const mustExplain = needsReasonPlan(row.judgment);
               const memberEntries = !member ? members.map((m) => ({ name: m.member, row: resultRowFor(m, goal.no) })).filter((x) => x.row.actual.trim() || x.row.judgment) : [];
@@ -986,12 +1075,17 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
               return <FragmentRows key={`${cycle.id}|${member}|${goal.no}`}>
                 <tr>
                   {fresh
-                    ? <FreshBottleneckCell goals={goals} goal={goal} alert={alert} alertTone={j === "미착수" ? "border-l-rose-500" : "border-l-orange-500"} />
+                    ? <LeaderBottleneckCell goals={goals} goal={goal} alert={alert} alertTone={j === "미착수" ? "border-l-rose-500" : "border-l-orange-500"} />
                     : <BottleneckCell goals={goals} goal={goal} alert={alert} alertTone={j === "미착수" ? "border-l-rose-500" : "border-l-orange-500"} editable={false} onRemove={() => undefined} />}
-                  <td className={TD_FIXED}><RichCell readOnly text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-sky-950" /></td>
+                  {!fresh ? <td className={TD_FIXED}><RichCell readOnly text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-sky-950" /></td>
+                    : monthPart ? <td className={TD_LEADER}><RichCell readOnly text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-indigo-950" /></td>
+                      : <td className={TD_SPLIT}>
+                        {goal.html?.objectiveSet === "1" && (() => { const mg = fresh.monthGoalOf?.(goal.no); return mg && mg.objective.trim() && mg.objective !== goal.objective ? <div className="whitespace-pre-wrap px-2 pt-1 text-[10px] font-semibold leading-snug text-slate-400" title="팀장 월 목표">월: {mg.objective}</div> : null; })()}
+                        <RichCell text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-slate-900" onChange={(t, h) => fresh.onObjective?.(goal.no, t, h)} />
+                      </td>}
                   {monthPart
-                    ? <td className={TD_FIXED}><RichCell readOnly text={goal.criteria} html={goal.html?.criteria} minRows={2} /></td>
-                    : <td className={TD_EDIT}><RichCell text={goal.criteria} html={goal.html?.criteria} minRows={2} onChange={(t, h) => onCriteria(goal.no, t, h)} /></td>}
+                    ? <td className={TD_LEADER}><RichCell readOnly text={goal.criteria} html={goal.html?.criteria} minRows={2} /></td>
+                    : <td className={fresh ? TD_SPLIT : TD_EDIT}><RichCell text={goal.criteria} html={goal.html?.criteria} minRows={2} onChange={(t, h) => onCriteria(goal.no, t, h)} /></td>}
                   <td className={TD_WRITE}>
                     {rich(row, "actual", goal.no, "")}
                     {SHOW_OKR_TOOLS && <div className="flex flex-wrap gap-x-3 px-2 pb-1 text-[10px] font-bold">
@@ -1004,8 +1098,8 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
                     </div>}
                   </td>
                   <td className={`${TD} p-0 ${j ? JUDGMENT_INFO[j].tone : "bg-[#FFFBEB]"}`}>
-                    <JudgmentPicker value={j} suggested={row.actual.trim() ? suggested : ""} onChange={(v) => onResult(goal.no, { judgment: v })} />
-                    {suggested && suggested !== j && row.actual.trim() && <button type="button" onClick={() => onResult(goal.no, { judgment: suggested })} className="block w-full px-2 pb-1 text-left text-[10px] font-bold text-slate-500 hover:underline">→ {suggested}</button>}
+                    <JudgmentPicker value={j} suggested={hasBasis ? suggested : ""} onChange={(v) => onResult(goal.no, { judgment: v })} />
+                    {suggested && suggested !== j && hasBasis && <button type="button" onClick={() => onResult(goal.no, { judgment: suggested })} className="block w-full px-2 pb-1 text-left text-[10px] font-bold text-slate-500 hover:underline">→ {suggested}</button>}
                   </td>
                   <td className={`${TD_WRITE} ${mustExplain && !row.reason.trim() ? "!bg-rose-50" : ""}`}>{rich(row, "reason", goal.no, "")}</td>
                   <td className={`${TD_WRITE} ${mustExplain && !row.plan.trim() ? "!bg-rose-50" : ""}`}>{rich(row, "plan", goal.no, "")}</td>

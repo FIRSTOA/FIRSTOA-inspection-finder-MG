@@ -5,7 +5,9 @@ import {
   OKR_PILLARS, actionMembersInMonth, applyPastedGoals, bottleneckText, cycleKindOf, cycleLabel, defaultCycleTitle, effectiveGoals, emptyReport,
   goalsAreFromQuarter, isLeaderGoals, mergeCycle, mergeMonthActuals, monthDraftFromQuarter, monthlyRollup, monthsOfQuarter, okrCyclePayload,
   parseOkrPaste, parseQuarterId, quarterCycleId, quarterDraft, quarterOf, quarterProgress, splitTsv, topFilterItems, weeksOfMonth,
-  type OkrCycle, type OkrGoal, type OkrReport,
+  directionSteps, lastJudgmentInMonth, lastOfJudgments, mergeFeedback, monthCsJudgment, overlayCriteria, overlayGoals, partMonthJudgment,
+  prevGoalsToCarry, putGoalField, quarterCsJudgment, quarterRollup,
+  type OkrCycle, type OkrGoal, type OkrJudgedCell, type OkrReport, type OkrTeam,
 } from "../src/okr";
 
 type Doc = { id: string; direction: string; goals: OkrGoal[] };
@@ -199,5 +201,157 @@ describe("집계", () => {
     ];
     expect(mergeMonthActuals(weeks, 1)).toBe("• 1주 이민구:\n  첫 줄\n  둘째 줄\n• 2주 한왕주: 둘째 주");
     expect(actionMembersInMonth(weeks, 1)).toEqual({ C: ["이민구", "한왕주"] });
+  });
+});
+
+// ── 2차 피드백(docs/tasks/okr-feedback-2.md) T1~T9 ──
+describe("2차: 판정 동그라미·CS 종합·분기 종합", () => {
+  it("T1 lastJudgmentInMonth — 마지막 기록 주차, 그 주 안에서는 가장 나쁜 것, 파트 행 무시", () => {
+    const weeks = [
+      rep("2026-10-W1", "A", "김", [[1, "", "미착수"]]),
+      rep("2026-10-W2", "A", "김", [[1, "", "미흡"]]),
+      rep("2026-10-W4", "A", "김", [[1, "", "완료"]]),
+      rep("2026-10-W4", "A", "", [[1, "파트 행", "미착수"]]),
+      rep("2026-10-W3", "B", "박", [[1, "", "완료"]]),
+      rep("2026-10-W3", "B", "최", [[1, "", "미흡"]]),
+      rep("2026-10-W4", "B", "박", [[1, "적었지만 판정 없음", ""]]),
+    ];
+    expect(lastJudgmentInMonth(weeks, "A", 1)).toBe("완료");
+    expect(lastJudgmentInMonth(weeks, "B", 1)).toBe("미흡"); // W4는 판정이 없어 W3, 그 주 완료·미흡 → 미흡
+    expect(lastJudgmentInMonth(weeks, "C", 1)).toBe("");
+    expect(lastJudgmentInMonth(weeks, "A", 2)).toBe("");
+    // 주차 번호는 숫자로 비교(W10 > W9)
+    expect(lastJudgmentInMonth([rep("2026-10-W9", "A", "김", [[1, "", "미흡"]]), rep("2026-10-W10", "A", "김", [[1, "", "완료"]])], "A", 1)).toBe("완료");
+  });
+  it("T2 partMonthJudgment — 월 행 판정이 있으면 set, 없으면 마지막 주차 suggest, 둘 다 없으면 빈칸", () => {
+    const month = [rep("2026-10", "A", "", [[1, "", "부분달성"]]), rep("2026-10", "B", "이", [[1, "", "미착수"]])];
+    const weeks = [rep("2026-10-W2", "A", "김", [[1, "", "미흡"]]), rep("2026-10-W2", "B", "이", [[1, "", "미흡"]])];
+    expect(partMonthJudgment(month, weeks, "A", 1)).toEqual({ judgment: "부분달성", source: "set" });
+    expect(partMonthJudgment(month, weeks, "B", 1)).toEqual({ judgment: "미흡", source: "suggest" }); // 월 팀원 행은 보지 않음
+    expect(partMonthJudgment(month, weeks, "C", 1)).toEqual({ judgment: "", source: "" });
+  });
+  it("T3 monthCsJudgment — auto는 확정·제안 중 가장 나쁜 것, override가 있으면 그것", () => {
+    const cells: Record<OkrTeam, OkrJudgedCell> = { A: { judgment: "완료", source: "set" }, B: { judgment: "미흡", source: "suggest" }, C: { judgment: "", source: "" }, D: { judgment: "", source: "" } };
+    expect(monthCsJudgment(cells)).toEqual({ judgment: "미흡", auto: "미흡", manual: false });
+    expect(monthCsJudgment(cells, "완료")).toEqual({ judgment: "완료", auto: "미흡", manual: true });
+    expect(monthCsJudgment(cells, "엉뚱한 글")).toEqual({ judgment: "미흡", auto: "미흡", manual: false });
+  });
+  it("T4 lastOfJudgments·quarterCsJudgment — 빈 것 건너뛴 마지막 값", () => {
+    expect(lastOfJudgments(["미흡", "완료", ""])).toBe("완료");
+    expect(lastOfJudgments(["", "", ""])).toBe("");
+    expect(quarterCsJudgment(["미흡", "완료", ""])).toEqual({ judgment: "완료", auto: "완료", manual: false });
+    expect(quarterCsJudgment(["미흡", "완료", ""], "미흡")).toEqual({ judgment: "미흡", auto: "완료", manual: true });
+  });
+  it("T5 quarterRollup — 9행, 달 CS 종합·분기 종합·파트 칸, 달 조치 수는 quarterProgress와 같음", () => {
+    const quarter = cyc({ id: "2026-Q4", kind: "quarter", goals: Q4.goals, feedback: { "1": { memo: "", judgment: "부분달성" } } });
+    const oct = cyc({ goals: OCT.goals, goals_origin: "import" });
+    const nov = cyc({ id: "2026-11", month: 11, goals_origin: "copy" });
+    const octReports = [rep("2026-10", "A", "", [[1, "x", "미흡"], [2, "y", "완료"]]), rep("2026-10", "C", "", [[1, "z", "미착수"]]), rep("2026-10", "C", "이민구", [[1, "", "완료"]])];
+    const monthReports = { "2026-10": octReports, "2026-11": [rep("2026-11", "B", "", [[9, "", "미흡"]])] };
+    const weekReports = { "2026-10": [rep("2026-10-W3", "D", "정", [[1, "", "완료"]])] };
+    const r = quarterRollup(quarter, [nov, oct], monthReports, weekReports);
+    expect(r.months).toEqual([{ id: "2026-10", month: 10, actionTeams: 2 }, { id: "2026-11", month: 11, actionTeams: 1 }]);
+    expect(r.rows).toHaveLength(9);
+    const row1 = r.rows[0];
+    expect(row1.objective).toBe(Q4.goals[0].objective);
+    expect(row1.byMonth["2026-10"]).toEqual({ judgment: "미착수", auto: "미착수", manual: false });
+    expect(row1.byMonth["2026-11"]).toEqual({ judgment: "", auto: "", manual: false });
+    expect(row1.quarter).toEqual({ judgment: "부분달성", auto: "미착수", manual: true });
+    expect(row1.byTeam.D.byMonth["2026-10"]).toEqual({ judgment: "완료", source: "suggest" });
+    expect(row1.byTeam.D.quarter).toBe("완료");
+    expect(row1.byTeam.A.byMonth["2026-10"]).toEqual({ judgment: "미흡", source: "set" });
+    expect(row1.byTeam.B.byMonth["2026-11"]).toEqual({ judgment: "", source: "" });
+    const row9 = r.rows[8];
+    expect(row9.byMonth["2026-11"].judgment).toBe("미흡");
+    expect(row9.quarter).toEqual({ judgment: "미흡", auto: "미흡", manual: false });
+    expect(row9.byTeam.B.quarter).toBe("미흡");
+  });
+  it("monthlyRollup 4번째 인자 — dots·cs, 월 feedback judgment가 CS 종합 덮어쓰기", () => {
+    const oct = cyc({ goals: OCT.goals, goals_origin: "import", feedback: { "2": { memo: "m", judgment: "미흡" } } });
+    const rows = monthlyRollup(oct, [rep("2026-10", "A", "", [[2, "", "완료"]])], null, [rep("2026-10-W1", "B", "김", [[2, "", "부분달성"]])]);
+    expect(rows[1].dots.B).toEqual({ judgment: "부분달성", source: "suggest" });
+    expect(rows[1].byTeam.B).toBe(""); // 확정만
+    expect(rows[1].cs).toEqual({ judgment: "미흡", auto: "부분달성", manual: true });
+    expect(monthlyRollup(oct, [])[0].cs).toEqual({ judgment: "", auto: "", manual: false }); // 옛 호출(인자 2개)
+  });
+});
+
+describe("2차: 주차 목표 덮어쓰기", () => {
+  const base: OkrGoal[] = [
+    { no: 1, pillar: "P", bottleneck: "막힘", objective: "월 목표 1", criteria: "월 기준 1" },
+    { no: 2, pillar: "P", bottleneck: "막힘2", objective: "월 목표 2", criteria: "월 기준 2" },
+  ];
+  it("T6 옛 objective 글이 든 칸(표시 없음)은 objective를 무시하고 달성기준만 덮는다", () => {
+    const old: OkrGoal[] = [{ no: 1, pillar: "P", bottleneck: "", objective: "8월 옛 목표", criteria: "주 기준" }];
+    const out = overlayGoals(base, old);
+    expect(out[0].objective).toBe("월 목표 1");
+    expect(out[0].criteria).toBe("주 기준");
+    expect(out[0].html).toBeUndefined();
+    expect(out).toEqual(overlayCriteria(base, old)); // 옛 데이터에서는 옛 함수와 같다
+    expect(overlayGoals(base, undefined)).toBe(base);
+  });
+  it("T6 표시가 있으면 objective를 덮고 표시를 남긴다, 파트 → 개인 사슬", () => {
+    const part = putGoalField(undefined, base[0], "objective", "파트 이번 주 목표");
+    expect(part).toEqual([{ no: 1, pillar: "P", bottleneck: "막힘", objective: "파트 이번 주 목표", criteria: "월 기준 1", html: { objectiveSet: "1" } }]);
+    const partView = overlayGoals(base, part);
+    expect(partView[0]).toMatchObject({ objective: "파트 이번 주 목표", criteria: "월 기준 1", html: { objectiveSet: "1" } });
+    expect(partView[1]).toBe(base[1]);
+    // 개인이 달성기준만 고침 → 새 칸에 표시를 베끼지 않아 파트 목표가 계속 흐른다
+    const person = putGoalField(undefined, partView[0], "criteria", "내 기준");
+    expect(person[0].html).toBeUndefined();
+    const personView = overlayGoals(partView, person);
+    expect(personView[0]).toMatchObject({ objective: "파트 이번 주 목표", criteria: "내 기준", html: { objectiveSet: "1" } });
+    // 개인이 목표를 고치면 그 사람만
+    const person2 = putGoalField(person, personView[0], "objective", "내 목표", "<b>내 목표</b>");
+    const personView2 = overlayGoals(partView, person2);
+    expect(personView2[0]).toMatchObject({ objective: "내 목표", criteria: "내 기준", html: { objective: "<b>내 목표</b>", objectiveSet: "1" } });
+  });
+  it("T6 빈 objective는 목표 덮어쓰기를 지우고, criteria만 고칠 때 같은 칸의 표시를 지킨다", () => {
+    const set = putGoalField(undefined, base[0], "objective", "주 목표", "<i>주 목표</i>");
+    const crit = putGoalField(set, base[0], "criteria", "주 기준");
+    expect(crit[0]).toEqual({ no: 1, pillar: "P", bottleneck: "막힘", objective: "주 목표", criteria: "주 기준", html: { objective: "<i>주 목표</i>", objectiveSet: "1" } });
+    const cleared = putGoalField(crit, base[0], "objective", "  ");
+    expect(cleared[0]).toEqual({ no: 1, pillar: "P", bottleneck: "막힘", objective: "", criteria: "주 기준" });
+    expect(overlayGoals(base, cleared)[0]).toMatchObject({ objective: "월 목표 1", criteria: "주 기준" });
+    expect(putGoalField(undefined, base[0], "objective", "")).toEqual([]); // 칸이 없으면 만들지 않는다
+    expect(putGoalField(undefined, base[1], "criteria", "")[0].criteria).toBe(""); // 빈 달성기준은 남긴다
+  });
+  it("T7 prevGoalsToCarry — 같은 달이면 표시 있는 목표만, 다른 달이면 목표 없음", () => {
+    const prev: OkrGoal[] = [
+      { no: 1, pillar: "P", bottleneck: "", objective: "전주 목표", criteria: "전주 기준", html: { objectiveSet: "1", criteria: "<b>전주 기준</b>" } },
+      { no: 2, pillar: "P", bottleneck: "", objective: "월 목표 2", criteria: "기준 2" },
+    ];
+    const carry = prevGoalsToCarry(prev, true);
+    expect(carry).toHaveLength(1);
+    expect(carry[0]).toMatchObject({ no: 1, objective: "전주 목표", html: { objectiveSet: "1", criteria: "<b>전주 기준</b>" } });
+    expect(overlayGoals(base, carry)[0].objective).toBe("전주 목표");
+    expect(prevGoalsToCarry(prev, false)).toEqual([]);
+  });
+});
+
+describe("2차: 핵심방향 단계·feedback 칸 병합", () => {
+  it("T8 directionSteps — 10월 전사본은 머리글 + 3단계", () => {
+    const d = directionSteps(OCT.direction);
+    expect(d.headline).toBe("10월은 4분기 목표의 담당자·대상·측정 기준을 정하고 실행을 시작한다.");
+    expect(d.steps.map((s) => [s.key, s.label])).toEqual([["week", "주간 실행"], ["month", "월말 확인"], ["quarter", "분기 정리"]]);
+    expect(d.steps[0].text).toBe("주간에는 실행하고");
+    expect(d.steps[1].text).toBe("월말에는 목표 대비 숫자와 미달 원인을 확인하여 11월 전략을 정한다.");
+    expect(d.steps[2].text).toBe("분기 말 지식과 교훈으로 정리할 수 있도록 개선 전 상태와 판단 근거를 남긴다.");
+    expect(d.rest).toEqual([]);
+  });
+  it("T8 단계 낱말이 없으면 steps는 비고 rest에 글", () => {
+    const d = directionSteps("머리 줄\n그냥 하는 일이다\n또 다른 줄");
+    expect(d).toEqual({ headline: "머리 줄", steps: [], rest: ["그냥 하는 일이다", "또 다른 줄"] });
+    expect(directionSteps("")).toEqual({ headline: "", steps: [], rest: [] });
+  });
+  it("T9 mergeFeedback 칸 단위 — 내가 judgment, 서버가 memo를 고치면 둘 다 남는다", () => {
+    const base = { "1": { memo: "옛 메모" }, "2": { memo: "x" } };
+    const local = { "1": { memo: "옛 메모", judgment: "미흡" }, "2": { memo: "x" } };
+    const server = { "1": { memo: "새 메모" }, "2": { memo: "서버 x" } };
+    expect(mergeFeedback(base, local, server)).toEqual({ "1": { memo: "새 메모", judgment: "미흡" }, "2": { memo: "서버 x" } });
+    // 같은 칸을 둘 다 고치면 내 것
+    expect(mergeFeedback(base, { "1": { memo: "내 메모" }, "2": { memo: "x" } }, server)["1"].memo).toBe("내 메모");
+    // 내가 번호를 지우고 서버는 안 고쳤으면 지워진다(예전과 같음), 서버에만 새로 생긴 번호는 남는다
+    expect(mergeFeedback({ "1": { memo: "a" } }, {}, { "1": { memo: "a" }, "3": { memo: "새" } })).toEqual({ "3": { memo: "새" } });
   });
 });

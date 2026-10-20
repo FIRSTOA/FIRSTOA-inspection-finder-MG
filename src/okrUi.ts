@@ -30,6 +30,13 @@ export const TD_EDIT = `${TD_CELL} focus-within:ring-2 focus-within:ring-inset f
 export const TD_WRITE = `${TD_CELL} bg-[#FFFBEB] focus-within:bg-white`;
 export const TD_FIXED = `${TD_CELL} bg-sky-50`; // 고정 목표(전사 공통) — 파트·팀원 화면에서 읽기만, 색으로 구분(2026-09-30 팀장)
 export const TD_FIXED_EDIT = `${TD_FIXED} focus-within:ring-2 focus-within:ring-inset focus-within:ring-sky-400`;
+// 새 구조(분기 → 월 → 주, 2026-10-20) 색 3종 — 팀장 문서 칸(남색) · 파트·파트원이 주차로 쪼개 적는 칸(청록) · 결과 입력(TD_WRITE 노랑).
+// 판정 등급 색(초록·호박·주황·장미·회색)과 겹치지 않게 골랐다. 옛 TD_FIXED(8·9월 화면)는 그대로 둔다.
+export const TD_LEADER = `${TD_CELL} bg-indigo-50`; // 분기·월 병목현상·목표·달성기준(팀장 문서) — 읽기
+export const TD_LEADER_EDIT = `${TD_LEADER} focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-400`; // 같은 칸을 고칠 수 있을 때
+export const TD_SPLIT = `${TD_CELL} bg-teal-50 focus-within:bg-white focus-within:ring-2 focus-within:ring-inset focus-within:ring-teal-400`; // 주차 목표·달성기준(쪼개 적는 칸, 늘 편집)
+export const TH_LEADER = "border border-slate-300 bg-indigo-100 px-2 py-1.5 text-indigo-900";
+export const TH_SPLIT = "border border-slate-300 bg-teal-100 px-2 py-1.5 text-teal-900";
 export const TH_READ = "border border-slate-300 bg-slate-100 px-2 py-1.5 text-slate-600";
 export const TH_WRITE = "border border-slate-300 bg-[#FDECB3] px-2 py-1.5 text-slate-800";
 export const LINK = "text-slate-500 hover:text-slate-900 hover:underline disabled:opacity-40";
