@@ -73,3 +73,17 @@ export function pillarRuns(goals: OkrGoal[]): Array<{ idx: number; goals: OkrGoa
   }
   return out;
 }
+
+// ── 새 구조 머리(2026-10-21 6차) — 흰 카드 안 경로 줄(breadcrumb). 통합집계 › 10월 / 통합집계 › 4분기 / C파트 › 파트 종합 › 10월 /
+//    C파트 › 팀원 집계 › 10월 / C파트 › 이민구 › 10월 3주차 (10/19~23). 옛 화면(8·9월·SQL 전)은 이 줄을 쓰지 않는다.
+const mdOf = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+// "2026-10-19","2026-10-23" → "10/19~23", 달이 바뀌면 "9/28~10/2"
+export const weekRangeShort = (start: string, end: string) => `${mdOf(start)}~${end.slice(5, 7) === start.slice(5, 7) ? Number(end.slice(8, 10)) : mdOf(end)}`;
+export function okrCrumbs(p: { quarterView: boolean; quarter: number; tab: string; member: string; month: number; week?: { weekNo: number; start: string; end: string } | null }): string[] {
+  if (p.quarterView) return ["통합집계", `${p.quarter}분기`];
+  if (p.tab === "all") return ["통합집계", `${p.month}월`];
+  const part = teamName(p.tab);
+  if (!p.member) return [part, "파트 종합", `${p.month}월`];
+  if (p.member === "__sum__") return [part, "팀원 집계", `${p.month}월`];
+  return [part, p.member, p.week ? `${p.month}월 ${p.week.weekNo}주차 (${weekRangeShort(p.week.start, p.week.end)})` : `${p.month}월`];
+}

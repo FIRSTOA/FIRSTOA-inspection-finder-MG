@@ -52,10 +52,11 @@ import {
   type OkrCycle, type OkrJudgment, type OkrGoal, type OkrPasteResult, type OkrReport, type OkrResultRow, type OkrTeam, type RichField,
 } from "./okr";
 import { BottleneckCell, FragmentRows, JudgmentBadge, PillarBar, ResizeHandle } from "./OkrCells";
-import { LINK, TD, TD_EDIT, TD_FIXED, TD_FIXED_EDIT, TD_LEADER, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, clearHtml, goalHtml, pillarRuns, shortBottleneck, showsWeekChips, teamName, useColWidths, withHtml } from "./okrUi";
+import { LINK, TD, TD_EDIT, TD_FIXED, TD_FIXED_EDIT, TD_LEADER, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, clearHtml, goalHtml, okrCrumbs, pillarRuns, shortBottleneck, showsWeekChips, teamName, useColWidths, withHtml } from "./okrUi";
 import OkrQuarterView from "./OkrQuarterView";
 import OkrMonthRollup, { MonthTeamSummary } from "./OkrMonthRollup";
 import OkrPasteModal from "./OkrPasteModal";
+import { AddNamePill, OkrCardTabs, OkrCrumbBar, OkrTopBand, OkrWeekStrip, PeoplePillRow, PersonPill, PillDivider } from "./OkrHeader";
 
 type Tab = "all" | OkrTeam;
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -141,6 +142,9 @@ export default function OkrHub({ author }: { author: string }) {
   const quarterMode = schemaReady === true;
   const isQuarterView = quarterMode && view === "quarter";
   const newMonth = quarterMode && view === "month" && !isLegacyMonthId(monthCycleId(year, month));
+  // 6차(2026-10-21): 새 머리(짙은 띠 = 기간만 + 흰 카드 경로 줄)는 분기 화면·새 달에서만. 옛 달(8·9월)·SQL 전은 옛 머리 그대로
+  const freshHead = isQuarterView || newMonth;
+  const freshInCard = freshHead && !isQuarterView && tab !== "all"; // 새 구조 파트 탭 — 사람 알약·주차 칩·표가 흰 카드 안
   // 마지막으로 서버와 맞춘 값(base) — 저장 때 지금 서버 값과 3자 비교해, 내가 고친 칸만 내 것으로 쓰고 남이 고친 칸은 덮어쓰지 않는다
   const cycleBaseRef = useRef<Record<string, OkrCycle>>({});
   const reportBaseRef = useRef<Record<string, OkrReport>>({});
@@ -818,17 +822,11 @@ export default function OkrHub({ author }: { author: string }) {
     const boxWeek = weekCycleId(year, month, weekNo ?? defaultWeekOf(year, month));
     const goals = personGoalsOf(team, member);
     const level = weekNo === null ? "month" as const : "week" as const;
-    const weekChips = !showsWeekChips(member) ? null : <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-[#1E252F] px-3 py-1.5">
-      <span className="mr-1 text-[11px] font-black text-slate-300">{member}</span>
-      {weeksOfMonth(year, month).map((w) => {
-        const isNow = thisWeek.year === year && thisWeek.month === month && thisWeek.weekNo === w.weekNo;
-        const filled = monthWeekRows.some((r) => r.cycle_id === w.id && r.team === team && (r.member || "") === member && hasResultRows(r.rows));
-        return <button key={w.id} type="button" title={`${w.start} ~ ${w.end}${isNow ? " · 이번 주" : ""}`} onClick={() => openCycle(year, month, w.weekNo)} className={chip(weekNo === w.weekNo, isNow)}>
-          {w.label}{isNow && <span className={`ml-1 text-[9px] font-black ${weekNo === w.weekNo ? "text-emerald-600" : "text-emerald-400"}`}>이번주</span>}
-          {filled && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 align-middle" />}
-        </button>;
-      })}
-    </div>;
+    // 6차(2026-10-21): 고른 사람 바로 아래 연한 줄(OkrHeader 의 OkrWeekStrip) — 사람 이름은 경로 줄에 있으므로 칩 줄엔 없다
+    const weekChips = !showsWeekChips(member) ? null : <OkrWeekStrip onPick={(w) => openCycle(year, month, w)} weeks={weeksOfMonth(year, month).map((w) => ({
+      ...w, on: weekNo === w.weekNo, now: thisWeek.year === year && thisWeek.month === month && thisWeek.weekNo === w.weekNo,
+      filled: monthWeekRows.some((r) => r.cycle_id === w.id && r.team === team && (r.member || "") === member && hasResultRows(r.rows)),
+    }))} />;
     return {
       level,
       nextMonth: month >= 12 ? 1 : month + 1,
@@ -853,68 +851,9 @@ export default function OkrHub({ author }: { author: string }) {
 
   if (!author) return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-sm font-semibold text-amber-800">FIELD에서 작성자를 먼저 선택해 주세요.</div>;
 
-  return <div className="space-y-4 pb-16">
-    {(!cycle || tableMissing) && !loading && <div className="rounded-xl bg-[#1E252F] px-5 py-4 text-sm font-black text-white">OKR · {year}년 {month}월</div>}
-    {tableMissing && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><b>OKR 표가 아직 없습니다.</b> Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>(표 만들기)을 한 번 실행한 뒤 이 화면을 다시 열어 주세요.</div>}
-    {needsUpgrade && !tableMissing && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><b>OKR 표를 한 번 더 올려야 합니다.</b> 팀원별 기록 칸(member)이 없는 예전 표라 저장이 안 됩니다. Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>을 다시 실행하면(기존 내용은 그대로) 바로 됩니다.</div>}
-    {schemaReady === false && !needsUpgrade && !tableMissing && <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-900">OKR 표 업데이트 대기(관리자에게 요청)</div>}
-    {message && !tableMissing && <div className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white">{message}</div>}
-
-    {cycle && goalCycle && !tableMissing && <>
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="bg-[#1E252F] px-5 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <h2 className="text-lg font-black tracking-tight text-white lg:text-xl">{cycle.title || defaultCycleTitle(cycle)}</h2>
-              {isDraft && <p className="mt-1 text-[11px] font-semibold text-slate-400">{draftNote}</p>}
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-300">
-              {quarterMode ? <>
-                <PortalSelect tone="dark" width={100} value={String(year)} onChange={(v) => goQuarter(Number(v), selQuarter)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
-                <PortalSelect tone="dark" width={96} value={String(selQuarter)} onChange={(v) => goQuarter(year, Number(v))} options={[1, 2, 3, 4].map((q) => ({ value: String(q), label: `${q}분기` }))} />
-                <div className="flex items-center gap-0.5 rounded-lg border border-white/15 bg-white/10 p-0.5">
-                  {filterItemsForTab(filterItems, tab).map((it) => { // 파트 탭엔 [n분기] 없음(3차)
-                    const on = it.kind === "quarter" ? view === "quarter" : view === "month" && month === it.month;
-                    const isNow = it.kind === "month" && thisWeek.year === it.year && thisWeek.month === it.month;
-                    return <button key={it.id} type="button" title={it.legacy ? "옛 구조(월 종합 + 주차)" : undefined} onClick={() => (it.kind === "quarter" ? openQuarter(it.year, selQuarter) : it.legacy ? openMonthDefault(it.year, it.month) : openMonthView(it.year, it.month))} className={chip(on, isNow)}>{it.label}</button>;
-                  })}
-                </div>
-              </> : <>
-                <PortalSelect tone="dark" width={110} value={String(year)} onChange={(v) => openMonthDefault(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
-                <MonthPicker value={month} current={thisWeek.year === year ? thisWeek.month : undefined} onChange={(m) => openMonthDefault(year, m)} />
-              </>}
-              {(!quarterMode || (view === "month" && !newMonth)) && <div className="flex items-center gap-0.5 rounded-lg border border-white/15 bg-white/10 p-0.5">
-                {showMonthTab && <button type="button" title="주차로 나누기 전 달 단위로 적은 옛 기록" onClick={() => openCycle(year, month, null)} className={`rounded-md px-2.5 py-1 text-[12px] font-bold transition ${!weekNo ? "bg-white text-slate-950" : "text-slate-300 hover:text-white"}`}>월 종합</button>}
-                {weeks.map((w) => {
-                  const isNow = thisWeek.year === year && thisWeek.month === month && thisWeek.weekNo === w.weekNo;
-                  const edge = w.start.slice(0, 7) !== `${year}-${pad(month)}` ? " · 지난달 말부터 이어지는 주" : w.end.slice(0, 7) !== `${year}-${pad(month)}` ? " · 다음달 초까지 이어지는 주" : "";
-                  return <button key={w.weekNo} type="button" title={`${w.start} ~ ${w.end}${isNow ? " · 이번 주" : ""}${edge}`} onClick={() => openCycle(year, month, w.weekNo)} className={`relative rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${weekNo === w.weekNo ? "bg-white text-slate-950" : isNow ? "text-white ring-1 ring-inset ring-emerald-400" : "text-slate-300 hover:text-white"}`}>
-                    {w.weekNo}주{isNow && <span className={`ml-1 text-[9px] font-black ${weekNo === w.weekNo ? "text-emerald-600" : "text-emerald-400"}`}>이번주</span>}
-                  </button>;
-                })}
-              </div>}
-              <span className="rounded-full bg-white/10 px-3 py-1.5 tabular-nums">{cycle.start_date} ~ {cycle.end_date}</span>
-              {saveStatus === "saving" && <span className="text-slate-400">저장 중…</span>}
-              {saveStatus === "error" && <span className="text-rose-300">저장 실패</span>}
-              {saveStatus !== "saving" && syncedAt && <span className="text-[11px] font-semibold text-slate-500" title="15초마다, 창을 다시 볼 때 다른 사람이 적은 내용을 가져옵니다">동기화 {syncedAt}</span>}            </div>
-          </div>
-        </div>
-        <div className="flex gap-1 overflow-x-auto px-3 pt-2">
-          {tabs.map(([key, label]) => {
-            const rep = key === "all" || isQuarterView ? undefined : findReport(reports, key, ""); // 분기 화면엔 파트 기록이 없다 — 숫자를 그리지 않는다
-            const goals = key === "all" ? commonGoals : teamGoalsOf(key);
-            const rows = rep ? goals.map((g) => resultRowFor(rep, g.no)) : [];
-            const judged = rows.filter((x) => normalizeJudgment(x.judgment)).length;
-            const alerts = rows.filter((x) => isAlert(x.judgment)).length;
-            return <button key={key} type="button" onClick={() => (newMonth || isQuarterView ? openTeamFresh(key) : openTeam(key))} className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-black transition ${tab === key ? "border-slate-900 text-slate-950" : "border-transparent text-slate-400 hover:text-slate-700"}`}>
-              {label}{key !== "all" && !isQuarterView && goals.length > 0 && <span className="text-[11px] font-bold tabular-nums text-slate-400">{judged}/{goals.length}</span>}
-              {alerts > 0 && <span className="text-[11px] font-bold text-rose-600">미흡 {alerts}</span>}
-            </button>;
-          })}
-        </div>
-      </section>
-
-      {loading ? <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">불러오는 중…</div>
+  // 본문(분기 표 · 통합집계 · 파트 탭) — 6차: 새 구조 파트 탭이면 흰 카드 안(inCard)에, 그 밖엔 카드 아래에 그대로
+  const renderBody = (cycle: OkrCycle, goalCycle: OkrCycle, inCard: boolean) =>
+    (loading ? <div className={inCard ? "border-t border-slate-200 p-12 text-center text-sm font-bold text-slate-400" : "rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400"}>불러오는 중…</div>
         : isQuarterView
           ? legacyQuarter ? <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm font-bold text-slate-400">분기 OKR 없음(옛 구조) — 위에서 달을 고르세요</div>
             : <OkrQuarterView quarter={cycle} rollup={quarterRollupNow} prevQuarter={prevQuarterSrc} onGoal={goalOps.onGoal} onPaste={() => setPasteOpen(true)} onRestore={() => void restoreGoals()} onCopyPrev={() => void copyPrevQuarter()} onTemplate={() => updateGoalCycle({ goals: blankGoalsLike([]) })}
@@ -933,7 +872,95 @@ export default function OkrHub({ author }: { author: string }) {
                 onResult={(no, patch) => updateResult(tab, member, no, patch)}
                 onMerge={(no) => void mergeMembers(tab, no)} onAiMerge={(no) => void aiMerge(tab, no)} onAiFormat={(no) => void aiFormat(tab, member, no)}
                 onTeamFeedback={(no, memo, memoHtml) => setTeamFeedback(tab, no, memo, memoHtml)} onAiTeamFeedback={(no) => void aiTeamFeedback(tab, no)}
-                onCriteria={(no, text, html) => setCriteria(tab, member, no, text, html)} onLoadPrev={() => void loadPrevCriteria(tab, member)} onLoadPrevResults={() => void loadPrevResults(tab, member)} prevLabel={prevCycleLabel} />}
+                onCriteria={(no, text, html) => setCriteria(tab, member, no, text, html)} onLoadPrev={() => void loadPrevCriteria(tab, member)} onLoadPrevResults={() => void loadPrevResults(tab, member)} prevLabel={prevCycleLabel} />);
+
+  return <div className="space-y-4 pb-16">
+    {(!cycle || tableMissing) && !loading && <div className="rounded-xl bg-[#1E252F] px-5 py-4 text-sm font-black text-white">OKR · {year}년 {month}월</div>}
+    {tableMissing && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"><b>OKR 표가 아직 없습니다.</b> Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>(표 만들기)을 한 번 실행한 뒤 이 화면을 다시 열어 주세요.</div>}
+    {needsUpgrade && !tableMissing && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><b>OKR 표를 한 번 더 올려야 합니다.</b> 팀원별 기록 칸(member)이 없는 예전 표라 저장이 안 됩니다. Supabase SQL Editor에서 <code className="rounded bg-white px-1">supabase/okr.sql</code>을 다시 실행하면(기존 내용은 그대로) 바로 됩니다.</div>}
+    {schemaReady === false && !needsUpgrade && !tableMissing && <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-900">OKR 표 업데이트 대기(관리자에게 요청)</div>}
+    {message && !tableMissing && <div className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white">{message}</div>}
+
+    {cycle && goalCycle && !tableMissing && <>
+      {freshHead ? <>
+        {/* 6차(2026-10-21): 짙은 띠 = 기간만, 흰 카드 = 탭 → 경로 줄 → (파트 탭) 사람 알약·주차 칩·표 */}
+        <OkrTopBand years={years} year={year} quarter={selQuarter} onYear={(y) => goQuarter(y, selQuarter)} onQuarter={(q) => goQuarter(year, q)}
+          chips={filterItemsForTab(filterItems, tab).map((it) => ({
+            id: it.id, label: it.label, title: it.legacy ? "옛 구조(월 종합 + 주차)" : undefined,
+            on: it.kind === "quarter" ? view === "quarter" : view === "month" && month === it.month,
+            now: it.kind === "month" && thisWeek.year === it.year && thisWeek.month === it.month,
+            onClick: () => (it.kind === "quarter" ? openQuarter(it.year, selQuarter) : it.legacy ? openMonthDefault(it.year, it.month) : openMonthView(it.year, it.month)),
+          }))} />
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <OkrCardTabs tabs={tabs.map(([key, label]) => {
+            const rep = key === "all" || isQuarterView ? undefined : findReport(reports, key, "");
+            const goals = key === "all" ? commonGoals : teamGoalsOf(key);
+            const rows = rep ? goals.map((g) => resultRowFor(rep, g.no)) : [];
+            return { key, label, on: tab === key, onClick: () => openTeamFresh(key),
+              count: key !== "all" && !isQuarterView && goals.length > 0 ? `${rows.filter((x) => normalizeJudgment(x.judgment)).length}/${goals.length}` : undefined,
+              alerts: rows.filter((x) => isAlert(x.judgment)).length };
+          })} />
+          <OkrCrumbBar crumbs={okrCrumbs({ quarterView: isQuarterView, quarter: selQuarter, tab, member, month, week: weekNo !== null ? weeksOfMonth(year, month).find((w) => w.weekNo === weekNo) : null })}
+            saveStatus={saveStatus} syncedAt={syncedAt} draftNote={isDraft ? draftNote : undefined} />
+          {freshInCard && renderBody(cycle, goalCycle, true)}
+        </section>
+        {!freshInCard && renderBody(cycle, goalCycle, false)}
+      </> : <>
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="bg-[#1E252F] px-5 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-lg font-black tracking-tight text-white lg:text-xl">{cycle.title || defaultCycleTitle(cycle)}</h2>
+                {isDraft && <p className="mt-1 text-[11px] font-semibold text-slate-400">{draftNote}</p>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-300">
+                {quarterMode ? <>
+                  <PortalSelect tone="dark" width={100} value={String(year)} onChange={(v) => goQuarter(Number(v), selQuarter)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
+                  <PortalSelect tone="dark" width={96} value={String(selQuarter)} onChange={(v) => goQuarter(year, Number(v))} options={[1, 2, 3, 4].map((q) => ({ value: String(q), label: `${q}분기` }))} />
+                  <div className="flex items-center gap-0.5 rounded-lg border border-white/15 bg-white/10 p-0.5">
+                    {filterItemsForTab(filterItems, tab).map((it) => { // 파트 탭엔 [n분기] 없음(3차)
+                      const on = it.kind === "quarter" ? view === "quarter" : view === "month" && month === it.month;
+                      const isNow = it.kind === "month" && thisWeek.year === it.year && thisWeek.month === it.month;
+                      return <button key={it.id} type="button" title={it.legacy ? "옛 구조(월 종합 + 주차)" : undefined} onClick={() => (it.kind === "quarter" ? openQuarter(it.year, selQuarter) : it.legacy ? openMonthDefault(it.year, it.month) : openMonthView(it.year, it.month))} className={chip(on, isNow)}>{it.label}</button>;
+                    })}
+                  </div>
+                </> : <>
+                  <PortalSelect tone="dark" width={110} value={String(year)} onChange={(v) => openMonthDefault(Number(v), month)} options={years.map((y) => ({ value: String(y), label: `${y}년` }))} />
+                  <MonthPicker value={month} current={thisWeek.year === year ? thisWeek.month : undefined} onChange={(m) => openMonthDefault(year, m)} />
+                </>}
+                {(!quarterMode || (view === "month" && !newMonth)) && <div className="flex items-center gap-0.5 rounded-lg border border-white/15 bg-white/10 p-0.5">
+                  {showMonthTab && <button type="button" title="주차로 나누기 전 달 단위로 적은 옛 기록" onClick={() => openCycle(year, month, null)} className={`rounded-md px-2.5 py-1 text-[12px] font-bold transition ${!weekNo ? "bg-white text-slate-950" : "text-slate-300 hover:text-white"}`}>월 종합</button>}
+                  {weeks.map((w) => {
+                    const isNow = thisWeek.year === year && thisWeek.month === month && thisWeek.weekNo === w.weekNo;
+                    const edge = w.start.slice(0, 7) !== `${year}-${pad(month)}` ? " · 지난달 말부터 이어지는 주" : w.end.slice(0, 7) !== `${year}-${pad(month)}` ? " · 다음달 초까지 이어지는 주" : "";
+                    return <button key={w.weekNo} type="button" title={`${w.start} ~ ${w.end}${isNow ? " · 이번 주" : ""}${edge}`} onClick={() => openCycle(year, month, w.weekNo)} className={`relative rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${weekNo === w.weekNo ? "bg-white text-slate-950" : isNow ? "text-white ring-1 ring-inset ring-emerald-400" : "text-slate-300 hover:text-white"}`}>
+                      {w.weekNo}주{isNow && <span className={`ml-1 text-[9px] font-black ${weekNo === w.weekNo ? "text-emerald-600" : "text-emerald-400"}`}>이번주</span>}
+                    </button>;
+                  })}
+                </div>}
+                <span className="rounded-full bg-white/10 px-3 py-1.5 tabular-nums">{cycle.start_date} ~ {cycle.end_date}</span>
+                {saveStatus === "saving" && <span className="text-slate-400">저장 중…</span>}
+                {saveStatus === "error" && <span className="text-rose-300">저장 실패</span>}
+                {saveStatus !== "saving" && syncedAt && <span className="text-[11px] font-semibold text-slate-500" title="15초마다, 창을 다시 볼 때 다른 사람이 적은 내용을 가져옵니다">동기화 {syncedAt}</span>}            </div>
+            </div>
+          </div>
+          <div className="flex gap-1 overflow-x-auto px-3 pt-2">
+            {tabs.map(([key, label]) => {
+              const rep = key === "all" || isQuarterView ? undefined : findReport(reports, key, ""); // 분기 화면엔 파트 기록이 없다 — 숫자를 그리지 않는다
+              const goals = key === "all" ? commonGoals : teamGoalsOf(key);
+              const rows = rep ? goals.map((g) => resultRowFor(rep, g.no)) : [];
+              const judged = rows.filter((x) => normalizeJudgment(x.judgment)).length;
+              const alerts = rows.filter((x) => isAlert(x.judgment)).length;
+              return <button key={key} type="button" onClick={() => (newMonth || isQuarterView ? openTeamFresh(key) : openTeam(key))} className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-black transition ${tab === key ? "border-slate-900 text-slate-950" : "border-transparent text-slate-400 hover:text-slate-700"}`}>
+                {label}{key !== "all" && !isQuarterView && goals.length > 0 && <span className="text-[11px] font-bold tabular-nums text-slate-400">{judged}/{goals.length}</span>}
+                {alerts > 0 && <span className="text-[11px] font-bold text-rose-600">미흡 {alerts}</span>}
+              </button>;
+            })}
+          </div>
+        </section>
+
+      {renderBody(cycle, goalCycle, false)}
+      </>}
       {pasteOpen && <OkrPasteModal title={isQuarterView ? `팀장 ${selQuarter}분기 OKR 붙여넣기` : `팀장 ${month}월 OKR 붙여넣기`} current={pasteBase} onApply={applyPaste} onClose={() => setPasteOpen(false)} />}
     </>}
   </div>;
@@ -1008,7 +1035,16 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
   const col = useColWidths(fresh ? "okr_cols_team_v2" : "okr_cols_team", cols.map(([, w]) => w));
   const rich = (row: OkrResultRow, field: RichField, no: number, placeholder: string, extra = "") => <RichCell text={row[field]} html={row.html?.[field]} placeholder={placeholder} className={extra} minRows={3} onChange={(t, h) => onResult(no, { [field]: t, html: withHtml(row, field, h) })} />;
 
-  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+  // 6차(2026-10-21): 새 구조(fresh)는 OkrHub 흰 카드 안에 들어간다 — 겉 카드 테두리 없이, 사람 박스 대신 알약 줄. 옛 화면은 아래 그대로
+  return <section className={fresh ? undefined : "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"}>
+    {fresh ? <PeoplePillRow>
+      <PersonPill label="팀원 집계" badge={`${members.length}명`} selected={member === "__sum__"} onClick={() => onMember("__sum__")} />
+      <PersonPill label="파트 종합" rows={rowsOf(partReport)} total={goals.length} selected={!member} onClick={() => onMember("")} />
+      <PillDivider />
+      {memberNames.map((name) => <PersonPill key={name} label={name} mine={name === author} rows={fresh.boxRowsOf ? fresh.boxRowsOf(name) : rowsOf(findReport(reports, team, name))} total={goals.length} selected={member === name} onClick={() => onMember(name)} onRemove={() => onRemoveMember(name)} />)}
+      <AddNamePill onClick={addOtherName} />
+      {!memberNames.length && <span className="text-[11px] font-semibold text-slate-400">관리 › 인원 명단에 {teamName(team)} 인원을 넣으면 이름이 생깁니다</span>}
+    </PeoplePillRow> : <>
     {/* 사람 박스 */}
     <div className="flex flex-wrap items-stretch gap-2 border-b border-slate-200 bg-slate-50 p-3">
       <div role="button" tabIndex={0} onClick={() => onMember("__sum__")} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onMember("__sum__"); } }} className={`w-[136px] shrink-0 cursor-pointer rounded-lg border p-2.5 text-left transition ${member === "__sum__" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-800 hover:border-slate-400"}`}>
@@ -1018,10 +1054,11 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
       </div>
       <PersonBox label="파트 종합" sub="통합집계에 반영" rows={rowsOf(partReport)} total={goals.length} selected={!member} onClick={() => onMember("")} />
       <span className="mx-0.5 hidden w-px self-stretch bg-slate-200 sm:block" />
-      {memberNames.map((name) => <PersonBox key={name} label={name} sub={name === author ? "나" : ""} rows={fresh?.boxRowsOf ? fresh.boxRowsOf(name) : rowsOf(findReport(reports, team, name))} total={goals.length} selected={member === name} onClick={() => onMember(name)} onRemove={() => onRemoveMember(name)} />)}
+      {memberNames.map((name) => <PersonBox key={name} label={name} sub={name === author ? "나" : ""} rows={rowsOf(findReport(reports, team, name))} total={goals.length} selected={member === name} onClick={() => onMember(name)} onRemove={() => onRemoveMember(name)} />)}
       <button type="button" onClick={addOtherName} className="w-[64px] shrink-0 rounded-lg border border-dashed border-slate-300 text-[11px] font-bold text-slate-400 hover:bg-white">＋ 이름</button>
       {!memberNames.length && <div className="self-center text-[11px] font-semibold text-slate-400">관리 › 인원 명단에 {teamName(team)} 인원을 넣으면 이름 박스가 생깁니다</div>}
     </div>
+    </>}
     {fresh?.weekChips}
     {member === "__sum__" ? fresh ? fresh.summary : <TeamSummary team={team} goals={goals} names={memberNames} reports={reports} partReport={partReport} onMember={onMember} aiBusy={aiBusy} onFeedback={onTeamFeedback} onAiFeedback={onAiTeamFeedback} /> : <>
     {/* 달성기준 안내 + 전주 불러오기(2026-10-01) — 목표는 통합집계 하나, 달성기준은 이 주차 파트 종합 것이 팀원에게 기본으로 보이고 팀원이 고친 건 본인 칸에만 */}
@@ -1041,7 +1078,7 @@ export function TeamView({ fresh, team, cycle, goals, reports, member, onMember,
     </div>}
 
     <div className="overflow-x-auto">
-      <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+      <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={fresh ? { width: "100%", minWidth: col.total } : { width: col.total, minWidth: col.total }}>
         <colgroup>{cols.map(([label], i) => <col key={label} style={{ width: col.widths[i] }} />)}</colgroup>
         <thead className="sticky top-0 z-10 text-[11px] font-bold">
           <tr>{cols.map(([label, , mode], i) => <th key={label} className={`relative ${TH_OF[mode]}`}>{label}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr>

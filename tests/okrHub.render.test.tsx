@@ -10,6 +10,8 @@ import { blankGoalsLike, emptyReport, monthDraftFromQuarter, quarterRollup, week
 import * as QuarterViewModule from "../src/OkrQuarterView";
 import OkrMonthRollup, { MonthTeamSummary } from "../src/OkrMonthRollup";
 import { TeamView } from "../src/OkrHub";
+import { OkrCrumbBar, OkrTopBand, OkrWeekStrip } from "../src/OkrHeader";
+import { okrCrumbs, weekRangeShort } from "../src/okrUi";
 const OkrQuarterView = QuarterViewModule.default;
 
 type Doc = { id: string; direction: string; goals: OkrGoal[] };
@@ -37,7 +39,7 @@ beforeAll(() => { vi.stubGlobal("fetch", vi.fn(async () => new Response("[]", { 
 afterAll(() => { vi.unstubAllGlobals(); });
 
 describe("OKR 분기 → 월 → 주 화면 렌더", () => {
-  it("[4분기] 탭: 표 하나(병목현상·목표·달성기준 + 10·11·12월 CS 종합 + 4분기 종합) + 붙여넣기 단추, 옛 '분기 진행' 표 없음", () => {
+  it("[4분기] 탭: 표 하나(병목현상·목표·달성기준 + 10·11·12월 CS 종합 + 4분기 종합), 옛 '분기 진행' 표 없음", () => {
     const rollup = quarterRollup(quarter, [october], { "2026-10": [partA] }, { "2026-10": weekRows });
     const partAled: OkrReport = { ...partA, header: { ...partA.header, leader: "박파트" } };
     const html = render(createElement(OkrQuarterView, { quarter: { ...quarter, direction: "4분기는 기준을 세운다.\n주간: 실행\n월말: 확인\n분기: 정리" }, rollup, prevQuarter: null, onGoal: noop, onPaste: noop, onRestore: noop, onCopyPrev: noop, onTemplate: noop, onQuarterJudgment: noop, onPickMonth: noop,
@@ -47,9 +49,9 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     for (const step of ["주간 실행", "월말 확인", "분기 정리"]) expect(html).toContain(step);
     expect(html).toContain("파트장 박파트");
     expect(html).toContain("파트장 미기재");
-    expect(html).toContain(`판정 1/${quarter.goals.length}`);
+    expect(html).toContain(`판정 1/${quarter.goals.length * 3}`); // 분기 카드 = 3달 합계(전체 = 목표 × 3)
     expect(html).toContain("미흡·미착수 1");
-    expect(html).toContain("팀장 분기 OKR 붙여넣기");
+    expect(html).not.toContain("OKR 붙여넣기"); // 6차: 붙여넣기 단추 없음
     expect(html).toContain("달성기준(실행)");
     expect(html).toContain("병목현상");
     // 목표 글은 RichCell 칸(effect에서 그림)이라 서버 렌더에 안 나온다 — 열 머리·칸 색으로 확인
@@ -88,7 +90,7 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(html).not.toContain("팀장 문서"); // 3차: 범례 없음
     expect(html).not.toContain("확정 판정");
     expect(html).toContain("10월 결과 및 11월 개선계획");
-    expect(html).toContain("팀장 10월 OKR 붙여넣기");
+    expect(html).not.toContain("OKR 붙여넣기"); // 6차: 붙여넣기·가져오기 단추 없음
     expect(html).toContain("A파트");
     expect(html).toContain("김정민"); // 그 달 주차 기록에서 미착수인 사람
     expect(html).not.toContain("OKR 대기");
@@ -100,7 +102,8 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
       onDirection: noop, onFeedback: noop, onPaste: noop, onStartFromQuarter: noop, onCopyGoals: noop, onRestore: noop, onTemplate: noop, ops: { onGoal: noop, onPillar: noop, onInsert: noop, onRemove: noop },
       onCsJudgment: noop, onPickTeam: noop,
     }));
-    expect(waiting).toContain("11월 OKR이 아직 없습니다 — [📋 팀장 11월 OKR 붙여넣기] 또는 [분기 OKR로 시작]"); // 5차 문구
+    expect(waiting).toContain("11월 OKR이 아직 없습니다"); // 6차: 붙여넣기·분기로 시작 단추 안내 없음
+    expect(waiting).not.toContain("분기 OKR로 시작");
     expect(waiting).not.toContain("OKR을 보여줍니다");
     expect(waiting).not.toContain(bottleneckSnippet(quarter.goals[0])); // 분기 글이 보이지 않는다
     expect(waiting).not.toContain("팀장 11월 OKR 대기");
@@ -143,6 +146,15 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(week).toMatch(/>달성기준<span/);
     expect(week).toMatch(/>개선계획<span/); // "(n월 전략)"은 파트 종합에서만
     expect(week).toContain(weeks[0].label); // 파트원을 고르면 주차 칩
+    // 6차: 새 구조는 사람 박스 대신 알약(rounded-full), 주차 칩은 짙은 띠가 아닌 연한 줄
+    expect(html).toContain("rounded-full px-3 py-1 text-[12px] font-black transition bg-slate-100");
+    expect(html).not.toContain("w-[128px]");
+    const strip = render(createElement(OkrWeekStrip, { onPick: noop, weeks: weeks.map((w) => ({ ...w, on: w.weekNo === 3, now: w.weekNo === 3, filled: w.weekNo === 1 })) }));
+    expect(strip).not.toContain("bg-[#1E252F]"); // 짙은 띠 아님
+    expect(strip).toContain("bg-slate-50");
+    expect(strip).toContain(weeks[2].label);
+    expect(strip).toContain("이번주");
+    expect(strip).toContain("bg-emerald-500"); // 기록 점
     expect(week).toContain("focus-within:ring-indigo-400");
     expect(week).not.toContain("bg-teal-50");
     expect(week).not.toContain("불러오기");
@@ -151,6 +163,8 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(week).not.toContain("월: ");
 
     const legacy = render(createElement(TeamView, base));
+    expect(legacy).toContain("w-[128px]"); // 6차: 옛 화면은 PersonBox 그대로
+    expect(legacy).toContain("rounded-xl border border-slate-200 bg-white shadow-sm");
     expect(legacy).toMatch(/>병목<span/);
     expect(legacy).not.toContain("병목현상");
     expect(legacy).not.toContain("주차 합치기");
@@ -172,6 +186,38 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(html).not.toMatch(/>병목 1</); // 3차: 첫 번호 열 삭제
     expect(html).not.toContain("확정 판정");
     expect(html).toMatch(/<th[^>]*>병목현상<span/); // 첫 머리가 병목현상
+  });
+});
+
+describe("OKR 6차 머리(짙은 띠 = 기간만, 흰 카드 경로 줄)", () => {
+  it("짙은 띠: 제목 'CS팀 OKR'·월 칩만, 큰 제목·기간 알약·동기화 없음", () => {
+    const chips = [{ id: "2026-Q4", label: "4분기", on: false, now: false, onClick: noop }, ...[10, 11, 12].map((m) => ({ id: `2026-${m}`, label: `${m}월`, on: m === 10, now: m === 10, onClick: noop }))];
+    const html = render(createElement(OkrTopBand, { years: [2026, 2025], year: 2026, quarter: 4, chips, onYear: noop, onQuarter: noop }));
+    expect(html).toContain("CS팀 OKR");
+    for (const m of ["4분기", "10월", "11월", "12월"]) expect(html).toContain(`>${m}</button>`);
+    expect(html).not.toContain("실행결과");
+    expect(html).not.toContain("2026-10-19 ~ 2026-10-23");
+    expect(html).not.toContain("동기화");
+  });
+  it("경로 줄: 마지막 조각 굵게 + 오른쪽 동기화 시각 · 저장 실패", () => {
+    const crumbs = okrCrumbs({ quarterView: false, quarter: 4, tab: "C", member: "이민구", month: 10, week: { weekNo: 3, start: "2026-10-19", end: "2026-10-23" } });
+    const html = render(createElement(OkrCrumbBar, { crumbs, saveStatus: "saved", syncedAt: "01:15" }));
+    expect(html).toContain("C파트");
+    expect(html).toContain("이민구");
+    expect(html).toContain("10월 3주차 (10/19~23)");
+    expect(html).toContain("동기화 01:15");
+    expect(html).toContain("truncate");
+    expect(render(createElement(OkrCrumbBar, { crumbs, saveStatus: "error", syncedAt: "01:15" }))).toContain("저장 실패");
+  });
+  it("okrCrumbs: 통합집계·분기·파트 종합·팀원 집계·파트원 주차", () => {
+    const base = { quarterView: false, quarter: 4, month: 10 };
+    expect(okrCrumbs({ ...base, tab: "all", member: "" })).toEqual(["통합집계", "10월"]);
+    expect(okrCrumbs({ ...base, quarterView: true, tab: "all", member: "" })).toEqual(["통합집계", "4분기"]);
+    expect(okrCrumbs({ ...base, tab: "C", member: "" })).toEqual(["C파트", "파트 종합", "10월"]);
+    expect(okrCrumbs({ ...base, tab: "C", member: "__sum__" })).toEqual(["C파트", "팀원 집계", "10월"]);
+    expect(okrCrumbs({ ...base, tab: "C", member: "이민구", week: { weekNo: 3, start: "2026-10-19", end: "2026-10-23" } })).toEqual(["C파트", "이민구", "10월 3주차 (10/19~23)"]);
+    expect(okrCrumbs({ ...base, tab: "C", member: "이민구", week: null })).toEqual(["C파트", "이민구", "10월"]);
+    expect(weekRangeShort("2026-09-28", "2026-10-02")).toBe("9/28~10/2");
   });
 });
 

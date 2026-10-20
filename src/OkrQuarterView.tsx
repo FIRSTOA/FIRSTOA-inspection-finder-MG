@@ -44,7 +44,7 @@ function quarterMonths(quarter: OkrCycle | null | undefined, rollup: OkrQuarterR
   return { q, months: monthsOfQuarter(year, q).map((x) => ({ id: x.id, month: x.month, actionTeams: rollup.months.find((m) => m.id === x.id)?.actionTeams || 0 })) };
 }
 
-export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, onPaste, onRestore, onCopyPrev, onTemplate, onQuarterJudgment, onPickMonth, onOpenMonth, onPick, onFeedback, onDirection, monthReports, onPickTeam }: {
+export default function OkrQuarterView({ quarter, rollup, onGoal, onTemplate, onQuarterJudgment, onPickMonth, onOpenMonth, onPick, onFeedback, onDirection, monthReports, onPickTeam }: {
   quarter: OkrCycle; rollup: OkrQuarterRollup; prevQuarter: OkrCycle | null;
   onGoal: (no: number, patch: Partial<OkrGoal>) => void; onPaste: () => void; onRestore: () => void; onCopyPrev: () => void; onTemplate: () => void;
   onQuarterJudgment?: (no: number, judgment: string) => void;
@@ -78,15 +78,11 @@ export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, o
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
         <span className="text-[12px] font-black text-slate-700">{quarter.title || "분기 OKR"}</span>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button type="button" onClick={onPaste} className={BTN}>📋 팀장 분기 OKR 붙여넣기</button>
-          {prevQuarter && <button type="button" onClick={onCopyPrev} className={BTN}>↩ 지난 분기에서 가져오기</button>}
-          {quarter.goals_prev?.length ? <button type="button" onClick={onRestore} className={BTN}>직전 목표로 되돌리기</button> : null}
-          {!goals.length && <button type="button" onClick={onTemplate} className={BTN}>3 × 3 빈 틀</button>}
-        </div>
+        {/* 붙여넣기·지난 분기 가져오기·되돌리기 단추는 2026-10-21 사용자 지시로 뺐다(props 유지). 목표가 없을 때만 [3 × 3 빈 틀]. */}
+        {!goals.length && <button type="button" onClick={onTemplate} className={BTN}>3 × 3 빈 틀</button>}
       </div>
       <div className="overflow-x-auto">
-        <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+        <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: "100%", minWidth: col.total }}>
           <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
           <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => {
             const mon = i >= MON0 && i < MON0 + months.length ? months[i - MON0] : null;
@@ -120,7 +116,7 @@ export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, o
                 </tr>;
               })}
             </FragmentRows>)}
-            {!goals.length && <tr><td colSpan={heads.length} className="border border-slate-200 p-8 text-center text-sm font-bold text-slate-400">분기 OKR이 없습니다 — [팀장 분기 OKR 붙여넣기] 또는 [3 × 3 빈 틀]</td></tr>}
+            {!goals.length && <tr><td colSpan={heads.length} className="border border-slate-200 p-8 text-center text-sm font-bold text-slate-400">분기 OKR이 없습니다 — [3 × 3 빈 틀]로 시작하세요</td></tr>}
           </tbody>
         </table>
       </div>

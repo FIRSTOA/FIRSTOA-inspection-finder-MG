@@ -6524,7 +6524,7 @@ export default function App() {
         </div>
       </aside>
 
-      <div className={`mx-auto flex flex-col transition-[margin] duration-200 ${screen === "walkingMap" ? "px-0 pt-0 sm:px-0 sm:pt-0 lg:px-0 lg:pt-0" : "px-3 pt-4 sm:px-6 sm:pt-6"} ${screen !== "field" ? `max-w-[1800px] ${screen === "walkingMap" ? "pb-0 lg:max-w-none lg:px-0" : "pb-16 lg:px-8"} ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}` : `max-w-3xl lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
+      <div className={`mx-auto flex flex-col transition-[margin] duration-200 ${screen === "walkingMap" ? "px-0 pt-0 sm:px-0 sm:pt-0 lg:px-0 lg:pt-0" : "px-3 pt-4 sm:px-6 sm:pt-6"} ${screen !== "field" ? `max-w-[1800px] ${screen === "walkingMap" ? "pb-0 lg:max-w-none lg:px-0" : screen === "okr" ? "pb-16 lg:max-w-none lg:px-4" : "pb-16 lg:px-8"} ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}` : `max-w-3xl lg:max-w-none lg:px-8 ${sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"}`} ${screen === "field" && hasOutput && !previewCollapsed ? "pb-[46vh] lg:pb-8" : screen !== "field" ? "" : "pb-60"}`}>
         {/* 상단 헤더 존 — 필드 화면 배경 띠 */}
         <div className={`${screen === "walkingMap" ? "mx-0 px-0 sm:mx-0 sm:px-0 lg:mx-0 lg:px-0" : "-mx-3 px-3 sm:-mx-6 sm:px-6"} ${screen === "field" ? "-mt-4 mb-5 bg-[#0B0F17] pb-3 pt-5 shadow-sm sm:-mt-6 sm:pt-7 lg:-mx-8 lg:px-8" : ""}`}>
         {/* Header — 브랜딩 */}

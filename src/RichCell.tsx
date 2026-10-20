@@ -135,7 +135,8 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     onBlur={(e) => { if (mode === "selected" && !wrapRef.current?.contains(e.relatedTarget as Node | null)) setMode("idle"); }}
     data-selected={mode === "selected" ? "" : undefined} // 선택 테두리는 index.css가 칸(td) 전체에 그린다 — 안쪽 상자에 그리면 글 높이만큼만 보였다
     className="relative cursor-cell outline-none" style={{ minHeight }}>
-    {mode !== "idle" && colors && <div className="absolute right-1 top-1 z-10 flex gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
+    {/* 색 단추는 칸 글 흐름 밖(칸 위 테두리에 걸치는 작은 띠)에 띄운다 — 예전처럼 칸 안 오른쪽 위에 두고 pr-16 을 주면 글이 일찍 줄바꿈돼 밀려 보였다(2026-10-21) */}
+    {mode !== "idle" && colors && <div className="absolute -top-3 right-1 z-20 flex gap-1 rounded-full border border-slate-200 bg-white p-0.5 shadow-sm">
       {(Object.keys(RICH_COLORS) as RichColorKey[]).map((k) => <button key={k} type="button" tabIndex={-1} title={k === "black" ? "검정" : k === "red" ? "빨강" : "파랑"} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); paint(k); }} className="h-4 w-4 rounded-full border border-white ring-1 ring-slate-200" style={{ background: RICH_COLORS[k] }} />)}
     </div>}
     <div ref={ref} contentEditable={mode === "editing"} suppressContentEditableWarning spellCheck={false} data-placeholder={placeholder} data-cell-text
@@ -148,6 +149,6 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
       }}
       onPaste={(e) => { e.preventDefault(); const t = e.clipboardData.getData("text/plain"); document.execCommand("insertText", false, t); }}
       style={{ minHeight }}
-      className={`block w-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none empty:before:text-slate-300 empty:before:content-[attr(data-placeholder)] ${mode === "editing" ? "cursor-text" : "cursor-cell select-none"} ${mode !== "idle" && colors ? "pr-16" : ""} ${className}`} />
+      className={`block w-full whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 outline-none empty:before:text-slate-300 empty:before:content-[attr(data-placeholder)] ${mode === "editing" ? "cursor-text" : "cursor-cell select-none"} ${className}`} />
   </div>;
 }

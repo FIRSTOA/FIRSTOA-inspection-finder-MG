@@ -435,7 +435,7 @@ describe("분기 표 조치·확인 필요 달(2026-10-21)", () => {
 });
 
 describe("4차·5차: 분기 파트 카드·월 빈 틀(2026-10-21)", () => {
-  it("T14 quarterTeamCard — 목표마다 마지막 기록 달 판정으로 셈, 파트장은 가장 최근 달", () => {
+  it("T14 quarterTeamCard — 10·11·12월 합계(전체 = 목표 × 3달), 파트장은 가장 최근 달", () => {
     const goals: OkrGoal[] = [1, 2, 3].map((no) => ({ no, pillar: "P", bottleneck: "", objective: `목표 ${no}`, criteria: "" }));
     const q: OkrCycle = { ...quarterDraft(2026, 4), goals };
     const oct: OkrCycle = { ...monthDraftFromQuarter(2026, 10, q), goals, goals_origin: "manual" };
@@ -444,9 +444,9 @@ describe("4차·5차: 분기 파트 카드·월 빈 틀(2026-10-21)", () => {
     const reports = { "2026-10": [rep("2026-10", "김옛", [[1, "미흡"], [2, "완료"]])], "2026-11": [rep("2026-11", "이새", [[1, "완료"]])] };
     const rollup = quarterRollup(q, [oct, nov], reports, {});
     const card = quarterTeamCard(rollup, "A", reports);
-    // 1번 = 11월 완료(마지막 달), 2번 = 10월 완료, 3번 = 없음
-    expect(card).toEqual({ team: "A", total: 3, judged: 2, alerts: 0, rate: 100, leader: "이새" });
-    expect(quarterTeamCard(rollup, "B", reports)).toEqual({ team: "B", total: 3, judged: 0, alerts: 0, rate: null, leader: "" });
+    // 전체 = 3목표 × 3달 = 9. 판정 칸: 10월 1 미흡·2 완료, 11월 1 완료 → 3칸, 미흡 1, 달성 = 완료 2 / 판정 3 = 67
+    expect(card).toEqual({ team: "A", total: 9, judged: 3, alerts: 1, rate: 67, leader: "이새" });
+    expect(quarterTeamCard(rollup, "B", reports)).toEqual({ team: "B", total: 9, judged: 0, alerts: 0, rate: null, leader: "" });
   });
   it("T15 monthScreenGoals — copy·빈 goals 달은 분기 글 대신 Pillar 만 있는 빈 틀, 팀장 월 OKR 은 그대로", () => {
     const q: OkrCycle = { ...quarterDraft(2026, 4), goals: [{ no: 1, pillar: "Pillar 1", bottleneck: "분기 병목", objective: "분기 목표", criteria: "분기 기준" }] };

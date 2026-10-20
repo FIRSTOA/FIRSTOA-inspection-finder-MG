@@ -46,7 +46,7 @@ export function RolledJudgmentCell({ value, label, onChange }: { value: OkrRolle
   </div>;
 }
 
-export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQuarter, reports, weekRows, otherMonths, onDirection, onFeedback, onPaste, onStartFromQuarter, onCopyGoals, onRestore, onTemplate, ops, onCsJudgment, onPickTeam, onOpenTeam }: {
+export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQuarter, reports, weekRows, onDirection, onFeedback, onTemplate, ops, onCsJudgment, onPickTeam, onOpenTeam }: {
   cycle: OkrCycle; quarter: OkrCycle | null; goals: OkrGoal[]; goalsOf: (team: OkrTeam) => OkrGoal[]; fromQuarter: boolean; quarterLabel: string; reports: OkrReport[]; weekRows: OkrReport[]; otherMonths: OkrCycle[];
   onDirection: (text: string) => void; onFeedback: (no: number, memo: string, memoHtml?: string) => void; onPaste: () => void; onStartFromQuarter: (() => void) | null; onCopyGoals: (id: string) => void; onRestore: () => void; onTemplate: () => void;
   ops: GoalOps | null; // null = 읽기 전용
@@ -81,21 +81,11 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
     </section>
 
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      {fromQuarter && <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-900">{m}월 OKR이 아직 없습니다 — [📋 팀장 {m}월 OKR 붙여넣기] 또는 [분기 OKR로 시작]</div>}
-      <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-slate-200 px-3 py-1.5">
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <button type="button" onClick={onPaste} className={BTN}>📋 팀장 {m}월 OKR 붙여넣기</button>
-          {onStartFromQuarter && <button type="button" onClick={onStartFromQuarter} className={BTN}>분기 OKR로 시작</button>}
-          {cycle.goals_prev?.length ? <button type="button" onClick={onRestore} className={BTN}>직전 목표로 되돌리기</button> : null}
-          {!goals.length && <button type="button" onClick={onTemplate} className={BTN}>3 × 3 빈 틀</button>}
-          {otherMonths.length > 0 && <select value="" onChange={(e) => e.target.value && onCopyGoals(e.target.value)} className="rounded-full border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-600">
-            <option value="">다른 달에서 가져오기…</option>
-            {otherMonths.map((c) => <option key={c.id} value={c.id}>{c.year}년 {c.month}월 ({c.goals.length}개)</option>)}
-          </select>}
-        </div>
-      </div>
+      {fromQuarter && <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-900">{m}월 OKR이 아직 없습니다 — 아래 빈 틀에 바로 적으면 {m}월 OKR로 저장됩니다</div>}
+      {/* 붙여넣기·분기 OKR로 시작·되돌리기·다른 달에서 가져오기 단추는 2026-10-21 사용자 지시로 뺐다(props 는 OkrHub 연결 유지). 목표가 하나도 없을 때만 [3 × 3 빈 틀]. */}
+      {!goals.length && <div className="flex items-center justify-end border-b border-slate-200 px-3 py-1.5"><button type="button" onClick={onTemplate} className={BTN}>3 × 3 빈 틀</button></div>}
       <div className="overflow-x-auto">
-        <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+        <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: "100%", minWidth: col.total }}>
           <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
           <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${thClass(i)}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
           <tbody>
@@ -132,7 +122,7 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
                 </FragmentRows>;
               })}
             </FragmentRows>)}
-            {!goals.length && <tr><td colSpan={heads.length} className="p-8 text-center text-sm font-bold text-slate-400">목표가 없습니다 — [팀장 {m}월 OKR 붙여넣기] 또는 [3 × 3 빈 틀]</td></tr>}
+            {!goals.length && <tr><td colSpan={heads.length} className="p-8 text-center text-sm font-bold text-slate-400">목표가 없습니다 — [3 × 3 빈 틀]로 시작하세요</td></tr>}
           </tbody>
         </table>
       </div>
@@ -162,7 +152,7 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
       </button>)}
     </div>}
     <div className="overflow-x-auto">
-      <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
+      <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: "100%", minWidth: col.total }}>
         <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
         <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${thClass(i)}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
         <tbody>

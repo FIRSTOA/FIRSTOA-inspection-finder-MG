@@ -870,11 +870,16 @@ export function alertMonths(byMonth: Record<string, OkrRolledJudgment> | undefin
 // 목표마다 그 파트의 월 판정 중 마지막 기록 달(byTeam.quarter = lastOfJudgments, ●·○ 모두)로 셈한다.
 // 파트장 = 분기 달 중 가장 최근 달의 파트 월 report(member '') header.leader, 없으면 "".
 export type OkrTeamCard = { team: OkrTeam; total: number; judged: number; alerts: number; rate: number | null; leader: string };
+// 분기 카드 = 그 파트의 10·11·12월 합계(사용자 2026-10-21: "ABCD의 10,11,12의 토탈", 전체 = 목표 수 × 3달 = 27).
+//   판정 n/27 = 달마다 파트 월 종합 판정(확정 ●·제안 ○ 모두)이 있는 칸 수, 미흡·미착수 = 그 중 경고 판정 수, 달성 % = 월 카드와 같은 셈(완료·해당없음 / 판정 있는 칸).
+//   달 행이 아직 없는 달도 전체(27)에 넣는다. 파트장 = 가장 최근 달 파트 월 report 의 header.leader.
 export function quarterTeamCard(rollup: OkrQuarterRollup, team: OkrTeam, monthReports: Record<string, OkrReport[]>): OkrTeamCard {
-  const rows = rollup.rows.map((r) => ({ ...emptyResultRow(r.no), judgment: r.byTeam[team]?.quarter || "" }));
+  const monthCount = Math.max(3, rollup.months.length);
+  const rows: OkrResultRow[] = [];
+  for (const r of rollup.rows) for (const m of rollup.months) rows.push({ ...emptyResultRow(r.no), judgment: r.byTeam[team]?.byMonth[m.id]?.judgment || "" });
   const ids = [...new Set([...rollup.months.map((m) => m.id), ...Object.keys(monthReports)])].sort().reverse();
   const leader = ids.map((id) => findReport(monthReports[id] || [], team, "")?.header.leader?.trim() || "").find(Boolean) || "";
-  return { team, total: rows.length, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows), leader };
+  return { team, total: rollup.rows.length * monthCount, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows), leader };
 }
 export type OkrQuarterRollup = {
   months: Array<{ id: string; month: number; actionTeams: number }>;
