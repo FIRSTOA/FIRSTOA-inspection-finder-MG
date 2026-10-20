@@ -42,7 +42,7 @@
 --     → 9 / CS팀 4분기 OKR / 2026-10-01 / 2026-12-31
 --   select length(direction), goals_origin, parent_id, goals_prev is not null, jsonb_array_length(goals_prev),
 --          goals->0->>'bottleneck' from okr_cycles where id = '2026-10';
---     → 138 / leader / 2026-Q4 / true / 9 / 직무별 담당자와 책임 범위가 정해져 있지 않으면 …
+--     → 136 / leader / 2026-Q4 / true / 9 / 직무별 담당자와 책임 범위가 정해져 있지 않으면 …
 --   select id, goals_origin, parent_id from okr_cycles where id in ('2026-11','2026-12');
 --     → copy / 2026-Q4 (두 행)
 --   select (select count(*) from okr_cycles_bak_20261020), (select count(*) from okr_reports_bak_20261020);
