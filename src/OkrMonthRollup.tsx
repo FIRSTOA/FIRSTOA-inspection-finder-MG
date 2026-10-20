@@ -2,6 +2,7 @@
 // 핵심방향 띠(OkrDirection) + 파트 카드 + No·Pillar 띠·병목현상·목표(팀장 문서색)·A~D 파트 월 종합 동그라미·CS 종합(월)·조치 필요 파트·
 // "n월 결과 및 n+1월 개선계획"(okr_cycles.feedback memo). 11·12월(팀장 월 OKR 대기, fromQuarter)도 ops 가 있으면 고칠 수 있다(첫 편집은 부모가 월 OKR로 굳힘).
 // MonthTeamSummary — 파트 탭 [팀원 집계]: 병목현상·목표 + 팀원 × 그 달 주차 판정 점 + 파트 종합(확정 ● / 마지막 주차 제안 ○).
+// 3차(2026-10-21): 범례 없음 · 색은 병목현상·목표만(달성기준은 노랑) · 팀원 집계의 "병목 n" 번호 열 삭제.
 //
 // props(OkrHub 연결용):
 //   OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQuarter, quarterLabel, reports, weekRows, otherMonths,
@@ -21,7 +22,7 @@ import {
   OKR_TEAMS, achievementRate, actionMembersInMonth, bottleneckText, findReport, isAlert, lastJudgmentInMonth, memberReports, monthlyRollup, normalizeJudgment, resultRowFor,
   type OkrCycle, type OkrFeedback, type OkrGoal, type OkrJudgedCell, type OkrReport, type OkrRolledJudgment, type OkrTeam,
 } from "./okr";
-import { FragmentRows, JudgmentDot, OkrLegend, PillarBar, ResizeHandle } from "./OkrCells";
+import { FragmentRows, JudgmentDot, PillarBar, ResizeHandle } from "./OkrCells";
 import { TD, TD_LEADER, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, goalHtml, pillarRuns, shortBottleneck, teamName, useColWidths } from "./okrUi";
 
 const BTN = "rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100";
@@ -84,8 +85,7 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
 
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       {fromQuarter && <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-900">팀장 {m}월 OKR 대기 — {quarterLabel} OKR을 보여줍니다. {editable ? `고치면 ${m}월 OKR로 저장됩니다` : "(읽기 전용)"}</div>}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-200 px-3 py-1.5">
-        <OkrLegend split={false} />
+      <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-slate-200 px-3 py-1.5">
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button type="button" onClick={onPaste} className={BTN}>📋 팀장 {m}월 OKR 붙여넣기</button>
           {onStartFromQuarter && <button type="button" onClick={onStartFromQuarter} className={BTN}>분기 OKR로 시작</button>}
@@ -128,8 +128,8 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
                     <td className={`${TD_READ} text-[11px] leading-snug`}>{actions.length ? actions.map((t) => <div key={t}><span className="font-black text-rose-600">{t}파트</span>{who[t]?.length ? <span className="text-slate-500"> · {who[t].join(", ")}</span> : null}</div>) : <span className="text-slate-300">—</span>}</td>
                     <td className={TD_WRITE}><RichCell text={fb(goal.no)?.memo || ""} html={fb(goal.no)?.memoHtml} minRows={2} onChange={(t, h) => onFeedback(goal.no, t, h)} /></td>
                   </tr>
-                  {open && <tr><td colSpan={heads.length} className={editable ? TD_LEADER_EDIT : TD_LEADER}>
-                    <div className="px-2 pt-1 text-[10px] font-black text-indigo-400">달성기준(실행)</div>
+                  {open && <tr><td colSpan={heads.length} className={editable ? TD_WRITE : TD_READ}>
+                    <div className="px-2 pt-1 text-[10px] font-black text-slate-500">달성기준(실행)</div>
                     {editable
                       ? <RichCell text={goal.criteria} html={goal.html?.criteria} minRows={2} onChange={(t, h) => ops?.onGoal(goal.no, { criteria: t, html: goalHtml(goal, "criteria", h) })} />
                       : <div className="whitespace-pre-wrap px-2 pb-1 text-slate-600">{goal.criteria || "—"}</div>}
@@ -153,10 +153,10 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
 }) {
   const runs = pillarRuns(goals);
   const teamRows = weekRows.filter((r) => r.team === team);
-  const NAME0 = 3; // 이름 첫 열 위치(그 뒤 파트 종합까지 가운데 정렬)
-  const heads = ["", "병목현상", "목표", ...names, "조치 필요 인원", "파트 종합", "미흡항목 피드백 & 다음 달 개선 방향"];
-  const col = useColWidths(`okr_cols_teamsum_v3_${team}_${names.length}`, [58, 200, 240, ...names.map(() => 16 + weeks.length * 24), 140, 96, 320]);
-  const thClass = (i: number) => (i === heads.length - 1 ? TH_WRITE : i === 1 || i === 2 ? TH_LEADER : `${TH_READ} ${i >= NAME0 ? "text-center" : ""}`);
+  const NAME0 = 2; // 이름 첫 열 위치(그 뒤 파트 종합까지 가운데 정렬). 3차: "병목 n" 번호 열은 지웠다
+  const heads = ["병목현상", "목표", ...names, "조치 필요 인원", "파트 종합", "미흡항목 피드백 & 다음 달 개선 방향"];
+  const col = useColWidths(`okr_cols_teamsum_v4_${team}_${names.length}`, [200, 240, ...names.map(() => 16 + weeks.length * 24), 140, 96, 320]);
+  const thClass = (i: number) => (i === heads.length - 1 ? TH_WRITE : i === 0 || i === 1 ? TH_LEADER : `${TH_READ} ${i >= NAME0 ? "text-center" : ""}`);
   const rowOf = (name: string, weekId: string, no: number) => resultRowFor(findReport(teamRows.filter((r) => r.cycle_id === weekId), team, name), no);
   const stats = names.map((name) => { const mine = memberReports(teamRows, team).filter((r) => r.member === name); const rows = mine.flatMap((r) => goals.map((g) => resultRowFor(r, g.no))); return { name, weeksFilled: weeks.filter((w) => mine.some((r) => r.cycle_id === w.id && r.rows.some((x) => x.actual.trim() || x.judgment.trim()))).length, alerts: rows.filter((x) => isAlert(x.judgment)).length, rate: achievementRate(rows) }; });
   return <div className="space-y-3 p-3">
@@ -166,7 +166,6 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
         <div className="mt-1 flex items-end justify-between"><div className="text-2xl font-black tabular-nums text-slate-950">{st.rate === null ? "—" : `${st.rate}%`}<span className="ml-1 text-xs font-semibold text-slate-400">달성</span></div><div className="text-[11px] font-bold">{st.alerts > 0 ? <span className="text-rose-600">미흡·미착수 {st.alerts}</span> : <span className="text-slate-300">미흡 없음</span>}</div></div>
       </button>)}
     </div>}
-    <OkrLegend split={false} />
     <div className="overflow-x-auto">
       <table onClick={tableCellClick} className="table-fixed border-collapse text-left text-[12px]" style={{ width: col.total, minWidth: col.total }}>
         <colgroup>{heads.map((h, i) => <col key={`${h}-${i}`} style={{ width: col.widths[i] }} />)}</colgroup>
@@ -181,8 +180,7 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
               const suggested = set ? "" : lastJudgmentInMonth(teamRows, team, goal.no);
               const partCell: OkrJudgedCell = set ? { judgment: set, source: "set" } : suggested ? { judgment: suggested, source: "suggest" } : EMPTY_CELL;
               return <tr key={goal.no}>
-                <td className={`${TD_READ} text-[11px] font-bold text-slate-500 ${alertNames.length ? "border-l-4 border-l-orange-500" : ""}`}>{shortBottleneck(goals, goal.no)}</td>
-                <td className={TD_LEADER}><div className="whitespace-pre-wrap px-2 py-1.5 text-[11px] leading-snug text-slate-700">{bottleneckText(goal.bottleneck) || <span className="text-slate-300">—</span>}</div></td>
+                <td className={`${TD_LEADER} ${alertNames.length ? "border-l-4 border-l-orange-500" : ""}`}><div className="whitespace-pre-wrap px-2 py-1.5 text-[11px] leading-snug text-slate-700">{bottleneckText(goal.bottleneck) || <span className="text-slate-300">—</span>}</div></td>
                 <td className={TD_LEADER}><div className="whitespace-pre-wrap px-2 py-1.5 font-semibold leading-snug text-indigo-950">{goal.objective}</div></td>
                 {names.map((name) => <td key={name} className={`${TD} px-1 py-1 text-center`}>
                   <span className="inline-flex flex-wrap justify-center">{weeks.map((w) => {

@@ -38,7 +38,8 @@ export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); 
 
 // html.objectiveSet === "1"(2026-10-20): 주차 덮어쓰기 칸의 objective를 사람이 고쳤다는 표시. 옛 덮어쓰기 칸에는 옛 objective 글이 남아 있어
 // 표시가 있는 칸만 objective를 읽는다(overlayGoals). 표시를 html 안에 두는 건 옛 앱이 html을 통째로 보존하기 때문이다.
-export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string; objectiveSet?: "1" } };
+// html.bottleneckSet === "1"(2026-10-21 3차): 같은 규칙으로 주차 덮어쓰기 칸의 bottleneck(병목현상 글)을 사람이 고쳤다는 표시.
+export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string; objectiveSet?: "1"; bottleneckSet?: "1" } };
 // 글자색(엑셀처럼 검정·빨강·파랑) — 색이 들어간 칸만 html을 함께 둔다. AI·합치기가 평문으로 바꾸면 html은 지운다.
 export type RichField = "actual" | "reason" | "plan" | "evidence";
 // judgment(2026-10-20): 월 행이면 CS 종합, 분기 행이면 분기 종합을 사람이 고른 값(자동값 덮어쓰기)
@@ -715,6 +716,13 @@ export type OkrFilterItem = { id: string; label: string; kind: "quarter" | "mont
 export const OKR_LEGACY_UNTIL = "2026-09"; // 이 달까지는 분기 행이 없는 옛 구조(월 종합 + 주차) 화면
 export const isLegacyMonthId = (id: string) => /^\d{4}-\d{2}$/.test(id) && id <= OKR_LEGACY_UNTIL;
 // today('YYYY-MM-DD', visits.ts kstDate())가 든 분기, 또는 pick으로 고른 분기의 [분기, 달×3]. 주차는 넣지 않는다.
+// 3차(2026-10-21): 파트 탭(A~D)엔 [n분기]가 없다 — 통합집계 탭('all')일 때만 분기 칩을 남긴다
+export const filterItemsForTab = (items: OkrFilterItem[], tab: string): OkrFilterItem[] => (tab === "all" ? items : items.filter((it) => it.kind !== "quarter"));
+// 3차: 그 분기의 "지금 달" — 오늘(KST yyyy-mm-dd)이 든 달, 아니면 첫 달. 분기 화면에서 파트 탭을 누르면 이 달의 [파트 종합]으로 간다
+export function quarterNowMonth(year: number, q: number, today: string): { year: number; month: number; id: string } {
+  const ms = monthsOfQuarter(year, q);
+  return ms.find((x) => x.year === Number(today.slice(0, 4)) && x.month === Number(today.slice(5, 7))) || ms[0];
+}
 export function topFilterItems(cycles: Pick<OkrCycle, "id">[], today: string, pick?: { year: number; quarter: number }): OkrFilterItem[] {
   const year = pick?.year ?? Number(today.slice(0, 4));
   const q = pick?.quarter ?? quarterOf(Number(today.slice(5, 7)));
@@ -843,6 +851,11 @@ export function quarterCsJudgment(byMonth: Array<OkrJudgment | "">, override?: s
 }
 
 // 분기 통합집계(quarterProgress 대체) — 묶음 × 달 CS 종합 + 분기 종합, 파트별 칸(파트 탭용)도 같이
+// 분기 표 "조치·확인 필요 달"(2026-10-21) — 그 목표의 월 CS 종합(사람 값 우선, 없으면 자동)이 미흡·미착수(isAlert)인 달 이름, 달 순서대로.
+// 월 통합집계의 '조치 필요 파트'와 같은 규칙. months 는 화면의 세 달(없는 달은 byMonth 에 없어 건너뛴다).
+export function alertMonths(byMonth: Record<string, OkrRolledJudgment> | undefined, months: Array<{ id: string; month: number }>): string[] {
+  return months.filter((m) => isAlert(byMonth?.[m.id]?.judgment || "")).map((m) => `${m.month}월`);
+}
 export type OkrQuarterRollup = {
   months: Array<{ id: string; month: number; actionTeams: number }>;
   rows: Array<{
@@ -883,8 +896,10 @@ export function quarterRollup(quarter: OkrCycle | null, monthCycles: OkrCycle[],
 
 // ── 주차 목표·달성기준 덮어쓰기 사슬: 월 공통(effectiveGoals) → 주차 파트(member '') → 주차 파트원 ──
 const isObjectiveSet = (g?: OkrGoal) => g?.html?.objectiveSet === "1";
+const isBottleneckSet = (g?: OkrGoal) => g?.html?.bottleneckSet === "1";
 // overlayCriteria에 목표를 더한 것. objective는 html.objectiveSet === "1"인 칸만 읽는다(옛 칸의 옛 objective 글은 무시).
 // 덮은 결과 goal에도 html.objectiveSet을 남긴다(화면이 '고친 목표'임을 알고 월 목표를 함께 보이게).
+// bottleneck도 같은 규칙(3차, 2026-10-21): html.bottleneckSet === "1"인 칸만 읽고 결과에 표시를 남긴다.
 export function overlayGoals(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
   if (!over?.length) return base;
   return base.map((g) => {
@@ -900,17 +915,24 @@ export function overlayGoals(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
       if (o.html?.objective) html.objective = o.html.objective;
       html.objectiveSet = "1";
     }
-    return { ...g, objective, criteria: o.criteria, html: Object.keys(html).length ? html : undefined };
+    let bottleneck = g.bottleneck;
+    if (isBottleneckSet(o)) {
+      bottleneck = o.bottleneck;
+      html.bottleneckSet = "1";
+    }
+    return { ...g, bottleneck, objective, criteria: o.criteria, html: Object.keys(html).length ? html : undefined };
   });
 }
 // 덮어쓰기 칸 하나 고치기 — 같은 번호 칸이 있으면 그 칸에 field만 바꿔 얹는다(putCriteria처럼 통째로 바꾸지 않는다: 다른 칸의 표시를 지키려고).
 // 새 칸은 shown(지금 보이는 값)에서 만들되 objectiveSet은 objective를 고칠 때만 붙인다(위 단계 목표 표시를 베껴 굳히지 않게).
 // objective가 빈 글이면 objective 덮어쓰기를 지운다(objective·html.objective·objectiveSet). criteria는 빈 글도 남긴다(지금 규칙).
-export function putGoalField(list: OkrGoal[] | undefined, shown: OkrGoal, field: "objective" | "criteria", text: string, html?: string): OkrGoal[] {
+// bottleneck(3차): objective와 같은 규칙 — 글이 있으면 html.bottleneckSet = "1", 빈 글이면 bottleneck·bottleneckSet을 지운다(색 html 없음).
+export function putGoalField(list: OkrGoal[] | undefined, shown: OkrGoal, field: "objective" | "criteria" | "bottleneck", text: string, html?: string): OkrGoal[] {
   const cur = list || [];
   const existing = cur.find((x) => x.no === shown.no);
   const clearObjective = field === "objective" && !text.trim();
-  if (!existing && clearObjective) return [...cur];
+  const clearBottleneck = field === "bottleneck" && !text.trim();
+  if (!existing && (clearObjective || clearBottleneck)) return [...cur];
   const cell: OkrGoal = existing
     ? { ...existing }
     : { no: shown.no, pillar: shown.pillar, bottleneck: shown.bottleneck, objective: shown.objective, criteria: shown.criteria };
@@ -919,6 +941,9 @@ export function putGoalField(list: OkrGoal[] | undefined, shown: OkrGoal, field:
     cell.criteria = text;
     delete h.criteria;
     if (html) h.criteria = html;
+  } else if (field === "bottleneck") {
+    cell.bottleneck = clearBottleneck ? "" : text;
+    if (clearBottleneck) delete h.bottleneckSet; else h.bottleneckSet = "1";
   } else if (clearObjective) {
     cell.objective = "";
     delete h.objective;

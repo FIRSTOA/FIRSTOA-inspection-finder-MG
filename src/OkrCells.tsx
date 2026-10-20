@@ -68,17 +68,5 @@ export function JudgmentDot({ cell, size = 14, onClick, title, label }: { cell: 
   return <button type="button" title={tip} aria-label={tip} onClick={(e) => { e.stopPropagation(); onClick(); }} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-sky-500 sm:min-h-7 sm:min-w-7">{shape}</button>;
 }
 
-// 범례 — 칸 색 3종 + 판정 점 2종. 새 구조 통합집계·파트 탭 표 위에 둔다(옛 화면에는 두지 않는다). split=false 면 쪼개기색을 뺀다(분기·월 통합집계).
-export function OkrLegend({ split = true }: { split?: boolean }) {
-  const chip = (cls: string, text: string) => <span className="inline-flex items-center gap-1"><span className={`inline-block h-3 w-3 rounded-sm border border-slate-300 ${cls}`} />{text}</span>;
-  return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500" aria-label="색 설명">
-    {chip("bg-indigo-50", "팀장 문서")}
-    {split && chip("bg-teal-50", "파트가 쪼개 적는 칸")}
-    {chip("bg-[#FFFBEB]", "결과 입력")}
-    <span className="inline-flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full bg-slate-500" />확정 판정</span>
-    <span className="inline-flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full border-2 border-slate-500 bg-white" />제안·자동값(마지막 주차 / 파트·달 종합)</span>
-  </div>;
-}
-
 // tbody 안에서 여러 행을 묶는 용도
 export function FragmentRows({ children }: { children: ReactNode }) { return <>{children}</>; }

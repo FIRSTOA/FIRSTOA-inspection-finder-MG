@@ -333,3 +333,15 @@ export async function getOkrReportsIn(cycleIds: string[]): Promise<OkrReport[]>;
 - okr-assist 엣지 함수 수정, ✨ 도구 다시 켜기(`SHOW_OKR_TOOLS`).
 - 분기 개선계획 메모 열(분기 통합집계 끝 메모 칸). 필요하면 다음 차례에 `quarter.feedback[no].memo`로 더한다.
 - App.tsx, 다른 기능 파일.
+
+---
+
+## 3차(2026-10-21 사용자 지시)
+
+1. 상단 필터 [n분기]는 통합집계 탭에서만, 파트 탭(A~D)은 [10월][11월][12월]만(`filterItemsForTab`). 분기 화면에서 파트 탭을 누르면 그 분기 지금 달(`quarterNowMonth`: 오늘이 든 달, 아니면 첫 달)의 그 파트 [파트 종합]으로 간다. `QuarterTeamView` 삭제.
+2. 범례(`OkrLegend` "팀장 문서·결과 입력·●○") 모든 화면에서 삭제, export 도 삭제.
+3. 색은 병목현상·목표 열만(`TD_LEADER_EDIT`/`TH_LEADER` 남보라). 달성기준은 노랑 입력칸(`TD_WRITE`/`TH_WRITE`). `TD_SPLIT`·`TH_SPLIT`(청록) 삭제.
+4. 주차 칩([1주][2주]…)은 파트원 이름을 골랐을 때만(`showsWeekChips`). 파트 종합 = 그 달 하나(칩·"n월 종합" 칩 없음), 팀원 집계에도 없음.
+5. 팀원 집계(`MonthTeamSummary`) 첫 "병목 n" 번호 열 삭제(열 폭 키 `okr_cols_teamsum_v4_…`). 병목현상 글·목표 열은 유지.
+6. 새 구조 경로의 [✨ 주차 합치기]·[↩ n주차 목표·달성기준 불러오기]·[↩ n주차 실제결과 불러오기] 단추 삭제. 옛 화면 단추, 판정 "→ 제안", [📋 팀장 문서 붙여넣기]·[직전 목표로 되돌리기]·[분기 OKR로 시작]은 유지.
+7. 주차 열 머리 = 파트 종합과 같게(병목현상·목표·달성기준…, "(n월 전략)"은 파트 종합만). 병목현상·목표 편집: 통합집계·파트 종합(월)은 월 공통 goals(goalOps), 주차는 header.goals 덮어쓰기(`putGoalField` "bottleneck" → `html.bottleneckSet`, `overlayGoals`가 표시 있는 칸만 덮음). 파트 종합 달성기준은 그 파트 월 report header.goals.

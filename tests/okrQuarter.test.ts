@@ -6,9 +6,10 @@ import {
   goalsAreFromQuarter, isLeaderGoals, mergeCycle, mergeMonthActuals, monthDraftFromQuarter, monthlyRollup, monthsOfQuarter, okrCyclePayload,
   parseOkrPaste, parseQuarterId, quarterCycleId, quarterDraft, quarterOf, quarterProgress, splitTsv, topFilterItems, weeksOfMonth,
   directionSteps, lastJudgmentInMonth, lastOfJudgments, mergeFeedback, monthCsJudgment, overlayCriteria, overlayGoals, partMonthJudgment,
-  prevGoalsToCarry, putGoalField, quarterCsJudgment, quarterRollup,
+  prevGoalsToCarry, putGoalField, quarterCsJudgment, quarterRollup, filterItemsForTab, quarterNowMonth, alertMonths,
   type OkrCycle, type OkrGoal, type OkrJudgedCell, type OkrReport, type OkrTeam,
 } from "../src/okr";
+import { showsWeekChips } from "../src/okrUi";
 
 type Doc = { id: string; direction: string; goals: OkrGoal[] };
 const load = (name: string): Doc => JSON.parse(readFileSync(resolve(__dirname, "../docs/okr", name), "utf8"));
@@ -353,5 +354,69 @@ describe("2차: 핵심방향 단계·feedback 칸 병합", () => {
     expect(mergeFeedback(base, { "1": { memo: "내 메모" }, "2": { memo: "x" } }, server)["1"].memo).toBe("내 메모");
     // 내가 번호를 지우고 서버는 안 고쳤으면 지워진다(예전과 같음), 서버에만 새로 생긴 번호는 남는다
     expect(mergeFeedback({ "1": { memo: "a" } }, {}, { "1": { memo: "a" }, "3": { memo: "새" } })).toEqual({ "3": { memo: "새" } });
+  });
+});
+
+describe("3차(2026-10-21): 병목현상 덮어쓰기·파트 탭 필터·주차 칩", () => {
+  const base: OkrGoal[] = [
+    { no: 1, pillar: "P", bottleneck: "월 병목 1", objective: "월 목표 1", criteria: "월 기준 1" },
+    { no: 2, pillar: "P", bottleneck: "월 병목 2", objective: "월 목표 2", criteria: "월 기준 2" },
+  ];
+  it("T10 putGoalField bottleneck — 표시(bottleneckSet)를 붙여 덮고, 파트 → 개인 사슬", () => {
+    const part = putGoalField(undefined, base[0], "bottleneck", "파트 병목");
+    expect(part).toEqual([{ no: 1, pillar: "P", bottleneck: "파트 병목", objective: "월 목표 1", criteria: "월 기준 1", html: { bottleneckSet: "1" } }]);
+    const partView = overlayGoals(base, part);
+    expect(partView[0]).toMatchObject({ bottleneck: "파트 병목", objective: "월 목표 1", criteria: "월 기준 1", html: { bottleneckSet: "1" } });
+    expect(partView[1]).toBe(base[1]);
+    // 개인이 달성기준만 고치면 표시를 베끼지 않아 파트 병목이 계속 흐른다
+    const person = putGoalField(undefined, partView[0], "criteria", "내 기준");
+    expect(person[0].html).toBeUndefined();
+    expect(overlayGoals(partView, person)[0]).toMatchObject({ bottleneck: "파트 병목", criteria: "내 기준" });
+    // 같은 칸에 목표·병목 둘 다 — 표시 둘 다 남는다
+    const both = putGoalField(putGoalField(undefined, base[0], "objective", "주 목표"), base[0], "bottleneck", "주 병목");
+    expect(both[0].html).toEqual({ objectiveSet: "1", bottleneckSet: "1" });
+    expect(overlayGoals(base, both)[0]).toMatchObject({ bottleneck: "주 병목", objective: "주 목표" });
+  });
+  it("T10 빈 bottleneck은 병목 덮어쓰기를 지우고(월 것으로), 칸이 없으면 만들지 않는다", () => {
+    const set = putGoalField(undefined, base[0], "bottleneck", "주 병목");
+    const crit = putGoalField(set, base[0], "criteria", "주 기준");
+    const cleared = putGoalField(crit, base[0], "bottleneck", "   ");
+    expect(cleared[0]).toEqual({ no: 1, pillar: "P", bottleneck: "", objective: "월 목표 1", criteria: "주 기준" });
+    expect(overlayGoals(base, cleared)[0]).toMatchObject({ bottleneck: "월 병목 1", criteria: "주 기준" });
+    expect(putGoalField(undefined, base[0], "bottleneck", "")).toEqual([]);
+  });
+  it("T10 표시 없는 옛 칸의 bottleneck 글은 무시한다", () => {
+    const old: OkrGoal[] = [{ no: 1, pillar: "P", bottleneck: "8월 옛 병목", objective: "", criteria: "주 기준" }];
+    const out = overlayGoals(base, old);
+    expect(out[0].bottleneck).toBe("월 병목 1");
+    expect(out[0].criteria).toBe("주 기준");
+    expect(out[0].html).toBeUndefined();
+  });
+  it("T11 파트 탭 필터엔 [n분기]가 없고 통합집계엔 있다, 분기 지금 달", () => {
+    const items = topFilterItems([], "2026-10-21", { year: 2026, quarter: 4 });
+    expect(filterItemsForTab(items, "all").map((x) => x.label)).toEqual(["4분기", "10월", "11월", "12월"]);
+    expect(filterItemsForTab(items, "A").map((x) => x.label)).toEqual(["10월", "11월", "12월"]);
+    expect(quarterNowMonth(2026, 4, "2026-11-03").id).toBe("2026-11");
+    expect(quarterNowMonth(2026, 4, "2027-01-05").id).toBe("2026-10"); // 오늘이 분기 밖이면 첫 달
+    expect(quarterNowMonth(2027, 1, "2026-10-21").id).toBe("2027-01");
+  });
+  it("T12 주차 칩은 파트원 이름을 골랐을 때만", () => {
+    expect(showsWeekChips("")).toBe(false);
+    expect(showsWeekChips("__sum__")).toBe(false);
+    expect(showsWeekChips("김정민")).toBe(true);
+  });
+});
+
+describe("분기 표 조치·확인 필요 달(2026-10-21)", () => {
+  it("T13 alertMonths — 월 CS 종합이 미흡·미착수인 달만 달 순서대로, 없으면 빈 배열", () => {
+    const months = [{ id: "2026-10", month: 10 }, { id: "2026-11", month: 11 }, { id: "2026-12", month: 12 }];
+    const byMonth = {
+      "2026-10": { judgment: "미흡", auto: "미흡", manual: false },
+      "2026-11": { judgment: "완료", auto: "미착수", manual: true }, // 사람이 완료로 덮었으면 조치 아님
+      "2026-12": { judgment: "미착수", auto: "", manual: true },
+    };
+    expect(alertMonths(byMonth, months)).toEqual(["10월", "12월"]);
+    expect(alertMonths({}, months)).toEqual([]);
+    expect(alertMonths(undefined, months)).toEqual([]);
   });
 });
