@@ -3,6 +3,7 @@
 // "n월 결과 및 n+1월 개선계획"(okr_cycles.feedback memo). 11·12월(팀장 월 OKR 대기, fromQuarter)도 ops 가 있으면 고칠 수 있다(첫 편집은 부모가 월 OKR로 굳힘).
 // MonthTeamSummary — 파트 탭 [팀원 집계]: 병목현상·목표 + 팀원 × 그 달 주차 판정 점 + 파트 종합(확정 ● / 마지막 주차 제안 ○).
 // 3차(2026-10-21): 범례 없음 · 색은 병목현상·목표만(달성기준은 노랑) · 팀원 집계의 "병목 n" 번호 열 삭제.
+// 4차(2026-10-21): 통합집계 No("병목 n") 열 삭제 — 목표 삭제 ×는 병목현상 칸 오른쪽 위로. 병목현상 굵게·글자색(html.bottleneck). "팀장 문서" 말·판정 "제안" 글자 삭제.
 //
 // props(OkrHub 연결용):
 //   OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQuarter, quarterLabel, reports, weekRows, otherMonths,
@@ -22,7 +23,7 @@ import {
   OKR_TEAMS, achievementRate, actionMembersInMonth, bottleneckText, findReport, isAlert, lastJudgmentInMonth, memberReports, monthlyRollup, normalizeJudgment, resultRowFor,
   type OkrCycle, type OkrFeedback, type OkrGoal, type OkrJudgedCell, type OkrReport, type OkrRolledJudgment, type OkrTeam,
 } from "./okr";
-import { FragmentRows, JudgmentDot, PillarBar, ResizeHandle } from "./OkrCells";
+import { FragmentRows, JudgmentDot, PillarBar, ResizeHandle, TeamCard } from "./OkrCells";
 import { TD, TD_LEADER, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, goalHtml, pillarRuns, shortBottleneck, teamName, useColWidths } from "./okrUi";
 
 const BTN = "rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100";
@@ -45,7 +46,7 @@ export function RolledJudgmentCell({ value, label, onChange }: { value: OkrRolle
   </div>;
 }
 
-export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQuarter, quarterLabel, reports, weekRows, otherMonths, onDirection, onFeedback, onPaste, onStartFromQuarter, onCopyGoals, onRestore, onTemplate, ops, onCsJudgment, onPickTeam, onOpenTeam }: {
+export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQuarter, reports, weekRows, otherMonths, onDirection, onFeedback, onPaste, onStartFromQuarter, onCopyGoals, onRestore, onTemplate, ops, onCsJudgment, onPickTeam, onOpenTeam }: {
   cycle: OkrCycle; quarter: OkrCycle | null; goals: OkrGoal[]; goalsOf: (team: OkrTeam) => OkrGoal[]; fromQuarter: boolean; quarterLabel: string; reports: OkrReport[]; weekRows: OkrReport[]; otherMonths: OkrCycle[];
   onDirection: (text: string) => void; onFeedback: (no: number, memo: string, memoHtml?: string) => void; onPaste: () => void; onStartFromQuarter: (() => void) | null; onCopyGoals: (id: string) => void; onRestore: () => void; onTemplate: () => void;
   ops: GoalOps | null; // null = 읽기 전용
@@ -65,26 +66,22 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
     const rep = partRows.find((r) => r.team === t);
     const teamGoals = goalsOf(t);
     const rows = teamGoals.map((g) => resultRowFor(rep, g.no));
-    return { team: t, rep, total: teamGoals.length, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows) };
+    return { team: t, total: teamGoals.length, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows), leader: rep?.header.leader || "" };
   });
-  const DOT0 = 3; // A~D 첫 열 위치(그 뒤 CS 종합까지 가운데 정렬)
-  const heads = ["", "병목현상", "목표", ...OKR_TEAMS.map(teamName), "CS 종합", "조치·확인 필요 파트", `${m}월 결과 및 ${nextMonthOf(m)}월 개선계획`];
-  const col = useColWidths("okr_cols_summary_v3", [58, 220, 260, ...OKR_TEAMS.map(() => 64), 112, 140, 320]);
-  const thClass = (i: number) => (i === heads.length - 1 ? TH_WRITE : i === 1 || i === 2 ? TH_LEADER : `${TH_READ} ${i >= DOT0 && i <= DOT0 + OKR_TEAMS.length ? "text-center" : ""}`);
+  const DOT0 = 2; // A~D 첫 열 위치(그 뒤 CS 종합까지 가운데 정렬). 4차: No 열 삭제
+  const heads = ["병목현상", "목표", ...OKR_TEAMS.map(teamName), "CS 종합", "조치·확인 필요 파트", `${m}월 결과 및 ${nextMonthOf(m)}월 개선계획`];
+  const col = useColWidths("okr_cols_summary_v4", [220, 260, ...OKR_TEAMS.map(() => 64), 112, 140, 320]);
+  const thClass = (i: number) => (i === heads.length - 1 ? TH_WRITE : i === 0 || i === 1 ? TH_LEADER : `${TH_READ} ${i >= DOT0 && i <= DOT0 + OKR_TEAMS.length ? "text-center" : ""}`);
   const fb = (no: number): OkrFeedback | undefined => cycle.feedback?.[String(no)];
   return <div className="space-y-3">
     <OkrDirection text={cycle.direction || ""} editable onChange={(t) => onDirection(t)} label={`${m}월 핵심방향`} />
 
     <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      {perTeam.map(({ team, rep, total, judged, alerts, rate }) => <div key={team} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">{teamName(team)}</div><div className="text-[11px] font-bold tabular-nums text-slate-400">{judged >= total && total ? "제출 완료" : `판정 ${judged}/${total}`}</div></div>
-        <div className="mt-1 flex items-end justify-between"><div className="text-2xl font-black tabular-nums text-slate-950">{rate === null ? "—" : `${rate}%`}<span className="ml-1 text-xs font-semibold text-slate-400">달성</span></div><div className="text-right text-[11px] font-bold">{alerts > 0 ? <span className="text-rose-600">미흡·미착수 {alerts}</span> : <span className="text-slate-300">미흡 없음</span>}</div></div>
-        <div className="mt-2 border-t border-slate-100 pt-2 text-[10px] font-semibold text-slate-400">{rep?.header.leader ? `파트장 ${rep.header.leader}` : "파트장 미기재"}</div>
-      </div>)}
+      {perTeam.map((card) => <TeamCard key={card.team} card={card} />)}
     </section>
 
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      {fromQuarter && <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-900">팀장 {m}월 OKR 대기 — {quarterLabel} OKR을 보여줍니다. {editable ? `고치면 ${m}월 OKR로 저장됩니다` : "(읽기 전용)"}</div>}
+      {fromQuarter && <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-900">{m}월 OKR이 아직 없습니다 — [📋 팀장 {m}월 OKR 붙여넣기] 또는 [분기 OKR로 시작]</div>}
       <div className="flex flex-wrap items-center justify-end gap-1.5 border-b border-slate-200 px-3 py-1.5">
         <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button type="button" onClick={onPaste} className={BTN}>📋 팀장 {m}월 OKR 붙여넣기</button>
@@ -111,12 +108,10 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
                 const open = !!openNo[goal.no];
                 return <FragmentRows key={goal.no}>
                   <tr>
-                    <td className={`${TD_READ} text-[11px] font-bold text-slate-500 ${actions.length ? "border-l-4 border-l-orange-500" : ""}`}>
-                      <div className="flex items-start justify-between gap-1">{shortBottleneck(goals, goal.no)}{editable && <button type="button" title="이 목표 삭제" onClick={() => ops?.onRemove(goal)} className="text-slate-300 hover:text-rose-600">×</button>}</div>
+                    <td className={`relative ${editable ? TD_LEADER_EDIT : TD_LEADER} ${actions.length ? "border-l-4 border-l-orange-500" : ""}`}>
+                      {editable && <button type="button" title={`${shortBottleneck(goals, goal.no)} 목표 삭제`} onClick={() => ops?.onRemove(goal)} className="absolute right-0.5 top-0 z-[1] px-1 text-[11px] font-bold text-slate-300 hover:text-rose-600">×</button>}
+                      <RichCell readOnly={!editable} text={bottleneckText(goal.bottleneck)} html={goal.html?.bottleneck} minRows={2} className="font-bold text-slate-800" onChange={editable ? (t, h) => ops?.onGoal(goal.no, { bottleneck: t, html: goalHtml(goal, "bottleneck", h) }) : undefined} />
                     </td>
-                    <td className={editable ? TD_LEADER_EDIT : TD_LEADER}>{editable
-                      ? <RichCell colors={false} text={bottleneckText(goal.bottleneck)} minRows={2} onChange={(t) => ops?.onGoal(goal.no, { bottleneck: t })} />
-                      : <div className="whitespace-pre-wrap px-2 py-1.5 leading-snug text-slate-700">{bottleneckText(goal.bottleneck)}</div>}</td>
                     <td className={editable ? TD_LEADER_EDIT : TD_LEADER}>
                       <RichCell readOnly={!editable} text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-indigo-950" onChange={editable ? (t, h) => ops?.onGoal(goal.no, { objective: t, html: goalHtml(goal, "objective", h) }) : undefined} />
                       <button type="button" onClick={() => setOpenNo((cur) => ({ ...cur, [goal.no]: !open }))} className="px-2 pb-1 text-[10px] font-bold text-slate-400 hover:text-slate-700">{open ? "달성기준 접기" : "달성기준 ▾"}</button>
@@ -180,7 +175,7 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
               const suggested = set ? "" : lastJudgmentInMonth(teamRows, team, goal.no);
               const partCell: OkrJudgedCell = set ? { judgment: set, source: "set" } : suggested ? { judgment: suggested, source: "suggest" } : EMPTY_CELL;
               return <tr key={goal.no}>
-                <td className={`${TD_LEADER} ${alertNames.length ? "border-l-4 border-l-orange-500" : ""}`}><div className="whitespace-pre-wrap px-2 py-1.5 text-[11px] leading-snug text-slate-700">{bottleneckText(goal.bottleneck) || <span className="text-slate-300">—</span>}</div></td>
+                <td className={`${TD_LEADER} ${alertNames.length ? "border-l-4 border-l-orange-500" : ""}`}><RichCell readOnly text={bottleneckText(goal.bottleneck)} html={goal.html?.bottleneck} minRows={1} className="font-bold text-slate-800" /></td>
                 <td className={TD_LEADER}><div className="whitespace-pre-wrap px-2 py-1.5 font-semibold leading-snug text-indigo-950">{goal.objective}</div></td>
                 {names.map((name) => <td key={name} className={`${TD} px-1 py-1 text-center`}>
                   <span className="inline-flex flex-wrap justify-center">{weeks.map((w) => {
@@ -193,7 +188,7 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
                 <td className={`${TD_READ} text-[11px] leading-snug`}>{alertNames.length ? <span className="font-black text-blue-700">{alertNames.join(", ")}</span> : <span className="text-slate-300">—</span>}</td>
                 <td className={`${TD} min-w-14 px-1 py-1 text-center`}>
                   <JudgmentDot cell={partCell} label={`${teamName(team)} 종합`} />
-                  {partCell.judgment && <div className="text-[10px] font-bold text-slate-400">{partCell.source === "suggest" ? `제안 ${partCell.judgment}` : partCell.judgment}</div>}
+                  {partCell.judgment && <div className="text-[10px] font-bold text-slate-400">{partCell.judgment /* 4차: "제안" 글자 없이 값만 — 제안은 ○ 점으로 */}</div>}
                 </td>
                 <td className={TD_WRITE}><RichCell text={partReport.feedback?.[String(goal.no)]?.memo || ""} html={partReport.feedback?.[String(goal.no)]?.memoHtml} minRows={2} onChange={(t, h) => onFeedback(goal.no, t, h)} /></td>
               </tr>;

@@ -19,7 +19,7 @@ export const clearHtml = (row: OkrResultRow, fields: RichField[]): OkrResultRow[
   for (const f of fields) delete next[f];
   return Object.keys(next).length ? next : undefined;
 };
-export const goalHtml = (g: OkrGoal, field: "objective" | "criteria", html: string | undefined): OkrGoal["html"] => {
+export const goalHtml = (g: OkrGoal, field: "objective" | "criteria" | "bottleneck", html: string | undefined): OkrGoal["html"] => {
   const next = { ...(g.html || {}) };
   if (html) next[field] = html; else delete next[field];
   return Object.keys(next).length ? next : undefined;

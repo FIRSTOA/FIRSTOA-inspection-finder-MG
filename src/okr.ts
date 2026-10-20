@@ -39,7 +39,8 @@ export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); 
 // html.objectiveSet === "1"(2026-10-20): 주차 덮어쓰기 칸의 objective를 사람이 고쳤다는 표시. 옛 덮어쓰기 칸에는 옛 objective 글이 남아 있어
 // 표시가 있는 칸만 objective를 읽는다(overlayGoals). 표시를 html 안에 두는 건 옛 앱이 html을 통째로 보존하기 때문이다.
 // html.bottleneckSet === "1"(2026-10-21 3차): 같은 규칙으로 주차 덮어쓰기 칸의 bottleneck(병목현상 글)을 사람이 고쳤다는 표시.
-export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string; objectiveSet?: "1"; bottleneckSet?: "1" } };
+// 4차(2026-10-21): 층별 독립 — 표시가 있으면 빈 글이어도 그 값(비우면 빈 채 유지). criteriaSet 도 같은 뜻. html.bottleneck = 병목현상 글자색(RichCell).
+export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string; bottleneck?: string; objectiveSet?: "1"; bottleneckSet?: "1"; criteriaSet?: "1" } };
 // 글자색(엑셀처럼 검정·빨강·파랑) — 색이 들어간 칸만 html을 함께 둔다. AI·합치기가 평문으로 바꾸면 html은 지운다.
 export type RichField = "actual" | "reason" | "plan" | "evidence";
 // judgment(2026-10-20): 월 행이면 CS 종합, 분기 행이면 분기 종합을 사람이 고른 값(자동값 덮어쓰기)
@@ -564,6 +565,15 @@ export function effectiveGoals(cycle: OkrCycle | null | undefined, quarter?: Okr
   return cycle?.goals || [];
 }
 // "팀장 n월 OKR 대기, 아래는 분기 OKR(읽기 전용)" 띠를 띄울지 — 달인데 팀장 goals가 아니고 분기 것을 대신 보여 줄 때
+// 화면용 월 목표(2026-10-21 사용자 "11·12월 다 지워줘") — 월 OKR 이 아직 없으면(copy, 또는 goals 비어 있음, 또는 글 없음) 분기 글을 보여 주지 않는다.
+// 바탕은 분기 Pillar 만 있는 빈 틀(blankGoalsLike, 분기가 없으면 빈 3×3). 손으로 만든 글 없는 틀(origin copy 아님 + 행 있음)은 그 틀 그대로.
+// pending = 월 OKR 글이 아직 없음(안내 줄). effectiveGoals 는 그대로 두고 화면 층(OkrHub)만 이것을 쓴다.
+export function monthScreenGoals(cycle: OkrCycle | null | undefined, quarter?: OkrCycle | null): { goals: OkrGoal[]; pending: boolean } {
+  if (!cycle) return { goals: [], pending: false };
+  if (cycle.kind === "quarter" || isLeaderGoals(cycle)) return { goals: cycle.goals, pending: false };
+  if (cycle.goals_origin !== "copy" && cycle.goals.length) return { goals: cycle.goals, pending: true };
+  return { goals: blankGoalsLike(quarter?.goals || []), pending: true };
+}
 export function goalsAreFromQuarter(cycle: OkrCycle | null | undefined, quarter?: OkrCycle | null): boolean {
   return !!cycle && cycle.kind !== "quarter" && !isLeaderGoals(cycle) && !!quarter && quarter.goals.some(goalHasText);
 }
@@ -856,6 +866,16 @@ export function quarterCsJudgment(byMonth: Array<OkrJudgment | "">, override?: s
 export function alertMonths(byMonth: Record<string, OkrRolledJudgment> | undefined, months: Array<{ id: string; month: number }>): string[] {
   return months.filter((m) => isAlert(byMonth?.[m.id]?.judgment || "")).map((m) => `${m.month}월`);
 }
+// 분기 통합집계 파트 카드(2026-10-21) — 월 카드와 같은 값(판정 n/총·달성 %·미흡·미착수 수·파트장).
+// 목표마다 그 파트의 월 판정 중 마지막 기록 달(byTeam.quarter = lastOfJudgments, ●·○ 모두)로 셈한다.
+// 파트장 = 분기 달 중 가장 최근 달의 파트 월 report(member '') header.leader, 없으면 "".
+export type OkrTeamCard = { team: OkrTeam; total: number; judged: number; alerts: number; rate: number | null; leader: string };
+export function quarterTeamCard(rollup: OkrQuarterRollup, team: OkrTeam, monthReports: Record<string, OkrReport[]>): OkrTeamCard {
+  const rows = rollup.rows.map((r) => ({ ...emptyResultRow(r.no), judgment: r.byTeam[team]?.quarter || "" }));
+  const ids = [...new Set([...rollup.months.map((m) => m.id), ...Object.keys(monthReports)])].sort().reverse();
+  const leader = ids.map((id) => findReport(monthReports[id] || [], team, "")?.header.leader?.trim() || "").find(Boolean) || "";
+  return { team, total: rows.length, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows), leader };
+}
 export type OkrQuarterRollup = {
   months: Array<{ id: string; month: number; actionTeams: number }>;
   rows: Array<{
@@ -894,20 +914,26 @@ export function quarterRollup(quarter: OkrCycle | null, monthCycles: OkrCycle[],
   };
 }
 
-// ── 주차 목표·달성기준 덮어쓰기 사슬: 월 공통(effectiveGoals) → 주차 파트(member '') → 주차 파트원 ──
+// ── 목표·달성기준 덮어쓰기 사슬(새 구조): 월 공통(effectiveGoals) → 파트 종합(월 report header.goals) → 파트원 주차(header.goals) ──
+// 4차(2026-10-21) 층별 독립: 칸마다 field 별 표시(html.bottleneckSet·objectiveSet·criteriaSet)가 있으면 그 층의 글을 쓴다 — 빈 글이어도(비우면 빈 채 유지).
+// 표시가 없으면 위 층 글이 기본으로 보인다. 표시 없는 옛 칸(8월~10월 W3 데이터): objective·bottleneck 은 무시, criteria 는 글이 있을 때만 덮는다.
 const isObjectiveSet = (g?: OkrGoal) => g?.html?.objectiveSet === "1";
 const isBottleneckSet = (g?: OkrGoal) => g?.html?.bottleneckSet === "1";
-// overlayCriteria에 목표를 더한 것. objective는 html.objectiveSet === "1"인 칸만 읽는다(옛 칸의 옛 objective 글은 무시).
-// 덮은 결과 goal에도 html.objectiveSet을 남긴다(화면이 '고친 목표'임을 알고 월 목표를 함께 보이게).
-// bottleneck도 같은 규칙(3차, 2026-10-21): html.bottleneckSet === "1"인 칸만 읽고 결과에 표시를 남긴다.
+const isCriteriaSet = (g?: OkrGoal) => g?.html?.criteriaSet === "1";
+// 덮은 결과 goal에도 표시를 남긴다(다음 층이 같은 규칙으로 덮는다).
 export function overlayGoals(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
   if (!over?.length) return base;
   return base.map((g) => {
     const o = over.find((x) => x.no === g.no);
     if (!o) return g;
     const html: NonNullable<OkrGoal["html"]> = { ...(g.html || {}) };
-    delete html.criteria;
-    if (o.html?.criteria) html.criteria = o.html.criteria;
+    let criteria = g.criteria;
+    if (isCriteriaSet(o) || o.criteria.trim()) {
+      criteria = o.criteria;
+      delete html.criteria;
+      if (o.html?.criteria) html.criteria = o.html.criteria;
+      if (isCriteriaSet(o)) html.criteriaSet = "1";
+    }
     let objective = g.objective;
     if (isObjectiveSet(o)) {
       objective = o.objective;
@@ -918,43 +944,26 @@ export function overlayGoals(base: OkrGoal[], over?: OkrGoal[]): OkrGoal[] {
     let bottleneck = g.bottleneck;
     if (isBottleneckSet(o)) {
       bottleneck = o.bottleneck;
+      delete html.bottleneck;
+      if (o.html?.bottleneck) html.bottleneck = o.html.bottleneck;
       html.bottleneckSet = "1";
     }
-    return { ...g, bottleneck, objective, criteria: o.criteria, html: Object.keys(html).length ? html : undefined };
+    return { ...g, bottleneck, objective, criteria, html: Object.keys(html).length ? html : undefined };
   });
 }
-// 덮어쓰기 칸 하나 고치기 — 같은 번호 칸이 있으면 그 칸에 field만 바꿔 얹는다(putCriteria처럼 통째로 바꾸지 않는다: 다른 칸의 표시를 지키려고).
-// 새 칸은 shown(지금 보이는 값)에서 만들되 objectiveSet은 objective를 고칠 때만 붙인다(위 단계 목표 표시를 베껴 굳히지 않게).
-// objective가 빈 글이면 objective 덮어쓰기를 지운다(objective·html.objective·objectiveSet). criteria는 빈 글도 남긴다(지금 규칙).
-// bottleneck(3차): objective와 같은 규칙 — 글이 있으면 html.bottleneckSet = "1", 빈 글이면 bottleneck·bottleneckSet을 지운다(색 html 없음).
+// 덮어쓰기 칸 하나 고치기 — 같은 번호 칸이 있으면 그 칸에 field만 바꿔 얹는다(다른 field 의 글·표시는 그대로).
+// 새 칸은 고친 field 만 채운다(다른 field 는 빈 글 + 표시 없음 → 위 층 글이 계속 기본으로 보인다).
+// 4차: 빈 글도 표시와 함께 저장한다(비우면 빈 채 유지, 위 층으로 되돌아가지 않음). html 은 글자색(RichCell).
 export function putGoalField(list: OkrGoal[] | undefined, shown: OkrGoal, field: "objective" | "criteria" | "bottleneck", text: string, html?: string): OkrGoal[] {
   const cur = list || [];
   const existing = cur.find((x) => x.no === shown.no);
-  const clearObjective = field === "objective" && !text.trim();
-  const clearBottleneck = field === "bottleneck" && !text.trim();
-  if (!existing && (clearObjective || clearBottleneck)) return [...cur];
-  const cell: OkrGoal = existing
-    ? { ...existing }
-    : { no: shown.no, pillar: shown.pillar, bottleneck: shown.bottleneck, objective: shown.objective, criteria: shown.criteria };
-  const h: NonNullable<OkrGoal["html"]> = existing ? { ...(existing.html || {}) } : (shown.html?.criteria ? { criteria: shown.html.criteria } : {});
-  if (field === "criteria") {
-    cell.criteria = text;
-    delete h.criteria;
-    if (html) h.criteria = html;
-  } else if (field === "bottleneck") {
-    cell.bottleneck = clearBottleneck ? "" : text;
-    if (clearBottleneck) delete h.bottleneckSet; else h.bottleneckSet = "1";
-  } else if (clearObjective) {
-    cell.objective = "";
-    delete h.objective;
-    delete h.objectiveSet;
-  } else {
-    cell.objective = text;
-    delete h.objective;
-    if (html) h.objective = html;
-    h.objectiveSet = "1";
-  }
-  if (Object.keys(h).length) cell.html = h; else delete cell.html;
+  const cell: OkrGoal = existing ? { ...existing } : { no: shown.no, pillar: shown.pillar, bottleneck: "", objective: "", criteria: "" };
+  const h: NonNullable<OkrGoal["html"]> = existing ? { ...(existing.html || {}) } : {};
+  cell[field] = text;
+  delete h[field];
+  if (html) h[field] = html;
+  if (field === "criteria") h.criteriaSet = "1"; else if (field === "objective") h.objectiveSet = "1"; else h.bottleneckSet = "1";
+  cell.html = h;
   return [...cur.filter((x) => x.no !== shown.no), cell].sort((a, b) => a.no - b.no);
 }
 // 전주 목표 가져오기 — 같은 달 안의 전주일 때만, 전주 칸에 objectiveSet이 있던 번호만 표시와 함께 돌려준다(달이 바뀌면 월 목표가 바뀌므로 넘기지 않는다).

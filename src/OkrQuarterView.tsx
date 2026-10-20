@@ -10,17 +10,23 @@
 //     onPickMonth?: (monthId: string) => void,                 ← 새로: 달 머리·달 동그라미 → 그 달 [통합집계]
 //     onOpenMonth?: (monthId: string) => void,                 ← onPickMonth 와 같은 뜻
 //     onPick?: (monthId: string, team: string) => void,        ← 예전 이름. 위 둘이 없으면 onPick(monthId, "all") 로 부른다
-//     onFeedback?: (no: number, memo: string, memoHtml?: string) => void })  ← 새로(2026-10-21): "n분기 결과 및 다음 분기 개선계획" 칸(분기 행 feedback[no].memo). 없으면 읽기
+//     onFeedback?: (no: number, memo: string, memoHtml?: string) => void,  ← 새로(2026-10-21): "n분기 결과 및 다음 분기 개선계획" 칸(분기 행 feedback[no].memo). 없으면 읽기
+//     onDirection?: (text: string) => void,                   ← 새로(4차): "n분기 핵심방향" 띠(분기 행 direction). 없으면 읽기
+//     monthReports?: Record<monthId, OkrReport[]>,            ← 새로(4차): 파트 카드의 파트장(가장 최근 달 파트 월 report header.leader)
+//     onPickTeam?: (team: OkrTeam) => void })                 ← 새로(4차): 파트 카드 → 그 파트 탭(지금 달 파트 종합)
+// 머리 구색(4차): 핵심방향 띠(OkrDirection) + A~D 파트 카드(TeamCard, quarterTeamCard: 목표마다 마지막 기록 달의 파트 판정으로 셈) — 월 통합집계와 같게.
+// 4차(2026-10-21): No("병목 n") 열·"팀장 문서" 배지 삭제, 병목현상 굵게·글자색(html.bottleneck). 목표 삭제는 통합집계(월)에서만(예전 그대로).
 // 표 끝 두 열(월 통합집계와 같은 꼴): "조치·확인 필요 달"(월 CS 종합이 미흡·미착수인 달, alertMonths) · "n분기 결과 및 다음 분기 개선계획".
 import RichCell from "./RichCell";
+import OkrDirection from "./OkrDirection";
 import { tableCellClick } from "./cellNav";
 import {
-  alertMonths, bottleneckText, monthsOfQuarter, parseQuarterId, quarterOf,
+  OKR_TEAMS, alertMonths, bottleneckText, quarterTeamCard, type OkrReport, type OkrTeam, monthsOfQuarter, parseQuarterId, quarterOf,
   type OkrCycle, type OkrGoal, type OkrJudgedCell, type OkrQuarterRollup, type OkrRolledJudgment,
 } from "./okr";
-import { FragmentRows, JudgmentDot, PillarBar, ResizeHandle } from "./OkrCells";
+import { FragmentRows, JudgmentDot, PillarBar, ResizeHandle, TeamCard } from "./OkrCells";
 import { RolledJudgmentCell } from "./OkrMonthRollup";
-import { TD, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, goalHtml, pillarRuns, shortBottleneck, useColWidths } from "./okrUi";
+import { TD, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, goalHtml, pillarRuns, useColWidths } from "./okrUi";
 
 const BTN = "rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100";
 const EMPTY_CELL: OkrJudgedCell = { judgment: "", source: "" };
@@ -38,7 +44,7 @@ function quarterMonths(quarter: OkrCycle | null | undefined, rollup: OkrQuarterR
   return { q, months: monthsOfQuarter(year, q).map((x) => ({ id: x.id, month: x.month, actionTeams: rollup.months.find((m) => m.id === x.id)?.actionTeams || 0 })) };
 }
 
-export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, onPaste, onRestore, onCopyPrev, onTemplate, onQuarterJudgment, onPickMonth, onOpenMonth, onPick, onFeedback }: {
+export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, onPaste, onRestore, onCopyPrev, onTemplate, onQuarterJudgment, onPickMonth, onOpenMonth, onPick, onFeedback, onDirection, monthReports, onPickTeam }: {
   quarter: OkrCycle; rollup: OkrQuarterRollup; prevQuarter: OkrCycle | null;
   onGoal: (no: number, patch: Partial<OkrGoal>) => void; onPaste: () => void; onRestore: () => void; onCopyPrev: () => void; onTemplate: () => void;
   onQuarterJudgment?: (no: number, judgment: string) => void;
@@ -46,6 +52,9 @@ export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, o
   onOpenMonth?: (monthId: string) => void;
   onPick?: (monthId: string, team: string) => void;
   onFeedback?: (no: number, memo: string, memoHtml?: string) => void;
+  onDirection?: (text: string) => void;
+  monthReports?: Record<string, OkrReport[]>;
+  onPickTeam?: (team: OkrTeam) => void;
 }) {
   const goals = quarter.goals;
   const runs = pillarRuns(goals);
@@ -53,15 +62,22 @@ export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, o
   const { q, months } = quarterMonths(quarter, rollup);
   const openMonth = onPickMonth || onOpenMonth || (onPick ? (id: string) => onPick(id, "all") : undefined);
   const byNo = new Map(rollup.rows.map((r) => [r.no, r]));
-  const MON0 = 4; // 첫 달 열 위치(그 뒤 분기 종합까지 가운데 정렬)
-  const heads = ["", "병목현상", "목표", "달성기준(실행)", ...months.map((m) => `${m.month}월`), `${q}분기 종합`, "조치·확인 필요 달", `${q}분기 결과 및 다음 분기 개선계획`];
-  const col = useColWidths("okr_cols_quarter_v3", [58, 220, 260, 280, ...months.map(() => 72), 112, 120, 320]);
+  const MON0 = 3; // 첫 달 열 위치(그 뒤 분기 종합까지 가운데 정렬). 4차: No 열 삭제
+  const heads = ["병목현상", "목표", "달성기준(실행)", ...months.map((m) => `${m.month}월`), `${q}분기 종합`, "조치·확인 필요 달", `${q}분기 결과 및 다음 분기 개선계획`];
+  const col = useColWidths("okr_cols_quarter_v4", [220, 260, 280, ...months.map(() => 72), 112, 120, 320]);
   const QSUM = MON0 + months.length; // 분기 종합 열 위치(가운데 정렬은 여기까지)
-  const thClass = (i: number) => (i === 1 || i === 2 ? TH_LEADER : i === 3 || i === heads.length - 1 ? TH_WRITE : `${TH_READ} ${i >= MON0 && i <= QSUM ? "text-center" : ""}`); // 색은 병목현상·목표만, 달성기준·개선계획은 노랑(3차)
+  const thClass = (i: number) => (i === 0 || i === 1 ? TH_LEADER : i === 2 || i === heads.length - 1 ? TH_WRITE : `${TH_READ} ${i >= MON0 && i <= QSUM ? "text-center" : ""}`); // 색은 병목현상·목표만, 달성기준·개선계획은 노랑(3차)
+  const cards = OKR_TEAMS.map((t) => quarterTeamCard(rollup, t, monthReports || {}));
   return <div className="space-y-3">
+    <OkrDirection text={quarter.direction || ""} editable={!!onDirection} onChange={(t) => onDirection?.(t)} label={`${q}분기 핵심방향`} />
+
+    <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {cards.map((card) => <TeamCard key={card.team} card={card} onClick={onPickTeam ? () => onPickTeam(card.team) : undefined} />)}
+    </section>
+
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
-        <span className="text-[12px] font-black text-slate-700">{quarter.title || "분기 OKR"}<span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-black text-indigo-900">팀장 문서</span></span>
+        <span className="text-[12px] font-black text-slate-700">{quarter.title || "분기 OKR"}</span>
         <div className="flex flex-wrap items-center gap-1.5">
           <button type="button" onClick={onPaste} className={BTN}>📋 팀장 분기 OKR 붙여넣기</button>
           {prevQuarter && <button type="button" onClick={onCopyPrev} className={BTN}>↩ 지난 분기에서 가져오기</button>}
@@ -90,8 +106,7 @@ export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, o
                 const alerts = alertMonths(r?.byMonth, months);
                 const fb = quarter.feedback?.[String(goal.no)];
                 return <tr key={goal.no}>
-                  <td className={`${TD_READ} text-[11px] font-bold text-slate-500`}>{shortBottleneck(goals, goal.no)}</td>
-                  <td className={TD_LEADER_EDIT}><RichCell colors={false} text={bottleneckText(goal.bottleneck)} minRows={2} onChange={(t) => onGoal(goal.no, { bottleneck: t })} /></td>
+                  <td className={TD_LEADER_EDIT}><RichCell text={bottleneckText(goal.bottleneck)} html={goal.html?.bottleneck} minRows={2} className="font-bold text-slate-800" onChange={(t, h) => onGoal(goal.no, { bottleneck: t, html: goalHtml(goal, "bottleneck", h) })} /></td>
                   <td className={TD_LEADER_EDIT}><RichCell text={goal.objective} html={goal.html?.objective} minRows={2} className="font-semibold text-indigo-950" onChange={(t, h) => onGoal(goal.no, { objective: t, html: goalHtml(goal, "objective", h) })} /></td>
                   <td className={TD_WRITE}><RichCell text={goal.criteria} html={goal.html?.criteria} minRows={2} onChange={(t, h) => onGoal(goal.no, { criteria: t, html: goalHtml(goal, "criteria", h) })} /></td>
                   {months.map((m) => <td key={m.id} className={`${TD} min-w-14 px-1 py-1 text-center`}>
@@ -109,7 +124,7 @@ export default function OkrQuarterView({ quarter, rollup, prevQuarter, onGoal, o
           </tbody>
         </table>
       </div>
-      {!hasText && goals.length > 0 && <div className="border-t border-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-400">비어 있는 분기 OKR — 팀장 문서를 붙여 넣으면 9묶음이 한 번에 채워집니다</div>}
+      {!hasText && goals.length > 0 && <div className="border-t border-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-400">비어 있는 분기 OKR — 분기 OKR을 붙여 넣으면 9묶음이 한 번에 채워집니다</div>}
       {!rollup.months.length && goals.length > 0 && <div className="border-t border-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-400">이 분기에 아직 월 기록이 없습니다 — 달 칸은 월 기록이 생기면 채워집니다</div>}
     </section>
   </div>;

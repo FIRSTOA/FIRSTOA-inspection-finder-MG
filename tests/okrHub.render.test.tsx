@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { emptyReport, monthDraftFromQuarter, quarterRollup, weeksOfMonth, type OkrCycle, type OkrGoal, type OkrReport } from "../src/okr";
+import { blankGoalsLike, emptyReport, monthDraftFromQuarter, quarterRollup, weeksOfMonth, type OkrCycle, type OkrGoal, type OkrReport } from "../src/okr";
 import * as QuarterViewModule from "../src/OkrQuarterView";
 import OkrMonthRollup, { MonthTeamSummary } from "../src/OkrMonthRollup";
 import { TeamView } from "../src/OkrHub";
@@ -26,7 +26,7 @@ const quarter: OkrCycle = {
 };
 const october: OkrCycle = {
   id: "2026-10", kind: "month", title: "CS팀 10월 OKR 실행결과", year: 2026, month: 10, week_no: null, start_date: "2026-10-01", end_date: "2026-10-31",
-  parent_id: "2026-Q4", goals: OCT.goals, feedback: { "1": { memo: "11월에는 담당자 기준표를 먼저 돌린다" } }, direction: OCT.direction || "AI로 반복 업무를 줄인다", goals_origin: "", goals_prev: null,
+  parent_id: "2026-Q4", goals: OCT.goals, feedback: { "1": { memo: "11월에는 담당자 기준표를 먼저 돌린다" } }, direction: "10월은 4분기 목표의 담당자·대상·측정 기준을 정하고 실행을 시작한다.\n주간: 주간에는 실행하고\n월말: 월말에는 숫자와 미달 원인을 확인한다.\n분기: 분기 말 교훈으로 정리한다.", goals_origin: "", goals_prev: null, // OkrDirection 새 저장 형식(머리글 / 주간: / 월말: / 분기:)
 };
 const partA: OkrReport = { ...emptyReport("2026-10", "A", ""), rows: [{ no: 1, actual: "9건 중 6건 (67%, 미흡)", judgment: "미흡", reason: "", plan: "", evidence: "" }] };
 const weekRows: OkrReport[] = [
@@ -39,7 +39,16 @@ afterAll(() => { vi.unstubAllGlobals(); });
 describe("OKR 분기 → 월 → 주 화면 렌더", () => {
   it("[4분기] 탭: 표 하나(병목현상·목표·달성기준 + 10·11·12월 CS 종합 + 4분기 종합) + 붙여넣기 단추, 옛 '분기 진행' 표 없음", () => {
     const rollup = quarterRollup(quarter, [october], { "2026-10": [partA] }, { "2026-10": weekRows });
-    const html = render(createElement(OkrQuarterView, { quarter, rollup, prevQuarter: null, onGoal: noop, onPaste: noop, onRestore: noop, onCopyPrev: noop, onTemplate: noop, onQuarterJudgment: noop, onPickMonth: noop }));
+    const partAled: OkrReport = { ...partA, header: { ...partA.header, leader: "박파트" } };
+    const html = render(createElement(OkrQuarterView, { quarter: { ...quarter, direction: "4분기는 기준을 세운다.\n주간: 실행\n월말: 확인\n분기: 정리" }, rollup, prevQuarter: null, onGoal: noop, onPaste: noop, onRestore: noop, onCopyPrev: noop, onTemplate: noop, onQuarterJudgment: noop, onPickMonth: noop,
+      onDirection: noop, monthReports: { "2026-10": [partAled] }, onPickTeam: noop }));
+    // 4차 머리 구색: 분기 핵심방향 띠 + A~D 파트 카드(파트장·판정 n/9)
+    expect(html).toContain("4분기 핵심방향");
+    for (const step of ["주간 실행", "월말 확인", "분기 정리"]) expect(html).toContain(step);
+    expect(html).toContain("파트장 박파트");
+    expect(html).toContain("파트장 미기재");
+    expect(html).toContain(`판정 1/${quarter.goals.length}`);
+    expect(html).toContain("미흡·미착수 1");
     expect(html).toContain("팀장 분기 OKR 붙여넣기");
     expect(html).toContain("달성기준(실행)");
     expect(html).toContain("병목현상");
@@ -58,6 +67,8 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     // 월 통합집계와 같은 꼴의 끝 두 열 — 10월 CS 종합이 미흡이라 "10월"이 조치·확인 필요 달에
     expect(html).toContain("조치·확인 필요 달");
     expect(html).toContain("4분기 결과 및 다음 분기 개선계획");
+    expect(html).not.toContain("팀장 문서"); // 4차: 배지 삭제
+    expect(html).not.toMatch(/>병목 1</); // 4차: No 열 삭제
     expect(html).toMatch(/text-rose-600">10월</);
   });
 
@@ -81,15 +92,20 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(html).toContain("A파트");
     expect(html).toContain("김정민"); // 그 달 주차 기록에서 미착수인 사람
     expect(html).not.toContain("OKR 대기");
-    // 월 OKR이 복사본이면 분기 OKR을 읽기 전용으로 + 대기 띠
+    // 5차: 월 OKR이 아직 없으면(copy) 분기 글 대신 빈 틀(OkrHub 가 monthScreenGoals 로 넘김) + 한 줄 안내
     const nov = { ...monthDraftFromQuarter(2026, 11, quarter), goals: october.goals, goals_origin: "copy" as const };
+    const blank = blankGoalsLike(quarter.goals);
     const waiting = render(createElement(OkrMonthRollup, {
-      cycle: nov, quarter, goals: quarter.goals, goalsOf: () => quarter.goals, fromQuarter: true, quarterLabel: "4분기", reports: [], weekRows: [], otherMonths: [],
+      cycle: nov, quarter, goals: blank, goalsOf: () => blank, fromQuarter: true, quarterLabel: "4분기", reports: [], weekRows: [], otherMonths: [],
       onDirection: noop, onFeedback: noop, onPaste: noop, onStartFromQuarter: noop, onCopyGoals: noop, onRestore: noop, onTemplate: noop, ops: { onGoal: noop, onPillar: noop, onInsert: noop, onRemove: noop },
       onCsJudgment: noop, onPickTeam: noop,
     }));
-    expect(waiting).toContain("팀장 11월 OKR 대기");
-    expect(waiting).toContain("고치면 11월 OKR로 저장"); // 11·12월도 OkrHub가 ops를 넘겨 고칠 수 있다
+    expect(waiting).toContain("11월 OKR이 아직 없습니다 — [📋 팀장 11월 OKR 붙여넣기] 또는 [분기 OKR로 시작]"); // 5차 문구
+    expect(waiting).not.toContain("OKR을 보여줍니다");
+    expect(waiting).not.toContain(bottleneckSnippet(quarter.goals[0])); // 분기 글이 보이지 않는다
+    expect(waiting).not.toContain("팀장 11월 OKR 대기");
+    expect(html).not.toMatch(/>병목 1</); // 4차: No 열 삭제
+    expect(html).toMatch(/<th[^>]*>병목현상<span/);
     expect(waiting).toContain("11월 결과 및 12월 개선계획");
     expect(waiting).toContain("focus-within:ring-indigo-400"); // 병목현상·목표 = 팀장 문서색 편집 칸(2차: 읽기 전용 아님 — 글은 RichCell이라 서버 렌더에 안 나옴)
   });
@@ -112,12 +128,15 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(html).not.toContain("불러오기"); // 월 제출 화면엔 전주 불러오기 없음
     expect(html).toContain("focus-within:ring-indigo-400"); // 병목현상·목표 = 남보라 편집 칸(RichCell 글은 서버 렌더에 안 나옴)
     expect(html).not.toContain("bg-teal-50"); // 쪼개기 색 없음
+    expect(html).not.toContain("파트 제출"); // 4차: 새 구조 안내 줄 없음
+    expect(html.indexOf("팀원 집계")).toBeLessThan(html.indexOf("파트 종합")); // 4차: [팀원 집계]가 [파트 종합] 앞
+    expect(html).not.toMatch(/>병목 1</); // 4차: 칸 안 "병목 n" 라벨 없음
     // 판정 제안 = 마지막 기록 주차(suggestOf). 파트 종합 판정이 미흡이어도 마지막 주차가 완료면 '→ 완료'
     const suggesting = render(createElement(TeamView, { ...base, fresh: { ...fresh, suggestOf: (no: number) => (no === 1 ? "완료" as const : "" as const) } }));
     expect(suggesting).toContain("→ 완료");
 
     // 주차(파트원) 화면: 열 머리 = 파트 종합과 같게, 병목현상·목표 남보라 편집, 불러오기 단추 없음
-    const week = render(createElement(TeamView, { ...base, member: "김정민", reports: weekRows, fresh: { ...fresh, level: "week" as const, monthGoalOf: () => undefined } }));
+    const week = render(createElement(TeamView, { ...base, member: "김정민", reports: weekRows, fresh: { ...fresh, level: "week" as const } }));
     expect(week).not.toContain("이번 주 목표");
     expect(week).not.toContain("이번 주 달성기준");
     expect(week).toMatch(/>목표<span/);
@@ -128,6 +147,8 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(week).not.toContain("bg-teal-50");
     expect(week).not.toContain("불러오기");
     expect(week).not.toContain("(목표는 통합집계에서만)");
+    expect(week).not.toContain("파트 것이 기본으로"); // 4차: 안내 줄 없음
+    expect(week).not.toContain("월: ");
 
     const legacy = render(createElement(TeamView, base));
     expect(legacy).toMatch(/>병목<span/);
@@ -146,7 +167,8 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     }));
     expect(html).toContain("병목현상");
     expect(html).toContain(bottleneckSnippet(october.goals[0]));
-    expect(html).toContain("제안 미착수");
+    expect(html).toMatch(/>미착수<\/div>/); // 4차: "제안" 글자 없이 값만(○ 점으로 제안)
+    expect(html).not.toContain("제안 미착수");
     expect(html).not.toMatch(/>병목 1</); // 3차: 첫 번호 열 삭제
     expect(html).not.toContain("확정 판정");
     expect(html).toMatch(/<th[^>]*>병목현상<span/); // 첫 머리가 병목현상

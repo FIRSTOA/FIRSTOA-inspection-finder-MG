@@ -6,7 +6,7 @@ import {
   goalsAreFromQuarter, isLeaderGoals, mergeCycle, mergeMonthActuals, monthDraftFromQuarter, monthlyRollup, monthsOfQuarter, okrCyclePayload,
   parseOkrPaste, parseQuarterId, quarterCycleId, quarterDraft, quarterOf, quarterProgress, splitTsv, topFilterItems, weeksOfMonth,
   directionSteps, lastJudgmentInMonth, lastOfJudgments, mergeFeedback, monthCsJudgment, overlayCriteria, overlayGoals, partMonthJudgment,
-  prevGoalsToCarry, putGoalField, quarterCsJudgment, quarterRollup, filterItemsForTab, quarterNowMonth, alertMonths,
+  prevGoalsToCarry, putGoalField, quarterCsJudgment, quarterRollup, filterItemsForTab, quarterNowMonth, alertMonths, quarterTeamCard, monthScreenGoals,
   type OkrCycle, type OkrGoal, type OkrJudgedCell, type OkrReport, type OkrTeam,
 } from "../src/okr";
 import { showsWeekChips } from "../src/okrUi";
@@ -291,31 +291,40 @@ describe("2차: 주차 목표 덮어쓰기", () => {
     expect(out).toEqual(overlayCriteria(base, old)); // 옛 데이터에서는 옛 함수와 같다
     expect(overlayGoals(base, undefined)).toBe(base);
   });
-  it("T6 표시가 있으면 objective를 덮고 표시를 남긴다, 파트 → 개인 사슬", () => {
+  it("T6 표시가 있으면 objective를 덮고 표시를 남긴다, 파트 → 개인 사슬(4차: 새 칸은 고친 field만)", () => {
     const part = putGoalField(undefined, base[0], "objective", "파트 이번 주 목표");
-    expect(part).toEqual([{ no: 1, pillar: "P", bottleneck: "막힘", objective: "파트 이번 주 목표", criteria: "월 기준 1", html: { objectiveSet: "1" } }]);
+    expect(part).toEqual([{ no: 1, pillar: "P", bottleneck: "", objective: "파트 이번 주 목표", criteria: "", html: { objectiveSet: "1" } }]);
     const partView = overlayGoals(base, part);
-    expect(partView[0]).toMatchObject({ objective: "파트 이번 주 목표", criteria: "월 기준 1", html: { objectiveSet: "1" } });
+    expect(partView[0]).toMatchObject({ bottleneck: "막힘", objective: "파트 이번 주 목표", criteria: "월 기준 1", html: { objectiveSet: "1" } });
     expect(partView[1]).toBe(base[1]);
-    // 개인이 달성기준만 고침 → 새 칸에 표시를 베끼지 않아 파트 목표가 계속 흐른다
+    // 개인이 달성기준만 고침 → 새 칸에 목표 표시를 베끼지 않아 파트 목표가 계속 기본으로 보인다
     const person = putGoalField(undefined, partView[0], "criteria", "내 기준");
-    expect(person[0].html).toBeUndefined();
+    expect(person[0]).toEqual({ no: 1, pillar: "P", bottleneck: "", objective: "", criteria: "내 기준", html: { criteriaSet: "1" } });
     const personView = overlayGoals(partView, person);
-    expect(personView[0]).toMatchObject({ objective: "파트 이번 주 목표", criteria: "내 기준", html: { objectiveSet: "1" } });
+    expect(personView[0]).toMatchObject({ objective: "파트 이번 주 목표", criteria: "내 기준", html: { objectiveSet: "1", criteriaSet: "1" } });
     // 개인이 목표를 고치면 그 사람만
     const person2 = putGoalField(person, personView[0], "objective", "내 목표", "<b>내 목표</b>");
     const personView2 = overlayGoals(partView, person2);
     expect(personView2[0]).toMatchObject({ objective: "내 목표", criteria: "내 기준", html: { objective: "<b>내 목표</b>", objectiveSet: "1" } });
   });
-  it("T6 빈 objective는 목표 덮어쓰기를 지우고, criteria만 고칠 때 같은 칸의 표시를 지킨다", () => {
+  it("T6(4차) 비우면 빈 채 유지 — 표시는 남고 글만 빈다(위 층으로 되돌아가지 않음), criteria만 고칠 때 같은 칸의 표시를 지킨다", () => {
     const set = putGoalField(undefined, base[0], "objective", "주 목표", "<i>주 목표</i>");
     const crit = putGoalField(set, base[0], "criteria", "주 기준");
-    expect(crit[0]).toEqual({ no: 1, pillar: "P", bottleneck: "막힘", objective: "주 목표", criteria: "주 기준", html: { objective: "<i>주 목표</i>", objectiveSet: "1" } });
+    expect(crit[0]).toEqual({ no: 1, pillar: "P", bottleneck: "", objective: "주 목표", criteria: "주 기준", html: { objective: "<i>주 목표</i>", objectiveSet: "1", criteriaSet: "1" } });
     const cleared = putGoalField(crit, base[0], "objective", "  ");
-    expect(cleared[0]).toEqual({ no: 1, pillar: "P", bottleneck: "막힘", objective: "", criteria: "주 기준" });
-    expect(overlayGoals(base, cleared)[0]).toMatchObject({ objective: "월 목표 1", criteria: "주 기준" });
-    expect(putGoalField(undefined, base[0], "objective", "")).toEqual([]); // 칸이 없으면 만들지 않는다
-    expect(putGoalField(undefined, base[1], "criteria", "")[0].criteria).toBe(""); // 빈 달성기준은 남긴다
+    expect(cleared[0]).toEqual({ no: 1, pillar: "P", bottleneck: "", objective: "  ", criteria: "주 기준", html: { objectiveSet: "1", criteriaSet: "1" } });
+    expect(overlayGoals(base, cleared)[0]).toMatchObject({ objective: "  ", criteria: "주 기준" });
+    // 칸이 없어도 비우면 빈 칸을 표시와 함께 만든다(위 층 글을 지운 것)
+    expect(putGoalField(undefined, base[0], "objective", "")).toEqual([{ no: 1, pillar: "P", bottleneck: "", objective: "", criteria: "", html: { objectiveSet: "1" } }]);
+    expect(overlayGoals(base, putGoalField(undefined, base[0], "objective", ""))[0].objective).toBe("");
+    const emptyCrit = putGoalField(undefined, base[1], "criteria", "");
+    expect(overlayGoals(base, emptyCrit)[1].criteria).toBe(""); // 빈 달성기준도 빈 채
+  });
+  it("T6(4차) 표시 없는 옛 칸의 criteria는 글이 있을 때만 덮는다", () => {
+    const old: OkrGoal[] = [{ no: 1, pillar: "P", bottleneck: "", objective: "옛 목표", criteria: "" }, { no: 2, pillar: "P", bottleneck: "", objective: "", criteria: "옛 기준" }];
+    const out = overlayGoals(base, old);
+    expect(out[0]).toMatchObject({ objective: "월 목표 1", criteria: "월 기준 1" });
+    expect(out[1]).toMatchObject({ objective: "월 목표 2", criteria: "옛 기준" });
   });
   it("T7 prevGoalsToCarry — 같은 달이면 표시 있는 목표만, 다른 달이면 목표 없음", () => {
     const prev: OkrGoal[] = [
@@ -362,28 +371,32 @@ describe("3차(2026-10-21): 병목현상 덮어쓰기·파트 탭 필터·주차
     { no: 1, pillar: "P", bottleneck: "월 병목 1", objective: "월 목표 1", criteria: "월 기준 1" },
     { no: 2, pillar: "P", bottleneck: "월 병목 2", objective: "월 목표 2", criteria: "월 기준 2" },
   ];
-  it("T10 putGoalField bottleneck — 표시(bottleneckSet)를 붙여 덮고, 파트 → 개인 사슬", () => {
-    const part = putGoalField(undefined, base[0], "bottleneck", "파트 병목");
-    expect(part).toEqual([{ no: 1, pillar: "P", bottleneck: "파트 병목", objective: "월 목표 1", criteria: "월 기준 1", html: { bottleneckSet: "1" } }]);
+  it("T10 putGoalField bottleneck — 표시(bottleneckSet)·글자색(html.bottleneck)을 붙여 덮고, 파트 → 개인 사슬", () => {
+    const part = putGoalField(undefined, base[0], "bottleneck", "파트 병목", "<b style=\"color:red\">파트 병목</b>");
+    expect(part).toEqual([{ no: 1, pillar: "P", bottleneck: "파트 병목", objective: "", criteria: "", html: { bottleneck: "<b style=\"color:red\">파트 병목</b>", bottleneckSet: "1" } }]);
     const partView = overlayGoals(base, part);
-    expect(partView[0]).toMatchObject({ bottleneck: "파트 병목", objective: "월 목표 1", criteria: "월 기준 1", html: { bottleneckSet: "1" } });
+    expect(partView[0]).toMatchObject({ bottleneck: "파트 병목", objective: "월 목표 1", criteria: "월 기준 1", html: { bottleneckSet: "1", bottleneck: "<b style=\"color:red\">파트 병목</b>" } });
     expect(partView[1]).toBe(base[1]);
-    // 개인이 달성기준만 고치면 표시를 베끼지 않아 파트 병목이 계속 흐른다
+    // 개인이 달성기준만 고치면 병목 표시를 베끼지 않아 파트 병목이 계속 기본으로 보인다
     const person = putGoalField(undefined, partView[0], "criteria", "내 기준");
-    expect(person[0].html).toBeUndefined();
+    expect(person[0].html).toEqual({ criteriaSet: "1" });
     expect(overlayGoals(partView, person)[0]).toMatchObject({ bottleneck: "파트 병목", criteria: "내 기준" });
     // 같은 칸에 목표·병목 둘 다 — 표시 둘 다 남는다
     const both = putGoalField(putGoalField(undefined, base[0], "objective", "주 목표"), base[0], "bottleneck", "주 병목");
     expect(both[0].html).toEqual({ objectiveSet: "1", bottleneckSet: "1" });
+    // 개인이 병목을 고치면 그 사람만(파트 칸은 그대로 — 층별 독립)
+    const mine = putGoalField(undefined, partView[0], "bottleneck", "내 병목");
+    expect(overlayGoals(partView, mine)[0].bottleneck).toBe("내 병목");
+    expect(overlayGoals(base, part)[0].bottleneck).toBe("파트 병목");
     expect(overlayGoals(base, both)[0]).toMatchObject({ bottleneck: "주 병목", objective: "주 목표" });
   });
-  it("T10 빈 bottleneck은 병목 덮어쓰기를 지우고(월 것으로), 칸이 없으면 만들지 않는다", () => {
-    const set = putGoalField(undefined, base[0], "bottleneck", "주 병목");
+  it("T10(4차) 빈 bottleneck은 빈 채 유지(월 것으로 돌아가지 않음)", () => {
+    const set = putGoalField(undefined, base[0], "bottleneck", "주 병목", "<i>주 병목</i>");
     const crit = putGoalField(set, base[0], "criteria", "주 기준");
-    const cleared = putGoalField(crit, base[0], "bottleneck", "   ");
-    expect(cleared[0]).toEqual({ no: 1, pillar: "P", bottleneck: "", objective: "월 목표 1", criteria: "주 기준" });
-    expect(overlayGoals(base, cleared)[0]).toMatchObject({ bottleneck: "월 병목 1", criteria: "주 기준" });
-    expect(putGoalField(undefined, base[0], "bottleneck", "")).toEqual([]);
+    const cleared = putGoalField(crit, base[0], "bottleneck", "");
+    expect(cleared[0]).toEqual({ no: 1, pillar: "P", bottleneck: "", objective: "", criteria: "주 기준", html: { bottleneckSet: "1", criteriaSet: "1" } });
+    expect(overlayGoals(base, cleared)[0]).toMatchObject({ bottleneck: "", objective: "월 목표 1", criteria: "주 기준" });
+    expect(overlayGoals(base, putGoalField(undefined, base[0], "bottleneck", ""))[0].bottleneck).toBe("");
   });
   it("T10 표시 없는 옛 칸의 bottleneck 글은 무시한다", () => {
     const old: OkrGoal[] = [{ no: 1, pillar: "P", bottleneck: "8월 옛 병목", objective: "", criteria: "주 기준" }];
@@ -418,5 +431,34 @@ describe("분기 표 조치·확인 필요 달(2026-10-21)", () => {
     expect(alertMonths(byMonth, months)).toEqual(["10월", "12월"]);
     expect(alertMonths({}, months)).toEqual([]);
     expect(alertMonths(undefined, months)).toEqual([]);
+  });
+});
+
+describe("4차·5차: 분기 파트 카드·월 빈 틀(2026-10-21)", () => {
+  it("T14 quarterTeamCard — 목표마다 마지막 기록 달 판정으로 셈, 파트장은 가장 최근 달", () => {
+    const goals: OkrGoal[] = [1, 2, 3].map((no) => ({ no, pillar: "P", bottleneck: "", objective: `목표 ${no}`, criteria: "" }));
+    const q: OkrCycle = { ...quarterDraft(2026, 4), goals };
+    const oct: OkrCycle = { ...monthDraftFromQuarter(2026, 10, q), goals, goals_origin: "manual" };
+    const nov: OkrCycle = { ...monthDraftFromQuarter(2026, 11, q), goals, goals_origin: "manual" };
+    const rep = (cid: string, leader: string, rows: Array<[number, string]>): OkrReport => ({ ...emptyReport(cid, "A", ""), header: { leader, author: "", headcount: "", submitted: "" }, rows: rows.map(([no, judgment]) => ({ no, actual: "", judgment, reason: "", plan: "", evidence: "" })) });
+    const reports = { "2026-10": [rep("2026-10", "김옛", [[1, "미흡"], [2, "완료"]])], "2026-11": [rep("2026-11", "이새", [[1, "완료"]])] };
+    const rollup = quarterRollup(q, [oct, nov], reports, {});
+    const card = quarterTeamCard(rollup, "A", reports);
+    // 1번 = 11월 완료(마지막 달), 2번 = 10월 완료, 3번 = 없음
+    expect(card).toEqual({ team: "A", total: 3, judged: 2, alerts: 0, rate: 100, leader: "이새" });
+    expect(quarterTeamCard(rollup, "B", reports)).toEqual({ team: "B", total: 3, judged: 0, alerts: 0, rate: null, leader: "" });
+  });
+  it("T15 monthScreenGoals — copy·빈 goals 달은 분기 글 대신 Pillar 만 있는 빈 틀, 팀장 월 OKR 은 그대로", () => {
+    const q: OkrCycle = { ...quarterDraft(2026, 4), goals: [{ no: 1, pillar: "Pillar 1", bottleneck: "분기 병목", objective: "분기 목표", criteria: "분기 기준" }] };
+    const copy: OkrCycle = { ...monthDraftFromQuarter(2026, 11, q), goals: [{ no: 1, pillar: "Pillar 1", bottleneck: "복사 병목", objective: "복사 목표", criteria: "" }], goals_origin: "copy" };
+    expect(monthScreenGoals(copy, q)).toEqual({ goals: [{ no: 1, pillar: "Pillar 1", bottleneck: "", objective: "", criteria: "" }], pending: true });
+    const empty: OkrCycle = { ...copy, goals: [], goals_origin: "" };
+    expect(monthScreenGoals(empty, q).goals).toEqual([{ no: 1, pillar: "Pillar 1", bottleneck: "", objective: "", criteria: "" }]);
+    const noQuarter = monthScreenGoals(empty, null);
+    expect(noQuarter.goals).toHaveLength(9); // 분기가 없으면 빈 3×3
+    expect(noQuarter.goals.every((g) => !g.bottleneck && !g.objective && !g.criteria)).toBe(true);
+    const leader: OkrCycle = { ...copy, goals_origin: "import" };
+    expect(monthScreenGoals(leader, q)).toEqual({ goals: leader.goals, pending: false });
+    expect(monthScreenGoals(null, q)).toEqual({ goals: [], pending: false });
   });
 });

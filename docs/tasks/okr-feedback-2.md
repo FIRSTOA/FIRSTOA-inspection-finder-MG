@@ -345,3 +345,17 @@ export async function getOkrReportsIn(cycleIds: string[]): Promise<OkrReport[]>;
 5. 팀원 집계(`MonthTeamSummary`) 첫 "병목 n" 번호 열 삭제(열 폭 키 `okr_cols_teamsum_v4_…`). 병목현상 글·목표 열은 유지.
 6. 새 구조 경로의 [✨ 주차 합치기]·[↩ n주차 목표·달성기준 불러오기]·[↩ n주차 실제결과 불러오기] 단추 삭제. 옛 화면 단추, 판정 "→ 제안", [📋 팀장 문서 붙여넣기]·[직전 목표로 되돌리기]·[분기 OKR로 시작]은 유지.
 7. 주차 열 머리 = 파트 종합과 같게(병목현상·목표·달성기준…, "(n월 전략)"은 파트 종합만). 병목현상·목표 편집: 통합집계·파트 종합(월)은 월 공통 goals(goalOps), 주차는 header.goals 덮어쓰기(`putGoalField` "bottleneck" → `html.bottleneckSet`, `overlayGoals`가 표시 있는 칸만 덮음). 파트 종합 달성기준은 그 파트 월 report header.goals.
+
+---
+
+## 4차(2026-10-21 사용자 지시)
+
+1. "팀장 문서" 배지(분기 표 제목 옆)와 띠 문구 삭제. 복사본 달(copy) 띠만 "n월 OKR이 아직 없어 4분기 OKR을 보여줍니다. 고치면 n월 OKR로 저장됩니다".
+2. 층별 독립: 통합집계(월 cycle goals, 통합집계에서만 편집) / 파트 종합(그 파트 월 report header.goals) / 파트원 주차(자기 header.goals)는 서로 동기화하지 않는다. 칸·field 마다 자기 글이 없을 때만 위 층 글이 기본(파트원 주차의 기본 = 그 달 파트 종합 `monthParts`). `putGoalField` 는 빈 글도 표시(`bottleneckSet`·`objectiveSet`·새 `criteriaSet`)와 함께 저장 → 비우면 빈 채 유지. 표시 없는 옛 칸: objective·bottleneck 무시, criteria 는 글이 있을 때만 덮음.
+3. 새 구조 안내 줄 두 개("…파트 것이 기본으로 보이고…", "…파트 제출 — 통합집계에 반영됩니다…")와 목표 칸 위 회색 "월: …" 삭제. 옛 화면 안내 줄은 그대로.
+4. 판정 칸의 "제안" 글자 삭제(팀원 집계 "제안 완료" → "완료"). 제안은 ○ 점으로만. "→ 완료" 단추는 그대로.
+5. 파트 탭 사람 박스: [팀원 집계] → [파트 종합] → 파트원 순.
+6. 병목현상 칸 굵게 + 글자색(RichCell, `html.bottleneck`). 칸 안 "병목 n" 라벨과 월 통합집계·분기 표의 No 열 삭제(목표 삭제 ×는 월 통합집계 병목현상 칸 오른쪽 위). 열 폭 키 `okr_cols_summary_v4`, `okr_cols_quarter_v4`.
+7. [4분기] 통합집계 머리 구색을 월과 같게: 핵심방향 띠(OkrDirection "4분기 핵심방향", 분기 행 `direction`, 월과 같은 updateCycle 저장) + A~D 파트 카드(`TeamCard`를 OkrCells로 빼서 월·분기 공용).
+8. 분기 파트 카드 값 = `quarterTeamCard`: 목표마다 그 파트 월 판정 중 마지막 기록 달(`byTeam.quarter`)로 판정 n/총·달성 %·미흡·미착수 수, 파트장 = 분기 달 중 가장 최근 파트 월 report `header.leader`. 카드를 누르면 그 파트 탭(지금 달 파트 종합).
+9. (5차, 사용자 "11·12월 다 지워줘") 월 OKR이 아직 없는 달(goals_origin copy·goals 비어 있음·글 없음)은 분기 글 대신 분기 Pillar만 있는 빈 틀(`monthScreenGoals`, 분기 없으면 빈 3×3) — 통합집계·파트 종합·주차 모두 이 바탕. 안내는 "n월 OKR이 아직 없습니다 — [📋 팀장 n월 OKR 붙여넣기] 또는 [분기 OKR로 시작]". 빈 틀에 적으면 manual로 굳음(예전 그대로). `effectiveGoals`는 그대로(화면 층만).

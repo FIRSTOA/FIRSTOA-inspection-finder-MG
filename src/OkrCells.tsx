@@ -1,7 +1,19 @@
 // OKR 표 칸 부품 — OkrHub.tsx 에 있던 것을 그대로 옮겼다(2026-10-20). FreshBottleneckCell·JudgmentDots 만 새로 더했다(분기 → 월 → 주 화면).
 import type { ReactNode } from "react";
-import { JUDGMENT_INFO, OKR_PILLARS, bottleneckText, normalizeJudgment, type OkrGoal } from "./okr";
-import { TD_READ, shortBottleneck } from "./okrUi";
+import { JUDGMENT_INFO, OKR_PILLARS, bottleneckText, normalizeJudgment, type OkrGoal, type OkrTeamCard } from "./okr";
+import { TD_READ, shortBottleneck, teamName } from "./okrUi";
+
+// 파트 카드(월·분기 통합집계 공용, 2026-10-21 OkrMonthRollup 에서 옮김) — 파트 이름 · 판정 n/총 · 달성 % · 미흡·미착수 · 파트장. onClick 이 있으면 단추
+export function TeamCard({ card, onClick }: { card: OkrTeamCard; onClick?: () => void }) {
+  const { team, total, judged, alerts, rate, leader } = card;
+  const body = <>
+    <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">{teamName(team)}</div><div className="text-[11px] font-bold tabular-nums text-slate-400">{judged >= total && total ? "제출 완료" : `판정 ${judged}/${total}`}</div></div>
+    <div className="mt-1 flex items-end justify-between"><div className="text-2xl font-black tabular-nums text-slate-950">{rate === null ? "—" : `${rate}%`}<span className="ml-1 text-xs font-semibold text-slate-400">달성</span></div><div className="text-right text-[11px] font-bold">{alerts > 0 ? <span className="text-rose-600">미흡·미착수 {alerts}</span> : <span className="text-slate-300">미흡 없음</span>}</div></div>
+    <div className="mt-2 border-t border-slate-100 pt-2 text-[10px] font-semibold text-slate-400">{leader ? `파트장 ${leader}` : "파트장 미기재"}</div>
+  </>;
+  if (!onClick) return <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">{body}</div>;
+  return <button type="button" onClick={onClick} title={`${teamName(team)} 열기`} className="rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-slate-400">{body}</button>;
+}
 
 export const ResizeHandle = ({ onDrag, onReset }: { onDrag: (e: React.MouseEvent) => void; onReset: () => void }) => <span onMouseDown={onDrag} onDoubleClick={onReset} title="끌어서 너비 조절 · 두 번 누르면 기본" className="absolute -right-[3px] top-0 z-10 h-full w-[7px] cursor-col-resize select-none hover:bg-slate-400/60" />;
 
@@ -56,7 +68,7 @@ export type JudgedCellLike = { judgment: string; source: "set" | "suggest" | "" 
 const DOT_RING: Record<string, string> = { 완료: "border-emerald-500", 해당없음: "border-slate-400", 부분달성: "border-amber-400", 미흡: "border-orange-500", 미착수: "border-rose-500" };
 export function JudgmentDot({ cell, size = 14, onClick, title, label }: { cell: JudgedCellLike; size?: number; onClick?: () => void; title?: string; label?: string }) {
   const j = normalizeJudgment(cell.judgment);
-  const kind = !j ? "없음" : cell.source === "set" ? "확정" : "제안";
+  const kind = !j ? "없음" : cell.source === "set" ? "확정" : "자동(마지막 주차)";
   const tip = title || [label, j || "기록 없음", j ? kind : ""].filter(Boolean).join(" · ");
   const shape = !j
     ? <span className="text-[11px] text-slate-300">—</span>

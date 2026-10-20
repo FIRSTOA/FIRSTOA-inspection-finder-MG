@@ -3,6 +3,90 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-21",
+    "hash": "7d377c505a",
+    "agent": "developer",
+    "summary": "OKR 3차: 파트 탭엔 월만(4분기 숨김), 범례·AI 단추 제거, 색은 병목현상·목표만, 파트 종합엔 주차 칩 없음, 분기 통합집계에 조치 달·개선계획 열"
+  },
+  {
+    "date": "2026-10-21",
+    "hash": "7d377c505a",
+    "agent": "qa-checker",
+    "summary": "OKR 3차: 파트 탭엔 월만(4분기 숨김), 범례·AI 단추 제거, 색은 병목현상·목표만, 파트 종합엔 주차 칩 없음, 분기 통합집계에 조치 달·개선계획 열"
+  },
+  {
+    "date": "2026-10-21",
+    "hash": "7d377c505a",
+    "agent": "field-deploy-check",
+    "summary": "OKR 3차: 파트 탭엔 월만(4분기 숨김), 범례·AI 단추 제거, 색은 병목현상·목표만, 파트 종합엔 주차 칩 없음, 분기 통합집계에 조치 달·개선계획 열"
+  },
+  {
+    "date": "2026-10-21",
+    "hash": "f386159a67",
+    "agent": "feature-planner",
+    "summary": "OKR 2차: 통합집계를 동그라미 틀(9목표×파트/×월 + CS 종합)로, 판정 제안은 마지막 주차, 핵심방향 띠, 주차 목표 쪼개기 편집"
+  },
+  {
+    "date": "2026-10-21",
+    "hash": "f386159a67",
+    "agent": "ui-designer",
+    "summary": "OKR 2차: 통합집계를 동그라미 틀(9목표×파트/×월 + CS 종합)로, 판정 제안은 마지막 주차, 핵심방향 띠, 주차 목표 쪼개기 편집"
+  },
+  {
+    "date": "2026-10-21",
+    "hash": "f386159a67",
+    "agent": "developer",
+    "summary": "OKR 2차: 통합집계를 동그라미 틀(9목표×파트/×월 + CS 종합)로, 판정 제안은 마지막 주차, 핵심방향 띠, 주차 목표 쪼개기 편집"
+  },
+  {
+    "date": "2026-10-21",
+    "hash": "f386159a67",
+    "agent": "qa-checker",
+    "summary": "OKR 2차: 통합집계를 동그라미 틀(9목표×파트/×월 + CS 종합)로, 판정 제안은 마지막 주차, 핵심방향 띠, 주차 목표 쪼개기 편집"
+  },
+  {
+    "date": "2026-10-21",
+    "hash": "f386159a67",
+    "agent": "field-deploy-check",
+    "summary": "OKR 2차: 통합집계를 동그라미 틀(9목표×파트/×월 + CS 종합)로, 판정 제안은 마지막 주차, 핵심방향 띠, 주차 목표 쪼개기 편집"
+  },
+  {
+    "date": "2026-10-20",
+    "hash": "da5e0f9579",
+    "agent": "feature-planner",
+    "summary": "OKR 구조 개편: 분기 OKR(통합집계) → 월 OKR(파트종합) → 주차(파트원), 상단 필터 [4분기][10월][11월][12월]"
+  },
+  {
+    "date": "2026-10-20",
+    "hash": "da5e0f9579",
+    "agent": "db-schema",
+    "summary": "OKR 구조 개편: 분기 OKR(통합집계) → 월 OKR(파트종합) → 주차(파트원), 상단 필터 [4분기][10월][11월][12월]"
+  },
+  {
+    "date": "2026-10-20",
+    "hash": "da5e0f9579",
+    "agent": "developer",
+    "summary": "OKR 구조 개편: 분기 OKR(통합집계) → 월 OKR(파트종합) → 주차(파트원), 상단 필터 [4분기][10월][11월][12월]"
+  },
+  {
+    "date": "2026-10-20",
+    "hash": "da5e0f9579",
+    "agent": "qa-checker",
+    "summary": "OKR 구조 개편: 분기 OKR(통합집계) → 월 OKR(파트종합) → 주차(파트원), 상단 필터 [4분기][10월][11월][12월]"
+  },
+  {
+    "date": "2026-10-20",
+    "hash": "da5e0f9579",
+    "agent": "field-deploy-check",
+    "summary": "OKR 구조 개편: 분기 OKR(통합집계) → 월 OKR(파트종합) → 주차(파트원), 상단 필터 [4분기][10월][11월][12월]"
+  },
+  {
+    "date": "2026-10-20",
+    "hash": "da5e0f9579",
+    "agent": "sql-review",
+    "summary": "OKR 구조 개편: 분기 OKR(통합집계) → 월 OKR(파트종합) → 주차(파트원), 상단 필터 [4분기][10월][11월][12월]"
+  },
+  {
     "date": "2026-10-20",
     "hash": "02961cbb85",
     "agent": "developer",
