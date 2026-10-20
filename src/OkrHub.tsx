@@ -28,7 +28,7 @@
 //     7) 주차 열 머리 = 파트 종합과 같게(병목현상·목표·달성기준…). 병목현상·목표 편집: 통합집계·파트 종합은 월 공통 goals(goalOps),
 //        주차는 header.goals 덮어쓰기(putGoalField "bottleneck"/"objective", html.bottleneckSet·objectiveSet). 달성기준은 파트 종합이면 월 파트 report header.goals.
 //    4차(2026-10-21 사용자 지시, docs/tasks/okr-feedback-2.md 끝): 층별 독립 — 통합집계(월 cycle goals) / 파트 종합(월 report header.goals) / 파트원 주차(header.goals)는
-//     서로 동기화하지 않는다. 칸마다 자기 글이 없을 때만 위 층 글이 기본(파트원 주차의 기본 = 그 달 파트 종합, monthParts), 비우면 빈 채 유지(html.*Set 표시).
+//     서로 동기화하지 않는다. 칸마다 자기 글이 없을 때만 위 층 글이 기본(파트원 주차의 기본 = 월 공통 → 그 주 파트 행; 파트 종합은 자기 층에서만 — 8차), 비우면 빈 채 유지(html.*Set 표시, 달성기준은 예외).
 //     "팀장 문서" 배지·안내 줄·"월: …"·판정 "제안" 글자 삭제, [팀원 집계]가 [파트 종합] 앞, 병목현상 굵게·글자색(html.bottleneck), "병목 n" 라벨·No 열 삭제.
 //    9월까지(OKR_LEGACY_UNTIL)와 SQL 실행 전에는 위 설명대로의 옛 화면을 그대로 쓴다(코드 경로 그대로).
 //    목표·달성기준의 바탕은 새 구조 달에서 effectiveGoals(달, 분기) — 달이 팀장 월 OKR이 아니면(복사본) 분기 OKR을 읽기 전용으로.
@@ -134,7 +134,6 @@ export default function OkrHub({ author }: { author: string }) {
   const quarterIdRef = useRef("");
   const [weekBook, setWeekBook] = useState<{ monthId: string; rows: OkrReport[] } | null>(null); // 그 달 주차 기록 전부(합치기·팀원 집계·박스 숫자)
   // 4차: 새 구조 주차 화면에서 그 달 파트 종합 행(월 report member '') — 파트원 주차 병목현상·목표·달성기준의 기본(읽기만)
-  const [monthParts, setMonthParts] = useState<{ monthId: string; rows: OkrReport[] } | null>(null);
   // 분기 통합집계 재료 — 세 달 행(없는 달은 분기 틀 초안)·월 파트 종합 행·주차 기록(정식 id …-Wn). 분기를 열 때 한 번만 읽는다(15초 틱에서는 안 읽음).
   const [progress, setProgress] = useState<{ months: OkrCycle[]; reports: Record<string, OkrReport[]>; weekReports: Record<string, OkrReport[]> } | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -217,7 +216,7 @@ export default function OkrHub({ author }: { author: string }) {
     setLoading(true);
     void (async () => {
       try {
-        const [found, rows, mc, qc, mp] = await Promise.all([getOkrCycle(id), getOkrReports(id), w ? getOkrCycle(mid) : Promise.resolve(null), fresh ? getOkrCycle(qid) : Promise.resolve(null), w && fresh ? getOkrReports(mid, "") : Promise.resolve(null)]);
+        const [found, rows, mc, qc] = await Promise.all([getOkrCycle(id), getOkrReports(id), w ? getOkrCycle(mid) : Promise.resolve(null), fresh ? getOkrCycle(qid) : Promise.resolve(null)]);
         if (token !== openTokenRef.current) return;
         const list = cyclesRef.current;
         // 새 구조 달의 초안은 지난달 복사 대신 분기 틀(글 빈칸, goals_origin 'copy') — 옛 구조 달은 그대로 monthDraft
@@ -240,7 +239,6 @@ export default function OkrHub({ author }: { author: string }) {
         if (found) rememberSaved(found);
         quarterIdRef.current = fresh ? qid : "";
         setQuarterCycle(qc);
-        setMonthParts(mp ? { monthId: mid, rows: mp } : null);
         setCycle(c);
         setReports(rows);
         loadedCycleRef.current = id;
@@ -427,7 +425,7 @@ export default function OkrHub({ author }: { author: string }) {
       const token = openTokenRef.current; const seq = saveSeqRef.current;
       const q0 = quarterIdRef.current; // 새 구조 달: 분기 OKR(읽기 전용)도 같이
       try {
-        const [srvC, srvRows, srvG, srvQ, srvMp] = await Promise.all([getOkrCycle(c0.id), getOkrReports(c0.id), g0 ? getOkrCycle(g0.cycle.id) : Promise.resolve(null), q0 ? getOkrCycle(q0) : Promise.resolve(null), g0 && q0 ? getOkrReports(g0.cycle.id, "") : Promise.resolve(null)]);
+        const [srvC, srvRows, srvG, srvQ] = await Promise.all([getOkrCycle(c0.id), getOkrReports(c0.id), g0 ? getOkrCycle(g0.cycle.id) : Promise.resolve(null), q0 ? getOkrCycle(q0) : Promise.resolve(null)]);
         if (stopped || token !== openTokenRef.current || seq !== saveSeqRef.current || pendingCyclesRef.current.length || pendingReportsRef.current.length) return;
         const takeCycle = (cur: OkrCycle, srv: OkrCycle | null) => {
           if (!srv || sig(cur) !== csig(cycleBaseRef.current[cur.id]) || sig(srv) === sig(cur)) return cur;
@@ -447,7 +445,6 @@ export default function OkrHub({ author }: { author: string }) {
         if (g0) setGoalSrc((cur) => (cur ? { cycle: takeCycle(cur.cycle, srvG) } : cur));
         if (srvC) rememberSaved(srvC);
         if (q0 && srvQ) setQuarterCycle((cur) => (cur && sig(cur) === sig(srvQ) ? cur : srvQ));
-        if (g0 && srvMp) setMonthParts({ monthId: g0.cycle.id, rows: srvMp });
         setSyncedAt(kstClock());
       } catch { /* 다음 틱에 다시 */ }
     };
@@ -468,9 +465,9 @@ export default function OkrHub({ author }: { author: string }) {
   // 보이는 목표: 공통(달) → 파트 종합의 달성기준 덮어쓰기(이 주차 기록) → 개인의 덮어쓰기. 목표·Pillar·병목은 늘 공통.
   // 새 구조 달(2026-10-20 2차): 주차 목표도 같은 사슬로 덮는다(overlayGoals — html.objectiveSet 표시가 있는 칸만). 옛 화면은 overlayCriteria 그대로.
   const overlay = newMonth ? overlayGoals : overlayCriteria;
-  // 4차: 새 구조 주차 화면의 파트 바탕 = 월 공통 → 그 달 파트 종합(monthParts) → 그 주 파트 행(옛 2차 데이터만, 화면에서 더 고칠 수 없음)
-  const monthPartOf = (team: OkrTeam) => (newMonth && weekNo !== null && monthParts?.monthId === monthCycleId(year, month) ? findReport(monthParts.rows, team, "") : undefined);
-  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => (newMonth && weekNo !== null ? overlay(overlay(commonGoals, monthPartOf(team)?.goals), partOf(team)?.goals) : overlay(commonGoals, partOf(team)?.goals));
+  // 8차(2026-10-21 사용자 "파트 종합 달성기준은 파트 종합에만"): 주차 바탕에서 그 달 파트 종합 층을 뺀다.
+  //   새 구조 주차 = 월 공통(팀장) → 그 주 파트 행 → 본인. 파트 종합(월 report)은 자기 층에서만 쓰인다(monthParts 는 이제 바탕에 안 들어감).
+  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => overlay(commonGoals, partOf(team)?.goals);
   const personGoalsOf = (team: OkrTeam, who: string): OkrGoal[] => (!who || who === "__sum__" ? teamGoalsOf(team) : overlay(teamGoalsOf(team), findReport(reports, team, who)?.goals));
   const updateCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
   // 목표 쪽 편집은 달에 — 주차를 열어 두었으면 goalSrc(달)로 간다
