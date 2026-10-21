@@ -49,6 +49,7 @@ Claude Code는 CLAUDE.md 규칙대로 자동 호출. Codex 등 다른 도구는 
 - **서비스접수 지원 3종(경영·운영·영업) + 미처리 현황판**: 설계안 2차 docs/tasks/reception-dept-types.md (2026-10-19, feature-planner, 사용자 답 Q1~Q9·팀장 결정 반영). 두 줄 종류 선택기(현장3·지원3), 서비스접수 맨 위 6종 미처리 현황판 + 홈 관제 덱 카드, 지원 3종 완료·내일로·날짜·보류·메모 단추(일정리스트 안 씀), 업체로 접수(vendor_master), 영업·경영 시트 동기화 reception_sales·reception_mgmt(새 경로 dept-sheets.ts). SQL reception-dept-types.sql 미작성. 1차 병렬(표다빈·윤화면·구현서A·B) → 2차(구현서C·D) → 검수아.
 
 ## 작업 기록
+- 2026-10-21 (Claude Code) 거래처 3단 구조(업체 10자리 › 지점 5자리 › 기기 순번, 자산기번은 별명) 구상 메모 + DB 실측을 docs/tasks/customer-hierarchy.md 로 보관(보류, 나중에 진행). 코드 변경 없음.
 - 2026-10-21 (Claude Code) OKR 9차(소): 병목현상·목표 칸(TD_LEADER) 행 경계가 안 보여 글이 빼곡해 보이던 것 — 테두리 indigo-300 + 글 위아래 여백 py-2.5. 파일: src/okrUi.ts.
 - 2026-10-21 (Claude Code) OKR 8차: 주차(파트원) 바탕에서 "그 달 파트 종합" 층 제거 — 주차 = 월 공통(팀장) → 그 주 파트 행 → 본인. 파트 종합 달성기준은 파트 종합에만(사용자 "이민구 4주차에 왜 파트 종합 달성기준이 들어가 있냐"). monthParts 상태·조회 2곳 삭제. 이어서 주차 화면은 지운 달성기준을 빈 채 유지(overlayGoals keepEmptyCriteria=true; 파트 종합은 7차대로 비우면 통합집계 것). 파일: src/OkrHub.tsx, src/okr.ts, tests/okrQuarter.test.ts.
 - 2026-10-21 (Claude Code) OKR 7차: 달성기준 규칙 — 파트 종합·주차에서 비우면 위 층(통합집계 달성기준)이 다시 보임(목표·병목현상은 비운 채 유지 그대로; overlayGoals), 팀원 집계 알약 인원 수 = 이름 목록 수(달 화면에서 0명 되던 버그), [4분기] 표 달성기준을 목표 칸 아래 [달성기준 ▾] 접기로 + 달 열을 2단 머리(10/11/12월 → A B C D CS 점, 파트 점 누르면 그 달 파트 종합), 열 너비 조절 1:1 복원(colStyle: 마지막 열만 폭 없이 남는 폭을 먹음, 표 끝 여백 없음 유지), OKR 화면 좌우 여백 0(워킨맵과 동일) → 바로 뒤 커밋에서 사용자 "너무 붙는다"로 12px(px-3)로. 테스트 627. 파일: src/okr.ts, App.tsx(1줄), OkrHub.tsx, OkrQuarterView.tsx, OkrMonthRollup.tsx, okrUi.ts, tests 2개.
