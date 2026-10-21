@@ -48,6 +48,24 @@ def main_window():
     return hit[0] if hit else None
 
 
+def login_window():
+    """로그인 화면 창(클래스 EVA_Window, 제목 '카카오톡', 보임) — 있으면 로그인 안 된 상태.
+    주의: 로그인 화면일 때도 메인 창(EVA_Window_Dblclk '카카오톡')은 숨은 채로 존재한다(2026-10-21 실측) — main_window()만으로 로그인 판단하면 틀린다"""
+    hit = []
+
+    def cb(h, _):
+        if win32gui.GetClassName(h) == "EVA_Window" and win32gui.GetWindowText(h).strip().lower() in MAIN_TITLES and win32gui.IsWindowVisible(h):
+            hit.append(h)
+
+    win32gui.EnumWindows(cb, None)
+    return hit[0] if hit else None
+
+
+def logged_in() -> bool:
+    """카톡이 로그인된 상태인가 — 메인 창이 있고 로그인 창은 없어야 한다"""
+    return bool(main_window()) and not login_window()
+
+
 def kakao_responding(hwnd: int, timeout_ms: int = 3000) -> bool:
     """카톡 창이 메시지에 답하는지(렉·멈춤 감지) — WM_NULL 을 3초 안에 처리하지 못하면 응답 없음"""
     import ctypes
@@ -82,12 +100,15 @@ def restart_kakao(reason: str = "") -> bool:
     except Exception as e:
         log(f"    카톡 재시작 실패: {e}")
         return False
-    for _ in range(12):  # 최대 60초 — 자동 로그인 끝나면 메인 창(EVA_Window_Dblclk '카카오톡')이 생긴다
+    for _ in range(12):  # 최대 60초 — 자동 로그인 끝나면 메인 창만 남고 로그인 창(EVA_Window)은 사라진다
         time.sleep(5)
-        if main_window():
+        if logged_in():
             log("    ✓ 카톡 다시 켜짐(로그인됨)")
             return True
-    log("    ✗ 카톡을 다시 켰지만 로그인 창이 안 생김 — 로그인 화면일 수 있음(사람이 확인)")
+    if login_window():
+        log("    ✗ 카톡을 다시 켰지만 로그인 화면이 떴다 — 자동 로그인 실패, 사람이 로그인해야 한다")
+    else:
+        log("    ✗ 카톡을 다시 켰지만 60초 안에 메인 창이 안 생김")
     return False
 
 
@@ -300,7 +321,20 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
     main = main_window()
     if not main:
         log("    카톡 메인 창을 못 찾음 — 카톡 PC가 꺼져 있거나 로그인 전")
+        open_room.last_fail = "nokakao"
         return False
+    if login_window():
+        try:
+            from kakao_login import auto_login  # 저장된 봇 계정으로 대신 로그인(10분에 한 번)
+
+            auto_login()
+        except Exception as e:
+            log(f"    자동 로그인 오류: {e}")
+        if login_window():
+            log("    ✗ 카톡이 로그인 화면 — 봇 계정으로 로그인해야 방을 열 수 있다(2026-10-21 자동 로그인 실패 사례)")
+            open_room.last_fail = "login"
+            return False
+        main = main_window() or main
     if not kakao_responding(main):
         log("    ✗ 카톡이 응답 없음(렉·멈춤) — 이번 시도 건너뜀")
         open_room.last_fail = "hung"
@@ -358,8 +392,9 @@ def open_room(room: str, wait: float = 1.2, debug: bool = False) -> bool:
         if not bring_front(main):
             break
     # 검색 닫기(다음 검색·사람 사용에 방해 안 되게) — 방 창이 내용을 다 불러오도록 잠깐 기다린 뒤, X 클릭만 한다
+    # (연 직후 바로 보내거나 닫으면 카톡이 힙 손상으로 죽는다 — 2026-10-19 08:02 월요 포스터 때 2번. 천천히 열면 35개도 멀쩡했다)
     try:
-        time.sleep(1.0)
+        time.sleep(2.5 if hwnd else 1.0)
         if win32gui.GetForegroundWindow() == main or bring_front(main):
             close_search(main, pyautogui)
             reset_filter_all(main, pyautogui)

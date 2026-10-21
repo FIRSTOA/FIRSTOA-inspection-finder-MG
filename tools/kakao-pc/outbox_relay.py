@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 # 창 찾기·클립보드·붙여넣기는 포스터 전송기와 같은 부품을 쓴다
 from poster_send import REST, SUPABASE_ANON, find_room_window, log, paste_and_send, set_clipboard_text
-from open_room import open_room, restart_kakao  # 창이 없으면 방 이름으로 검색해 연다(2026-10-17, 카톡 26.8 실측)
+from open_room import login_window, open_room, restart_kakao  # 창이 없으면 방 이름으로 검색해 연다(2026-10-17, 카톡 26.8 실측)
 
 STALE_SECONDS = 120  # 봇 폴링(7초)의 넉넉한 배수 — 이보다 오래 남았으면 봇이 못 보내는 상태다 (2026-10-17: 180→120, 실행기 1분 주기와 함께 조용한 방도 3분 안에)
 
@@ -49,6 +49,21 @@ _open_tried: dict[str, float] = {}  # 방별 마지막 "검색해서 열기" 시
 _open_fail_streak = 0  # 연속 열기 실패 횟수(어느 방이든) — 3번(≈30분)이면 카톡이 렉 걸린 것으로 보고 재시작(2026-10-18 아침 ERP방 8번 연속 실패 → 1시간 22분 지연)
 _kakao_restarted_at = 0.0  # 재시작은 1시간에 한 번만
 RESTART_AFTER_FAILS = 3
+
+# 야간 발송 금지 — 22:00~08:00(KST, PC 시간)엔 보내지 않고 들고 있다가 08:00 이후 첫 1분에 보낸다(2026-10-22 00:06 영업확장성미션방 심야 발송 뒤 요청)
+QUIET_START_HOUR = 22
+QUIET_END_HOUR = 8
+_quiet_logged_at = 0.0
+_login_logged_at = 0.0
+
+
+KST = timezone(timedelta(hours=9))
+MAX_ROOMS_PER_RUN = 3  # 한 번(1분)에 보내는 방 수 상한 — 08:00 직후 밤새 밀린 글이 한꺼번에 몰려 창이 쌓이면 카톡이 죽는다(10/19 08:02 사례, 방지훈 검토 2026-10-22)
+
+
+def in_quiet_hours(now: datetime | None = None) -> bool:
+    h = (now or datetime.now(KST)).hour  # PC 시간대 설정과 상관없이 KST(폰 봇과 같은 기준)
+    return h >= QUIET_START_HOUR or h < QUIET_END_HOUR
 _quiet_until: dict[str, float] = {}  # 방별 "창 없음" 로그를 30분에 한 번만 — 1분 주기로 돌면서 같은 줄이 쌓이던 것(2026-10-17 노트북 첫 가동)
 
 
@@ -81,6 +96,27 @@ def main() -> int:
     if not rows:
         return 0  # 적체 없음 — 봇이 잘 돌고 있다 (로그도 남기지 않는다: 1분마다 도는 조용한 파수꾼)
 
+    import time as _t
+
+    global _quiet_logged_at, _login_logged_at
+    if in_quiet_hours():
+        if _t.time() - _quiet_logged_at > 3600:
+            _quiet_logged_at = _t.time()
+            log(f"  🌙 야간({QUIET_START_HOUR:02d}:00~{QUIET_END_HOUR:02d}:00) — 밀린 글 {len(rows)}건은 {QUIET_END_HOUR:02d}:00 이후에 보낸다 (이 줄은 1시간에 한 번)")
+        return 0
+    if login_window():
+        try:
+            from kakao_login import auto_login  # 저장된 봇 계정으로 대신 로그인(10분에 한 번)
+
+            auto_login()
+        except Exception as e:
+            log(f"  자동 로그인 오류: {e}")
+    if login_window():
+        if _t.time() - _login_logged_at > 1800:
+            _login_logged_at = _t.time()
+            log(f"  ✗ 카톡이 로그인 화면 — 봇 계정으로 로그인해야 밀린 글 {len(rows)}건을 보낼 수 있다 (재시작해도 소용없어 기다린다 · 이 줄은 30분에 한 번)")
+        return 0
+
     # 창이 열려 있는 방만 추린다 — 창 없는 방은 30분에 한 번만 로그(조용한 파수꾼)
     todo = []
     opened_here: list[int] = []  # 이번에 검색으로 연 창 — 보내고 나면 닫는다(창이 쌓이면 카톡이 대화 내용 불러오다 죽는다 — 2026-10-17 노트북 실측)
@@ -91,7 +127,6 @@ def main() -> int:
             continue
         hwnd, title = find_room_window(room)
         if not hwnd:
-            import time as _t
             if _open_tried.get(room, 0) < _t.time() - 10 * 60:
                 _open_tried[room] = _t.time()
                 log(f"  [{room}] 창이 없어 방 이름으로 검색해 열어 봅니다")
@@ -106,8 +141,11 @@ def main() -> int:
                     _open_fail_streak = 0
                 else:
                     _open_fail_streak += 1
-                    hung = getattr(open_room, "last_fail", "") == "hung"
-                    if (hung or _open_fail_streak >= RESTART_AFTER_FAILS) and _t.time() - _kakao_restarted_at > 3600:
+                    fail = getattr(open_room, "last_fail", "")
+                    hung = fail == "hung"
+                    if fail in ("login", "nokakao"):
+                        _open_fail_streak = 0  # 로그인 화면·카톡 꺼짐은 재시작으로 못 고친다 — 사람이 로그인할 때까지 기다린다
+                    elif (hung or _open_fail_streak >= RESTART_AFTER_FAILS) and _t.time() - _kakao_restarted_at > 3600:
                         _kakao_restarted_at = _t.time()
                         if restart_kakao("응답 없음" if hung else f"방 열기 {_open_fail_streak}번 연속 실패"):
                             _open_fail_streak = 0
@@ -117,12 +155,17 @@ def main() -> int:
                 log(f"  ✗ [{room}] 창이 안 열려 있음 — 카톡 PC에서 그 방을 더블클릭해 창으로 열어 두면 다음 1분 안에 보냅니다 (이 줄은 30분에 한 번만 적습니다)")
             continue
         todo.append((row, room, text, hwnd, title))
+        if len(todo) >= MAX_ROOMS_PER_RUN:
+            break  # 나머지는 다음 1분에
     if not todo:
         return 0
     log("=" * 64)
     log(f"outbox 적체 {len(rows)}건 중 창이 열린 {len(todo)}건 — 봇 대신 PC가 발송 시도")
     sent = 0
-    for row, room, text, hwnd, title in todo:
+    for i, (row, room, text, hwnd, title) in enumerate(todo):
+        if i:
+            import time as _t2
+            _t2.sleep(2.0)  # 방 사이 텀 — 연달아 보내면 카톡이 죽는다(2026-10-19)
         set_clipboard_text(text)
         if paste_and_send(hwnd, room, 0.9):
             try:
@@ -139,7 +182,7 @@ def main() -> int:
         import time as _t
         import win32con
         import win32gui
-        _t.sleep(2.5)
+        _t.sleep(8.0)  # 보낸 직후 닫으면 카톡이 죽는다(2026-10-19 08:05 닫은 8초 뒤 크래시) — 전송이 완전히 끝날 시간을 넉넉히 준다
         closed = 0
         for h in opened_here:
             try:

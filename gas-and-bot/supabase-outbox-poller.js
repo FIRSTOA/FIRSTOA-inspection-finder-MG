@@ -27,6 +27,10 @@
  *      10분마다 읽는다(앱·노트북 실행기와 한 곳에서 관리). onMessage 는 글을 큐에만 넣고(통신 없음) 폴링 스레드가
  *      flushLists 로 보낸다 — ①②와 같은 규칙. 봇 폰에서 그 방의 알림이 켜져 있어야 글이 들어온다.
  *      저장 뒤 엣지 함수 counter-inbox-ingest 를 불러 FIELD 목록에 바로 반영한다(있는 업체 그대로, 없는 업체만 추가).
+ *
+ *  2026-10-22 ⑨ 야간 발송 금지 — 22:00~08:00(KST)엔 outbox 를 꺼내 보내지 않고 서버에 그대로 둔다(지우지 않음 → 무유실).
+ *      08:00 이후 첫 폴링에 밀린 글을 보낸다. 노트북 카톡 PC 중계(tools/kakao-pc/outbox_relay.py)와 같은 시각 규칙.
+ *      계기: 10/22 00:06 영업확장성미션방 심야 발송. "봇테스트" 응답(사람이 부른 것)과 마감 목록 수집은 밤에도 그대로.
  */
 
 // ===================== 설정 =====================
@@ -35,6 +39,8 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const POLL_INTERVAL = 7000;
 const RETRY_MS      = 10 * 60 * 1000; // 세션 없는 방 재시도 간격
 const LIST_ROOMS_REFRESH_MS = 10 * 60 * 1000; // 마감방 이름(room_map '마감') 다시 읽는 간격
+const QUIET_START_HOUR = 22; // ⑨ 야간 발송 금지 시작(KST, 포함)
+const QUIET_END_HOUR   = 8;  // ⑨ 야간 발송 금지 끝(KST, 이 시각부터 보냄)
 // 마감 목록으로 볼 글: 머리글 【수도권C】·[수도권C]·【CSS】, 또는 CMS 결제일("CMS.15")이 든 글, 또는 "번호, 번호등급업체명" 줄이 2개 이상
 const LIST_HEAD_RE  = /^\s*[【\[]\s*(수도권\s*[A-Ea-e]|CSS|지방)\s*[】\]]/;
 const LIST_CMS_RE   = /CMS\s*[.·-]?\s*\d{1,2}/i;
@@ -54,6 +60,7 @@ var _failedAt = {};  // 방(공백 제거)별 마지막 전송 실패 시각 —
 var _listQueue = [];                   // 마감방에서 받은 목록 글 — 폴링 스레드가 counter_sms_inbox 로 보낸다(⑧)
 var _listRooms = { names: [], at: 0 }; // room_map '마감' 방 이름 캐시(⑧)
 var _polling = false;
+var _quietLoggedAt = 0; // ⑨ 야간 로그 스로틀(1시간)
 var _lock = new java.util.concurrent.locks.ReentrantLock(); // 스레드 사이 JS 실행 줄 세우기
 
 function nowMs() { return java.lang.System.currentTimeMillis(); }
@@ -220,8 +227,20 @@ function findSession(room) {
 }
 
 // 한 번 폴링 — 서버에서 밀린 글을 받아 방마다 보내고, 보낸 것만 지운다. 폴링 스레드에서만 부른다.
+// ⑨ 지금이 야간(22:00~08:00 KST)인가 — 폰 시간대와 상관없이 서울 시각으로 본다
+function inQuietHours() {
+  var cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul"));
+  var h = cal.get(java.util.Calendar.HOUR_OF_DAY);
+  return h >= QUIET_START_HOUR || h < QUIET_END_HOUR;
+}
+
 function pollOnce() {
   if (_polling) return; // 겹침 방지
+  if (inQuietHours()) { // ⑨ 밤에는 꺼내지도 않는다 — 서버에 남아 있다가 08:00 이후 첫 폴링에 나간다
+    var qt = nowMs();
+    if (qt - _quietLoggedAt > 60 * 60 * 1000) { _quietLoggedAt = qt; Log.i("[야간] 22:00~08:00 발송 금지 — 밀린 글은 08:00 이후에 보냅니다"); }
+    return;
+  }
   _polling = true;
   try {
     lastPull = nowMs();
@@ -295,7 +314,7 @@ function startPolling() {
     }
   });
   t.setName("inspPoller"); t.setDaemon(true); t.start();
-  Log.i("[봇] Supabase outbox 폴링 시작 (2026-10-10판 — 마감 목록 수집 포함)");
+  Log.i("[봇] Supabase outbox 폴링 시작 (2026-10-22판 — 마감 목록 수집 + 야간 22~08시 발송 금지)");
 }
 function onStartCompile() { startPolling(); }
 startPolling();

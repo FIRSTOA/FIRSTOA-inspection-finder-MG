@@ -38,3 +38,6 @@ tools/kakao-pc/poster_log.txt
 
 .vercel
 .env*
+
+# 노트북 카톡 자동 로그인 실패 횟수(로컬 상태)
+tools/kakao-pc/kakao_login_state.json
