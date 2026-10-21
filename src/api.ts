@@ -17,6 +17,7 @@ import { CATEGORY_SCHEMAS } from "./categoryForms";
 import { normRegion } from "./region";
 import { normalizeId as normId, vendorMatchKey, vendorNameCore } from "./ids";
 import { inferBrand } from "./copierBrand";
+import { confirmExpansionResend } from "./expansionResendGuard";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -1095,6 +1096,8 @@ export async function sendPcForm(form: PcFormState, author: string, text: string
   try {
     const vendor = String(form.company || "").trim();
     if (!vendor) return { ok: false, error: "업체명을 입력하세요." };
+    // 같은 날 같은 업체 재전송은 보내기 전에 확인(expansionResendGuard, 2026-10-22)
+    if (!await confirmExpansionResend("pc_expansion", author, vendor, ts)) return { ok: false, error: "보내기를 취소했습니다 (오늘 이미 보낸 업체)" };
     const date = toKstDate(ts);
     const row: Record<string, unknown> = {
       "날짜": date, "작성자": author, "등급": form.grade,
@@ -1319,6 +1322,7 @@ export async function sendCopierExpansionForm(form: CopierExpansionFormState, au
   try {
     const vendor = String(form.company || "").trim();
     if (!vendor) return { ok: false, error: "상호명을 입력하세요." };
+    if (!await confirmExpansionResend("mfp_expansion", form.registrant || author, vendor, ts)) return { ok: false, error: "보내기를 취소했습니다 (오늘 이미 보낸 업체)" };
     const date = toKstDate(ts);
     const row: Record<string, unknown> = {
       "등록일": date,

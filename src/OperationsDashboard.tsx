@@ -3,7 +3,6 @@ import PortalSelect from "./PortalSelect";
 import {
   ACTIVITY_LABELS,
   OPERATIONS_TEAMS,
-  getActivityEvents,
   logisticsKindForEvent,
   teamForAuthor,
   type ActivityEvent,
@@ -11,7 +10,8 @@ import {
 } from "./operations";
 import { kstDate, weekRange } from "./visits";
 import { vendorMatchKey } from "./ids";
-import { countableEvents, distinctVendors } from "./workCount";
+import { countableEvents, distinctVendors, EXPANSION_BASIS_TEXT } from "./workCount";
+import { loadWorkEvents } from "./expansionSource";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Props = { author: string };
@@ -125,7 +125,8 @@ export default function OperationsDashboard({ author: _author }: Props) {
 
   const load = useCallback(() => {
     let active = true;
-    getActivityEvents(range.start, range.end)
+    // 확장성은 활동 기록이 아니라 pc_expansion·mfp_expansion(시트 포함)에서 — 조회 탭과 같은 원본·같은 함수(2026-10-22)
+    loadWorkEvents(range.start, range.end)
       .then((rows) => {
         if (!active) return;
         setEvents(rows);
@@ -217,7 +218,7 @@ export default function OperationsDashboard({ author: _author }: Props) {
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* 기간 선택 — 조회 허브의 다크바 아래 밝은 헤더 (관리 내부 카드와 같은 톤) */}
         <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록·오발송 취소분은 빼고, 같은 거래처 재전송은 1건으로 셉니다(확장성은 같은 날, 그 밖은 10분 안). 건수 = 업무 기록 수, 거래처 = 서로 다른 거래처 수(같은 곳 여러 번은 1곳).</p>
+          <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록·오발송 취소분은 빼고, 같은 거래처 재전송은 1건으로 셉니다(확장성은 같은 날, 그 밖은 10분 안). 건수 = 업무 기록 수, 거래처 = 서로 다른 거래처 수(같은 곳 여러 번은 1곳).<br />확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT} — 조회 탭과 같은 숫자.</p>
           <div className="grid grid-cols-4 rounded-full bg-slate-100 p-1 lg:w-72">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
               <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>

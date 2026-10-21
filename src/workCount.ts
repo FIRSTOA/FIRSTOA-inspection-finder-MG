@@ -87,3 +87,108 @@ export function kstDayOf(value: string): string {
   const t = Date.parse(s);
   return Number.isFinite(t) ? new Date(t + 9 * 3600_000).toISOString().slice(0, 10) : s.slice(0, 10);
 }
+
+/* ───────────── 확장성(PC·복합기) 건수 — 원본 하나·함수 하나(2026-10-22) ─────────────
+ * 왜: "조회 탭 PC확장성 C팀 이번달 48개인데 주간현황 팀현황엔 45" — 조회 탭은 pc_expansion 행 수(재전송·팀장 포함),
+ *     팀 현황·순위표는 activity_events(FIELD 전송 때만 생김 — 시트에 직접 적은 행이 없다)를 재전송 묶음·팀장 제외로 셌다.
+ * 원본: pc_expansion / mfp_expansion(시트 미러 = 시트 직입력까지 포함하는 가장 완전한 장부). activity_events 는 확장성 집계에 쓰지 않는다.
+ * 규칙(이 함수 하나를 조회 탭·팀 현황·순위표가 같이 쓴다)
+ *   · 오발송 삭제(_hidden) 행 제외
+ *   · 팀장(명단 팀 '팀장') 기록 제외 — 팀 현황·순위표가 원래 쓰던 규칙
+ *   · 같은 종류·같은 작성자·같은 KST 날짜·같은 거래처(vendorMatchKey) = 1건
+ *   · 팀 = 지역 칸(PC만, 'C'·'수도권 C'·'c'·'Ｃ'·'D(성남)'·'CSS'→E) → 비었거나 못 읽으면 작성자 명단 팀
+ *     (복합기 '미팅지역'은 주소라 팀이 아니다 → 작성자 팀)
+ *   · 날짜 칸 'YYYY-MM-DD'(웹앱)·UTC 시각 글자(시트 미러)가 섞여 있어 kstDayOf 로 KST 날짜
+ */
+export type ExpansionKind = "expansion_it" | "expansion_copier";
+export type ExpansionTable = "pc_expansion" | "mfp_expansion";
+export const EXPANSION_SOURCES: Record<ExpansionTable, { kind: ExpansionKind; label: string; dateField: string; authorField: string; regionField: string; vendorFields: string[] }> = {
+  pc_expansion: { kind: "expansion_it", label: "PC확장성", dateField: "날짜", authorField: "작성자", regionField: "지역", vendorFields: ["_업체명"] },
+  mfp_expansion: { kind: "expansion_copier", label: "복합기확장성", dateField: "등록일", authorField: "등록자", regionField: "", vendorFields: ["_업체명", "상호"] },
+};
+export const EXPANSION_BASIS_TEXT = "같은 날 같은 업체 재전송은 1건 · 오발송 삭제·팀장 기록 제외";
+
+/** 표에서 읽은 한 행(필요한 칸만) */
+export type ExpansionRaw = Record<string, unknown> & { id?: unknown; _hidden?: unknown };
+/** 집계용으로 정리한 한 행 */
+export type ExpansionRow = {
+  table: ExpansionTable; kind: ExpansionKind; id: string;
+  at: string;      // 날짜 칸 원문(정렬용)
+  day: string;     // KST 날짜
+  author: string; vendor: string;
+  team: string;    // A~E·팀장·미지정 …
+  manager: boolean; hidden: boolean;
+};
+
+/** 지역 칸 → 팀 글자(A~E). 못 읽으면 "" */
+export function regionTeam(value: unknown): string {
+  const s = String(value ?? "").normalize("NFKC").toUpperCase().replace(/\s+/g, "").replace(/^(수도권|지역)/, "");
+  if (/^CSS/.test(s) || /^지방/.test(s)) return "E";
+  return s.match(/^([ABCDE])(?![A-Z])/)?.[1] || "";
+}
+
+export function toExpansionRows(table: ExpansionTable, raws: ExpansionRaw[], teamOfAuthor: (author: string) => string): ExpansionRow[] {
+  const src = EXPANSION_SOURCES[table];
+  return raws.map((r) => {
+    const at = String(r[src.dateField] ?? "").trim();
+    const author = String(r[src.authorField] ?? "").trim();
+    const authorTeam = teamOfAuthor(author);
+    const vendor = src.vendorFields.map((f) => String(r[f] ?? "").trim()).find(Boolean) || "";
+    return {
+      table, kind: src.kind, id: String(r.id ?? ""), at, day: kstDayOf(at), author, vendor,
+      team: (src.regionField && regionTeam(r[src.regionField])) || authorTeam,
+      manager: authorTeam === "팀장", hidden: r._hidden === true,
+    };
+  });
+}
+
+export type ExpansionScope = { team?: string; author?: string; from?: string; to?: string; kind?: ExpansionKind };
+
+/** 범위 안 행(삭제 제외, 팀장 포함) — 목록 행 수와 견줄 때 쓴다 */
+function scoped(rows: ExpansionRow[], s: ExpansionScope): ExpansionRow[] {
+  return rows.filter((r) => !r.hidden
+    && (!s.kind || r.kind === s.kind)
+    && (!s.team || s.team === "전체" || r.team === s.team)
+    && (!s.author || r.author === s.author)
+    && (!s.from || r.day >= s.from) && (!s.to || r.day <= s.to));
+}
+
+/** 세는 대상 행 — 삭제·팀장 제외 → (종류, 작성자, KST 날짜, 거래처) 1건 */
+export function countableExpansion(rows: ExpansionRow[], s: ExpansionScope = {}): ExpansionRow[] {
+  const seen = new Set<string>();
+  const out: ExpansionRow[] = [];
+  for (const r of [...scoped(rows, s)].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))) {
+    if (r.manager) continue;
+    const v = vendorKeyOf(r.vendor);
+    if (v) {
+      const k = `${r.kind}|${r.author}|${r.day}|${v}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+/** 확장성 건수 — 조회 탭·팀 현황·순위표가 모두 이 값 */
+export function countExpansion(rows: ExpansionRow[], s: ExpansionScope = {}): number {
+  return countableExpansion(rows, s).length;
+}
+
+/** 화면 설명용: 범위 안 행 수와 빠진 이유별 수 */
+export function expansionTally(rows: ExpansionRow[], s: ExpansionScope = {}): { count: number; rows: number; managers: number; resends: number } {
+  const inScope = scoped(rows, s);
+  const managers = inScope.filter((r) => r.manager).length;
+  const count = countableExpansion(rows, s).length;
+  return { count, rows: inScope.length, managers, resends: inScope.length - managers - count };
+}
+
+/** 활동 기록(점검·AS 등)에서 확장성만 표 원본으로 갈아 끼운다 — 팀 현황·순위표가 이 결과에 countableEvents 를 건다 */
+export function mergeExpansionIntoEvents(events: ActivityEvent[], expansion: ExpansionRow[]): ActivityEvent[] {
+  const fromTables: ActivityEvent[] = countableExpansion(expansion).map((r) => ({
+    id: `${r.table}:${r.id}`, createdAt: r.at, activityDate: r.day, author: r.author, team: r.team,
+    category: r.kind, vendor: r.vendor, quantity: 1, machineCount: 0, sourceText: "", metadata: { sourceTable: r.table },
+    status: "active", cancelledAt: "", cancelledBy: "",
+  }));
+  return [...events.filter((e) => !EXPANSION_KINDS.has(e.category)), ...fromTables];
+}
