@@ -1,7 +1,11 @@
 import PortalSelect from "./PortalSelect";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { selectAllRows, selectRows } from "./supabase";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
+import type { MisuVisit } from "./misuVisit";
+
+// [방문 이력](CS 방문이력 조회, 2026-10-22) — 누를 때만 내려받는다
+const MisuVisitHistory = lazy(() => import("./MisuVisitHistory"));
 
 // "이 미수·초과 업체가 이번 분기 점검·재계약 대상인가"를 바로 보려고(2026-10-02 요청) — 일정리스트 배지와 같은 기준(vendorFlags, 5분 캐시)
 type TargetSel = { quarter: boolean; renewal: boolean }; // 둘 다 켜면 둘 다 해당하는 업체만
@@ -177,7 +181,7 @@ export const MISU_DETAIL_FIELDS = ["_업체명", "지역", "미수개월", "미�
 
 type CsCheckRow = { key: string; team: string; vendor: string; checked: boolean; cs_manager: string; cs1: string; cs2: string; synced_at: string };
 
-export function MisuBoard() {
+export function MisuBoard({ onMisuSupplement }: { onMisuSupplement?: (visit: MisuVisit) => void } = {}) {
   const [rows, setRows] = useState<SheetRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -189,7 +193,7 @@ export function MisuBoard() {
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<SheetRecord | null>(null);
   // 관리부가 시트에서 CS체크한 업체만 모아 보는 목록 (misu_cs_checks — GAS 1시간 동기화)
-  const [boardView, setBoardView] = useState<"전체" | "CS체크">("전체");
+  const [boardView, setBoardView] = useState<"전체" | "CS체크" | "방문">("전체");
   const [target, setTarget] = useState<TargetSel>(NO_TARGET);
   // undefined = 불러오는 중(느린 회선에서 0으로 보이던 것 — 2026-09-18) · null = 표 없음/실패 · 배열 = 정상
   const [csChecks, setCsChecks] = useState<CsCheckRow[] | null | undefined>(undefined);
@@ -254,14 +258,19 @@ export function MisuBoard() {
 
   return (
     <div className="space-y-3">
-      <div className="flex w-fit rounded-full bg-slate-100 p-1">
-        {(["전체", "CS체크"] as const).map((name) => (
-          <button key={name} type="button" onClick={() => setBoardView(name)} className={`rounded-full px-4 py-1.5 text-sm font-black transition ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-            {name === "전체" ? "전체 현황" : "CS체크 목록"}
+      <div className="flex w-fit max-w-full overflow-x-auto rounded-full bg-slate-100 p-1 [scrollbar-width:none]">
+        {(["전체", "CS체크", "방문"] as const).map((name) => (
+          <button key={name} type="button" onClick={() => setBoardView(name)} className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-black transition sm:px-4 ${boardView === name ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            {name === "전체" ? "전체 현황" : name === "CS체크" ? "CS체크 목록" : "방문 이력"}
             {name === "CS체크" && csChecks && <span className={`ml-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] tabular-nums ${boardView === name ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-500"}`}>{(csChecks || []).length}</span>}
           </button>
         ))}
       </div>
+      {boardView === "방문" && (
+        <Suspense fallback={<div role="status" className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">방문 이력 화면을 불러오는 중…</div>}>
+          <MisuVisitHistory onSupplement={onMisuSupplement} />
+        </Suspense>
+      )}
       {boardView === "CS체크" && (
         <div className="space-y-3">
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5">

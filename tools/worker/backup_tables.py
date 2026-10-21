@@ -29,7 +29,7 @@ TABLES = [
     "contact_changes", "counter_sms_batches", "counter_sms_targets", "counter_sms_settings", "counter_sms_contact_rules",
     "vendor_info", "vendor_master", "vendor_match_alias", "lease_ident_code", "workin_map_places", "workin_vendor_code",
     "photo_albums", "photo_assets",
-    "misu", "overage", "overage_adjust", "bulman", "recontract", "churn_defense", "mgmt_support", "lease_status",
+    "misu", "misu_visits", "overage", "overage_adjust", "bulman", "recontract", "churn_defense", "mgmt_support", "lease_status",
     "pc_expansion", "mfp_expansion",
     "message_jobs", "message_templates", "happycall_messages", "report_recipients", "report_send_log", "promo_materials",
     "notices", "notice_reads", "dept_requests", "feedback_items", "reading_posts", "praise_posts",
@@ -41,7 +41,7 @@ PAGE = 1000
 KEEP = 14  # 매일 1회 기준 2주
 # 비어 있는 게 정상인 표 — 0행이어도 실패로 보지 않는다
 MAY_BE_EMPTY = {
-    "dept_requests", "churn_defense", "mgmt_support", "notices", "notice_reads", "report_send_log", "report_recipients",
+    "misu_visits", "dept_requests", "churn_defense", "mgmt_support", "notices", "notice_reads", "report_send_log", "report_recipients",
     "push_subscriptions", "copier_learning_posts", "team_calendar_events", "self_goals", "praise_posts", "feedback_items",
     "reading_posts", "promo_materials", "happycall_messages", "message_jobs", "overage_adjust", "logistics_records",
 }

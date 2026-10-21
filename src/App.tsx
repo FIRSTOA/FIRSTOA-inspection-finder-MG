@@ -75,6 +75,7 @@ const CustomerCallHub = lazyScreen(() => import("./QuarterNotice"), "해피콜")
 const ItLearningHistory = lazyScreen(() => import("./ItLearningHistory"), "IT 학습");
 const CounterSms = lazyScreen(() => import("./CounterSms"), "카운터 문자");
 const AutoSchedule = lazyScreen(() => import("./AutoSchedule"), "자동 일정");
+const MisuVisitForm = lazyScreen(() => import("./MisuVisitForm"), "미수 방문이력"); // 필드 › 미수 = CS 방문이력 작성기(2026-10-22, 옛 CategoryForm 미수 대신)
 const RecontractPrep = lazy(() => import("./recontract/RecontractPrep"));
 /**
  * 화면 유지(keep-alive, 2026-10-11 속도): 자주 오가는 화면은 한 번 열면 숨겨 두기만 한다 — 다시 누르면 있던 값이 즉시 보이고,
@@ -4461,7 +4462,7 @@ export default function App() {
   const [reportTypeOther, setReportTypeOther] = useState<string>((ss.reportTypeOther as string) ?? "");
 
   // 카테고리 폼(불만/재계약/초과조정) — 모드키별 상태 맵
-  const isCat = mode === "bulman" || mode === "misu" || mode === "recontract" || mode === "overage-adjust";
+  const isCat = (["bulman", "recontract", "overage-adjust"] as Mode[]).includes(mode); // 미수는 MisuVisitForm(2026-10-22) — includes 라 아래 misu 분기 타입이 그대로 산다
   const [catForms, setCatForms] = useState<Record<string, Record<string, string>>>(() => (ss.catForms as Record<string, Record<string, string>>) || {});
   const curCatForm = catForms[mode] || (isCat ? emptyCatForm(mode) : {});
   const catFilled = isCat && Object.values(curCatForm).some((v) => String(v).trim() !== "");
@@ -6802,7 +6803,7 @@ export default function App() {
         {screen === "field" && (<>
         <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoPick} className="hidden" />
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_520px] lg:items-start">
+        <div className={`grid gap-5 lg:items-start ${mode === "misu" ? "" : "lg:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_520px]"}`}>
         <div className="min-w-0 space-y-3">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex items-start gap-2.5">
@@ -6978,6 +6979,7 @@ export default function App() {
         {mode === "replacement" && <ReplacementForm form={replacementForm} setForm={setReplacementForm} />}
         {mode === "contact-change" && <ContactChangeForm form={contactChangeForm} setForm={setContactChangeForm} author={author} setAuthor={handleSetAuthor} onLoad={loadSharedFromInspect} onError={(message) => showToast(message, "error")} />}
         {mode === "praise" && <PraiseForm author={author} onToast={showToast} bindSubmit={(fn) => { praiseSubmitRef.current = fn; }} onReadyChange={setPraiseReady} />}
+        {mode === "misu" && <MisuVisitForm author={author} setAuthor={handleSetAuthor} onToast={showToast} />}
 
         {/* 카테고리 폼 (불만/재계약/초과조정) */}
         {isCat && (
@@ -6993,7 +6995,7 @@ export default function App() {
         )}
 
         </div>
-        <aside className="sticky top-5 hidden max-h-[calc(100vh-2.5rem)] min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:flex lg:flex-col">
+        <aside className={`sticky top-5 hidden max-h-[calc(100vh-2.5rem)] min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ${mode === "misu" ? "" : "lg:flex lg:flex-col"}`}>
           <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
             <div className="text-sm font-black text-slate-950">결과 미리보기</div>
             <div className="mt-0.5 text-xs font-semibold text-slate-400">PC에서는 입력과 결과를 동시에 확인합니다.</div>
@@ -7085,7 +7087,7 @@ export default function App() {
       </div>
 
       {/* Sticky bottom: result panel + action bar (FIELD 전용) */}
-      {screen === "field" && (
+      {screen === "field" && mode !== "misu" && (
       <div id="field-bottom-panel" className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden">
         {hasOutput && (
           <div className="mx-auto max-w-3xl px-3 pt-1 sm:px-6">
