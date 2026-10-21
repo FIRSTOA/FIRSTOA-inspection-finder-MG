@@ -3,8 +3,9 @@
  *  - buildCatText: 폼 → 카톡 전송 텍스트(■ 양식)
  */
 import { GRADE_OPTIONS, REGION_OPTIONS } from "./formOptions";
+import { formatYmdKo } from "./recontractSchedule";
 
-export type FieldType = "text" | "textarea" | "select";
+export type FieldType = "text" | "textarea" | "select" | "date"; // date: 값은 YYYY-MM-DD(글자값도 허용 — [미정·글로 쓰기])
 export type FieldFill = "author" | "company" | "region" | "keyman" | "grade";
 export type FieldDef = { key: string; label: string; type: FieldType; options?: string[]; fill?: FieldFill };
 export type Section = { title: string; fields: FieldDef[] };
@@ -18,6 +19,7 @@ export type FormSchema = {
 
 const T = (key: string, label: string, fill?: FieldFill): FieldDef => ({ key, label, type: "text", fill });
 const TA = (key: string, label: string): FieldDef => ({ key, label, type: "textarea" });
+const D = (key: string, label: string): FieldDef => ({ key, label, type: "date" });
 const SEL = (key: string, label: string, options: string[]): FieldDef => ({ key, label, type: "select", options });
 const REGION = (fill?: FieldFill): FieldDef => ({ ...SEL("지역", "지역", REGION_OPTIONS), fill });
 const GRADE = (fill?: FieldFill): FieldDef => ({ ...SEL("등급", "등급", GRADE_OPTIONS), fill });
@@ -82,7 +84,7 @@ export const CATEGORY_SCHEMAS: Record<string, FormSchema> = {
       ] },
       { title: "원인분석", fields: [ TA("외부원인", "외부 원인"), TA("내부원인", "내부 원인") ] },
       { title: "실행전략", fields: [ TA("갱신방향", "갱신 방향"), TA("제시선택지", "제시한 선택지"), TA("내부협의", "내부 협의 필요사항") ] },
-      { title: "다음 액션", fields: [ T("후속담당자", "담당자"), SEL("기한", "기한", ["당일", "익일", "3일 이내", "1주 이내", "협의"]), T("다음확인일", "다음 확인일") ] },
+      { title: "다음 액션", fields: [ T("후속담당자", "담당자"), SEL("기한", "기한", ["당일", "익일", "3일 이내", "1주 이내", "협의"]), D("다음확인일", "다음 확인일") ] }, // 재계약만 날짜 칸(불만은 2차, D8)
       { title: "마무리", fields: [
         SEL("최종상태", "최종상태", ["진행중", "보류", "갱신완료", "조건재협의", "이탈위험", "종료"]), TA("관리포인트", "관리 포인트"),
       ] },
@@ -111,7 +113,8 @@ export function buildCatText(schemaKey: string, form: Record<string, string>, au
   for (const sec of s.sections) {
     lines.push("", `■ ${sec.title}`);
     for (const f of sec.fields) {
-      const v = f.fill === "author" ? author : (form[f.key] || "");
+      const raw = f.fill === "author" ? author : (form[f.key] || "");
+      const v = f.type === "date" ? formatYmdKo(raw) : raw; // 날짜 칸: 카톡엔 "2026-10-29(목)", 표엔 YYYY-MM-DD 원값
       lines.push(`${f.label}: ${v}`);
     }
   }

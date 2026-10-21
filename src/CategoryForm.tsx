@@ -2,10 +2,16 @@
  *  - [점검/AS 불러오기]: 작성자·업체명·지역·키맨 가져옴(키맨 다중→드롭다운).
  *  - 작성자는 author 상태 사용. 나머지는 form 상태.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuthorBook } from "./authors";
 import { authorLocked } from "./sso";
 import { CATEGORY_SCHEMAS, type FieldDef } from "./categoryForms";
+import DatePickSheet from "./DatePickSheet";
+import RecontractScheduleSheet from "./RecontractScheduleSheet";
+import { onCategorySent } from "./categorySentEvent";
+import { formatYmdShort, isYmd, readScheduleOffer, shouldOfferSchedule, type ScheduleOffer } from "./recontractSchedule";
+import { kstDate } from "./visits";
 
 type Keyman = { label: string; name: string; phone: string };
 type LoadResult = { grade: string; company: string; region: string; keymen: Keyman[]; author: string };
@@ -63,7 +69,15 @@ ${src === "inspection" ? "점검" : "AS"} 탭의 업체: ${incoming}
 
 export default function CategoryForm({ schemaKey, form, setForm, author, setAuthor, onLoad, onError }: Props) {
   const [keymen, setKeymen] = useState<Keyman[]>([]);
-  const { authors } = useAuthorBook();
+  const { authors, book } = useAuthorBook();
+  // 날짜 칸(재계약 다음확인일): 시트로 고르기, [미정·글로 쓰기]면 글자 입력 칸으로
+  const [picking, setPicking] = useState("");
+  const [textKeys, setTextKeys] = useState<Record<string, boolean>>({});
+  // 재계약 보낸 뒤 "다음 확인일로 일정 만들까요?" — api.ts 저장 성공 신호(창 이벤트) + 기기에 남은 제안(24시간)
+  const [offer, setOffer] = useState<ScheduleOffer | null>(() => readScheduleOffer());
+  useEffect(() => onCategorySent((d) => {
+    if (shouldOfferSchedule(d)) setOffer({ dupKey: d.dupKey, form: { ...d.form }, author: d.author, text: d.text, testMode: d.testMode, at: Date.now() });
+  }), []);
   const schema = CATEGORY_SCHEMAS[schemaKey];
   if (!schema) return null;
   const set = (k: string, v: string) => setForm({ ...form, [k]: v });
@@ -100,6 +114,31 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
             {authors.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>}
         </label>
+      );
+    }
+    if (f.type === "date") {
+      const v = String(form[f.key] || "");
+      const asText = textKeys[f.key];
+      return (
+        <div key={f.key} className="block">
+          <span className="text-xs font-medium text-slate-500">{f.label}</span>
+          {asText ? (
+            <div className="mt-0.5 flex gap-2">
+              <input value={v} onChange={(e) => set(f.key, e.target.value)} placeholder="예: 차주 중" autoFocus
+                className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
+              <button type="button" onClick={() => { setTextKeys({ ...textKeys, [f.key]: false }); setPicking(f.key); }}
+                className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-700">달력</button>
+            </div>
+          ) : (
+            <div className="mt-0.5 flex gap-2">
+              <button type="button" onClick={() => setPicking(f.key)}
+                className={`min-w-0 flex-1 truncate rounded-xl border px-3 py-2 text-left text-sm ${v ? "border-purple-200 bg-white font-bold text-slate-800" : "border-dashed border-slate-300 bg-white text-slate-400"}`}>
+                {v ? (isYmd(v) ? formatYmdShort(v) : v) : "날짜 고르기"}
+              </button>
+              {v && <button type="button" onClick={() => set(f.key, "")} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500">지우기</button>}
+            </div>
+          )}
+        </div>
       );
     }
     if (f.type === "select") {
@@ -153,6 +192,19 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
       ))}
 
       <div className="text-[11px] text-slate-400">전송: {schema.category} 방 · 저장: {schema.table}</div>
+
+      {picking && typeof document !== "undefined" && createPortal(
+        <DatePickSheet title={schema.sections.flatMap((sec) => sec.fields).find((f) => f.key === picking)?.label || "날짜 고르기"}
+          subtitle={String(form["업체명"] || "") || undefined} value={String(form[picking] || "")} today={kstDate()}
+          onPick={(ymd) => { set(picking, ymd); setPicking(""); }}
+          onText={() => { setTextKeys({ ...textKeys, [picking]: true }); setPicking(""); }}
+          onClose={() => setPicking("")} />,
+        document.body,
+      )}
+      {offer && schemaKey === "recontract" && typeof document !== "undefined" && createPortal(
+        <RecontractScheduleSheet key={offer.dupKey} offer={offer} book={book} names={authors} onDone={() => setOffer(null)} />,
+        document.body,
+      )}
     </div>
   );
 }

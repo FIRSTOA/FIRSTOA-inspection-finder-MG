@@ -14,6 +14,7 @@ import type { PcFormState } from "./PcForm";
 import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import type { ContactChangeFormState } from "./contactChange";
 import { CATEGORY_SCHEMAS } from "./categoryForms";
+import { emitCategorySent } from "./categorySentEvent";
 import { normRegion } from "./region";
 import { normalizeId as normId, vendorMatchKey, vendorNameCore } from "./ids";
 import { inferBrand } from "./copierBrand";
@@ -1085,7 +1086,9 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
       if (!automation.holdKakao && isEnabled(cfg.FIELD_KAKAO_SEND_ENABLED)) for (const room of rooms) await enqueueOutbox(room, text);
       return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} · ${automation.message}`, testMode: automation.testMode };
     }
-    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — ${queueNote(await queueRooms(rooms, text))}` };
+    const queued = await queueRooms(rooms, text);
+    emitCategorySent({ schemaKey, form, author, dupKey: String(row["_dupKey"]), text, testMode: isTestModeValue(cfg.TEST_MODE) }); // 재계약 → "다음 확인일로 일정 만들까요?"(CategoryForm 이 받음)
+    return { ok: true, message: `${r === "new" ? "저장 완료" : "기존 기록 확인"} — ${queueNote(queued)}` };
   } catch (e) {
     return { ok: false, error: (e as Error).message || "네트워크 오류" };
   }
