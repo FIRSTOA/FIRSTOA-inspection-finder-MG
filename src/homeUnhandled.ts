@@ -4,6 +4,7 @@
  */
 import { isStaleRemote, normalizeRegion } from "./deptReception";
 import { overdueKind } from "./overdueLogic";
+import type { SheetOpenRow } from "./receptionSheetOpen";
 
 export type UnhandledKind = "복합기 AS" | "원격이관" | "IT" | "경영지원" | "운영지원" | "영업팀" | "AS일정" | "물류";
 export type UnhandledTeam = "A" | "B" | "C" | "D" | "E" | "경영" | "운영" | "영업" | "";
@@ -58,9 +59,26 @@ const ticketTeam = (team: string): UnhandledTeam => {
   return (LETTERS.has(t) ? t : "") as UnhandledTeam;
 };
 
-export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInput[], today: string): UnhandledRow[] {
+/** 시트 미처리 행(C3 시트 기준) 중 쓰는 칸만 — 부르는 쪽이 mergeSheetAndDb 로 90일 안 행만 넘긴다 */
+export type SheetUnhandledInput = Pick<SheetOpenRow, "source" | "kind" | "sheetRow" | "date" | "vendor" | "field" | "summary" | "handler" | "state" | "region" | "receptionId">;
+
+/**
+ * sheetRows(기본 [])는 시트 기준 모드에서만 넘어온다. 팀은 영업→영업, 경영→경영, 원격·IT→지역 A~E(지방 E) — "팀 합 = 전체" 규칙 유지.
+ * 시트 행에는 7일 원격 규칙(isStaleRemote)을 쓰지 않는다.
+ */
+export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInput[], today: string, sheetRows: SheetUnhandledInput[] = []): UnhandledRow[] {
   const out: UnhandledRow[] = [];
   const openIds = new Set<string>();
+  for (const s of sheetRows) {
+    const date = String(s.date || "").slice(0, 10);
+    const rid = String(s.receptionId || "");
+    if (rid) openIds.add(rid);
+    out.push({
+      key: `s:${s.source}:${s.sheetRow}`, source: "reception", kind: s.kind, team: receptionTeam(s.kind, s.region), date,
+      vendor: String(s.vendor || ""), title: String(s.summary || s.field || ""), assignee: String(s.handler || ""),
+      status: String(s.state || ""), ageDays: date ? ageDaysOf(date, today) : 0, ...(rid ? { receptionId: rid } : {}),
+    });
+  }
   for (const r of receptions) {
     if (isStaleRemote(r, today)) continue; // 7일 지난 원격대기 = 원격팀 처리로 봄
     openIds.add(String(r.id));

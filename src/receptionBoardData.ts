@@ -7,6 +7,7 @@ import { ageDays, isDeptType, isStaleRemote, weekCompletionRate } from "./deptRe
 import { selectAllRows, selectRows, updateRows } from "./supabase";
 import { fieldTicketVendor } from "./ids";
 import { kstDate } from "./visits";
+import { mergeSheetAndDb, sheetRowStatus, sheetRowUrl, type SheetOpenResult, type SheetOpenRow } from "./receptionSheetOpen";
 
 const KNOWN_TYPES = new Set<string>(RECEPTION_TYPES.map((m) => m.type));
 
@@ -59,6 +60,14 @@ export type BoardData = {
   healed: number;
   /** 일정 대조·자가 치유 실패 메시지(화면은 계속, 패널이 한 번 알린다). 없으면 "" */
   syncError: string;
+  /** 시트 기준(C3) — applySheetToBoard 가 채운다. 스위치 꺼짐이면 없음 */
+  sheetMode?: boolean;
+  /** 시트 읽기 실패·일부 탭 빠짐 안내 한 줄(없으면 "") */
+  sheetNotice?: string;
+  /** 90일 넘은 시트 미처리(칸 숫자 밖, "90일 넘음 n" 칩) */
+  over90?: BoardRow[];
+  /** 시트 완료로 DB 접수를 맞춘 건수(엣지 자가 치유, 스위치 켜졌을 때만) */
+  sheetHealed?: number;
 };
 
 /** 일정(as_tickets)과 대조하는 접수 종류·상태. 보류·원격대기는 사람이 일부러 둔 상태라 건드리지 않는다. */
@@ -160,6 +169,50 @@ export async function loadBoardData(today: string = kstDate()): Promise<BoardDat
     weekDoneRate: rate.total ? Math.round(rate.rate * 100) : null,
     healed,
     syncError,
+  };
+}
+
+/** 시트 미처리 행 → 현황판 행. 앱 접수에 이어진 행은 그 접수 id(상세·처리 단추가 그대로 붙음), 아니면 sheet:<탭>:<행> */
+export function sheetToBoardRow(row: SheetOpenRow): BoardRow {
+  return {
+    id: row.receptionId || `sheet:${row.source}:${row.sheetRow}`,
+    type: row.kind,
+    vendor: String(row.vendor || ""),
+    field: String(row.field || row.summary || ""),
+    author: String(row.author || ""),
+    handler: String(row.handler || ""),
+    status: sheetRowStatus(row),
+    receipt_date: String(row.date || ""),
+    scheduled_date: null,
+    postponeCount: 0,
+    sheet: {
+      source: row.source, sheetRow: row.sheetRow, seq: String(row.seq || ""), state: String(row.state || ""),
+      summary: String(row.summary || ""), region: String(row.region || ""), url: sheetRowUrl(row.source, row.sheetRow),
+      linked: Boolean(row.receptionId),
+    },
+  };
+}
+
+/**
+ * DB 현황판 재료 + 시트 결과 → 시트 기준 현황판(C3). 스위치 꺼짐(enabled=false)이면 data 그대로(숫자 변화 없음).
+ * 시트를 못 읽으면 DB 그대로 + sheetNotice. 순수 함수.
+ */
+export function applySheetToBoard(data: BoardData, sheet: SheetOpenResult, today: string = kstDate()): BoardData {
+  if (!sheet.enabled) return data;
+  const merge = mergeSheetAndDb(Object.values(data.sources), sheet.data, today, sheet.error);
+  const kept = new Set(merge.db.map((r) => r.id));
+  const sources: Record<string, OpenReceptionRow> = {};
+  for (const r of merge.db) sources[r.id] = r;
+  // 이어진 시트 행의 DB 원본은 (열려 있으면) 남겨 둔다 — 지원 3종 처리 단추가 원본을 쓴다
+  for (const r of merge.sheet) if (r.receptionId && data.sources[r.receptionId]) sources[r.receptionId] = data.sources[r.receptionId];
+  return {
+    ...data,
+    rows: [...data.rows.filter((r) => kept.has(r.id)), ...merge.sheet.map(sheetToBoardRow)],
+    sources,
+    sheetMode: merge.sheetKinds.length > 0,
+    sheetNotice: merge.notice,
+    over90: merge.over90.map(sheetToBoardRow),
+    sheetHealed: sheet.data?.healed || 0,
   };
 }
 

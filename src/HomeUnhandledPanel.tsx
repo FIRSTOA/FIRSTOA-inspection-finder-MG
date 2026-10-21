@@ -10,6 +10,7 @@ import { kstDate } from "./visits";
 import { fieldTicketVendor } from "./ids";
 import { overdueAgeTone } from "./overdueLogic";
 import { fetchOpenReceptions } from "./deptReceptionApi";
+import { loadSheetOpen, mergeSheetAndDb } from "./receptionSheetOpen";
 import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
 import {
@@ -28,19 +29,31 @@ export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: {
   const [rows, setRows] = useState<UnhandledRow[] | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<UnhandledTab>("전체");
+  // 시트 기준(C3) 안내·90일 넘은 시트 건수. 스위치 꺼짐이면 sheetMode=false(지금과 같은 DB 숫자)
+  const [sheetInfo, setSheetInfo] = useState<{ sheetMode: boolean; notice: string; over90: number }>({ sheetMode: false, notice: "", over90: 0 });
   const load = useCallback(async () => {
     const today = kstDate();
     const from = new Date(Date.now() - 180 * 86400_000 + 9 * 3600_000).toISOString().slice(0, 10);
-    const [rec, tic] = await Promise.allSettled([
+    const [rec, tic, sheetRes] = await Promise.allSettled([
       fetchOpenReceptions(90),
       selectRows<TicketInput>("as_tickets", `select=id,team,date,time,vendor,assignee,status,scheduleType,receptionId,issue&date=lt.${today}&date=gte.${from}&status=neq.${encodeURIComponent("완료")}&scheduleType=neq.${encodeURIComponent("매월점검")}&order=date.desc,time.asc&limit=3000`),
+      loadSheetOpen(),
     ]);
     const errs: string[] = [];
     if (rec.status === "rejected") errs.push("접수");
     if (tic.status === "rejected") errs.push("일정");
     // 접수를 못 읽으면 AS 중복 제외도 못 한다 — 숫자가 틀릴 수 있음을 안내문으로 알린다
     setError(errs.length ? `${errs.join("·")} 미처리를 불러오지 못했습니다 — 숫자가 빠지거나 겹쳤을 수 있음` : "");
-    setRows(mergeUnhandled(rec.status === "fulfilled" ? rec.value : [], tic.status === "fulfilled" ? tic.value : [], today));
+    const sheet = sheetRes.status === "fulfilled" ? sheetRes.value : { enabled: true as const, data: null, error: "시트 조회 실패" };
+    const dbRows = rec.status === "fulfilled" ? rec.value : [];
+    if (sheet.enabled) {
+      const merged = mergeSheetAndDb(dbRows, sheet.data, today, sheet.error);
+      setSheetInfo({ sheetMode: merged.sheetKinds.length > 0, notice: merged.notice, over90: merged.over90.length });
+      setRows(mergeUnhandled(merged.db, tic.status === "fulfilled" ? tic.value : [], today, merged.sheet));
+    } else {
+      setSheetInfo({ sheetMode: false, notice: "", over90: 0 });
+      setRows(mergeUnhandled(dbRows, tic.status === "fulfilled" ? tic.value : [], today));
+    }
   }, []);
   useEffect(() => {
     const first = window.setTimeout(() => { void load(); }, 0);
@@ -102,6 +115,13 @@ export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: {
         ))}
       </div>
       {error && <p className="mt-2 text-[11px] font-bold text-amber-300">{error}</p>}
+      {sheetInfo.notice && <p className="mt-2 text-[11px] font-bold text-amber-300">{sheetInfo.notice}</p>}
+      {sheetInfo.sheetMode && (
+        <p className="mt-1.5 text-[10.5px] font-bold text-slate-500">
+          영업·경영·원격은 시트 상태 열 기준 · 최근 90일
+          {sheetInfo.over90 > 0 && <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-black text-slate-300">90일 넘음 {sheetInfo.over90}</span>}
+        </p>
+      )}
       <div className="mt-3 max-h-[320px] overflow-y-auto rounded-xl border border-white/[0.06]">
         {rows === null && <ul>{Array.from({ length: 3 }).map((_, i) => <li key={i} className="px-3 py-2.5"><div className="h-3.5 animate-pulse rounded bg-white/[0.06]" /></li>)}</ul>}
         {rows !== null && !list.length && <p className="px-3 py-5 text-center text-[12px] font-bold text-emerald-300">{tab === "전체" ? "" : `${tab} `}미처리 없음</p>}

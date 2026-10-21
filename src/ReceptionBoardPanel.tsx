@@ -5,7 +5,9 @@ import ReceptionBoard, { type ReceptionRow } from "./ReceptionBoard";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import type { OpenReceptionRow } from "./deptReceptionApi";
 import { isDeptType } from "./deptReception";
-import { loadBoardData, loadScheduleOverdue, requestOpenOverdue, type BoardData, type ScheduleOverdueRow } from "./receptionBoardData";
+import { applySheetToBoard, loadBoardData, loadScheduleOverdue, requestOpenOverdue, type BoardData, type ScheduleOverdueRow } from "./receptionBoardData";
+import { loadSheetOpen } from "./receptionSheetOpen";
+import SheetRowCard from "./SheetRowCard";
 import { notify } from "./toast";
 import { kstDate } from "./visits";
 
@@ -56,10 +58,14 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
     const day = kstDate();
     try {
       // 접수 현황과 물류 미처리를 함께 읽는다. 물류 쪽 실패는 접수 현황을 막지 않고, 처음 실패할 때 한 번 알린다(분마다 반복 알림 방지).
-      const [next, logi] = await Promise.all([
+      // 시트 기준(C3): 스위치 RECEPTION_SHEET_OPEN_ENABLED 가 'true' 일 때만 엣지를 부른다. loadSheetOpen 은 throw 하지 않는다 —
+      // 시트 실패는 DB 숫자 + 안내 한 줄(sheetNotice)로 남고 현황판을 막지 않는다.
+      const [base, logi, sheet] = await Promise.all([
         loadBoardData(day),
         loadScheduleOverdue(day).then((r) => ({ ok: true as const, rows: r }), (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) })),
+        loadSheetOpen(),
       ]);
+      const next = applySheetToBoard(base, sheet, day);
       if (!alive.current || my !== seq.current) return;
       if (logi.ok) {
         logisticsFailed.current = false;
@@ -73,6 +79,7 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
       if (next.syncError) { if (!syncFailed.current) { syncFailed.current = true; notify(next.syncError, "error"); } }
       else syncFailed.current = false;
       if (next.healed) notify(`일정이 완료된 복합기 AS 접수 ${next.healed}건을 완료로 맞췄습니다`, "success");
+      if (next.sheetHealed) notify(`시트에서 끝난 접수 ${next.sheetHealed}건을 완료로 맞췄습니다`, "success");
       setData(next);
       onCountsRef.current?.(Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, next.rows.filter((r) => r.type === m.type).length])) as Record<ReceptionType, number>);
       setToday(day);
@@ -95,8 +102,11 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
   const openSchedule = useCallback(() => { if (onOpenSchedule) onOpenSchedule(); else requestOpenOverdue(); }, [onOpenSchedule]);
   const onDone = useCallback(() => { void refresh(); }, [refresh]);
   const rows = data ? (deptEnabled ? data.rows : data.rows.filter((r) => !isDeptType(r.type))) : [];
+  const over90Rows = data?.over90 ? (deptEnabled ? data.over90 : data.over90.filter((r) => !isDeptType(r.type))) : undefined;
 
   const renderActions = (row: ReceptionRow): ReactNode => {
+    // 시트 행: 앱 접수에 이어지지 않았거나(지원 3종은) 열린 DB 원본이 없으면 읽기 전용 카드 — 처리는 시트에서
+    if (row.sheet && (!row.sheet.linked || (isDeptType(row.type) && !data?.sources[row.id]))) return <SheetRowCard row={row} />;
     if (isDeptType(row.type)) {
       return renderDeptActions
         ? renderDeptActions(row, { source: data?.sources[row.id], onDone })
@@ -128,6 +138,9 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
       compact={compact}
       scheduleRows={logistics}
       onOpenSchedule={openSchedule}
+      sheetMode={Boolean(data?.sheetMode)}
+      sheetNotice={data?.sheetNotice || undefined}
+      over90Rows={over90Rows}
     />
   );
 }

@@ -32,6 +32,7 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "FIELD_OCR", label: "매수·잔량 사진 분석(시험)", desc: "켜면 FIELD 점검 양식의 매수·잔량 칸 옆에 [📷 매수 분석]·[📷 잔량 분석]이 보입니다. 사진 한 장당 AI 비용이 듭니다." },
   { key: "NAVER_CALENDAR_ENABLED", label: "네이버 캘린더 미러", desc: "켜면 일정 등록 시 네이버 캘린더에도 자동 등록됩니다 (원본은 웹앱 일정리스트)." },
   { key: "DEPT_RECEPTION_ENABLED", label: "서비스접수 지원 3종(경영·운영·영업)", desc: "켜면 서비스접수 종류 선택기에 경영지원·운영지원·영업팀 줄과 부서 접수 폼이 보입니다. supabase/reception-dept-types.sql 과 reception-dept-types-rename.sql 을 먼저 실행해야 저장이 됩니다." },
+  { key: "RECEPTION_SHEET_OPEN_ENABLED", label: "서비스접수 미처리 = 시트 상태 기준", desc: "켜면 미처리 현황판·홈 미처리 칸의 영업·경영·원격·IT 숫자를 접수 시트 상태 열(처리완료·취소·이관이 아니면 미처리, 최근 90일)로 셉니다. 시트에서 끝난 앱 접수는 자동으로 완료 처리됩니다. 끄면 앱 접수(DB) 기준. 엣지 함수 reception-sheet-open 을 먼저 배포해야 합니다." },
   { key: "SSO_REQUIRED", label: "그룹웨어 로그인 필수", desc: "켜면 그룹웨어 계정으로 로그인한 기기만 FIELD가 열립니다(앨범·설명서 같은 공개 페이지는 예외). 그룹웨어 담당자가 우리 주소를 허용목록에 올려 로그인이 되는 걸 확인한 뒤 켜세요.", danger: true },
 ];
 
