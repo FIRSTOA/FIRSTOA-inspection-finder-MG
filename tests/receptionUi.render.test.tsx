@@ -121,7 +121,7 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(mgmt).toContain("계약서구분");
     expect(sales).not.toContain("계약서구분");
     expect(mgmt).not.toContain("업체로 접수");
-    expect(mgmt).toContain("임대리스트 검색 — 업체명 / 자산기번 / 순번");
+    expect(mgmt).toContain("임대리스트 검색 — 업체명·부서명·자산·시리얼·순번"); // C4: 부서명 검색 추가
     expect(mgmt).toContain("순번 하나로 업체 정보가 자동 채워집니다");
     expect(mgmt).not.toContain("시트에 자동 기입됩니다");
     const picked = renderToString(createElement(DeptReceptionFormView, { ...base, custKind: "기존" as const, onCustKind: noop, onClearVendor: noop,

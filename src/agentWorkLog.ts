@@ -4,6 +4,66 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-22",
+    "hash": "a5b4d0bb7f",
+    "agent": "feature-planner",
+    "summary": "서비스접수 미처리 = 실제 접수 시트 상태 기준(관리 탭 스위치, 기본 꺼짐) + 엣지 reception-sheet-open"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "a5b4d0bb7f",
+    "agent": "developer",
+    "summary": "서비스접수 미처리 = 실제 접수 시트 상태 기준(관리 탭 스위치, 기본 꺼짐) + 엣지 reception-sheet-open"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "a5b4d0bb7f",
+    "agent": "qa-checker",
+    "summary": "서비스접수 미처리 = 실제 접수 시트 상태 기준(관리 탭 스위치, 기본 꺼짐) + 엣지 reception-sheet-open"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "741be1e768",
+    "agent": "feature-planner",
+    "summary": "재계약 다음 확인일 = 달력 칸 + 보낸 뒤 일정 1건 생성(네이버·일정리스트·캘린더), 밤사이 조사·설계 문서"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "741be1e768",
+    "agent": "db-schema",
+    "summary": "재계약 다음 확인일 = 달력 칸 + 보낸 뒤 일정 1건 생성(네이버·일정리스트·캘린더), 밤사이 조사·설계 문서"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "741be1e768",
+    "agent": "developer",
+    "summary": "재계약 다음 확인일 = 달력 칸 + 보낸 뒤 일정 1건 생성(네이버·일정리스트·캘린더), 밤사이 조사·설계 문서"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "741be1e768",
+    "agent": "qa-checker",
+    "summary": "재계약 다음 확인일 = 달력 칸 + 보낸 뒤 일정 1건 생성(네이버·일정리스트·캘린더), 밤사이 조사·설계 문서"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "741be1e768",
+    "agent": "sql-review",
+    "summary": "재계약 다음 확인일 = 달력 칸 + 보낸 뒤 일정 1건 생성(네이버·일정리스트·캘린더), 밤사이 조사·설계 문서"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "3685f55df3",
+    "agent": "debugger",
+    "summary": "확장성 건수 원본 하나로(조회·팀 현황·순위표 = 같은 표·같은 함수) + 같은 날 재전송 사전 확인 + \"오발송 삭제\" 단추"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "3685f55df3",
+    "agent": "qa-checker",
+    "summary": "확장성 건수 원본 하나로(조회·팀 현황·순위표 = 같은 표·같은 함수) + 같은 날 재전송 사전 확인 + \"오발송 삭제\" 단추"
+  },
+  {
+    "date": "2026-10-22",
     "hash": "89cc85145a",
     "agent": "feature-planner",
     "summary": "미수 개편: 필드 미수 탭 = 법무 기준 CS 방문이력 작성기, 조회 미수 = 업체별 방문 이력·소송이관 준비"

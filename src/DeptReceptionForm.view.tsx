@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { AlertCircle, Building2, ChevronRight, Loader2, Save, Search } from "lucide-react";
 import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 import { openNativePicker } from "./datePicker";
+import LeaseDeptPill from "./LeaseDeptPill";
 
 export type DeptReceptionFormViewProps = {
   dept: Extract<ReceptionType, "경영지원" | "운영지원" | "영업팀">;
@@ -82,12 +83,13 @@ const section = "text-[11px] font-bold uppercase tracking-wider text-slate-400";
 export function DeptCandidateList({ children }: { children: ReactNode }) {
   return <div className="mt-2 max-h-72 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">{children}</div>;
 }
-export function DeptCandidateRow(p: { name: string; ended?: string; sameVendor?: number; no: string; model: string; asset: string; serial: string; region: string; onPick: () => void }) {
+export function DeptCandidateRow(p: { name: string; dept?: string; deptMatched?: boolean; ended?: string; sameVendor?: number; no: string; model: string; asset: string; serial: string; region: string; onPick: () => void }) {
   return (
     <button type="button" onClick={p.onPick} className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-blue-50/50 ${p.ended ? "opacity-60" : ""}`}>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <b className="truncate text-[14px] font-black text-slate-900">{p.name}</b>
+          <LeaseDeptPill dept={p.dept || ""} matched={p.deptMatched} />
           {p.ended && <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{p.ended}</span>}
           {(p.sameVendor || 0) > 1 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">기기 {p.sameVendor}대</span>}
         </span>
@@ -134,7 +136,7 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
         <div className="flex items-center gap-2">
           {custKind === "기존" && <div className="relative min-w-0 flex-1">
             <input value={p.query} onChange={(e) => p.onQueryChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") p.onSearch(); }}
-              placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" aria-label="거래처 검색" className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-3.5 pr-24 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              placeholder="임대리스트 검색 — 업체명·부서명·자산·시리얼·순번" aria-label="거래처 검색" className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-3.5 pr-24 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
             <button type="button" onClick={p.onSearch} disabled={p.searching} className="absolute right-1 top-1 inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-[12px] font-bold text-white transition hover:bg-blue-700 disabled:opacity-40"><Search size={14} aria-hidden />{p.searching ? "검색중" : "검색"}</button>
           </div>}
           {custKind === "신규" && <label className="block min-w-0 flex-1"><span className="sr-only">업체명</span>

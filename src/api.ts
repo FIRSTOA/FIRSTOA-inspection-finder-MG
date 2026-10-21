@@ -19,6 +19,7 @@ import { normRegion } from "./region";
 import { normalizeId as normId, vendorMatchKey, vendorNameCore } from "./ids";
 import { inferBrand } from "./copierBrand";
 import { confirmExpansionResend } from "./expansionResendGuard";
+import { deptFilter, isDeptColumnMissing, isMissingColumnError, markDeptColumnMissing, MATCHED_BY_KEY, shouldSearchDept, type LeaseMatchedBy } from "./leaseDept";
 
 export const GAS_GET_URL =
   "https://script.google.com/macros/s/AKfycbzoubwDNWFpiR7h9YTEfQBTM2wE69GeqXI4fjVJQ-wPdEsQ9thxASo2J4ydytaPXyoO/exec";
@@ -238,7 +239,7 @@ async function searchMachineIdentity(query: string): Promise<VendorHit[]> {
   return Array.from(hits.values());
 }
 
-// 임대리스트(vendor_info) 검색 — 서비스접수 자동채움용. 업체명은 즉시, 자산번호/순번은 컬럼 승격 후 동작.
+// 임대리스트(vendor_info) 검색 — 서비스접수 자동채움용. 순서: 업체명 → 부서명(2자↑, 숫자만이면 건너뜀) → 자산번호 → 기번(4자↑) → 순번(숫자).
 export type LeaseHit = Record<string, string>;
 export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
   const kw = String(q || "").trim();
@@ -249,7 +250,8 @@ export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
   const seqCol = enc("순번");
   const seen = new Set<string>();
   const out: LeaseHit[] = [];
-  const push = (rows: Array<{ id?: number; _업체명?: string; _raw?: unknown }>) => {
+  type LeaseRow = { id?: number; _업체명?: string; _raw?: unknown };
+  const push = (rows: LeaseRow[], matchedBy: LeaseMatchedBy) => {
     for (const r of rows) {
       const raw = (r._raw && typeof r._raw === "object" ? r._raw : {}) as Record<string, unknown>;
       const dedup = String(r.id ?? `${r._업체명}-${raw["순"]}`);
@@ -257,18 +259,32 @@ export async function searchLeaseList(q: string): Promise<LeaseHit[]> {
       seen.add(dedup);
       const normalized: LeaseHit = { _업체명: String(r._업체명 || "") };
       for (const [k, v] of Object.entries(raw)) normalized[k] = v == null ? "" : String(v);
+      normalized[MATCHED_BY_KEY] = matchedBy; // 결과 줄에서 "왜 걸렸나" 표시용(부서 알약 노란 테두리)
       out.push(normalized);
     }
   };
   const run = async (query: string) => {
-    try { return await selectRows<{ id?: number; _업체명?: string; _raw?: unknown }>("vendor_info", query); }
+    try { return await selectRows<LeaseRow>("vendor_info", query); }
     catch { return []; }
   };
+  // 부서 단계(C4): 생성 컬럼 "부서명" 먼저 → 400(컬럼 없음, SQL 실행 전)이면 이번 세션은 _raw 경로로
+  const runDept = async (): Promise<LeaseRow[]> => {
+    const select = `select=id,${vendorCol},_raw`;
+    if (!isDeptColumnMissing()) {
+      try { return await selectRows<LeaseRow>("vendor_info", `${select}&${deptFilter(kw, false)}&limit=30`); }
+      catch (error) {
+        if (!isMissingColumnError(error)) return []; // 타임아웃 등은 이 단계만 건너뜀(업체·자산·순번 결과는 그대로)
+        markDeptColumnMissing();
+      }
+    }
+    return run(`${select}&${deptFilter(kw, true)}&limit=30`);
+  };
   const serialCol = enc("기번");
-  push(await run(`select=id,${vendorCol},_raw&${vendorCol}=ilike.*${enc(kw)}*&limit=30`));
-  if (out.length < 30) push(await run(`select=id,${vendorCol},_raw&${assetCol}=ilike.*${enc(kw)}*&limit=30`));
-  if (kw.length >= 4 && out.length < 30) push(await run(`select=id,${vendorCol},_raw&${serialCol}=ilike.*${enc(kw)}*&limit=30`));
-  if (/^\d+$/.test(kw) && out.length < 30) push(await run(`select=id,${vendorCol},_raw&${seqCol}=eq.${enc(kw)}&limit=30`));
+  push(await run(`select=id,${vendorCol},_raw&${vendorCol}=ilike.*${enc(kw)}*&limit=30`), "업체");
+  if (shouldSearchDept(kw) && out.length < 30) push(await runDept(), "부서");
+  if (out.length < 30) push(await run(`select=id,${vendorCol},_raw&${assetCol}=ilike.*${enc(kw)}*&limit=30`), "자산");
+  if (kw.length >= 4 && out.length < 30) push(await run(`select=id,${vendorCol},_raw&${serialCol}=ilike.*${enc(kw)}*&limit=30`), "기번");
+  if (/^\d+$/.test(kw) && out.length < 30) push(await run(`select=id,${vendorCol},_raw&${seqCol}=eq.${enc(kw)}&limit=30`), "순번");
   return out.slice(0, 30);
 }
 

@@ -32,6 +32,8 @@ import DeptReceptionDetail from "./DeptReceptionDetail";
 import DeptActionBar from "./DeptActionBar";
 import { deptListState, deptShort, isDeptType, type DeptType } from "./deptReception";
 import ReceptionListFilters from "./ReceptionListFilters";
+import LeaseDeptPill from "./LeaseDeptPill";
+import { leaseDeptOf, MATCHED_BY_KEY } from "./leaseDept";
 
 type ListTypeFilter = "전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인" | DeptType; // 접수리스트 종류 필터(2026-10-19 "지원" 묶음 → 부서 3종 각각)
 const LIST_TYPE_FILTERS: readonly ListTypeFilter[] = ["전체", "복합기 AS", "IT", "원격이관", "주소확인", "경영지원", "운영지원", "영업팀"];
@@ -1642,7 +1644,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
             <div className="px-4 pb-4 pt-2.5 lg:px-5">
             <div className="flex items-center gap-2">
             {custKind === "기존" && <div className="relative min-w-0 flex-1">
-              <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명 / 자산기번 / 순번" className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-3.5 pr-24 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="임대리스트 검색 — 업체명·부서명·자산·시리얼·순번" className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-3.5 pr-24 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
               <button type="button" onClick={() => void runSearch()} disabled={searching} className="absolute right-1 top-1 inline-flex h-8 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-[12px] font-bold text-white transition hover:bg-blue-700 disabled:opacity-40"><Search size={14} />{searching ? "검색중" : "검색"}</button>
             </div>}
             {custKind === "신규" && <label className="block min-w-0 flex-1"><span className="sr-only">업체명</span>
@@ -1665,6 +1667,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <b className="truncate text-[14px] font-black text-slate-900">{pick(hit, "거래처명", "_업체명")}</b>
+                        <LeaseDeptPill dept={leaseDeptOf(hit)} matched={hit[MATCHED_BY_KEY] === "부서"} />
                         {ended && <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">{leaseState}</span>}
                         {sameVendor > 1 && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">기기 {sameVendor}대</span>}
                       </span>
@@ -1695,7 +1698,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
               </div>
               {/* 값을 칩으로 흘려놓으면 기번·자산을 눈으로 대조하기 어렵다 — 라벨 바로 옆에 값을 붙인 한 줄 요약으로 둔다 */}
               <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                {([["순", pick(lease, "순") || "-", "num"], ["모델", pick(lease, "모델명") || "-", ""], ["자산번호", pick(lease, "자산번호") || "-", "mono"], ["기번", pick(lease, "시리얼번호(기번)") || "-", "mono"], ["등급", pick(lease, "등급") || "-", ""], ["지역", region || "-", ""], ["종료일", pick(lease, "종료일") || "-", "num"], ["미수", `${pick(lease, "미수개월수") || "0"}개월`, "num"]] as [string, string, string][]).map(([label, value, kind]) => (
+                {([["순", pick(lease, "순") || "-", "num"], ["부서", leaseDeptOf(lease) || "-", ""], ["모델", pick(lease, "모델명") || "-", ""], ["자산번호", pick(lease, "자산번호") || "-", "mono"], ["기번", pick(lease, "시리얼번호(기번)") || "-", "mono"], ["등급", pick(lease, "등급") || "-", ""], ["지역", region || "-", ""], ["종료일", pick(lease, "종료일") || "-", "num"], ["미수", `${pick(lease, "미수개월수") || "0"}개월`, "num"]] as [string, string, string][]).map(([label, value, kind]) => (
                   <span key={label} className="inline-flex min-w-0 items-baseline gap-1">
                     <span className="text-[11px] font-medium text-slate-400">{label}</span>
                     <span className={`truncate text-[12px] font-bold text-slate-800 ${kind === "mono" ? "font-mono" : kind === "num" ? "tabular-nums" : ""}`} title={value}>{value}</span>

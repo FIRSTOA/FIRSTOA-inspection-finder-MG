@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import DeptReceptionFormView, { DeptCandidateList, DeptCandidateRow } from "./DeptReceptionForm.view";
 import PortalSelect from "./PortalSelect";
 import { searchLeaseList, type LeaseHit } from "./api";
+import { leaseDeptOf, MATCHED_BY_KEY } from "./leaseDept";
 import {
   DEPT_FIELD_CHIPS, DEPT_ROUTES, DEPT_ROUTE_LABEL, defaultHandler, defaultRoute, deptMissing, normalizeRegion,
   pickLease, regionLabelOf, type DeptReceptionInput, type DeptRegion, type DeptRoute, type DeptType,
@@ -133,7 +134,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
   const candidates = isNew || lease ? null : leaseHits.length > 0 ? (
     <DeptCandidateList>
       {leaseHits.slice(0, 30).map((h, i) => (
-        <DeptCandidateRow key={`${seqOf(h)}-${i}`} name={firstLine(pickLease(h, "거래처명", "_업체명"))} ended={endedOf(h) || undefined}
+        <DeptCandidateRow key={`${seqOf(h)}-${i}`} name={firstLine(pickLease(h, "거래처명", "_업체명"))} dept={leaseDeptOf(h)} deptMatched={h[MATCHED_BY_KEY] === "부서"} ended={endedOf(h) || undefined}
           sameVendor={vendorCounts.get(vendorKey(h)) || 0} no={seqOf(h) || "-"} model={pickLease(h, "모델명", "기종")} asset={pickLease(h, "자산번호")}
           serial={pickLease(h, "시리얼번호(기번)", "기번")} region={regionLabelOf(leaseRegionOf(h) as DeptRegion)} onPick={() => chooseLease(h)} />
       ))}
@@ -146,7 +147,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
     name: vendorName || "업체 미기재",
     badge: endedOf(lease) ? `${endedOf(lease)} 기기` : undefined,
     fields: [
-      ["순", seqOf(lease) || "-", "num"], ["모델", pickLease(lease, "모델명", "기종") || "-", ""],
+      ["순", seqOf(lease) || "-", "num"], ["부서", leaseDeptOf(lease) || "-", ""], ["모델", pickLease(lease, "모델명", "기종") || "-", ""],
       ["자산번호", pickLease(lease, "자산번호") || "-", "mono"], ["기번", pickLease(lease, "시리얼번호(기번)", "기번") || "-", "mono"],
       ["등급", pickLease(lease, "등급") || "-", ""], ["지역", regionLabelOf(normalizeRegion(region)) || "-", ""],
       ["종료일", pickLease(lease, "종료일") || "-", "num"], ["미수", `${pickLease(lease, "미수개월수", "미수개월") || "0"}개월`, "num"],
