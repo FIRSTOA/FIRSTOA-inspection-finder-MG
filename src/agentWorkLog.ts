@@ -4,6 +4,54 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-22",
+    "hash": "89cc85145a",
+    "agent": "feature-planner",
+    "summary": "미수 개편: 필드 미수 탭 = 법무 기준 CS 방문이력 작성기, 조회 미수 = 업체별 방문 이력·소송이관 준비"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "89cc85145a",
+    "agent": "ui-designer",
+    "summary": "미수 개편: 필드 미수 탭 = 법무 기준 CS 방문이력 작성기, 조회 미수 = 업체별 방문 이력·소송이관 준비"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "89cc85145a",
+    "agent": "db-schema",
+    "summary": "미수 개편: 필드 미수 탭 = 법무 기준 CS 방문이력 작성기, 조회 미수 = 업체별 방문 이력·소송이관 준비"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "89cc85145a",
+    "agent": "developer",
+    "summary": "미수 개편: 필드 미수 탭 = 법무 기준 CS 방문이력 작성기, 조회 미수 = 업체별 방문 이력·소송이관 준비"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "89cc85145a",
+    "agent": "qa-checker",
+    "summary": "미수 개편: 필드 미수 탭 = 법무 기준 CS 방문이력 작성기, 조회 미수 = 업체별 방문 이력·소송이관 준비"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "89cc85145a",
+    "agent": "sql-review",
+    "summary": "미수 개편: 필드 미수 탭 = 법무 기준 CS 방문이력 작성기, 조회 미수 = 업체별 방문 이력·소송이관 준비"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "4e12c4722e",
+    "agent": "kakao-pc-rules",
+    "summary": "카톡 발송 야간 22~08시 금지(노트북 중계·봇폰) + 노트북 카톡 PC 자동 로그인(로그인 풀림 20시간 정지 대응)"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "58be332e2c",
+    "agent": "feature-planner",
+    "summary": "미수 개편 설계안(승인 대기) + 자동 생성 패치노트·한 일 갱신"
+  },
+  {
+    "date": "2026-10-22",
     "hash": "1ce6036fd2",
     "agent": "developer",
     "summary": "할 일 21건 정리 + 버그 4건: E팀 \"지방\" → C 오저장, 그룹웨어 세션 만료 시 작성자 고르기 재노출, PC확장성 건수 셈법 통일, 키맨 공지 10시"
