@@ -4,7 +4,8 @@ import { notify } from "./toast";
 import { askConfirm } from "./confirmModal";
 import { Download, RefreshCw, Search, X } from "lucide-react";
 import { countRows, selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction } from "./supabase";
-import { setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor } from "./operations";
+import { setActivityEventsCancelledByKey, setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor } from "./operations";
+import { kstDayOf, kstTextRange, UTC_TEXT_DATE_TABLES } from "./workCount";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
@@ -12,12 +13,16 @@ import StockBoard from "./StockBoard";
 import SupplyBoard from "./SupplyBoard";
 import { kstDate } from "./visits";
 import { okrWeeksInMonth } from "./okr";
+import { calendarRange } from "./periodRange";
 
 type Row = Record<string, unknown>;
 
 const PAGE = 300;
+// 확장성 표 → 활동 기록 종류·작성자 칸 (숨김을 팀 현황에도 반영할 때 쓴다)
+const EXPANSION_KIND_BY_TABLE: Record<string, "expansion_it" | "expansion_copier"> = { pc_expansion: "expansion_it", mfp_expansion: "expansion_copier" };
+const expansionAuthorField = (table: string) => table === "pc_expansion" ? "작성자" : table === "mfp_expansion" ? "등록자" : "";
 const PERIODS = [
-  ["1m", "최근 1개월"], ["3m", "최근 3개월"], ["6m", "최근 6개월"], ["1y", "최근 1년"], ["all", "전체"],
+  ["month", "이번 달"], ["lastmonth", "지난달"], ["3m", "최근 3개월"], ["6m", "최근 6개월"], ["1y", "최근 1년"], ["all", "전체"],
 ] as const;
 type PeriodKey = typeof PERIODS[number][0] | "week"; // "week" = 월~일 한 주(PC 확장성만, 2026-10-08)
 
@@ -31,12 +36,6 @@ function weekOf(date: string): { start: string; end: string } {
 }
 const shiftDays = (date: string, days: number) => { const d = new Date(`${date}T12:00:00+09:00`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
-
-function shiftMonths(date: string, months: number) {
-  const base = new Date(`${date}T12:00:00+09:00`);
-  base.setMonth(base.getMonth() + months);
-  return base.toISOString().slice(0, 10);
-}
 
 const SHEET_ERROR = /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NULL!|ERROR!?)$/i;
 function text(row: Row, key: string) {
@@ -137,11 +136,15 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     if (HIDEABLE.has(category.table)) parts.push(`_hidden=${showHidden ? "is.true" : "not.is.true"}`);
     if (category.filterQuery) parts.push(category.filterQuery);
     if (category.chipFilter && chip) parts.push(`${encodeURIComponent(category.chipFilter.field)}=eq.${encodeURIComponent(chip)}`);
-    if (period === "week") {
-      parts.push(`${encodeURIComponent(category.dateField)}=gte.${week.start}`, `${encodeURIComponent(category.dateField)}=lte.${week.end}T23:59:59`);
-    } else if (period !== "all") {
-      const months = period === "1m" ? -1 : period === "3m" ? -3 : period === "6m" ? -6 : -12;
-      parts.push(`${encodeURIComponent(category.dateField)}=gte.${shiftMonths(kstDate(), months)}`);
+    if (period !== "all") {
+      const range = period === "week" ? { from: week.start, to: week.end } : calendarRange(period, kstDate()); // 달력 기준(이번 달 1일~말일 등)
+      if (UTC_TEXT_DATE_TABLES.has(category.table)) {
+        // 확장성 날짜 칸은 'YYYY-MM-DD'(웹앱)와 UTC 시각 글자(시트 미러)가 섞여 있다 — KST 하루 경계로 자른다(workCount.ts)
+        const kst = kstTextRange(range.from, range.to);
+        parts.push(`${encodeURIComponent(category.dateField)}=gte.${kst.gte}`, `${encodeURIComponent(category.dateField)}=lt.${kst.lt}`);
+      } else {
+        parts.push(`${encodeURIComponent(category.dateField)}=gte.${range.from}`, `${encodeURIComponent(category.dateField)}=lte.${range.to}T23:59:59`);
+      }
     }
     if (query.trim()) {
       // PostgREST or 조건 — 정의된 검색 필드를 한 번에 훑는다.
@@ -157,12 +160,19 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       const conds: string[] = [];
       if (category.teamField) conds.push(`"${category.teamField}".ilike."*${team}*"`);
       if (category.teamSourceParen) conds.push(`"_출처".ilike."*(*${team}*)*"`);
+      // 확장성: 지역 칸이 비면 작성자 팀으로 — 팀 현황(activity_events)이 같은 규칙이라 두 화면 팀 합계가 맞는다
+      // (2026-10-22 C팀 10월: 지역 빈 이민구 마이밸류 1건이 조회 탭에서만 빠져 46 vs 47)
+      const authorField = expansionAuthorField(category.table);
+      if (authorField && category.teamField && teamMembers.length) {
+        const names = teamMembers.map((m) => `"${m.name.replace(/"/g, "")}"`).join(",");
+        conds.push(`and(or("${category.teamField}".is.null,"${category.teamField}".eq.""),"${authorField}".in.(${names}))`);
+      }
       parts.push(`or=(${conds.map((cond) => encodeURIComponent(cond)).join(",")})`);
     }
     parts.push(`order=${encodeURIComponent(category.orderField)}.${sortDir}`, `limit=${PAGE}`);
     if (offset > 0) parts.push(`offset=${offset}`);
     return parts.join("&");
-  }, [category, period, week, query, team, member, HIDEABLE, showHidden, chip, sortDir]);
+  }, [category, period, week, query, team, member, HIDEABLE, showHidden, chip, sortDir, teamMembers]);
   // 주 단위는 PC 확장성에서만 — 다른 표로 옮기면 3개월로 돌아간다
   useEffect(() => { if (period === "week" && category.key !== "pc") setPeriod("3m"); }, [category.key, period]);
 
@@ -311,7 +321,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
             <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">기간</span>
             {category.key === "pc" && (
               <button type="button" onClick={() => setPeriod("week")}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === "week" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>주</button>
+                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === "week" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>이번 주</button>
             )}
             {PERIODS.map(([value, label]) => (
               <button key={value} type="button" onClick={() => setPeriod(value)}
@@ -595,6 +605,24 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                           if (rowVendor.trim() && rowAuthor && rowDate) {
                             void setVisitsCancelledByVendor(rowVendor, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
                             void setActivityEventsCancelledByVendor(rowVendor, rowAuthor, rowDate, hiding, author || "미지정").catch(() => {});
+                          }
+                        }
+                        // 확장성(PC·복합기)도 팀 현황에서 같이 빠지게(2026-10-22) — 같은 사람·같은 날·같은 거래처에 보이는 행이
+                        // 하나도 안 남을 때만 취소한다. 하나라도 남으면 팀 현황도 재전송 묶음으로 1건이라 그대로 맞다.
+                        const expansionKind = EXPANSION_KIND_BY_TABLE[category.table];
+                        const authorField = expansionAuthorField(category.table);
+                        if (expansionKind && authorField) {
+                          const rowAuthor = String(detail[authorField] ?? "").trim();
+                          const rowVendor = String(detail["_업체명"] ?? "").trim();
+                          const rowDay = kstDayOf(String(detail[category.dateField] ?? ""));
+                          if (rowAuthor && rowVendor && /^\d{4}-\d{2}-\d{2}$/.test(rowDay)) {
+                            const kst = kstTextRange(rowDay, rowDay);
+                            const same = [`_hidden=not.is.true`, `${encodeURIComponent(authorField)}=eq.${encodeURIComponent(rowAuthor)}`,
+                              `${encodeURIComponent("_업체명")}=eq.${encodeURIComponent(rowVendor)}`,
+                              `${encodeURIComponent(category.dateField)}=gte.${kst.gte}`, `${encodeURIComponent(category.dateField)}=lt.${kst.lt}`].join("&");
+                            void countRows(category.table, same)
+                              .then((left) => { if (hiding ? left === 0 : left > 0) return setActivityEventsCancelledByKey(expansionKind, rowVendor, rowAuthor, rowDay, hiding, author || "미지정"); })
+                              .catch((e: unknown) => notify(`팀 현황 반영 실패: ${(e as Error).message}`, "error"));
                           }
                         }
                         setRows((current) => current.filter((r) => r.id !== detail.id));

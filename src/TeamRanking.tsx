@@ -8,42 +8,15 @@ import { getActivityEvents, OPERATIONS_TEAMS, type ActivityEvent } from "./opera
 import { useMembers } from "./authors";
 import { kstDate, weekRange } from "./visits";
 import { vendorMatchKey } from "./ids";
+import { countableEvents } from "./workCount";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Metric = { key: string; label: string; unit: string; count: (evs: ActivityEvent[]) => number };
 
 const byKind = (kind: string) => (evs: ActivityEvent[]) => evs.filter((e) => e.category === kind).length;
 const byVendor = (kind: string) => (evs: ActivityEvent[]) => new Set(evs.filter((e) => e.category === kind).map((e) => vendorMatchKey(e.vendor) || e.vendor)).size;
-/** 같은 사람이 같은 업체를 다시 보낸 것(수정 재전송·연타)은 한 건으로 — 2026-10-17 "한왕주 PC 8개인데 실제 6개"
- *  · 확장성: 같은 날 같은 업체는 1건(사양을 채워 한 번 더 보낸 것)
- *  · 그 밖: 같은 업체를 10분 안에 다시 보낸 것은 1건(점검 대수는 큰 값) */
-export function dedupeForRanking(evs: ActivityEvent[]): ActivityEvent[] {
-  const sorted = [...evs].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const out: ActivityEvent[] = [];
-  const lastAt = new Map<string, { at: number; idx: number }>();
-  const dayKeys = new Set<string>();
-  for (const e of sorted) {
-    const v = vendorMatchKey(e.vendor) || e.vendor.trim();
-    if (!v) { out.push(e); continue; }
-    if (e.category === "expansion_it" || e.category === "expansion_copier") {
-      const k = `${e.author}|${e.category}|${v}|${e.activityDate}`;
-      if (dayKeys.has(k)) continue;
-      dayKeys.add(k); out.push(e); continue;
-    }
-    const k = `${e.author}|${e.category}|${v}`;
-    const at = new Date(e.createdAt).getTime();
-    const prev = lastAt.get(k);
-    if (prev && at - prev.at <= 10 * 60_000) {
-      const kept = out[prev.idx];
-      if ((e.machineCount || 0) > (kept.machineCount || 0)) out[prev.idx] = { ...kept, machineCount: e.machineCount };
-      lastAt.set(k, { at, idx: prev.idx });
-      continue;
-    }
-    lastAt.set(k, { at, idx: out.length });
-    out.push(e);
-  }
-  return out;
-}
+// 같은 사람이 같은 업체를 다시 보낸 것(수정 재전송·연타)은 한 건으로 — 2026-10-17 "한왕주 PC 8개인데 실제 6개".
+// 규칙(옛 dedupeForRanking)은 workCount.ts 한 곳에 두고 팀 현황(OperationsDashboard)도 같은 것을 쓴다(2026-10-22).
 
 const METRICS: Metric[] = [
   { key: "inspection", label: "점검", unit: "대", count: (evs) => evs.filter((e) => e.category === "inspection").reduce((n, e) => n + (e.machineCount || 1), 0) },
@@ -77,7 +50,7 @@ export default function TeamRanking({ author }: { author: string }) {
 
   useEffect(() => {
     let alive = true; setEvents(null);
-    void getActivityEvents(range.start, range.end).then((rows) => { if (alive) setEvents(dedupeForRanking(rows.filter((r) => r.status !== "cancelled"))); }).catch(() => { if (alive) setEvents([]); });
+    void getActivityEvents(range.start, range.end).then((rows) => { if (alive) setEvents(countableEvents(rows)); }).catch(() => { if (alive) setEvents([]); });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);

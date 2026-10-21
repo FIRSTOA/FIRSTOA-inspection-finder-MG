@@ -12,7 +12,7 @@ import { buildCatText, emptyCatForm } from "./categoryForms";
 import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey , extractCompanyForTemplate} from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { ToastHost, notify } from "./toast";
-import { clearSsoSession, getSsoSession, logoutToGroupware, ssoLoginVisible, ssoRequiredCached, startGroupwareLogin } from "./sso";
+import { authorLocked, clearSsoSession, getSsoSession, logoutToGroupware, ssoLoginVisible, ssoRequiredCached, startGroupwareLogin } from "./sso";
 import { extractVendorFromText, pickLabelValue } from "./vendorLine";
 import { ConfirmHost } from "./confirmModal";
 import { syncPush } from "./push";
@@ -46,7 +46,7 @@ import { AUTHOR_TEAMS, CS_DEPT, EXTERNAL_AUTHORS, addMember, deleteMember, displ
 import { buildActionBlock } from "./actionBlock";
 import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags, splitTableReceptionBlocks } from "./inspectionBlocks";
 import type { AuthorTeam, MemberRow } from "./authors";
-import { regionLetter } from "./region";
+import { regionLetter, tableVisitRegion } from "./region";
 // 재계약 준비 — 별도 chunk로 떼어 둔다. 이 탭을 열지 않는 사람은 코드를 받지 않는다
 /** 화면 단위 코드 분할(2026-10-10 속도): 처음 열 때 2.2MB 번들을 통째로 받던 것을, FIELD 화면만 먼저 받고 나머지 화면은 눌렀을 때 받는다 */
 function ScreenLoading({ label }: { label: string }) {
@@ -815,12 +815,8 @@ function extractStatusTextFromRaw(rawText: string): string {
   return value;
 }
 
-// Table-format 지역 extraction — reads 방문담당자 value (e.g., "수도권A" → "A")
-function extractTableRegion(rawText: string): string {
-  const match = rawText.match(/방문담당자[\t ]+[^\t\n]*?([A-E])(?=[\t \n]|$)/);
-  if (match) return match[1];
-  return "";
-}
+// Table-format 지역 extraction — reads 방문담당자 value ("수도권A" → "A", "지방" → "E")
+const extractTableRegion = tableVisitRegion;
 
 // Compact model/serial: "샤오미 MI-AIR/318115/00036240" → model + (rest as serial)
 function parseCompactModelSerial(line: string): ModelSerial {
@@ -3522,7 +3518,7 @@ function AuthorPicker({ value, onChange, accent }: AuthorPickerProps) {
         }}
       >
         <span className="truncate">{filled ? value : "작성자 선택"}</span>
-        {!(ssoRequiredCached() && getSsoSession()) && <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />} {/* 그룹웨어 로그인 고정이면 "고르는" 화살표 없이 이름만(내 계정·로그아웃은 눌러서) 2026-10-19 */}
+        {!authorLocked() && <ChevronDown size={14} className="ml-1 shrink-0 text-slate-400" />} {/* 그룹웨어 로그인 고정이면 "고르는" 화살표 없이 이름만(내 계정·로그아웃은 눌러서) 2026-10-19 */}
       </button>
       {open && <AuthorPickerModal value={value} onChange={onChange} accent={accent} onClose={() => setOpen(false)} />}
     </>
@@ -3622,7 +3618,7 @@ function ProcessingFormPanel({
       <div className={`mb-2 grid gap-2 rounded-xl p-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)_4.5rem]" : "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)]"}`} style={{ background: bgSoft }}>
         <div>
           <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
-          {ssoRequiredCached() && getSsoSession() ? <div className="truncate rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-slate-900">{author}</div> /* 그룹웨어 로그인 고정이면 이름만 글자로(2026-10-19 사용자 "없애라") */ : <AuthorPicker value={author} onChange={setAuthor} accent={accent} />}
+          {authorLocked() ? <div className="truncate rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-slate-900">{author}</div> /* 그룹웨어 로그인 고정이면 이름만 글자로(2026-10-19 사용자 "없애라") */ : <AuthorPicker value={author} onChange={setAuthor} accent={accent} />}
         </div>
         <div className="min-w-0">
           <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">지역</div>
@@ -4000,7 +3996,7 @@ function AirPurifierFormPanel({
       {/* 작성자 */}
       <div className="mb-2">
         <div className="mb-1.5 inline-block rounded-full bg-slate-200 px-3 py-0.5 text-[13px] font-bold text-slate-700">작성자</div>
-        {ssoRequiredCached() && getSsoSession() ? <div className="truncate rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-slate-900">{author}</div> /* 그룹웨어 로그인 고정이면 이름만 글자로(2026-10-19 사용자 "없애라") */ : <AuthorPicker value={author} onChange={setAuthor} accent={accent} />}
+        {authorLocked() ? <div className="truncate rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-slate-900">{author}</div> /* 그룹웨어 로그인 고정이면 이름만 글자로(2026-10-19 사용자 "없애라") */ : <AuthorPicker value={author} onChange={setAuthor} accent={accent} />}
       </div>
 
       {/* 필터리셋 / 필터교체 */}
@@ -6328,7 +6324,7 @@ export default function App() {
   const { book: authorBook } = useAuthorBook();
   // 사용자(작성자) 선택 창 — 좌하단 프로필·우상단 이름에서 열고, 아직 정한 적 없으면 첫 화면에서 바로 묻는다(2026-09-18)
   const [userPickOpen, setUserPickOpen] = useState(false);
-  useEffect(() => { if (!author) setUserPickOpen(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 첫 진입 한 번만
+  useEffect(() => { if (!author && !authorLocked()) setUserPickOpen(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 첫 진입 한 번만
   const inboxBadge = useInboxBadge(author);
   const todayLabel = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "short" }).format(new Date());
   const members = useMembers();

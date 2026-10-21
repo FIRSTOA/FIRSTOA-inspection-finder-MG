@@ -18,23 +18,33 @@ const SESSION_HOURS = 24 * 7; // 로그인 유지 7일(2026-10-14 사용자 결�
 export type SsoUser = { sub: string; username: string; name: string; empNo: string; department: string; position: string; email: string; role: "ADMIN" | "MANAGER" | "STAFF" | string; mustChangePassword?: boolean };
 export type SsoSession = { user: SsoUser; at: string; exp: number };
 
-export function getSsoSession(): SsoSession | null {
+/** 보관한 세션 글자를 now 기준으로 판정(순수 함수 — 테스트용). 만료·깨짐이면 null */
+export function parseSsoSession(raw: string | null, now: number): SsoSession | null {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
     const s = JSON.parse(raw) as SsoSession;
     if (!s?.user?.name || !s.exp) return null;
     // 유지 시간을 늘렸을 때 이미 로그인한 기기도 새 기준(로그인 시각 + 7일)을 따른다
     const exp = Math.max(s.exp, (Date.parse(s.at) || 0) + SESSION_HOURS * 3600_000);
-    if (Date.now() > exp) return null;
+    if (now > exp) return null;
     return { ...s, exp };
   } catch { return null; }
+}
+export function getSsoSession(): SsoSession | null {
+  try { return parseSsoSession(localStorage.getItem(SESSION_KEY), Date.now()); } catch { return null; }
 }
 export function clearSsoSession() { try { localStorage.removeItem(SESSION_KEY); } catch { /* 무시 */ } }
 
 
 /** 잠금 스위치는 app_config에 있지만 첫 화면을 늦추지 않으려고 마지막으로 본 값을 기기에 적어 둔다 */
 export function ssoRequiredCached(): boolean { try { return localStorage.getItem(REQUIRED_KEY) === "1"; } catch { return false; } }
+/** 이 기기가 스위치 값을 한 번이라도 받아 적었는가 — 새 기기·저장소 비움이면 "unknown"(설정 확인 전) */
+export function ssoRequiredStateCached(): "on" | "off" | "unknown" {
+  try { const v = localStorage.getItem(REQUIRED_KEY); return v === "1" ? "on" : v === "0" ? "off" : "unknown"; } catch { return "unknown"; }
+}
+/** 작성자 고정 여부 — 스위치가 켜져 있으면 세션 유무와 상관없이 고르기를 보이지 않는다.
+ *  (세션이 만료된 채 열린 화면에서 고르기·인원 선택 창이 되살아나던 2026-10-21 버그. 세션이 없으면 Boot 가 그룹웨어 재로그인으로 보낸다) */
+export const authorLocked = () => ssoRequiredCached();
 export function rememberSsoRequired(on: boolean) { try { localStorage.setItem(REQUIRED_KEY, on ? "1" : "0"); } catch { /* 무시 */ } }
 export const isOnValue = (v: string | undefined) => /^(true|1|on|y)$/i.test(v || "");
 

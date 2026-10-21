@@ -48,3 +48,16 @@ export function regionLetter(value: string, fallback = ""): string {
   const f = String(fallback || "").trim().toUpperCase().match(/^(?:수도권)?([A-E])$/);
   return f ? f[1] : "";
 }
+
+/**
+ * 접수 리포트(표 양식)의 "방문담당자" 칸 → 지역 글자. 못 읽으면 빈칸(호출부가 기본값을 정한다).
+ * 서비스접수 E팀(CSS)은 이 칸이 "수도권E"가 아니라 "지방"으로 온다 — 예전 정규식은 A~E 글자만 찾아서
+ * "지방"을 못 읽고 기본 C로 떨어졌다(2026-10-21 지앤아이·2026-09-18 알스퀘어디자인 C 오발송).
+ */
+export function tableVisitRegion(rawText: string): string {
+  const text = String(rawText || "");
+  const letter = text.match(/방문담당자[\t ]+[^\t\n]*?([A-E])(?=[\t \n]|$)/);
+  if (letter) return letter[1];
+  const value = text.match(/방문담당자[\t ]+([^\t\n]+)/);
+  return value ? regionLetter(value[1]) : "";
+}

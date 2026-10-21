@@ -8,7 +8,7 @@ FIRSTOA 작업 실행기 — 노트북(사무실 상시 PC)에서 24시간 도�
 하는 일 (1분에 한 바퀴)
   ① 심박: worker_heartbeat 에 "살아 있음"을 적는다. 15분 끊기면 DB 파수꾼(worker-watchdog 크론)이 담당자에게 웹푸시.
   ② 일감: worker_jobs 에서 queued 를 하나씩 잡아(claim) 처리한다 — ping · backup · relay · poster. (음성·OCR 은 자리만 있다)
-  ③ 시계: 매일 02:30 KST 전체 표 백업, 5분마다 카톡 PC 발송 중계(봇이 못 보낸 outbox), 월요일 08시 키맨 포스터.
+  ③ 시계: 매일 02:30 KST 전체 표 백업, 5분마다 카톡 PC 발송 중계(봇이 못 보낸 outbox), 월요일 10시 키맨 포스터.
 
 설치·운영은 README.md. 수동 확인: python worker.py --once (한 바퀴) · python worker.py --job ping · python worker.py --backup
 """
@@ -24,12 +24,12 @@ from datetime import timedelta
 
 from config import HOST, KAKAO_PC_DIR, LOG_DIR, RestError, kst_now, load_state, log, rest, save_state
 
-VERSION = "2026-10-10a"
+VERSION = "2026-10-21a"
 WORKER_NAME = os.environ.get("FIRSTOA_WORKER_NAME", f"worker@{HOST}")
 LOOP_SECONDS = 60
 BACKUP_AT = (2, 30)            # KST 02:30 이후 그날 첫 바퀴에
 RELAY_EVERY = 60               # 초 — 봇이 2분 넘게 못 가져간 outbox 를 카톡 PC 가 대신 보낸다(outbox_relay.py 규칙 · 2026-10-17 300→60)
-POSTER_HOUR = 8                # 월요일 08시대
+POSTER_HOUR = 10               # 월요일 10시대 (2026-10-21 사용자: 8시 → 10시, 출근 전 카톡 금지 규칙)
 RELAY_ENABLED = os.environ.get("FIRSTOA_RELAY", "1") != "0"
 POSTER_ENABLED = os.environ.get("FIRSTOA_POSTER", "1") != "0"
 

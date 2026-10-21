@@ -17,7 +17,7 @@
 
 사용법
   python poster_send.py --check                       열려 있는 방 창·이번 주 대상 확인 (전송 없음)
-  python poster_send.py --weekly                      실제 발송 (월요일 8시 작업 스케줄러가 부른다)
+  python poster_send.py --weekly                      실제 발송 (월요일 10시 — worker.py POSTER_HOUR)
   python poster_send.py --weekly --plan               보내지 않고 어디에 보낼 수 있는지만
   python poster_send.py --room "나와의 채팅" --test    그 방으로 테스트 1장
 """

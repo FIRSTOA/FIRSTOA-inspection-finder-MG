@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dedupeForRanking } from "./TeamRanking";
+import { dedupeResends as dedupeForRanking } from "./workCount";
 import type { ActivityEvent } from "./operations";
 
 const ev = (category: string, vendor: string, createdAt: string, machineCount = 1): ActivityEvent => ({

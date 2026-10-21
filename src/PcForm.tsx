@@ -4,7 +4,7 @@
  */
 import { useState } from "react";
 import { useAuthorBook } from "./authors";
-import { getSsoSession, ssoRequiredCached } from "./sso";
+import { authorLocked } from "./sso";
 import { GRADE_OPTIONS, REGION_OPTIONS } from "./formOptions";
 
 export type PcFormState = {
@@ -194,7 +194,7 @@ export default function PcForm({ form, setForm, author, setAuthor, onLoad, onErr
       {/* 작성자 */}
       <label className="block">
         <span className="text-xs font-medium text-slate-500">작성자</span>
-        {ssoRequiredCached() && getSsoSession() ? <div className="mt-0.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{author}</div> : <select value={author} onChange={(e) => setAuthor(e.target.value)}
+        {authorLocked() ? <div className="mt-0.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{author}</div> : <select value={author} onChange={(e) => setAuthor(e.target.value)}
           className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#334155]">
           <option value="">선택</option>
           {authors.map((a) => <option key={a} value={a}>{a}</option>)}

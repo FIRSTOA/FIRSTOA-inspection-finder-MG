@@ -11,6 +11,7 @@ import {
 } from "./operations";
 import { kstDate, weekRange } from "./visits";
 import { vendorMatchKey } from "./ids";
+import { countableEvents, distinctVendors } from "./workCount";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Props = { author: string };
@@ -151,7 +152,9 @@ export default function OperationsDashboard({ author: _author }: Props) {
     () => events.filter((event) => teamForAuthor(event.author) !== "팀장"),
     [events],
   );
-  const activeEvents = useMemo(() => nonManagerEvents.filter((event) => event.status !== "cancelled"), [nonManagerEvents]);
+  // 취소(오발송) 제외 + 재전송·연타 묶음 — 순위표와 같은 규칙(workCount.ts). 예전엔 여기만 재전송을 그대로 세서
+  // "한왕주 PC확장성 18건인데 조회 탭 16건"이 났다(2026-10-22, 세원기술단·에스에이치파트너스 재전송 2건)
+  const activeEvents = useMemo(() => countableEvents(nonManagerEvents), [nonManagerEvents]);
   const categoryScoped = useMemo(
     () => activeEvents.filter((event) => matchesFilter(event, category)),
     [activeEvents, category],
@@ -176,7 +179,7 @@ export default function OperationsDashboard({ author: _author }: Props) {
     if (member !== "전체") names.push(member);
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, "ko"));
   }, [activeEvents, team, member]);
-  const vendors = useMemo(() => new Set(filtered.map((event) => event.vendor.trim()).filter(Boolean)).size, [filtered]);
+  const vendors = useMemo(() => distinctVendors(filtered.map((event) => event.vendor)), [filtered]);
   const people = useMemo(() => new Set(filtered.map((event) => event.author).filter(Boolean)).size, [filtered]);
   const machineCount = useMemo(() => filtered.reduce((sum, event) => sum + Number(event.machineCount || 0), 0), [filtered]);
 
@@ -201,7 +204,7 @@ export default function OperationsDashboard({ author: _author }: Props) {
         name,
         team: rows[0]?.team || "미지정",
         total: rows.length,
-        vendors: new Set(rows.map((event) => event.vendor).filter(Boolean)).size,
+        vendors: distinctVendors(rows.map((event) => event.vendor)),
         categories: countByCategory(rows),
       }))
       .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "ko"));
@@ -214,7 +217,7 @@ export default function OperationsDashboard({ author: _author }: Props) {
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* 기간 선택 — 조회 허브의 다크바 아래 밝은 헤더 (관리 내부 카드와 같은 톤) */}
         <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록은 집계하지 않습니다.</p>
+          <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록·오발송 취소분은 빼고, 같은 거래처 재전송은 1건으로 셉니다(확장성은 같은 날, 그 밖은 10분 안). 건수 = 업무 기록 수, 거래처 = 서로 다른 거래처 수(같은 곳 여러 번은 1곳).</p>
           <div className="grid grid-cols-4 rounded-full bg-slate-100 p-1 lg:w-72">
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
               <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
@@ -306,7 +309,7 @@ export default function OperationsDashboard({ author: _author }: Props) {
                   </div>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full min-w-[1320px] text-sm">
-                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th>전체</th><th>거래처</th><th>점검</th><th>AS</th><th>물류</th><th>기타(여분,마감)</th><th>확장성(IT,복합기)</th><th>불만</th><th>미수</th><th>초과조정</th><th>재계약</th><th>담당자 변경</th><th>교체양식</th></tr></thead>
+                      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th title="업무 기록 수(재전송 묶음 뒤)">전체(건)</th><th title="서로 다른 거래처 수 — 같은 곳을 여러 번 가면 1곳">거래처(곳)</th><th>점검</th><th>AS</th><th>물류</th><th>기타(여분,마감)</th><th>확장성(IT,복합기)</th><th>불만</th><th>미수</th><th>초과조정</th><th>재계약</th><th>담당자 변경</th><th>교체양식</th></tr></thead>
                       <tbody>{peopleRows.map((row) => {
                         const personEvents = filtered.filter((event) => event.author === row.name);
                         return <tr key={row.name} onClick={() => setMember(row.name)} className={`cursor-pointer border-b border-slate-100 text-center last:border-0 hover:bg-slate-50 ${member === row.name ? "bg-blue-50" : ""}`}><td className="px-4 py-3 text-left font-black">{row.name}</td><td>{row.team}</td><td className="font-black">{row.total}</td><td>{row.vendors}</td><td>{row.categories.inspection}</td><td>{row.categories.as}</td><td>{filterCount(personEvents, "logistics_main")}</td><td>{filterCount(personEvents, "logistics_etc")}</td><td>{filterCount(personEvents, "expansion")}</td><td>{row.categories.complaint}</td><td>{row.categories.misu}</td><td>{row.categories.overage}</td><td>{row.categories.recontract}</td><td>{row.categories.contact_change}</td><td>{row.categories.replacement}</td></tr>;

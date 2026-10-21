@@ -22,7 +22,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
 import { notify } from "./toast";
-import { getSsoSession, ssoRequiredCached } from "./sso";
+import { authorLocked } from "./sso";
 import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import ReceptionBoardPanel from "./ReceptionBoardPanel";
 import { requestOpenOverdue } from "./receptionBoardData";
@@ -1610,7 +1610,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
           </span>
           {counts.addr > 0 && <span className="rounded bg-amber-400/15 px-2 py-0.5 text-[11px] font-black text-amber-300">📍 주소확인 {counts.addr}</span>}
           <span className="ml-auto flex items-center gap-2">
-            {ssoRequiredCached() && getSsoSession() ? <span className="px-1 text-[11px] font-black text-white">{author}</span> /* 그룹웨어 로그인 고정 — 고르기 없이 이름만(2026-10-19) */ : <select value={author} onChange={(e) => setAuthor(e.target.value)} title="접수 작성자 (원격팀)"
+            {authorLocked() ? <span className="px-1 text-[11px] font-black text-white">{author}</span> /* 그룹웨어 로그인 고정 — 고르기 없이 이름만(2026-10-19) */ : <select value={author} onChange={(e) => setAuthor(e.target.value)} title="접수 작성자 (원격팀)"
               className="rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-black text-white outline-none">
               {!(book.IT || []).includes(author) && <option value={author} className="text-slate-900">{author || "미지정"}</option>}
               {(book.IT || []).map((name) => <option key={name} value={name} className="text-slate-900">{name}</option>)}

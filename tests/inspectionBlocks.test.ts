@@ -37,6 +37,11 @@ describe("isSpareNoteBlock", () => {
     // 창고 낱말이 없어도 처리내용의 재고 줄만으로 메모
     expect(isSpareNoteBlock(HUSTEEL_NOTE.map((l) => (l === "14층 창고" ? "14층" : l)))).toBe(true);
   });
+  it("카톡 원문 그대로 '13.14층 창고' 한 줄 + 재고 줄 — 13은 기기 번호, 14층 창고는 보관 메모(위치 토큰이 아님)", () => {
+    const raw = ["13.14층 창고", "450 토너 K 6 C 8 M 10 Y 7 폐 5", "5700 토너 2 드럼 2", "CM305 토너 K 4 C 5 M 5 Y 5"];
+    expect(isSpareNoteBlock(raw)).toBe(true);
+    expect(itemStartFlags([DIV, ...raw]).filter(Boolean)).toHaveLength(0);
+  });
   it("식별칸이 하나라도 차 있으면 기기 — 처리내용에 토너 수량이 있어도", () => {
     expect(isSpareNoteBlock(HUSTEEL_NOTE.map((l) => (l === "모델명:" ? "모델명: 5700" : l)))).toBe(false);
     expect(isSpareNoteBlock(HUSTEEL_NOTE.map((l) => (l === "자산기번:" ? "자산기번: C0603" : l)))).toBe(false);

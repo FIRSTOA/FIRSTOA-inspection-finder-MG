@@ -184,6 +184,18 @@ export async function setActivityEventsCancelledByVendor(vendor: string, author:
   });
 }
 
+// 종류까지 맞춰 취소 — 확장성(pc_expansion·mfp_expansion) 숨김용(2026-10-22). 위 ByVendor 는 종류를 안 봐서
+// 같은 날 같은 업체의 점검·AS 까지 같이 취소된다(현장 기록 숨김에는 그 동작이 의도) — 확장성에는 쓰지 않는다.
+export async function setActivityEventsCancelledByKey(category: ActivityKind, vendor: string, author: string, activityDate: string, cancelled: boolean, cancelledBy: string): Promise<void> {
+  if (!vendor.trim() || !author.trim() || !activityDate) return;
+  const query = `category=eq.${encodeURIComponent(category)}&vendor=eq.${encodeURIComponent(vendor.trim())}&author=eq.${encodeURIComponent(author.trim())}&activity_date=eq.${activityDate}`;
+  await updateRows("activity_events", query, {
+    status: cancelled ? "cancelled" : "active",
+    cancelled_at: cancelled ? new Date().toISOString() : null,
+    cancelled_by: cancelled ? cancelledBy : null,
+  });
+}
+
 export async function setActivityEventsCancelledBySource(sourceText: string, author: string, activityDate: string, cancelled: boolean, cancelledBy: string): Promise<void> {
   if (!sourceText.trim()) return;
   const query = `source_text=eq.${encodeURIComponent(sourceText)}&author=eq.${encodeURIComponent(author)}&activity_date=eq.${activityDate}`;
