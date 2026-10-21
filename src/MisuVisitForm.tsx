@@ -15,7 +15,7 @@ import {
   type MisuPhoto, type MisuVisit, type MisuVisitDraft,
 } from "./misuVisit";
 import {
-  isMisuTableMissing, loadMisuSheetVendors, loadMisuVisitIndex, resolveMisuRoom, saveMisuVisit, searchMisuOtherVendors,
+  isMisuTableMissing, loadMisuSheetVendors, loadMisuVisitById, loadMisuVisitIndex, resolveMisuRoom, saveMisuVisit, searchMisuOtherVendors,
   uploadMisuSlotPhoto, type MisuRoomInfo, type MisuSheetVendor,
 } from "./misuVisitApi";
 import {
@@ -28,6 +28,10 @@ import { useAuthorBook } from "./authors";
 import { teamForAuthor, saveActivityEvent } from "./operations";
 import { kstDate, saveVisit } from "./visits";
 import { askConfirm } from "./confirmModal";
+import {
+  buildSupplementDraft, clearSupplementRequest, MISU_SUPPLEMENT_EVENT, parseSupplementPayload, readSupplementRequest,
+  supplementSlotMeta, supplementVendorOption, type MisuSupplementPayload,
+} from "./misuSupplement";
 
 type ToastFn = (message: string, kind?: "success" | "warning" | "error") => void;
 type Props = { author: string; setAuthor: (v: string) => void; onToast: ToastFn };
@@ -138,7 +142,7 @@ export default function MisuVisitForm({ author, setAuthor, onToast }: Props) {
     const id = draft.id;
     let alive = true;
     void photoStoreLoadAll().then((byMode) => {
-      if (!alive) return;
+      if (!alive || supplementAppliedRef.current) return; // 보완 기록으로 시작했으면 옛 초안 사진은 되살리지 않는다
       for (const item of byMode[MISU_PHOTO_MODE] || []) {
         const [draftId, slot] = item.id.split(":") as [string, MisuPhotoSlotKey];
         if (draftId !== id || !PHOTO_SLOTS.includes(slot)) { void photoStoreDelete(item.id); continue; } // 다른(끝난) 초안의 찌꺼기
@@ -188,6 +192,51 @@ export default function MisuVisitForm({ author, setAuthor, onToast }: Props) {
     const saved = savedSlots(slotMeta);
     writeMisuDraft(storage(), { v: 1, savedAt: Date.now(), draft, vendor, slots: saved, ...flagsRef.current });
   }, [draft, vendor, slots, slotMeta]);
+
+  // ── 보완 기록(조회 › 미수 [방문 이력]에서 넘어옴) — 원 기록 전체를 복사한 새 초안으로 시작 ──
+  const supplementBusyRef = useRef(false);
+  const supplementAppliedRef = useRef(false);
+  const latestRef = useRef({ draft, vendor, slots });
+  const applySupplementRef = useRef<(p: MisuSupplementPayload) => Promise<void>>(async () => undefined);
+  useEffect(() => {
+    latestRef.current = { draft, vendor, slots };
+    applySupplementRef.current = async (payload) => {
+      if (supplementBusyRef.current) return;
+      supplementBusyRef.current = true;
+      try {
+        let original: MisuVisit | null = null;
+        try { original = await loadMisuVisitById(payload.visitId); }
+        catch (e) { onToast(`원 기록을 불러오지 못해 보완 기록을 시작하지 못했습니다 — ${(e as Error).message || e}`, "error"); return; }
+        if (!original) { onToast("원 기록을 찾지 못했습니다. 조회 화면을 새로고침한 뒤 다시 눌러 주세요.", "error"); return; }
+        const cur = latestRef.current;
+        if (isMisuDraftTouched(cur.draft, cur.vendor, Object.values(cur.slots).filter(Boolean).length)) {
+          if (!(await askConfirm("보완 기록으로 새로 쓸까요? (쓰던 내용은 지워집니다)", { danger: true, okLabel: "보완 기록으로 새로 쓰기" }))) return;
+        }
+        resetAll();
+        supplementAppliedRef.current = true;
+        const meta = supplementSlotMeta(original.photos);
+        const nextSlots: SlotMap = { ...EMPTY_SLOTS };
+        for (const [k, m] of Object.entries(meta)) nextSlots[k as MisuPhotoSlotKey] = { url: m.url, status: "done" };
+        setDraft(buildSupplementDraft(original));
+        setVendor(supplementVendorOption(original));
+        setSlotMeta(meta);
+        setSlots(nextSlots);
+        const when = original.visited_at ? kstParts(original.visited_at) : null;
+        setDraftNotice(`${original.visit_round}${when ? ` (${when.date.slice(5)} ${when.hm})` : ""} 기록을 고쳐 쓰는 보완 기록입니다 — 원 기록 내용을 채워 두었습니다`);
+        setResult(null);
+      } finally {
+        supplementBusyRef.current = false;
+      }
+    };
+  });
+  useEffect(() => {
+    const take = (p: MisuSupplementPayload) => { clearSupplementRequest(storage()); void applySupplementRef.current(p); };
+    const pending = readSupplementRequest(storage());
+    if (pending) take(pending); else clearSupplementRequest(storage()); // 10분 지난 값은 지운다
+    const onEvent = (e: Event) => { const p = parseSupplementPayload((e as CustomEvent).detail); if (p) take(p); };
+    window.addEventListener(MISU_SUPPLEMENT_EVENT, onEvent);
+    return () => window.removeEventListener(MISU_SUPPLEMENT_EVENT, onEvent);
+  }, []);
 
   // ── 업체 ──
   const myVisits = useMemo(() => (vendor ? visitsForVendor(visits, { company_code: vendor.companyCode, lease_seq: vendor.leaseSeq, vendor: vendor.name }) : []), [vendor, visits]);

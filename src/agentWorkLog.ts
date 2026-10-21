@@ -4,6 +4,36 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-22",
+    "hash": "3aa39d1bf0",
+    "agent": "feature-planner",
+    "summary": "서비스접수 업체 검색에 부서명(임대리스트 Q열) 추가 — 업체명 → 부서명 → 자산 → 기번 → 순번"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "3aa39d1bf0",
+    "agent": "db-schema",
+    "summary": "서비스접수 업체 검색에 부서명(임대리스트 Q열) 추가 — 업체명 → 부서명 → 자산 → 기번 → 순번"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "3aa39d1bf0",
+    "agent": "developer",
+    "summary": "서비스접수 업체 검색에 부서명(임대리스트 Q열) 추가 — 업체명 → 부서명 → 자산 → 기번 → 순번"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "3aa39d1bf0",
+    "agent": "qa-checker",
+    "summary": "서비스접수 업체 검색에 부서명(임대리스트 Q열) 추가 — 업체명 → 부서명 → 자산 → 기번 → 순번"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "3aa39d1bf0",
+    "agent": "sql-review",
+    "summary": "서비스접수 업체 검색에 부서명(임대리스트 Q열) 추가 — 업체명 → 부서명 → 자산 → 기번 → 순번"
+  },
+  {
+    "date": "2026-10-22",
     "hash": "a5b4d0bb7f",
     "agent": "feature-planner",
     "summary": "서비스접수 미처리 = 실제 접수 시트 상태 기준(관리 탭 스위치, 기본 꺼짐) + 엣지 reception-sheet-open"

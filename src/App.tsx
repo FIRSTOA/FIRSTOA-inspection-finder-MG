@@ -5052,6 +5052,8 @@ export default function App() {
   // 한 번 열었던 화면 목록(keep-alive 대상만 유지) — 모듈 집합에 렌더 중 add(멱등). 앱은 하나뿐이라 ref 대신 모듈 변수로 둔다
   VISITED_SCREENS.add(screen);
   const visited = VISITED_SCREENS;
+  // 조회 › 미수 [보완 기록 쓰기] → 필드 › 미수 작성기로 이동(값은 MisuVisitForm 이 읽는다)
+  useEffect(() => { const go = () => { setScreen("field"); handleModeChange("misu"); }; window.addEventListener("field:misu-supplement", go); return () => window.removeEventListener("field:misu-supplement", go); });
   // 자주 쓰는 화면 조각은 첫 로딩 뒤 한가할 때 미리 받아 둔다 — 처음 누를 때도 기다리지 않게
   useEffect(() => {
     const t = window.setTimeout(() => { void import("./CsAsWorkspace"); void import("./ServiceReception"); void import("./LookupHub"); }, 4000);

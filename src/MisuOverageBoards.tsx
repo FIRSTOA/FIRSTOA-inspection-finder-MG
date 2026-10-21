@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { selectAllRows, selectRows } from "./supabase";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import type { MisuVisit } from "./misuVisit";
+import { requestMisuSupplement } from "./misuSupplement";
 
 // [방문 이력](CS 방문이력 조회, 2026-10-22) — 누를 때만 내려받는다
 const MisuVisitHistory = lazy(() => import("./MisuVisitHistory"));
@@ -268,7 +269,7 @@ export function MisuBoard({ onMisuSupplement }: { onMisuSupplement?: (visit: Mis
       </div>
       {boardView === "방문" && (
         <Suspense fallback={<div role="status" className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm font-bold text-slate-400">방문 이력 화면을 불러오는 중…</div>}>
-          <MisuVisitHistory onSupplement={onMisuSupplement} />
+          <MisuVisitHistory onSupplement={onMisuSupplement ?? requestMisuSupplement} />
         </Suspense>
       )}
       {boardView === "CS체크" && (

@@ -94,6 +94,12 @@ export async function loadMisuVisitIndex(): Promise<MisuVisit[]> {
   return rows.map((r) => ({ ...r, missing: [], photos: [], photo_skips: {}, rules_ack: {}, dun_methods: [] }) as unknown as MisuVisit);
 }
 
+/** 보완 기록용 — 원 기록 1행 전체(모든 열). 없으면 null, 실패는 throw. */
+export async function loadMisuVisitById(id: string): Promise<MisuVisit | null> {
+  const rows = await selectRows<MisuVisit>(TABLE, `select=*&id=eq.${enc(id)}&limit=1`);
+  return rows[0] || null;
+}
+
 // ───────── 다른 업체 찾기(vendor_master) ─────────
 export type MisuMasterVendor = { key: string; name: string; companyCode: string };
 export async function searchMisuOtherVendors(q: string): Promise<MisuMasterVendor[]> {
