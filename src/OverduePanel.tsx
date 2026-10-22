@@ -7,6 +7,7 @@ import { CalendarClock } from "lucide-react";
 import { selectRows } from "./supabase";
 import { kstDate } from "./visits";
 import { fieldTicketVendor } from "./ids";
+import { formatAssignees } from "./assignees";
 import { filterOverdue, overdueAgeTone, overdueBadge, overdueKind, type KindFilter } from "./overdueLogic";
 
 type Row = { id: string; team: string; date: string; time: string; vendor: string; assignee: string; status: string; scheduleType: string };
@@ -70,7 +71,7 @@ export default function OverduePanel({ onOpen }: { onOpen: () => void }) {
               <span className={`w-12 shrink-0 text-[10.5px] font-black ${tone === "red" ? "text-rose-300" : tone === "amber" ? "text-amber-300" : "text-slate-400"}`}>{d}일 전</span>
               <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-slate-100">{fieldTicketVendor(r.vendor).vendor || r.vendor}</span>
               <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-300">{overdueBadge(r.scheduleType)}</span>
-              <span className={`w-14 shrink-0 truncate text-right text-[11px] font-black ${r.assignee ? "text-slate-400" : "text-rose-300"}`}>{r.assignee || "미배정"}</span>
+              <span className={`w-14 shrink-0 truncate text-right text-[11px] font-black ${r.assignee ? "text-slate-400" : "text-rose-300"}`}>{formatAssignees(r.assignee, { short: true }) || "미배정"}</span>
               {logistics && <span className="shrink-0 text-[9.5px] font-bold text-slate-500">네이버 캘린더에서 완료</span>}
             </>
           );

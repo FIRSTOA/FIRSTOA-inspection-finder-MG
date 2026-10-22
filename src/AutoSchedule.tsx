@@ -23,6 +23,7 @@ import UnifiedHistory from "./UnifiedHistory";
 import { usageSpareAdvice } from "./spareAdvice";
 import CandidateMap, { type CandidatePoint } from "./CandidateMap";
 import PortalSelect from "./PortalSelect";
+import { hasAssignee } from "./assignees";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
 type Place = {
@@ -82,8 +83,11 @@ export default function AutoSchedule({ author }: { author: string }) {
 
   // ① 그날 필수 스케줄 (일정리스트)
   const loadTickets = useCallback(async () => {
-    const mineFilter = onlyMine && author ? `&assignee=eq.${encodeURIComponent(author)}` : "";
-    const list = await selectRows<Ticket>("as_tickets", `select=id,date,time,team,vendor,address,scheduleType&date=eq.${date}&team=eq.${team}${mineFilter}&order=time.asc`).catch(() => [] as Ticket[]);
+    // 담당이 여러 명("김A,이B")일 수 있어 서버는 넓게(ilike) 받고 화면에서 정확히 거른다 — "이수"와 "이수진"이 섞이지 않게(2026-10-22)
+    const mine = onlyMine && !!author;
+    const mineFilter = mine ? `&assignee=ilike.*${encodeURIComponent(author)}*` : "";
+    const rows = await selectRows<Ticket & { assignee?: string }>("as_tickets", `select=id,date,time,team,vendor,address,scheduleType,assignee&date=eq.${date}&team=eq.${team}${mineFilter}&order=time.asc`).catch(() => [] as Array<Ticket & { assignee?: string }>);
+    const list: Ticket[] = mine ? rows.filter((r) => hasAssignee(r.assignee, author)) : rows;
     setTickets(list);
     setAnchorId(list.length ? list[list.length - 1].id : "");
   }, [date, team, onlyMine, author]);

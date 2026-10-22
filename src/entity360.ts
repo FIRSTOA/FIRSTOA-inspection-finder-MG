@@ -359,8 +359,13 @@ async function gatherWorkin(e: Entity): Promise<Row[]> {
   return selectRows<Row>("workin_map_places", `select=*&id=in.(${links.map((l) => l.place_id).join(",")})&limit=50`).catch(() => [] as Row[]);
 }
 
-export async function gather(e: Entity): Promise<SourceResult[]> {
-  const results = await Promise.all(SOURCES.filter((s) => s.table !== "plan_memos").map(async (src): Promise<SourceResult> => {
+/**
+ * opts.only(2026-10-22 탭 검색): 이 표들만 모은다(SOURCES 순서 유지). 없으면 전부 — 통합 검색 360 은 인자 없이 부르므로 지금과 같다.
+ * plan_memos 는 only 에 들어 있을 때만 2차로 붙인다(as_tickets 도 같이 있어야 이어진다).
+ */
+export async function gather(e: Entity, opts?: { only?: string[] }): Promise<SourceResult[]> {
+  const only = opts?.only ? new Set(opts.only) : null;
+  const results = await Promise.all(SOURCES.filter((s) => s.table !== "plan_memos" && (!only || only.has(s.table))).map(async (src): Promise<SourceResult> => {
     try {
       let exact: Row[] = src.table === "vendor_info" ? e.leaseRows : [];
       if (src.table === "workin_map_places") exact = await gatherWorkin(e);
@@ -392,6 +397,7 @@ export async function gather(e: Entity): Promise<SourceResult[]> {
       return { source: src, exact: [], loose: [], ok: false, error: (err as Error).message.slice(0, 120) };
     }
   }));
+  if (only && !only.has("plan_memos")) return results;
   // 일정 메모는 일정(as_tickets) id 로만 이어진다 — 일정 결과가 나온 뒤 2차로
   const memoSrc = SOURCES.find((s) => s.table === "plan_memos")!;
   const ticketIds = (results.find((r) => r.source.table === "as_tickets")?.exact || []).map((r) => String(r.id)).filter(Boolean).slice(0, 100);

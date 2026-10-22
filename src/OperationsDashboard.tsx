@@ -12,6 +12,7 @@ import { kstDate, weekRange } from "./visits";
 import { vendorMatchKey } from "./ids";
 import { countableEvents, distinctVendors, EXPANSION_BASIS_TEXT, FIELD_BASIS_TEXT } from "./workCount";
 import { loadWorkEvents } from "./expansionSource";
+import BlogCommentCard from "./BlogCommentCard";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Props = { author: string };
@@ -322,7 +323,7 @@ export default function OperationsDashboard({ author: _author }: Props) {
             </div>
           </section>
 
-
+          <BlogCommentCard />
         </>
       )}
     </div>

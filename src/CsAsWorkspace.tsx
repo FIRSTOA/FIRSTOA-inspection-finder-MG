@@ -18,7 +18,9 @@ import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./ac
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { useAuthorBook, teamLabel } from "./authors";
-import { escapeRegExp, extractCategory, extractIssue, matchReportAssignee as reportAssignee } from "./reportAssignee";
+import { escapeRegExp, extractCategory, extractIssue, groupReportTickets, hasReportMember, reportHeadOf } from "./reportAssignee";
+import { addedAssignees, formatAssignees, MAX_ASSIGNEES } from "./assignees";
+import AssigneePicker from "./AssigneePicker";
 
 // 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
 const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
@@ -930,14 +932,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       void invokeEdgeFunction("naver-calendar-push", { action: "caldav_update", uid: changed.naverUid, title: displayTitleOf(changed) })
         .catch((e) => notify(`네이버 제목 동기화 실패: ${(e as Error).message}`, "error"));
     }
-    // 새로 배정된 사람에게 웹푸시 — 자기 이름이 걸린 일정을 바로 알게
-    if (changed && before && changed.assignee && changed.assignee !== before.assignee) {
+    // 새로 배정된 사람에게 웹푸시 — 자기 이름이 걸린 일정을 바로 알게. 여러 명이면 새로 추가된 사람 전원(이미 있던 사람은 제외)
+    const pushTargets = changed && before && changed.assignee !== before.assignee ? addedAssignees(before.assignee, changed.assignee) : [];
+    if (changed && pushTargets.length) {
       void invokeEdgeFunction("push-send", {
         title: `일정 배정 — ${(changed.calendarTitle || "").trim() || changed.vendor || "일정"}`.slice(0, 80),
         body: `${changed.date} ${changed.time || ""} · ${changed.team}팀`.trim(),
         tag: `assign-${changed.id}`,
         category: "assign",
-        targets: [changed.assignee],
+        targets: pushTargets,
       }).catch(() => undefined);
     }
     // 네이버 미러 동기화: 완료되면 팀 완료 캘린더(예: C→강남C as)로 이동, 날짜·시간이 바뀌면(익일 연기 등) 일정 시간 이동
@@ -1256,9 +1259,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름의 건은 그쪽에서 소화한다.
     // 순서: 팀장 최상단 → 부파트장(명단 첫 번째) → 동급 순 (명단 순서 그대로)
     const order = reportOrder(reportTeam);
-    const assigneeOf = (ticket: AsTicket) => reportAssignee(ticket, order);
+    // 줄 머리에서 떼어낼 이름표 — 배정 칸 원문("김A,이B"), 없으면 제목 추정 1명. 사람별 묶음은 groupReportTickets 가 맡는다(여러 명이면 각자 묶음에 한 줄씩)
+    const headOf = (ticket: AsTicket) => reportHeadOf(ticket, order);
     const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
-    const cut = (value: string, max: number) => (value.length > max ? `${value.slice(0, max)}…` : value);
+    const cut =(value: string, max: number) => (value.length > max ? `${value.slice(0, max)}…` : value);
     // 기종 초단축: 괄호 별명("헤라클래스")이 있으면 그것, 없으면 브랜드 접두를 뗀 짧은 표기
     const shortModel = (model: string) => {
       const nick = model.match(/\(([가-힣A-Za-z0-9]{2,8})\)/)?.[1];
@@ -1275,7 +1279,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         }
       }
       // 업체명: 법인표기·위치 꼬리를 벗긴 핵심 이름만
-      const name = assigneeOf(ticket);
+      const name = headOf(ticket);
       // "A/S"의 슬래시는 구분자가 아니다 — 잠깐 다른 글자로 바꿔 보호하고 자른 뒤 되돌린다
       let raw = ticket.vendor.replace(/A\/S/g, "A\u2044S").split(/\s*>\s*/)[0].split("/")[0].replace(/A\u2044S/g, "A/S");
       if (name) raw = raw.replace(new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]*`), "");
@@ -1284,23 +1288,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const category = extractCategory(ticket.vendor, ticket.calendarTitle, name);
       return ["•" + vendor, ticket.model ? shortModel(ticket.model) : "", category, cut(issue, 14)].filter(Boolean).join(" ");
     };
-    const todays = teamTickets.filter((ticket) =>
-      ticket.date === targetYmd && ticket.status !== "완료" && order.includes(assigneeOf(ticket)));
     // 담당자가 아직 없는 건 — "#미배정"으로 묶어 빠뜨리지 않는다.
     // 금일 보고는 이름 없는 납품을 뺀다(물류 몫). 익일 보고는 물류까지 전부 — 누락을 눈으로 잡아 직접 지우는 쪽이 안전하다(2026-08-28 요청)
-    const unassigned = teamTickets.filter((ticket) =>
-      ticket.date === targetYmd && ticket.status !== "완료" && !assigneeOf(ticket) && (day === "next" || !isLogistics(ticket)));
+    const dayGroups = groupReportTickets(
+      teamTickets.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료"),
+      order, (ticket) => day === "next" || !isLogistics(ticket));
     const groups: string[] = [];
-    for (const name of order) {
-      const mine = todays.filter((ticket) => assigneeOf(ticket) === name);
-      if (mine.length) {
-        if (groups.length) groups.push("");   // 이름 사이 빈 줄 — 카톡에서 사람별로 끊어 읽힌다
-        groups.push(`#${name}`, ...mine.flatMap((t) => (day === "next" ? [lineOf(t), ...reportDetailOf(t)] : [lineOf(t)])));
-      }
-    }
-    if (unassigned.length) {
-      if (groups.length) groups.push("");
-      groups.push("#미배정", ...unassigned.flatMap((t) => (day === "next" ? [lineOf(t), ...reportDetailOf(t)] : [lineOf(t)])));
+    for (const { name, tickets: mine } of dayGroups) {
+      if (groups.length) groups.push("");   // 이름 사이 빈 줄 — 카톡에서 사람별로 끊어 읽힌다
+      groups.push(`#${name}`, ...mine.flatMap((t) => (day === "next" ? [lineOf(t), ...reportDetailOf(t)] : [lineOf(t)])));
     }
     if (day === "next") {
       // 익일스케줄 보고 — 내일 일정만, 미배정 포함 전부. 퇴근 전에 보내는 별도 보고(2026-08-28 요청)
@@ -1310,7 +1306,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // 익일일정 — 다음 영업일에 잡힌 팀 일정 전부. 누가 갈지 아직 모르니 이름 없이 적는다.
     // 오늘 익일로 넘긴 건도 날짜가 내일이면 자연히 여기 들어오고, 이름 없는 납품은 물류 몫이라 금일과 같은 기준으로 뺀다.
     const tomorrows = teamTickets.filter((ticket) =>
-      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || order.includes(assigneeOf(ticket))));
+      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || hasReportMember(ticket, order)));
     // 모레 이후(주말 포함)로 연기한 건 — 연기 기록 "(M/D로 연기)"가 남아 있으면 연기 이력으로 본다.
     // 마크의 날짜를 현재 날짜와 정확 대조하던 방식은 물류 건(status가 익일이 안 됨)과
     // 연기 후 날짜를 다시 옮긴 건, 토요일로 연기한 건을 보고에서 통째로 빠뜨렸다.
@@ -1347,21 +1343,18 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const targetYmd = day === "next" ? tomorrowYmd : todayYmd;
     // AI에 넘길 재료 — buildMidReport와 같은 필터·순서 (그쪽 규칙이 바뀌면 여기도 함께)
     const order = reportOrder(reportTeam);
-    const assigneeOf = (ticket: AsTicket) => reportAssignee(ticket, order);
     const eligible = tickets.filter((ticket) =>
       ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
       && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검");
     const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
-    const pending = [
-      ...order.flatMap((name) =>
-        eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료" && assigneeOf(ticket) === name)
-          .map((ticket) => ({ name, ticket }))),
-      ...eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료" && !assigneeOf(ticket) && (day === "next" || !isLogistics(ticket)))
-        .map((ticket) => ({ name: "미배정", ticket })),
-    ];
+    // 사람별 묶음 — buildMidReport 와 같은 함수(2명 일정은 두 사람 묶음에 각각 한 줄, AI 다듬기 재료도 두 번 들어간다)
+    const pending = groupReportTickets(
+      eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료"),
+      order, (ticket) => day === "next" || !isLogistics(ticket),
+    ).flatMap((group) => group.tickets.map((ticket) => ({ name: group.name, ticket })));
     // 익일스케줄 보고에는 익일일정·연기 꼬리 섹션이 없다 — 본문이 곧 익일이다
     const tomorrows = day === "next" ? [] : eligible.filter((ticket) =>
-      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || order.includes(assigneeOf(ticket))));
+      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || hasReportMember(ticket, order)));
     const deferredLater = day === "next" ? [] : eligible.filter((ticket) =>
       ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.status !== "완료"
       && /\(\d{1,2}\/\d{1,2}로 연기\)/.test(ticket.note || ""));
@@ -1378,7 +1371,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       note: (ticket.note || "").split(/\n/).slice(0, 3).join(" ").slice(0, 240),
       model: ticket.model,
       issue: extractIssue(ticket.issue, ticket.note),
-      category: extractCategory(ticket.vendor, ticket.calendarTitle, reportAssignee(ticket, order)),
+      category: extractCategory(ticket.vendor, ticket.calendarTitle, reportHeadOf(ticket, order)),
       kind: ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류" ? "물류" : "as",
     }));
     if (!payload.length) { setMidReport({ team: reportTeam, day, text: draft, polishing: false, diag }); return; }
@@ -1969,7 +1962,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 // 스티키 날짜 띠가 잘리지 않게 박스에 overflow-hidden을 쓰지 않는다
                 <section key={`${group.key}-${group.rows[0].id}`} className={`rounded-xl border shadow-sm ${group.key ? "border-emerald-200" : "border-amber-200"}`}>
                   <div className={`flex items-center justify-between rounded-t-xl px-3 py-1 ${group.key ? "bg-emerald-600" : "bg-amber-500"}`}>
-                    <span className="text-[12px] font-black text-white">{group.key || "미배정"}</span>
+                    <span className="text-[12px] font-black text-white">{formatAssignees(group.key) || "미배정"}</span>
                     <span className="text-[10.5px] font-bold tabular-nums text-white/75">{group.rows.length}건</span>
                   </div>
                   <div className="space-y-2 rounded-b-xl bg-slate-50/60 p-2">
@@ -1996,7 +1989,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     {ticket.source === "it" ? "IT" : ticket.source === "cs-transfer" ? "CS이관" : ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS" ? "익일as" : ticket.scheduleType === "매월점검" ? inspectionTypeLabel(ticket) : "납품"}
                   </span>
                   <span className="text-slate-500">{ticket.date.slice(5)} {ticket.time}</span>
-                  <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{ticket.assignee || "미배정"}</span>
+                  <span className={`rounded-full px-2 py-0.5 ${ticket.assignee ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{formatAssignees(ticket.assignee) || "미배정"}</span>
                   {ticket.status === "완료" && <span className="ml-auto rounded-full bg-blue-600 px-2 py-0.5 text-white">✓</span>}
                 </div>
                 {/* 제목은 원문 그대로 한 줄 — 넘치면 글자를 줄이고, 그래도 넘치면 천천히 흘려 끝까지 보인다(행 높이 고정) */}
@@ -2150,7 +2143,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               ) : (
                 <section key={key || "__none__"} className={`overflow-hidden rounded-xl border-2 bg-white shadow-sm ${key ? "border-emerald-300" : "border-rose-400"}`}>
                   <div className={`flex items-center gap-2 px-4 py-2 ${key ? "bg-emerald-50/60" : "bg-rose-50"}`}>
-                    <span className={`text-sm font-black ${key ? "text-emerald-900" : "text-rose-800"}`}>{key || "미배정 — 배정 필요"}</span>
+                    <span className={`text-sm font-black ${key ? "text-emerald-900" : "text-rose-800"}`}>{formatAssignees(key) || "미배정 — 배정 필요"}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${key ? "bg-white text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{rows.length + naver.length}건</span>
                   </div>
                   <div className="overflow-x-auto">
@@ -2209,7 +2202,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 )}
                 {/* 제목 — [수정]을 눌러야 편집, [저장]으로 확정 (저장하면 리스트·캘린더·네이버 제목이 함께 바뀐다) */}
                 <div className="mt-2 flex items-center gap-2">
-                  {ticket.assignee && <span className="shrink-0 rounded bg-emerald-500/90 px-2 py-1 text-sm font-black text-white">{ticket.assignee}</span>}
+                  {ticket.assignee && <span className="shrink-0 rounded bg-emerald-500/90 px-2 py-1 text-sm font-black text-white">{formatAssignees(ticket.assignee)}</span>}
                   {titleDraft === null ? (<>
                     <span className="min-w-0 flex-1 truncate px-1 text-[15px] font-bold text-white">{(ticket.calendarTitle || "").trim() || ticket.vendor}</span>
                     <VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} />
@@ -2366,21 +2359,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         </div>
       )}
       {assignTicket && (
-        <div className="fixed inset-0 z-[140] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setAssignId("")}>
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="text-lg font-black text-slate-950">담당자 배정</div>
-            <div className="mt-1 text-sm font-semibold text-slate-500">{assignTicket.vendor || "이 일정"} · {assignTicket.team}팀 · 현재 {assignTicket.assignee || "미배정"}</div>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              {teamAssignees[assignTicket.team].map((name) => (
-                <button key={name} type="button" onClick={() => applyAssign(assignTicket, name)} className={`rounded-full border px-3 py-3 text-sm font-black ${assignTicket.assignee === name ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>{name}</button>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center justify-between">
-              <button type="button" onClick={() => applyAssign(assignTicket, "")} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-black text-slate-500 hover:bg-slate-50">미배정으로</button>
-              <button type="button" onClick={() => setAssignId("")} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-black text-slate-600 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">닫기</button>
-            </div>
-          </div>
-        </div>
+        <AssigneePicker key={assignTicket.id} names={teamAssignees[assignTicket.team]} value={assignTicket.assignee} max={MAX_ASSIGNEES}
+          subtitle={`${assignTicket.vendor || "이 일정"} · ${assignTicket.team}팀 · 현재 ${formatAssignees(assignTicket.assignee) || "미배정"}`}
+          onSave={(value) => { if (value === assignTicket.assignee) setAssignId(""); else applyAssign(assignTicket, value); }}
+          onClose={() => setAssignId("")} />
       )}
       {moveTarget && (
         <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setMoveTarget(null)}>

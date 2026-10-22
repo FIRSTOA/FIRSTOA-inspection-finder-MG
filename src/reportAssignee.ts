@@ -7,18 +7,70 @@
  * 통째로 "없음"이 되는 사고가 실제로 있었다(\\s가 \s로 깎여 무력화).
  * tests/reportAssignee.test.ts가 실제 사고 케이스로 그걸 지킨다.
  */
-export type AssigneeSource = { assignee?: string; vendor: string; calendarTitle?: string };
+import { parseAssignees } from "./assignees";
+
+export type AssigneeSource ={ assignee?: string; vendor: string; calendarTitle?: string };
 
 /** 이름을 정규식에 끼울 때 특수문자를 무력화 — 명단은 자유 입력이라 "김광태(IT)" 같은 표기가 올 수 있다 */
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function matchReportAssignee(ticket: AssigneeSource, order: string[]): string {
-  return ticket.assignee
-    || order.find((name) => new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]`).test(ticket.vendor))
+/** 배정 칸이 빈 수기 일정 — 제목 머리에서 명단 이름 1명을 추정 */
+function matchFromTitle(ticket: AssigneeSource, order: string[]): string {
+  return order.find((name) => new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]`).test(ticket.vendor))
     || order.find((name) => new RegExp(`(?:^|[\\s/·])${escapeRegExp(name)}(?=[\\s\\-–—:/]|$)`).test((ticket.calendarTitle || "").slice(0, 14)))
     || "";
+}
+
+/**
+ * 제목 머리에서 떼어낼 이름표 — 배정 칸 원문 그대로("김A,이B"는 네이버 제목 머리 "김A,이B-"와 같은 글자).
+ * 1명일 때 예전 matchReportAssignee 와 글자까지 같다(줄 만들기·구분 추출이 이 값을 쓴다).
+ */
+export function reportHeadOf(ticket: AssigneeSource, order: string[]): string {
+  return ticket.assignee || matchFromTitle(ticket, order);
+}
+
+/**
+ * 중간보고 담당자들 — 배정 칸이 있으면 그 목록(여러 명이면 각자 묶음에 한 줄씩, D3), 없으면 제목 추정 1명.
+ * 빈 배열 = 미배정. 배정 칸이 공백뿐인 옛 값은 예전처럼 그 원문 1개로 둔다(미배정으로 바뀌지 않게).
+ */
+export function matchReportAssignees(ticket: AssigneeSource, order: string[]): string[] {
+  if (ticket.assignee) {
+    const names = parseAssignees(ticket.assignee);
+    return names.length ? names : [ticket.assignee];
+  }
+  const one = matchFromTitle(ticket, order);
+  return one ? [one] : [];
+}
+
+/** 호환 — 대표(첫 사람) 1명 */
+export function matchReportAssignee(ticket: AssigneeSource, order: string[]): string {
+  return matchReportAssignees(ticket, order)[0] || "";
+}
+
+/**
+ * 금일 처리예정 묶음 — 명단 순서대로 사람별, 끝에 "미배정"(keepUnassigned 가 허락한 것만).
+ * 명단 밖 사람만 걸린 건은 어느 묶음에도 넣지 않는다(물류 인원 몫 — 예전 규칙 그대로).
+ * 2명 일정은 두 사람 묶음에 각각 들어간다. 두 보고 생성기(규칙 초안·AI 다듬기)가 이 하나를 같이 쓴다.
+ */
+export function groupReportTickets<T extends AssigneeSource>(
+  tickets: T[], order: string[], keepUnassigned: (ticket: T) => boolean,
+): Array<{ name: string; tickets: T[] }> {
+  const namesOf = new Map<T, string[]>(tickets.map((t) => [t, matchReportAssignees(t, order)]));
+  const groups: Array<{ name: string; tickets: T[] }> = [];
+  for (const name of order) {
+    const mine = tickets.filter((t) => namesOf.get(t)!.includes(name));
+    if (mine.length) groups.push({ name, tickets: mine });
+  }
+  const unassigned = tickets.filter((t) => !namesOf.get(t)!.length && keepUnassigned(t));
+  if (unassigned.length) groups.push({ name: "미배정", tickets: unassigned });
+  return groups;
+}
+
+/** 명단 사람이 하나라도 걸렸나 — 익일일정에서 물류 건을 남길지 판단 */
+export function hasReportMember(ticket: AssigneeSource, order: string[]): boolean {
+  return matchReportAssignees(ticket, order).some((name) => order.includes(name));
 }
 
 /**

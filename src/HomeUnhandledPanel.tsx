@@ -8,6 +8,7 @@ import { CalendarClock } from "lucide-react";
 import { selectRows } from "./supabase";
 import { kstDate } from "./visits";
 import { fieldTicketVendor } from "./ids";
+import { formatAssignees } from "./assignees";
 import { overdueAgeTone } from "./overdueLogic";
 import { fetchOpenReceptions } from "./deptReceptionApi";
 import { loadSheetOpen, mergeSheetAndDb } from "./receptionSheetOpen";
@@ -85,7 +86,7 @@ export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: {
           {UNHANDLED_BADGE[r.kind]}
           {r.team && !DEPT_TEAMS.has(r.team) ? <span className="text-slate-500">{r.team}</span> : null}
         </span>
-        <span className={`w-14 shrink-0 truncate text-right text-[11px] font-black ${r.assignee ? "text-slate-400" : "text-rose-300"}`}>{r.assignee || "미배정"}</span>
+        <span className={`w-14 shrink-0 truncate text-right text-[11px] font-black ${r.assignee ? "text-slate-400" : "text-rose-300"}`}>{formatAssignees(r.assignee, { short: true }) || "미배정"}</span>
       </>
     );
     if (r.kind === "물류") return <div className="flex w-full items-center gap-2.5 px-3 py-2 opacity-80">{body}</div>;

@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-22",
+    "hash": "43df4054ae",
+    "agent": "feature-planner",
+    "summary": "FIELD 매뉴얼 체계: 사용자용 16장 + 운영·이관용 12장(docs/manual), 일정 여러 명 배정·탭 검색 설계안"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "43df4054ae",
+    "agent": "db-schema",
+    "summary": "FIELD 매뉴얼 체계: 사용자용 16장 + 운영·이관용 12장(docs/manual), 일정 여러 명 배정·탭 검색 설계안"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "cf0134e042",
+    "agent": "debugger",
+    "summary": "점검·AS 건수 원본 통일(홈·팀 현황·순위표·조회 = 같은 표·같은 함수) + 보낸 뒤 양식 비우기 버그"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "cf0134e042",
+    "agent": "qa-checker",
+    "summary": "점검·AS 건수 원본 통일(홈·팀 현황·순위표·조회 = 같은 표·같은 함수) + 보낸 뒤 양식 비우기 버그"
+  },
+  {
+    "date": "2026-10-22",
     "hash": "8e9f0df69a",
     "agent": "feature-planner",
     "summary": "미수 [보완 기록 쓰기] 연결(조회 → 필드 미수 작성기, 원 기록 복사) + 홈 KPI 현황판 제안서"

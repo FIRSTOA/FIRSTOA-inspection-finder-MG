@@ -134,3 +134,116 @@ describe("접수내용 추출 — 빈 칸이 다음 줄 라벨을 물지 않는�
     expect(extractIssue("", "내용:\t\n접수자성함\t홍길동")).toBe("");
   });
 });
+
+import { escapeRegExp, groupReportTickets, hasReportMember, matchReportAssignees, reportHeadOf } from "../src/reportAssignee";
+
+/**
+ * 여러 명 배정(2026-10-22) 회귀 고정 — 2026-08-25 "팀 보고 통째로 없음" 사고와 같은 자리.
+ * LEGACY_* 는 바꾸기 전 CsAsWorkspace 의 보고 생성 코드를 글자 그대로 옮긴 것이다.
+ * 1명(또는 미배정)뿐인 일정에서는 새 묶음 함수로 만든 본문이 옛 본문과 한 글자도 다르면 안 된다.
+ */
+type T = { id: string; assignee?: string; vendor: string; calendarTitle?: string; logistics?: boolean };
+
+function legacyAssignee(ticket: T, order: string[]): string {
+  return ticket.assignee
+    || order.find((name) => new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]`).test(ticket.vendor))
+    || order.find((name) => new RegExp(`(?:^|[\\s/·])${escapeRegExp(name)}(?=[\\s\\-–—:/]|$)`).test((ticket.calendarTitle || "").slice(0, 14)))
+    || "";
+}
+const lineOf = (t: T, head: string) => `•${head ? t.vendor.replace(new RegExp(`^\\s*${escapeRegExp(head)}\\s*[-–—:\\s]*`), "") : t.vendor}`;
+
+function legacyReport(dayTickets: T[], order: string[], day: "today" | "next"): string {
+  const assigneeOf = (t: T) => legacyAssignee(t, order);
+  const todays = dayTickets.filter((t) => order.includes(assigneeOf(t)));
+  const unassigned = dayTickets.filter((t) => !assigneeOf(t) && (day === "next" || !t.logistics));
+  const groups: string[] = [];
+  for (const name of order) {
+    const mine = todays.filter((t) => assigneeOf(t) === name);
+    if (mine.length) {
+      if (groups.length) groups.push("");
+      groups.push(`#${name}`, ...mine.map((t) => lineOf(t, assigneeOf(t))));
+    }
+  }
+  if (unassigned.length) {
+    if (groups.length) groups.push("");
+    groups.push("#미배정", ...unassigned.map((t) => lineOf(t, assigneeOf(t))));
+  }
+  return (groups.length ? groups : ["없음"]).join("\n");
+}
+
+function newReport(dayTickets: T[], order: string[], day: "today" | "next"): string {
+  const groups: string[] = [];
+  for (const { name, tickets } of groupReportTickets(dayTickets, order, (t) => day === "next" || !t.logistics)) {
+    if (groups.length) groups.push("");
+    groups.push(`#${name}`, ...tickets.map((t) => lineOf(t, reportHeadOf(t, order))));
+  }
+  return (groups.length ? groups : ["없음"]).join("\n");
+}
+
+const ORDER2 = ["신정훈", "손영근", "김정민", "심태현", "정웅", "이권선", "박옥주"];
+const SINGLE: T[] = [
+  { id: "1", assignee: "김정민", vendor: "키프코우주항공 재계약 및 점검" },
+  { id: "2", vendor: "김정민 효성산업 A/S" },
+  { id: "3", vendor: "2차체크/효성산업", calendarTitle: "심태현 2차체크/효성산업" },
+  { id: "4", assignee: "신정훈", vendor: "신정훈 - 서버실 점검" },
+  { id: "5", vendor: "납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소", logistics: true },
+  { id: "6", vendor: "용지걸림 정웅빌딩" },
+  { id: "7", assignee: "물류기사", vendor: "토너 납품", logistics: true },
+  { id: "8", assignee: "심태현", vendor: "공간코리아 점검요청" },
+];
+
+describe("중간보고 묶음 — 1명 일정은 옛 본문과 글자까지 같다", () => {
+  it("금일(물류 미배정 제외)", () => {
+    expect(newReport(SINGLE, ORDER2, "today")).toBe(legacyReport(SINGLE, ORDER2, "today"));
+  });
+  it("익일(미배정 물류 포함)", () => {
+    expect(newReport(SINGLE, ORDER2, "next")).toBe(legacyReport(SINGLE, ORDER2, "next"));
+  });
+  it("빈 날은 '없음'", () => {
+    expect(newReport([], ORDER2, "today")).toBe("없음");
+  });
+  it("옛 본문 그대로의 기대값(고정)", () => {
+    expect(newReport(SINGLE, ORDER2, "today")).toBe([
+      "#신정훈", "•서버실 점검", "",
+      "#김정민", "•키프코우주항공 재계약 및 점검", "•효성산업 A/S", "",
+      "#심태현", "•2차체크/효성산업", "•공간코리아 점검요청", "",
+      "#미배정", "•용지걸림 정웅빌딩",
+    ].join("\n"));
+  });
+});
+
+describe("중간보고 묶음 — 여러 명", () => {
+  const MULTI: T[] = [
+    { id: "a", assignee: "김정민,심태현", vendor: "합동 납품 설치" },
+    { id: "b", assignee: "외부기사,정웅", vendor: "외부 섞인 건" },
+    { id: "c", assignee: "외부기사,물류", vendor: "명단 밖만" },
+    { id: "d", assignee: "", vendor: "아무도 없음" },
+  ];
+  const groups = groupReportTickets(MULTI, ORDER2, () => true);
+  it("2명 일정은 두 사람 묶음에 각각 한 줄, #미배정에 없다", () => {
+    expect(groups.find((g) => g.name === "김정민")?.tickets.map((t) => t.id)).toEqual(["a"]);
+    expect(groups.find((g) => g.name === "심태현")?.tickets.map((t) => t.id)).toEqual(["a"]);
+    expect(groups.find((g) => g.name === "미배정")?.tickets.map((t) => t.id)).toEqual(["d"]);
+  });
+  it("명단 밖 + 명단 사람 혼합: 명단 사람 묶음에만 나오고 사라지지 않는다", () => {
+    expect(groups.find((g) => g.name === "정웅")?.tickets.map((t) => t.id)).toEqual(["b"]);
+  });
+  it("명단 밖 사람만 걸린 건은 예전처럼 어디에도 안 들어간다(물류 몫)", () => {
+    expect(groups.flatMap((g) => g.tickets).some((t) => t.id === "c")).toBe(false);
+  });
+  it("묶음 순서는 명단 순서", () => {
+    expect(groups.map((g) => g.name)).toEqual(["김정민", "심태현", "정웅", "미배정"]);
+  });
+  it("matchReportAssignees·hasReportMember", () => {
+    expect(matchReportAssignees({ assignee: "김정민,심태현", vendor: "" }, ORDER2)).toEqual(["김정민", "심태현"]);
+    expect(matchReportAssignees({ vendor: "김정민 키프코" }, ORDER2)).toEqual(["김정민"]);
+    expect(matchReportAssignees({ vendor: "정웅빌딩 점검" }, ORDER2)).toEqual([]);
+    expect(hasReportMember({ assignee: "외부기사,정웅", vendor: "" }, ORDER2)).toBe(true);
+    expect(hasReportMember({ assignee: "외부기사", vendor: "" }, ORDER2)).toBe(false);
+  });
+  it("호환 matchReportAssignee 는 대표(첫 사람), 줄 머리 떼기는 원문 그대로", () => {
+    expect(matchReportAssignee({ assignee: "김정민,심태현", vendor: "" }, ORDER2)).toBe("김정민");
+    expect(reportHeadOf({ assignee: "김정민,심태현", vendor: "" }, ORDER2)).toBe("김정민,심태현");
+    expect(reportHeadOf({ assignee: "이홍진", vendor: "" }, ORDER2)).toBe("이홍진");
+  });
+});

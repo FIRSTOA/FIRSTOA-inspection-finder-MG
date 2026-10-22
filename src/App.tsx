@@ -95,6 +95,7 @@ const CsCalendar = lazyScreen<object>(() => import("./CsAsWorkspace").then((m) =
 const PromoWorkspace = lazyScreen<ComponentProps<EngagementModule["PromoWorkspace"]>>(() => import("./CustomerEngagement").then((m) => ({ default: m.PromoWorkspace })), "홍보물 발송");
 // 통합이력 팝업은 열 때만 받는다(77KB) — 다른 화면(일정리스트·서비스접수·조회…)과 같은 조각을 나눠 쓴다(2026-10-10 속도)
 const UnifiedHistoryLazy = lazy(() => import("./UnifiedHistory"));
+const TabSearchBar = lazy(() => import("./TabSearchBar")); // 필드 탭 맨 위 검색(2026-10-22, docs/tasks/tab-search-kakao-history.md 1단계)
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
   | "logistics" | "replacement" | "contact-change" | "bulman" | "misu" | "overage-adjust" | "recontract" | "praise";
@@ -6802,6 +6803,7 @@ export default function App() {
             })}
           </div>
         )}
+        <Suspense fallback={null}><TabSearchBar mode={mode} pcSubTab={pcSubTab} /></Suspense>
         </>)}{/* /필드 탭 */}
         </div>{/* /헤더 존 */}
 

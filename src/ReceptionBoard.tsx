@@ -9,6 +9,7 @@ import { useState, type ReactNode } from "react";
 import { AlertCircle, CalendarClock, CalendarX2, Check, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import { sheetStateLabel } from "./receptionSheetState";
+import { formatAssignees } from "./assignees";
 
 /** 시트에서 온 행(C3 시트 기준) — 상태 글자·내용 요약·시트 링크. linked = 앱 접수에 이어진 행 */
 export type SheetRowInfo = {
@@ -193,7 +194,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
           <span className="inline-flex items-center gap-1 tabular-nums"><CalendarClock size={11} aria-hidden />{s.date.slice(5, 10)}{s.time ? ` ${s.time.slice(0, 5)}` : ""}</span>
           <span className="rounded bg-slate-200 px-1 text-[10px] font-black text-slate-700">{scheduleTypeLabel(s.scheduleType)}</span>
           {s.team && <span>{s.team}</span>}
-          <span>{s.assignee || "담당 미정"}</span>
+          <span>{formatAssignees(s.assignee) || "담당 미정"}</span>
         </div>
       </li>
     );
