@@ -6,7 +6,7 @@
 ## 설치 (한 번)
 1. 이 폴더의 파일을 PC의 `C:\firstoa\` 에 둔다 (`poster_send.py`, `register_task.ps1`).
 2. 파이썬 패키지: `pywin32 pillow pyautogui` (이미 깔려 있음 — 2026-08-28 확인).
-3. `register_task.ps1` 을 PowerShell로 실행 → 매주 월요일 08:00 작업 등록.
+3. `register_task.ps1` 을 PowerShell로 실행 → (옛 방식 — 지금은 노트북 실행기 tools/worker 가 월 10시에 부른다. 작업 스케줄러 등록 불필요, docs/manual/ops/06-laptop-worker.md)
 4. 카톡에서 **지역 점검방을 각각 더블클릭해 별도 창으로 열어 둔다.** 카톡을 끄지 않으면 창은 유지된다.
 
 ## 확인·시험
