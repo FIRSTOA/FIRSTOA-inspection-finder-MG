@@ -25,6 +25,8 @@ export function dedupeResends(evs: ActivityEvent[]): ActivityEvent[] {
   const lastAt = new Map<string, { at: number; idx: number }>();
   const dayKeys = new Set<string>();
   for (const e of sorted) {
+    // 점검·AS 는 표 원본에서 이미 기기 단위로 묶어 넣었다(mergeFieldIntoEvents) — 거래처 10분 묶음을 다시 걸면 다른 기기가 합쳐진다
+    if (e.metadata?.counted === true) { out.push(e); continue; }
     const v = vendorKeyOf(e.vendor);
     if (!v) { out.push(e); continue; }
     if (EXPANSION_KINDS.has(e.category)) {
@@ -191,4 +193,134 @@ export function mergeExpansionIntoEvents(events: ActivityEvent[], expansion: Exp
     status: "active", cancelledAt: "", cancelledBy: "",
   }));
   return [...events.filter((e) => !EXPANSION_KINDS.has(e.category)), ...fromTables];
+}
+
+/* ───────────── 점검·AS 수 — 원본 하나·함수 하나(2026-10-22) ─────────────
+ * 왜: "점검 수도 화면마다 세는 원본이 다르다" — 홈은 jeomgeom 행 수(양식 1장 = 1, 팀장 포함, 지역 칸),
+ *     팀 현황·순위표는 activity_events(FIELD 전송 때만 생김, 기기 대수, 10분 재전송 묶음, 작성자 팀),
+ *     조회 탭은 jeomgeom 행 수(지역·출처 괄호). 같은 C팀 10월이 화면마다 달랐다.
+ * 원본: jeomgeom(점검) / as_records(AS) — FIELD 전송·카톡 가져오기 모두 들어가는 장부.
+ *       '점검, AS' 양식은 두 표에 다 들어간다(10월 43장) → 점검·AS 각각 1번씩 센다.
+ *       activity_events 는 점검·AS 집계에 더 쓰지 않는다(물류 등 다른 종류는 그대로).
+ * 규칙(이 함수 하나를 홈·조회 탭·팀 현황·순위표가 같이 쓴다)
+ *   · 오발송 삭제(_hidden) 행 제외 · 팀장(명단 팀 '팀장') 기록 제외
+ *   · 기기 = 원문(_원문)의 기기 칸(모델명/시리얼넘버/자산기번 묶음) — 1행에 여러 대가 든다(양식 1장 = 1행)
+ *     기기 열쇠 = 시리얼 → 없으면 자산기번 → 둘 다 없으면 "모델#순번"
+ *   · 재전송 = 같은 종류·같은 작성자·같은 KST 날짜·같은 업체(vendorMatchKey)·같은 기기 — 거래처 단위가 아니라 기기 단위
+ *     (거래처로 묶으면 같은 날 같은 업체의 다른 기기 양식이 1로 줄어든다)
+ *   · 점검 = 대수(새 기기 1대 = 1) · AS = 건(양식 1장 = 1, 이미 센 기기만 다시 보낸 양식은 재전송)
+ *   · 팀 = 지역 칸 → 출처 괄호('카톡:점검(C)') → 작성자 명단 팀
+ */
+export type FieldKind = "inspection" | "as";
+export type FieldTable = "jeomgeom" | "as_records";
+export const FIELD_SOURCES: Record<FieldTable, { kind: FieldKind; label: string; unit: string }> = {
+  jeomgeom: { kind: "inspection", label: "점검", unit: "대" },
+  as_records: { kind: "as", label: "AS", unit: "건" },
+};
+export const FIELD_TABLE_BY_KIND: Record<FieldKind, FieldTable> = { inspection: "jeomgeom", as: "as_records" };
+/** 로더가 읽는 칸 — 원문은 기기 수를 세려고 필요하다 */
+export const FIELD_COLUMNS = ["id", "_hidden", "작성일", "작성자", "지역", "_출처", "업체명", "_업체명", "모델명", "시리얼넘버", "자산기번", "_원문", "created_at"];
+export const FIELD_BASIS_TEXT = "점검 = 기기 대수 · AS = 양식 건수 · 같은 날 같은 업체 같은 기기 재전송은 1 · 오발송 삭제·팀장 기록 제외 · 팀 = 지역 칸(없으면 작성자 팀)";
+
+export type FieldRaw = Record<string, unknown> & { id?: unknown; _hidden?: unknown };
+export type FieldRow = {
+  table: FieldTable; kind: FieldKind; id: string;
+  at: string;       // 정렬용(created_at → 작성일)
+  day: string;      // KST 날짜
+  author: string; vendor: string;
+  team: string; manager: boolean; hidden: boolean;
+  machines: string[]; // 기기 열쇠(양식 안 순서)
+};
+
+/** 시리얼·자산기번 정규화 — 숫자가 하나도 없으면('-'·'없음'·'확인') 빈 값 */
+function idKey(value: unknown): string {
+  const v = String(value ?? "").normalize("NFKC").toUpperCase().replace(/[^0-9A-Z가-힣]/g, "");
+  return /\d/.test(v) ? v : "";
+}
+
+/** 원문에서 기기 열쇠 목록. 기기 칸이 없으면 행의 시리얼/자산/모델 한 대 */
+export function machineKeysOf(text: unknown, fallback: { model?: unknown; serial?: unknown; asset?: unknown } = {}): string[] {
+  type M = { model: string; serial: string; asset: string; has: Set<string> };
+  const blocks: M[] = [];
+  let cur: M | null = null;
+  for (const line of String(text ?? "").split(/\r?\n/)) {
+    const m = line.trim().match(/^(모델명|시리얼넘버|자산기번)\s*[:：]\s*(.*)$/);
+    if (!m) continue;
+    const field = m[1];
+    if (!cur || cur.has.has(field) || (field === "모델명" && cur.has.size > 0)) { cur = { model: "", serial: "", asset: "", has: new Set() }; blocks.push(cur); }
+    cur.has.add(field);
+    if (field === "모델명") cur.model = m[2].trim();
+    else if (field === "시리얼넘버") cur.serial = m[2].trim();
+    else cur.asset = m[2].trim();
+  }
+  if (!blocks.length) blocks.push({ model: String(fallback.model ?? ""), serial: String(fallback.serial ?? ""), asset: String(fallback.asset ?? ""), has: new Set() });
+  return blocks.map((b, i) => idKey(b.serial) || idKey(b.asset) || `${String(b.model).normalize("NFKC").toUpperCase().replace(/\s+/g, "")}#${i + 1}`);
+}
+
+/** 출처 라벨 괄호의 팀 — '카톡:점검(C)' → C */
+function sourceTeam(value: unknown): string {
+  const inner = String(value ?? "").match(/\(([^)]*)\)/)?.[1] || "";
+  return regionTeam(inner);
+}
+
+export function toFieldRows(table: FieldTable, raws: FieldRaw[], teamOfAuthor: (author: string) => string): FieldRow[] {
+  const src = FIELD_SOURCES[table];
+  return raws.map((r) => {
+    const author = String(r["작성자"] ?? "").trim();
+    const authorTeam = teamOfAuthor(author);
+    const day = kstDayOf(String(r["작성일"] ?? ""));
+    return {
+      table, kind: src.kind, id: String(r.id ?? ""),
+      at: String(r.created_at ?? "") || day, day, author,
+      vendor: String(r["_업체명"] ?? "").trim() || String(r["업체명"] ?? "").trim(),
+      team: regionTeam(r["지역"]) || sourceTeam(r["_출처"]) || authorTeam,
+      manager: authorTeam === "팀장", hidden: r._hidden === true,
+      machines: machineKeysOf(r["_원문"], { model: r["모델명"], serial: r["시리얼넘버"], asset: r["자산기번"] }),
+    };
+  });
+}
+
+export type FieldScope = { kind?: FieldKind; team?: string; author?: string; from?: string; to?: string };
+const fieldScoped = (rows: FieldRow[], s: FieldScope) => rows.filter((r) => !r.hidden
+  && (!s.kind || r.kind === s.kind)
+  && (!s.team || s.team === "전체" || r.team === s.team)
+  && (!s.author || r.author === s.author)
+  && (!s.from || r.day >= s.from) && (!s.to || r.day <= s.to));
+
+/** 세는 대상 — 행마다 몇을 셌는지(점검: 새 기기 대수, AS: 새 기기가 하나라도 있으면 1). 0 인 행(재전송)은 빠진다 */
+export function countableField(rows: FieldRow[], s: FieldScope = {}): Array<{ row: FieldRow; units: number }> {
+  const seen = new Set<string>();
+  const out: Array<{ row: FieldRow; units: number }> = [];
+  for (const r of [...fieldScoped(rows, s)].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id, undefined, { numeric: true }))) {
+    if (r.manager) continue;
+    const base = `${r.kind}|${r.author}|${r.day}|${vendorKeyOf(r.vendor)}`;
+    const fresh = Array.from(new Set(r.machines)).filter((m) => !seen.has(`${base}|${m}`));
+    fresh.forEach((m) => seen.add(`${base}|${m}`));
+    const units = r.kind === "inspection" ? fresh.length : fresh.length ? 1 : 0;
+    if (units) out.push({ row: r, units });
+  }
+  return out;
+}
+
+/** 점검 대수 / AS 건수 — kind 를 꼭 준다(둘을 더하면 단위가 섞인다) */
+export function countField(rows: FieldRow[], s: FieldScope & { kind: FieldKind }): number {
+  return countableField(rows, s).reduce((n, c) => n + c.units, 0);
+}
+
+/** 화면 설명용: 범위 안 양식 수·센 값·팀장 양식 수·재전송 양식 수 */
+export function fieldTally(rows: FieldRow[], s: FieldScope & { kind: FieldKind }): { count: number; rows: number; managers: number; resends: number } {
+  const inScope = fieldScoped(rows, s);
+  const managers = inScope.filter((r) => r.manager).length;
+  const counted = countableField(rows, s);
+  return { count: counted.reduce((n, c) => n + c.units, 0), rows: inScope.length, managers, resends: inScope.length - managers - counted.length };
+}
+
+/** 활동 기록에서 점검·AS 를 표 원본으로 갈아 끼운다 — 센 단위 하나 = 활동 1개(기기 수 1), countableEvents 재묶음을 건너뛴다 */
+export function mergeFieldIntoEvents(events: ActivityEvent[], field: FieldRow[]): ActivityEvent[] {
+  const fromTables: ActivityEvent[] = countableField(field).flatMap(({ row, units }) => Array.from({ length: units }, (_, i) => ({
+    id: `${row.table}:${row.id}:${i + 1}`, createdAt: row.at, activityDate: row.day, author: row.author, team: row.team,
+    category: row.kind, vendor: row.vendor, quantity: 1, machineCount: 1, sourceText: "", metadata: { sourceTable: row.table, counted: true },
+    status: "active" as const, cancelledAt: "", cancelledBy: "",
+  })));
+  return [...events.filter((e) => e.category !== "inspection" && e.category !== "as"), ...fromTables];
 }

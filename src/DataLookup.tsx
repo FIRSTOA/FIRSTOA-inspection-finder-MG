@@ -5,8 +5,8 @@ import { askConfirm } from "./confirmModal";
 import { Download, RefreshCw, Search, X } from "lucide-react";
 import { countRows, selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction } from "./supabase";
 import { setActivityEventsCancelledByKey, setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor, teamForAuthor } from "./operations";
-import { EXPANSION_BASIS_TEXT, EXPANSION_SOURCES, countExpansion, expansionTally, kstDayOf, kstTextRange, toExpansionRows, UTC_TEXT_DATE_TABLES, type ExpansionRaw, type ExpansionTable } from "./workCount";
-import { loadExpansionRaw } from "./expansionSource";
+import { EXPANSION_BASIS_TEXT, EXPANSION_SOURCES, countExpansion, countField, expansionTally, FIELD_BASIS_TEXT, FIELD_SOURCES, fieldTally, kstDayOf, kstTextRange, toExpansionRows, toFieldRows, UTC_TEXT_DATE_TABLES, type ExpansionRaw, type ExpansionTable, type FieldRaw, type FieldTable } from "./workCount";
+import { loadExpansionRaw, loadFieldRaw } from "./expansionSource";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
@@ -23,6 +23,7 @@ const PAGE = 300;
 const EXPANSION_KIND_BY_TABLE: Record<string, "expansion_it" | "expansion_copier"> = { pc_expansion: "expansion_it", mfp_expansion: "expansion_copier" };
 const expansionAuthorField = (table: string) => table === "pc_expansion" ? "작성자" : table === "mfp_expansion" ? "등록자" : "";
 const isExpansionTable = (table: string): table is ExpansionTable => table in EXPANSION_SOURCES;
+const isFieldTable = (table: string): table is FieldTable => table in FIELD_SOURCES;
 // 시트가 원본인 미러 표(밤 00:30 통째 교체) — 오발송 삭제는 mirror_hidden 장부가 다음 날에도 유지한다
 const SHEET_MIRROR_TABLES = new Set(["pc_expansion", "mfp_expansion", "misu", "overage"]);
 const PERIODS = [
@@ -209,6 +210,30 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     return expansionTally(expansionRows, { team, author: member || undefined });
   }, [expansionRows, showHidden, query, chip, team, member]);
 
+  // 점검 대수·AS 건수 — 홈·팀 현황·순위표와 같은 원본(표 행)·같은 함수(workCount countField)로 센다(2026-10-22).
+  // 목록은 행(양식 1장) 그대로, 건수 카드만 이 값. '전체' 기간은 원문을 다 받아야 해서 행 수만 보인다.
+  const [fieldRaw, setFieldRaw] = useState<{ key: string; rows: FieldRaw[] } | null>(null);
+  const fieldKey = `${category.table}|${expansionRange?.from || ""}|${expansionRange?.to || ""}|${expansionNonce}`;
+  useEffect(() => {
+    const table = category.table;
+    if (!isFieldTable(table) || !expansionRange) return;
+    let alive = true;
+    loadFieldRaw(table, expansionRange.from, expansionRange.to)
+      .then((rows) => { if (alive) setFieldRaw({ key: fieldKey, rows }); })
+      .catch((e: unknown) => { if (alive) setError(`${FIELD_SOURCES[table].label} 수 계산 실패: ${(e as Error).message}`); });
+    return () => { alive = false; };
+  }, [category.table, expansionRange, fieldKey]);
+  const fieldRows = useMemo(() => {
+    const table = category.table;
+    if (!isFieldTable(table) || fieldRaw?.key !== fieldKey || !roster) return null;
+    return toFieldRows(table, fieldRaw.rows, teamForAuthor);
+  }, [category.table, fieldRaw, fieldKey, roster]);
+  const fieldCount = useMemo(() => {
+    const table = category.table;
+    if (!isFieldTable(table) || !fieldRows || showHidden || query.trim() || chip) return null;
+    return fieldTally(fieldRows, { kind: FIELD_SOURCES[table].kind, team, author: member || undefined });
+  }, [category.table, fieldRows, showHidden, query, chip, team, member]);
+
   // 사람별 건수 — 지금 조건(기간·유형·검색어·팀)에서 작성자만 바꿔 가며 세어 단추 옆에 보여 준다
   const canMember = Boolean(category.teamField) && category.searchFields.includes("작성자");
   useEffect(() => {
@@ -219,12 +244,18 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       setMemberCounts(Object.fromEntries(teamMembers.map((m) => [m.name, countExpansion(expansionRows, { team, author: m.name })])));
       return;
     }
+    if (isFieldTable(category.table) && fieldRows && !query.trim() && !chip && !showHidden) {
+      // 점검·AS 도 같은 함수로(재전송 1·팀장 제외·점검은 대수) — 사람 합 = 팀 값
+      const kind = FIELD_SOURCES[category.table].kind;
+      setMemberCounts(Object.fromEntries(teamMembers.map((m) => [m.name, countField(fieldRows, { kind, team, author: m.name })])));
+      return;
+    }
     let alive = true;
     const base = buildQuery(0).split("&").filter((part) => !/^(select|order|limit|offset)=/.test(part) && !part.startsWith(`${encodeURIComponent("작성자")}=`));
     Promise.all(teamMembers.map((m) => countRows(category.table, [...base, `${encodeURIComponent("작성자")}=ilike.*${encodeURIComponent(m.name)}*`].join("&")).then((n) => [m.name, n] as const).catch(() => [m.name, -1] as const)))
       .then((pairs) => { if (alive) setMemberCounts(Object.fromEntries(pairs)); });
     return () => { alive = false; };
-  }, [canMember, teamMembers, buildQuery, category.table, expansionRows, query, chip, showHidden, team]);
+  }, [canMember, teamMembers, buildQuery, category.table, expansionRows, fieldRows, query, chip, showHidden, team]);
 
   const fetchPage = useCallback(async (offset: number) => {
     setLoading(true);
@@ -341,7 +372,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {!category.custom && (
         <div className="grid grid-cols-3 gap-2">
           {([
-            [expansionCount ? expansionCount.count.toLocaleString() + "건" : totalCount != null ? totalCount.toLocaleString() + (isExpansionTable(category.table) ? "행" : "건") : "…", period === "week" ? `${weekLabel} (${md(week.start)}~${md(week.end)}) 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
+            [expansionCount ? expansionCount.count.toLocaleString() + "건" : fieldCount && isFieldTable(category.table) ? fieldCount.count.toLocaleString() + FIELD_SOURCES[category.table].unit : totalCount != null ? totalCount.toLocaleString() + (isExpansionTable(category.table) || isFieldTable(category.table) ? "행" : "건") : "…", period === "week" ? `${weekLabel} (${md(week.start)}~${md(week.end)}) 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
             [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
             [team === "전체" ? "전 팀" : teamLabel(team), query ? `"${query}" 검색 중` : "보는 범위"],
           ] as [string, string][]).map(([value, label]) => (
@@ -357,6 +388,14 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           기준: {EXPANSION_SOURCES[category.table].label} 표(시트 포함), {EXPANSION_BASIS_TEXT} — 주간현황판 팀 현황·순위표와 같은 숫자.
           {expansionCount && expansionCount.rows !== expansionCount.count && <span className="text-slate-400"> 목록 {expansionCount.rows}행 중 재전송 {expansionCount.resends}·팀장 {expansionCount.managers} 제외.</span>}
           {!expansionCount && (query.trim() || chip || showHidden) && <span className="text-slate-400"> 검색·유형·삭제한 기록 보기 중에는 행 수만 보입니다.</span>}
+        </div>
+      )}
+
+      {!category.custom && isFieldTable(category.table) && (
+        <div className="-mt-1 px-1 text-[11px] font-bold text-slate-500">
+          기준: {FIELD_SOURCES[category.table].label} 표, {FIELD_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.
+          {fieldCount && <span className="text-slate-400"> 목록 {fieldCount.rows}행(양식) 중 재전송 {fieldCount.resends}·팀장 {fieldCount.managers} 제외.</span>}
+          {!fieldCount && (query.trim() || chip || showHidden || period === "all") && <span className="text-slate-400"> 검색·유형·삭제한 기록·전체 기간 보기 중에는 행 수만 보입니다.</span>}
         </div>
       )}
 
@@ -675,7 +714,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                         }
                         setRows((current) => current.filter((r) => r.id !== detail.id));
                         setDetail(null);
-                        if (isExpansionTable(category.table)) setExpansionNonce((n) => n + 1); // 건수 카드도 바로 다시 센다
+                        if (isExpansionTable(category.table) || isFieldTable(category.table)) setExpansionNonce((n) => n + 1); // 건수 카드도 바로 다시 센다
                       })
                       .catch((e: unknown) => notify(`처리 실패: ${(e as Error).message}`, "error"))
                       .finally(() => setHideBusy(false));

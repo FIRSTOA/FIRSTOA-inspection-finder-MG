@@ -27,6 +27,8 @@ import { AGENT_DEPTS } from "./agentTeam";
 import { AGENT_WORK_LOG } from "./agentWorkLog";
 import { countRows, selectAllRowsFast, selectRows } from "./supabase";
 import { getTeamVisits, kstDate, weekRange } from "./visits";
+import { loadFieldRows } from "./expansionSource";
+import { countField, FIELD_BASIS_TEXT, type FieldRow } from "./workCount";
 
 // 홈 = 실시간 운영 현황판 (2026-09-12 개편, 같은 날 하단부까지 전면 다크 통일)
 // ① 관제 덱: 라이브 시계·시스템 상태·개인 인사(내 이번 주 기록)
@@ -49,12 +51,11 @@ const savings = [
 
 // ── 실시간 데이터 ────────────────────────────────────────────────────────────
 type RecordRow = { id: number; created_at: string | null; 작성일: string; 작성자: string; 업체명: string; 구분: string; 지역: string };
-type WeekRow = { 작성일: string; 작성자: string; 지역: string; kind: "점검" | "AS" };
 type Telemetry = {
   fetchedAt: number; latencyMs: number;
   todayInspections: number; todayAs: number; weekInspections: number; weekAs: number;
   daily: Array<{ date: string; inspections: number; as: number }>;
-  weekRows: WeekRow[];
+  weekRows: FieldRow[];   // 이번 주 점검·AS 표 행(세는 규칙은 workCount countField — 팀 현황·순위표·조회 탭과 같은 함수)
   weekVisits: number; weekMinutes: number;
   outboxPending: number; outboxOldestMin: number | null; botLastDelivery: string | null;
   sheetPending: number; sheetFailed: number;
@@ -80,11 +81,10 @@ async function loadTelemetry(): Promise<Telemetry> {
   const safe = async <T,>(label: string, p: Promise<T>, fallback: T): Promise<T> => {
     try { return await p; } catch (e) { errors.push(`${label} ${(e as Error).message}`); return fallback; }
   };
-  const weekCols = `select=${COL("작성일")},${COL("작성자")},${COL("지역")}&${COL("작성일")}=gte.${d7}&_hidden=not.is.true&order=id.asc`;
   const recentCols = `select=id,created_at,${COL("작성일")},${COL("작성자")},${COL("업체명")},${COL("구분")},${COL("지역")}&_hidden=not.is.true&order=id.desc&limit=8`;
-  const [insp7, as7, recentInsp, recentAs, outbox, activity, sheetJobs, keyman, visits, totalInsp, totalAs, totalPhotos, workin] = await Promise.all([
-    safe("점검7일", selectAllRowsFast<Omit<WeekRow, "kind">>("jeomgeom", weekCols), []),
-    safe("AS7일", selectAllRowsFast<Omit<WeekRow, "kind">>("as_records", weekCols), []),
+  const [field7, recentInsp, recentAs, outbox, activity, sheetJobs, keyman, visits, totalInsp, totalAs, totalPhotos, workin] = await Promise.all([
+    // 점검·AS 수 = 표 원본 하나·함수 하나(2026-10-22) — 예전엔 여기만 행 수(양식 1장 = 1, 팀장 포함, 지역 칸)라 팀 현황과 달랐다
+    safe("점검·AS 7일", loadFieldRows(d7 < week.start ? d7 : week.start, today), [] as FieldRow[]),
     safe("최근점검", selectRows<RecordRow>("jeomgeom", recentCols), []),
     safe("최근AS", selectRows<RecordRow>("as_records", recentCols), []),
     safe("봇큐", selectRows<{ created_at: string }>("outbox", "select=created_at&order=created_at.asc&limit=50"), []),
@@ -98,14 +98,9 @@ async function loadTelemetry(): Promise<Telemetry> {
     // 워킨맵은 분기당 3천 행이 넘는다 — 반드시 전량 조회(selectRows는 1,000행에서 잘려 진행률이 틀리게 나왔다)
     safe("워킨맵", selectAllRowsFast<{ team: string; label: string; kind: string }>("workin_map_places", `select=team,label,kind&quarter=eq.${quarter}&kind=in.(quarter,monthly)&visible=not.is.false&order=id.asc`), []),
   ]);
-  const day = (r: { 작성일: string }) => String(r.작성일 || "").slice(0, 10);
   const dayKeys = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i));
-  const daily = dayKeys.map((date) => ({ date, inspections: insp7.filter((r) => day(r) === date).length, as: as7.filter((r) => day(r) === date).length }));
-  const inWeek = (d: string) => d >= week.start && d <= week.end;
-  const weekRows: WeekRow[] = [
-    ...insp7.filter((r) => inWeek(day(r))).map((r) => ({ ...r, kind: "점검" as const })),
-    ...as7.filter((r) => inWeek(day(r))).map((r) => ({ ...r, kind: "AS" as const })),
-  ];
+  const daily = dayKeys.map((date) => ({ date, inspections: countField(field7, { kind: "inspection", from: date, to: date }), as: countField(field7, { kind: "as", from: date, to: date }) }));
+  const weekRows = field7.filter((r) => !r.hidden && r.day >= week.start && r.day <= week.end);
   const now = Date.now();
   const oldest = outbox[0]?.created_at ? Math.round((now - new Date(outbox[0].created_at).getTime()) / 60000) : null;
   const statusOf = (s: string | null) => (s || "").toLowerCase();
@@ -114,7 +109,7 @@ async function loadTelemetry(): Promise<Telemetry> {
   return {
     fetchedAt: now, latencyMs,
     todayInspections: daily[6].inspections, todayAs: daily[6].as,
-    weekInspections: weekRows.filter((r) => r.kind === "점검").length, weekAs: weekRows.filter((r) => r.kind === "AS").length,
+    weekInspections: countField(weekRows, { kind: "inspection" }), weekAs: countField(weekRows, { kind: "as" }),
     daily, weekRows,
     weekVisits: visited.length,
     weekMinutes: visited.reduce((s, v) => s + Object.values((v as unknown as { minutes?: Record<string, number> }).minutes || {}).reduce((a, b) => a + (Number(b) || 0), 0), 0),
@@ -255,7 +250,7 @@ function Bars({ daily }: { daily: Telemetry["daily"] }) {
       {daily.map((d, i) => {
         const total = d.inspections + d.as, h = Math.max(total ? 6 : 2, Math.round((total / max) * 60)), ih = total ? Math.round((d.inspections / total) * h) : 0;
         return (
-          <div key={d.date} className="flex flex-1 flex-col items-center gap-1" title={`${d.date} · 점검 ${d.inspections} · AS ${d.as}`}>
+          <div key={d.date} className="flex flex-1 flex-col items-center gap-1" title={`${d.date} · 점검 ${d.inspections}대 · AS ${d.as}건`}>
             <span className={`text-[10px] font-black tabular-nums ${total ? "text-slate-300" : "text-slate-600"}`}>{total || ""}</span>
             <div className="flex w-full flex-col justify-end overflow-hidden rounded-sm bg-white/[0.06]" style={{ height: 60 }}>
               <div className={`w-full transition-[height] duration-700 ${i === 6 ? "bg-blue-400" : "bg-blue-500/60"}`} style={{ height: ih }} />
@@ -306,9 +301,16 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const totalProgress = data ? data.teamProgress.reduce((s, t) => s + t.total, 0) : 0;
   const doneProgress = data ? data.teamProgress.reduce((s, t) => s + t.done, 0) : 0;
   const pct = (done: number, total: number) => (total ? Math.round((done / total) * 100) : 0);
-  const weekRecords = data ? data.weekRows.length : 0;
-  const myWeek = data && author ? data.weekRows.filter((r) => r.작성자 === author).length : 0;
-  const regionWeek = useMemo(() => ["A", "B", "C", "D", "E"].map((region) => ({ region, count: data ? data.weekRows.filter((r) => (r.지역 || "").toUpperCase().startsWith(region)).length : 0 })), [data]);
+  const weekRecords = data ? data.weekRows.length : 0; // 양식 장수 — 절약 효과(양식 1장 × 10분) 계산에만
+  const myWeekInsp = data && author ? countField(data.weekRows, { kind: "inspection", author }) : 0;
+  const myWeekAs = data && author ? countField(data.weekRows, { kind: "as", author }) : 0;
+  const amManager = Boolean(data && author && data.weekRows.some((r) => r.author === author && r.manager));
+  // 팀 = 지역 칸(없으면 출처 괄호 → 작성자 팀) — 팀 현황·조회 탭과 같은 함수
+  const regionWeek = useMemo(() => ["A", "B", "C", "D", "E"].map((region) => {
+    const insp = data ? countField(data.weekRows, { kind: "inspection", team: region }) : 0;
+    const as = data ? countField(data.weekRows, { kind: "as", team: region }) : 0;
+    return { region, insp, as, count: insp + as };
+  }), [data]);
   const regionMax = Math.max(1, ...regionWeek.map((r) => r.count));
   const savedWeekHours = Math.round((weekRecords * MINUTES_SAVED_PER_RECORD) / 60);
   const savedTotalHours = data ? Math.round((data.totalRecords * MINUTES_SAVED_PER_RECORD) / 60) : 0;
@@ -337,7 +339,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
               {data && <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-emerald-300">갱신 {relTime(new Date(data.fetchedAt).toISOString())}</span>}
             </div>
             <p className="mt-3 text-[13px] font-bold text-slate-300">
-              {author ? <><span className="text-white">{author}</span> 프로, {greeting(now.getHours())}. 이번 주 내 기록 <span className="font-mono text-white">{data ? myWeek : "—"}</span>건 · 팀 전체 <span className="font-mono text-white">{data ? fmt(weekRecords) : "—"}</span>건</>
+              {author ? <><span className="text-white">{author}</span> 프로, {greeting(now.getHours())}. 이번 주 내 점검 <span className="font-mono text-white">{data ? myWeekInsp : "—"}</span>대 · AS <span className="font-mono text-white">{data ? myWeekAs : "—"}</span>건{amManager ? " (팀장 기록은 집계 제외)" : ""} · 전체 점검 <span className="font-mono text-white">{data ? fmt(data.weekInspections) : "—"}</span>대 · AS <span className="font-mono text-white">{data ? fmt(data.weekAs) : "—"}</span>건</>
                 : <>{greeting(now.getHours())}. 왼쪽 아래에서 작성자를 고르면 내 기록이 여기 표시됩니다.</>}
             </p>
           </div>
@@ -360,25 +362,26 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           <div className="grid min-w-0 auto-rows-min grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-8">
             {/* 미처리 토탈 — 접수 6종 + 지난 일정, 팀·부서·물류 탭(2026-10-19) */}
             <HomeUnhandledPanel onOpenOverdue={openOverdue} onOpenReception={() => go("serviceReception")} />
-            <Metric label="오늘 현장 기록" icon={Activity} accent="text-emerald-300" loading={loading} value={data ? data.todayInspections + data.todayAs : null} sub={data ? `점검 ${data.todayInspections} · AS ${data.todayAs} · 이번 주 ${fmt(weekRecords)}건` : undefined} />
-            <Metric label="이번 주 방문" icon={Route} accent="text-blue-300" loading={loading} value={data ? data.weekVisits : null} sub={data ? `${Math.round(data.weekMinutes / 60)}시간 현장 · 작성자 ${new Set(data.weekRows.map((r) => r.작성자).filter(Boolean)).size}명` : undefined} />
+            <Metric label="오늘 점검(대)" icon={Activity} accent="text-emerald-300" loading={loading} value={data ? data.todayInspections : null} sub={data ? `AS ${data.todayAs}건 · 이번 주 점검 ${fmt(data.weekInspections)}대 · AS ${fmt(data.weekAs)}건` : undefined} />
+            <Metric label="이번 주 방문" icon={Route} accent="text-blue-300" loading={loading} value={data ? data.weekVisits : null} sub={data ? `${Math.round(data.weekMinutes / 60)}시간 현장 · 작성자 ${new Set(data.weekRows.map((r) => r.author).filter(Boolean)).size}명` : undefined} />
             <Metric label="키맨·주소 변경 7일" icon={UsersRound} accent="text-amber-300" loading={loading} value={data ? data.keymanChanges7d : null} sub={data ? (data.keymanGreetWaiting ? `인사 대기 ${data.keymanGreetWaiting}건 — 워킨맵에서 체크` : "인사 대기 없음") : undefined} />
             <Metric label="데이터 자산" icon={Camera} accent="text-violet-300" loading={loading} value={data ? data.totalRecords : null} sub={data ? `점검·AS 기록 누적 · 사진 ${fmt(data.totalPhotos)}장` : undefined} />
             <div className={`p-4 ${card}`}>
               <div className={`flex items-center justify-between ${eyebrow}`}>
-                <span>최근 7일 기록 추이</span>
+                <span>최근 7일 점검(대)·AS(건)</span>
                 <span className="flex items-center gap-3 normal-case tracking-normal"><span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-blue-400" />점검</span><span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-violet-400" />AS</span></span>
               </div>
               <div className="mt-3">{data ? <Bars daily={data.daily} /> : <div className="h-[96px] animate-pulse rounded bg-white/[0.05]" />}</div>
+              <div className="mt-2 text-[10px] font-semibold leading-snug text-slate-500">기준: 점검·AS 표, {FIELD_BASIS_TEXT} — 팀 현황·순위표·조회 탭과 같은 숫자</div>
             </div>
             <div className={`p-4 ${card}`}>
-              <div className={`flex items-center justify-between ${eyebrow}`}><span>이번 주 지역별 기록</span><span className="normal-case tracking-normal text-slate-500">점검+AS</span></div>
+              <div className={`flex items-center justify-between ${eyebrow}`}><span>이번 주 팀별 점검·AS</span><span className="normal-case tracking-normal text-slate-500">점검(대) · AS(건)</span></div>
               <div className="mt-3 space-y-2">
                 {regionWeek.map((r) => (
                   <div key={r.region} className="flex items-center gap-3">
                     <span className="w-6 shrink-0 text-[12px] font-black text-slate-300">{r.region}</span>
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-blue-400 transition-[width] duration-700" style={{ width: `${Math.round((r.count / regionMax) * 100)}%` }} /></div>
-                    <span className="w-10 shrink-0 text-right font-mono text-[11px] font-black tabular-nums text-slate-300">{data ? r.count : "—"}</span>
+                    <span className="w-16 shrink-0 text-right font-mono text-[11px] font-black tabular-nums text-slate-300">{data ? `${r.insp} · ${r.as}` : "—"}</span>
                   </div>
                 ))}
               </div>

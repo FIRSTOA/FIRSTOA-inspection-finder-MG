@@ -5686,6 +5686,7 @@ export default function App() {
       }
       setSending(false);
       showToast(res.ok ? (res.message || "담당자/주소 변경방 전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
+      if (res.ok) resetAfterSend(); // 보낸 뒤 비우기(2026-10-23, isCat 과 같은 버그) — 실패면 그대로
       return Boolean(res.ok);
     }
 
@@ -5705,6 +5706,7 @@ export default function App() {
       }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
+      if (res.ok) resetAfterSend(); // 보낸 뒤 비우기(2026-10-23, isCat 과 같은 버그) — 실패·같은 날 재전송 취소면 그대로
       return Boolean(res.ok);
     }
 
@@ -5748,6 +5750,7 @@ export default function App() {
       }
       setSending(false);
       showToast(res.ok ? (res.message || "전송 완료") : "전송 실패: " + (res.error || "오류"), res.ok ? "success" : "error");
+      if (res.ok) resetAfterSend(); // 보낸 뒤 양식·사진 비우기(2026-10-22) — 실패면 그대로 둔다(재전송). 재계약 일정 제안은 api.ts 가 미리 복사해 둠
       return Boolean(res.ok);
     }
 

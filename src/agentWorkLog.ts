@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-22",
+    "hash": "8e9f0df69a",
+    "agent": "feature-planner",
+    "summary": "미수 [보완 기록 쓰기] 연결(조회 → 필드 미수 작성기, 원 기록 복사) + 홈 KPI 현황판 제안서"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "8e9f0df69a",
+    "agent": "developer",
+    "summary": "미수 [보완 기록 쓰기] 연결(조회 → 필드 미수 작성기, 원 기록 복사) + 홈 KPI 현황판 제안서"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "8e9f0df69a",
+    "agent": "qa-checker",
+    "summary": "미수 [보완 기록 쓰기] 연결(조회 → 필드 미수 작성기, 원 기록 복사) + 홈 KPI 현황판 제안서"
+  },
+  {
+    "date": "2026-10-22",
     "hash": "3aa39d1bf0",
     "agent": "feature-planner",
     "summary": "서비스접수 업체 검색에 부서명(임대리스트 Q열) 추가 — 업체명 → 부서명 → 자산 → 기번 → 순번"

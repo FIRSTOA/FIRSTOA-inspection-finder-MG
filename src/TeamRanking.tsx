@@ -2,6 +2,7 @@
  * 주간현황판 → 순위표 (2026-10-15 팀장 요청)
  * 활동 기록(activity_events)을 사람별로 세어 항목마다 순위를 매기고, 사람마다 "팀 평균보다 뛰어난 것 / 부족한 것"을 짚는다.
  * 점검은 기기 대수, 재계약·불만은 업체 기준 중복 제거, 나머지는 건수. 취소된 기록은 뺀다.
+ * 점검·AS 는 2026-10-22부터 jeomgeom·as_records 표 원본(workCount countField, loadWorkEvents 가 갈아 끼움) — 홈·팀 현황·조회 탭과 같은 값.
  */
 import { useEffect, useMemo, useState } from "react";
 import { OPERATIONS_TEAMS, type ActivityEvent } from "./operations";
@@ -9,7 +10,7 @@ import { loadWorkEvents } from "./expansionSource";
 import { useMembers } from "./authors";
 import { kstDate, weekRange } from "./visits";
 import { vendorMatchKey } from "./ids";
-import { countableEvents, EXPANSION_BASIS_TEXT } from "./workCount";
+import { countableEvents, EXPANSION_BASIS_TEXT, FIELD_BASIS_TEXT } from "./workCount";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Metric = { key: string; label: string; unit: string; count: (evs: ActivityEvent[]) => number };
@@ -95,7 +96,7 @@ export default function TeamRanking({ author }: { author: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="flex rounded-full bg-slate-100 p-0.5">{(["week", "month", "quarter", "year"] as Period[]).map((p) => <button key={p} type="button" onClick={() => setPeriod(p)} className={`rounded-full px-3 py-1 text-[12px] font-black ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{rangeOf(p).label}</button>)}</span>
         <span className="flex rounded-full bg-slate-100 p-0.5">{["전체", ...OPERATIONS_TEAMS].map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`rounded-full px-2.5 py-1 text-[12px] font-black ${team === t ? "bg-slate-900 text-white" : "text-slate-500"}`}>{t === "전체" ? "전체" : `${t}팀`}</button>)}</span>
-        <span className="ml-auto text-[11px] font-bold text-slate-400">{range.start} ~ {range.end} · 활동 기록 기준(확장성은 확장성 표, 시트 포함) · 취소 제외</span>
+        <span className="ml-auto text-[11px] font-bold text-slate-400">{range.start} ~ {range.end} · 활동 기록 기준(점검·AS 는 점검·AS 표, 확장성은 확장성 표) · 취소 제외</span>
       </div>
 
       {/* 항목별 순위 */}
@@ -143,7 +144,7 @@ export default function TeamRanking({ author }: { author: string }) {
               <tbody>{insight.rows.map((r) => <tr key={r.mt.key} className="border-t border-slate-100"><td className="py-1 font-bold text-slate-700">{r.mt.label}</td><td className={`py-1 text-right font-mono font-black ${r.ratio >= 1.2 ? "text-emerald-700" : r.ratio < 0.8 ? "text-amber-700" : "text-slate-800"}`}>{r.v}{r.mt.unit}</td><td className="py-1 text-right font-mono text-slate-500">{r.a.toFixed(1)}</td><td className="py-1 text-right font-mono text-slate-500">{r.rank}/{table.length}</td></tr>)}</tbody>
             </table>
           </div>
-          <div className="mt-2 text-[10.5px] font-semibold text-slate-400">숫자는 FIELD 보고·확장성·불만·미수 등 활동 기록을 센 것입니다. 같은 업체를 10분 안에 다시 보낸 것은 1건. 확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT}. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
+          <div className="mt-2 text-[10.5px] font-semibold text-slate-400">숫자는 FIELD 보고·확장성·불만·미수 등 활동 기록을 센 것입니다. 같은 업체를 10분 안에 다시 보낸 것은 1건. 점검·AS 기준: 점검·AS 표, {FIELD_BASIS_TEXT}. 확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT}. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
         </section>
       )}
     </div>
