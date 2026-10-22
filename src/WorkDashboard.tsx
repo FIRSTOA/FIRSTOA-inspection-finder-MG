@@ -13,13 +13,30 @@ import {
 } from "./visits";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
+import { loadExpansionRows, loadFieldRows } from "./expansionSource";
+import { EMPTY_LEDGER, myLedgerCounts, type WorkLedger } from "./myWorkCount";
 
 const KINDS = Object.keys(WORK_LABELS) as WorkKind[];
 const OFFICE_KINDS = Object.keys(OFFICE_LABELS) as OfficeKind[];
 const icons: Record<WorkKind, string> = { inspection: "✅", as: "🔧", delivery: "📦", etc: "📌", pc: "💻", misu: "💰", bulman: "💢", recontract: "📝", overage: "📈" };
 const tones: Record<WorkKind, string> = { inspection: "bg-blue-50 text-blue-700", as: "bg-rose-50 text-rose-700", delivery: "bg-violet-50 text-violet-700", etc: "bg-slate-100 text-slate-600", pc: "bg-cyan-50 text-cyan-700", misu: "bg-amber-50 text-amber-700", bulman: "bg-pink-50 text-pink-700", recontract: "bg-emerald-50 text-emerald-700", overage: "bg-yellow-50 text-yellow-700" };
 
-function summarize(rows: VisitRow[]) {
+// 점검·AS·확장성(pc) 숫자는 표 원본(myLedgerCounts = 순위표·팀 현황·홈·조회와 같은 함수)으로 덮는다(2026-10-23).
+// 방문 수·기기 대수·시간·영업 칸은 방문 장부(visit_logs) 그대로.
+// 표 원본을 못 읽으면 ledger=null — 방문 장부 숫자를 그대로 두고 화면에 안내만 띄운다(방문 기록 화면까지 막지 않는다).
+type LedgerScope = { ledger: WorkLedger | null; author: string };
+const UNIT: Partial<Record<WorkKind, string>> = { inspection: "대" };
+const unitOf = (k: WorkKind) => UNIT[k] || "건";
+function summarize(rows: VisitRow[], scope: LedgerScope, from: string, to: string) {
+  const sum = summarizeVisits(rows);
+  if (!scope.ledger) return sum;
+  const fromLedger = myLedgerCounts(scope.ledger, scope.author, from, to);
+  sum.count.inspection = fromLedger.inspection;
+  sum.count.as = fromLedger.as;
+  sum.count.pc = fromLedger.expansion;
+  return sum;
+}
+function summarizeVisits(rows: VisitRow[]) {
   const count = Object.fromEntries(KINDS.map((k) => [k, 0])) as Record<WorkKind, number>;
   const minutes = Object.fromEntries(KINDS.map((k) => [k, 0])) as Record<WorkKind, number>;
   const visitMachines = new Map<string, number>();
@@ -265,6 +282,8 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
   const selectedWeekLabel = monthWeeks.find((w) => w.start === editWeek.start)?.label || `${Math.ceil(Number(editWeek.start.slice(8, 10)) / 7)}주차`;
   const [rows, setRows] = useState<VisitRow[]>([]);
   const [officeLogs, setOfficeLogs] = useState<OfficeLog[]>([]);
+  const [ledger, setLedger] = useState<WorkLedger | null>(EMPTY_LEDGER); // 점검·AS·확장성 표 원본(전원, 기간 안), 못 읽으면 null
+  const [ledgerError, setLedgerError] = useState("");
   const [office, setOffice] = useState<OfficeLog>({ workDate: today, author, returnTime: "", values: emptyOfficeValues() });
   const [note, setNote] = useState<WeeklyNote>({ ...EMPTY_WEEKLY_NOTE });
   const [loading, setLoading] = useState(true);
@@ -280,8 +299,11 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
       getVisits(subject, range.start, range.end),
       getOfficeLogs(subject, range.start, range.end),
       period === "week" ? getWeeklyNote(subject, editWeek.start) : Promise.resolve({ ...EMPTY_WEEKLY_NOTE }),
+      Promise.all([loadFieldRows(range.start, range.end), loadExpansionRows(range.start, range.end)])
+        .then(([field, expansion]) => ({ ledger: { field, expansion } as WorkLedger, error: "" }))
+        .catch((e) => ({ ledger: null, error: (e as Error).message })),
     ])
-      .then(([visits, offices, weekly]) => { if (!alive) return; if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current); setRows(visits); setOfficeLogs(offices); setNote(weekly); setAutoSaveStatus("idle"); setOffice(offices.find((o) => o.workDate === selectedDay) || { workDate: selectedDay, author, returnTime: "", values: emptyOfficeValues() }); })
+      .then(([visits, offices, weekly, led]) => { if (!alive) return; if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current); setRows(visits); setOfficeLogs(offices); setLedger(led.ledger); setLedgerError(led.error); setNote(weekly); setAutoSaveStatus("idle"); setOffice(offices.find((o) => o.workDate === selectedDay) || { workDate: selectedDay, author, returnTime: "", values: emptyOfficeValues() }); })
       .catch((e) => { if (alive) setError((e as Error).message); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -320,7 +342,8 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     }, 900);
   };
 
-  const sum = useMemo(() => summarize(rows), [rows]);
+  const ledgerScope = useMemo<LedgerScope>(() => ({ ledger, author: subject }), [ledger, subject]);
+  const sum = useMemo(() => summarize(rows, ledgerScope, range.start, range.end), [rows, ledgerScope, range.start, range.end]);
   const insideMinutes = officeMinutes(officeLogs);
   const commute = [...rows].reverse().find((r) => r.commute)?.commute;
   const setNoteField = <K extends keyof WeeklyNote>(k: K, v: WeeklyNote[K]) => {
@@ -367,7 +390,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] font-semibold text-slate-400">
               {periodRangeText && <span className="tabular-nums text-slate-300">{periodRangeText}</span>}
               <span>{subject}{readOnly ? " · 읽기 전용" : ""}</span>
-              {!loading && <span className="tabular-nums">방문 <b className="text-slate-200">{sum.visits}</b>곳 · 점검 <b className="text-slate-200">{sum.count.inspection}</b>건 · AS <b className="text-slate-200">{sum.count.as}</b>건 · 외근 <b className="text-slate-200">{hm(sum.fieldMinutes)}</b></span>}
+              {!loading && <span className="tabular-nums">방문 <b className="text-slate-200">{sum.visits}</b>회 · 점검 <b className="text-slate-200">{sum.count.inspection}</b>대 · AS <b className="text-slate-200">{sum.count.as}</b>건 · 외근 <b className="text-slate-200">{hm(sum.fieldMinutes)}</b></span>}
             </div>
           </div>
           <div className="flex w-full flex-col gap-2 lg:w-auto lg:shrink-0 lg:items-end">
@@ -387,14 +410,14 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
       {!loading && <div className="overflow-x-auto"><table onClick={tableCellClick} className="w-full border-collapse text-left text-[12px]" style={{ minWidth: 1000 }}>
         <thead><tr><th className={`${TH_DARK} w-16`}>외근</th><th className={TH_DARK}>방문 거래처</th>{KINDS.map((k) => <th key={k} className={TH_DARK}>{WORK_LABELS[k]}</th>)}</tr></thead>
         <tbody>
-          <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-2xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">곳</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>
-            {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><div className={`text-2xl font-black leading-tight ${sum.count[k] ? "text-slate-900" : "text-slate-300"}`}>{sum.count[k]}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">건</span></div>{sum.minutes[k] > 0 && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{hm(sum.minutes[k])}</div>}</td>)}</tr>
+          <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>실적</td><td className={`${TD_READ} tabular-nums`}><div className="text-2xl font-black leading-tight text-slate-900">{sum.visits}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">회</span></div><div className="mt-0.5 text-[11px] font-semibold text-slate-500">기기 {sum.machines}대</div></td>
+            {KINDS.map((k) => <td key={k} className={`${TD_READ} tabular-nums`}><div className={`text-2xl font-black leading-tight ${sum.count[k] ? "text-slate-900" : "text-slate-300"}`}>{sum.count[k]}<span className="ml-0.5 text-[11px] font-semibold text-slate-400">{unitOf(k)}</span></div>{sum.minutes[k] > 0 && <div className="mt-0.5 text-[11px] font-semibold text-slate-500">{hm(sum.minutes[k])}</div>}</td>)}</tr>
           {period === "week" && <>
             <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>목표</td><td className={`${TD_READ} text-slate-300`}>—</td>
               {KINDS.map((k) => <td key={k} className={TD_WRITE}><input data-cell onKeyDown={inputCellKeyDown} type="number" min="0" disabled={readOnly} value={note.goals[k] || ""} onChange={(e) => setNoteField("goals", { ...note.goals, [k]: Number(e.target.value) || 0 })} className={`${CELL_AREA} text-lg font-black tabular-nums`} /></td>)}</tr>
             <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>달성</td><td className={`${TD_READ} text-slate-300`}>—</td>
               {KINDS.map((k) => { const target = Number(note.goals[k] || 0); const actual = sum.count[k]; const percent = target > 0 ? Math.round((actual / target) * 100) : 0; const gap = actual - target; const met = target > 0 && actual >= target;
-                return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><div className="flex items-baseline justify-between gap-1"><span className={`text-lg font-black leading-tight ${met ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</span><span className={`text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}건` : `${gap}건`}</span></div><div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${met ? "bg-emerald-500" : "bg-slate-800"}`} style={{ width: `${Math.min(100, percent)}%` }} /></div></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
+                return <td key={k} className={`${TD_READ} tabular-nums`}>{target > 0 ? <><div className="flex items-baseline justify-between gap-1"><span className={`text-lg font-black leading-tight ${met ? "text-emerald-700" : "text-slate-800"}`}>{percent}%</span><span className={`text-[11px] font-bold ${gap >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{gap >= 0 ? `+${gap}${unitOf(k)}` : `${gap}${unitOf(k)}`}</span></div><div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${met ? "bg-emerald-500" : "bg-slate-800"}`} style={{ width: `${Math.min(100, percent)}%` }} /></div></> : <span className="text-slate-300">—</span>}</td>; })}</tr>
           </>}
           <tr><td className={`${TD_LABEL} text-[12px] text-slate-700`}>시간</td><td colSpan={KINDS.length + 1} className={`${TD_READ} text-[12px] font-semibold text-slate-500`}><span className="inline-flex flex-wrap gap-x-5 gap-y-1">
             <span>외근 <b className="ml-1 text-slate-900">{hm(sum.fieldMinutes)}</b></span><span>내근 <b className="ml-1 text-slate-900">{hm(insideMinutes)}</b></span><span>합계 <b className="ml-1 text-slate-900">{hm(sum.fieldMinutes + insideMinutes)}</b></span>
@@ -405,6 +428,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     </section>
 
     {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">현황을 불러오는 중…</div>}
+    {ledgerError && !error && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">점검·AS·확장성 원본 표를 불러오지 못해 방문 장부 숫자로 보여줍니다(순위표와 다를 수 있음) — {ledgerError}</div>}
     {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}<br /><span className="text-xs">업데이트된 supabase/visits.sql을 다시 실행했는지 확인해 주세요.</span></div>}
     {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
 
@@ -415,7 +439,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
           <section className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="text-base font-black text-slate-950 lg:text-lg">외근 영업 활동</h3><div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">{[
             ["N~S IT 영업", sum.sales.nsIt], ["N~S 복합기 영업", sum.sales.nsCopier], ["SS~V IT 영업", sum.sales.ssvIt], ["SS~V 복합기 영업", sum.sales.ssvCopier], ["N~S 계약종료", sum.sales.nsEnd], ["SS~V 계약종료", sum.sales.ssvEnd],
           ].map(([l, v]) => <div key={String(l)} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"><div className="text-[11px] font-bold text-slate-400">{l}</div><div className="mt-1 text-xl font-black tabular-nums text-slate-950">{v}<span className="ml-1 text-xs font-semibold text-slate-400">건</span></div></div>)}</div></section>
-          <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
+          <HierarchicalVisitList period={period} rows={rows} scope={ledgerScope} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
         </div>
         <section className="h-fit rounded-xl border border-slate-200 bg-white p-5 xl:sticky xl:top-6"><div className="flex items-center justify-between"><div><h3 className="text-base font-black text-slate-950 lg:text-lg">내근 업무 입력</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">수량·건수와 시간을 입력하세요.</p></div><label className="text-xs font-bold text-slate-500">복귀시간<input type="time" disabled={readOnly} value={office.returnTime} onChange={(e) => setOffice({ ...office, returnTime: e.target.value })} className="ml-2 rounded-lg border border-slate-300 px-2 py-1.5 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>
           <div className="mt-4 divide-y divide-slate-100">{OFFICE_KINDS.map((k) => <div key={k} className="grid grid-cols-[1fr_90px_100px] items-center gap-2 py-2.5"><div className="text-sm font-semibold text-slate-700">{OFFICE_LABELS[k]}</div><label className="text-[10px] font-bold text-slate-400">수량/건<input type="number" min="0" disabled={readOnly} value={office.values[k].count || ""} onChange={(e) => setOfficeValue(k, "count", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label><label className="text-[10px] font-bold text-slate-400">시간(분)<input type="number" min="0" disabled={readOnly} value={office.values[k].minutes || ""} onChange={(e) => setOfficeValue(k, "minutes", Number(e.target.value))} className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /></label></div>)}</div>
@@ -423,11 +447,11 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
         </section>
       </div></div> : period === "week" ? <div className="space-y-6">
         <WeeklyNoteSection note={note} onNoteChange={setNoteField} onBottleneckChange={setBottleneck} autoSaveStatus={autoSaveStatus} readOnly={readOnly} onGather={() => setGatherOpen(true)} />
-        <PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} />
-        <HierarchicalVisitList period="week" rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
+        <PeriodBreakdown period={period} rows={rows} scope={ledgerScope} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} />
+        <HierarchicalVisitList period="week" rows={rows} scope={ledgerScope} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
       </div> : <div className="space-y-6">
-        <PeriodBreakdown period={period} rows={rows} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} />
-        <HierarchicalVisitList period={period} rows={rows} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
+        <PeriodBreakdown period={period} rows={rows} scope={ledgerScope} officeLogs={officeLogs} start={range.start} end={range.end} year={year} month={month} quarter={quarter} />
+        <HierarchicalVisitList period={period} rows={rows} scope={ledgerScope} year={year} month={month} quarter={quarter} start={range.start} end={range.end} />
       </div>}
     </>}
     {gatherOpen && <GatherModal subject={subject} year={period === "week" ? Number(editWeek.start.slice(0, 4)) : year} quarter={period === "quarter" ? quarter : period === "week" ? Math.ceil(Number(editWeek.start.slice(5, 7)) / 3) : Math.ceil(month / 3)} onClose={() => setGatherOpen(false)} />}
@@ -571,7 +595,7 @@ function WeeklyNoteSection({ note, onNoteChange, onBottleneckChange, autoSaveSta
   );
 }
 
-function PeriodBreakdown({ period, rows, officeLogs, start, end, year, month, quarter }: { period: Period; rows: VisitRow[]; officeLogs: OfficeLog[]; start: string; end: string; year: number; month: number; quarter: number }) {
+function PeriodBreakdown({ period, rows, scope, officeLogs, start, end, year, month, quarter }: { period: Period; rows: VisitRow[]; scope: LedgerScope; officeLogs: OfficeLog[]; start: string; end: string; year: number; month: number; quarter: number }) {
   const inRange = (d: string, s: string, e: string) => d >= s && d <= e;
   const daysBetween = () => {
     const days: Array<{ label: string; start: string; end: string; sub?: string }> = [];
@@ -601,7 +625,7 @@ function PeriodBreakdown({ period, rows, officeLogs, start, end, year, month, qu
   const desc = period === "week" ? "선택한 주의 일별 흐름을 확인하세요." : period === "month" ? "선택한 월의 주차별 흐름을 확인하세요." : period === "quarter" ? "선택한 분기의 월별 흐름을 확인하세요." : "선택한 연도의 분기별 흐름을 확인하세요.";
   const summaries = buckets.map((bucket) => ({
     bucket,
-    summary: summarize(rows.filter((row) => inRange(row.workDate, bucket.start, bucket.end))),
+    summary: summarize(rows.filter((row) => inRange(row.workDate, bucket.start, bucket.end)), scope, bucket.start, bucket.end),
     inside: officeMinutes(officeLogs.filter((office) => inRange(office.workDate, bucket.start, bucket.end))),
   }));
   return <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="mb-4"><h3 className="text-base font-black text-slate-950 lg:text-lg">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">{desc}</p></div>
@@ -614,7 +638,7 @@ function PeriodBreakdown({ period, rows, officeLogs, start, end, year, month, qu
   </section>;
 }
 
-function HierarchicalVisitList({ period, rows, year, month, quarter, start, end }: { period: Period; rows: VisitRow[]; year: number; month: number; quarter: number; start: string; end: string }) {
+function HierarchicalVisitList({ period, rows, scope, year, month, quarter, start, end }: { period: Period; rows: VisitRow[]; scope: LedgerScope; year: number; month: number; quarter: number; start: string; end: string }) {
   const [open, setOpen] = useState(false);
   const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setOpenKeys((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -636,8 +660,8 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end 
     }
     return out;
   };
-  const summaryChips = (list: VisitRow[]) => {
-    const s = summarize(list);
+  const summaryChips = (list: VisitRow[], from: string, to: string) => {
+    const s = summarize(list, scope, from, to);
     const items = [
       ["방문", s.visits],
       ["기기", s.machines],
@@ -656,7 +680,7 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end 
     const list = grouped[date] || [];
     const key = `day:${date}`;
     const isOpen = !!openKeys[key];
-    return <div key={key} className={`border-b border-slate-100 last:border-0 ${depth ? "border-l-4 border-l-blue-200 bg-white" : "border-l-4 border-l-slate-300"}`}><button type="button" onClick={() => toggle(key)} className={`grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[210px_1fr_60px] md:items-center ${depth ? "bg-white" : "bg-slate-50"}`}><span className="text-xs font-black text-slate-700">{shortDate(date)} · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && (list.length ? visitRows(list) : <div className="px-5 py-4 text-sm text-slate-400">방문 기록이 없습니다.</div>)}</div>;
+    return <div key={key} className={`border-b border-slate-100 last:border-0 ${depth ? "border-l-4 border-l-blue-200 bg-white" : "border-l-4 border-l-slate-300"}`}><button type="button" onClick={() => toggle(key)} className={`grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[210px_1fr_60px] md:items-center ${depth ? "bg-white" : "bg-slate-50"}`}><span className="text-xs font-black text-slate-700">{shortDate(date)} · {list.length}건</span>{summaryChips(list, date, date)}<span className="text-right text-xs font-bold text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && (list.length ? visitRows(list) : <div className="px-5 py-4 text-sm text-slate-400">방문 기록이 없습니다.</div>)}</div>;
   };
   const weekNode = (w: { label: string; start: string; end: string }, prefix = "") => {
     const s = w.start < start ? start : w.start;
@@ -665,15 +689,15 @@ function HierarchicalVisitList({ period, rows, year, month, quarter, start, end 
     const list = rowsBetween(s, e);
     const key = `${prefix}week:${s}`;
     const isOpen = !!openKeys[key];
-    return <div key={key} className="border-b border-l-4 border-l-emerald-300 border-b-slate-100 bg-emerald-50/30 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[250px_1fr_60px] md:items-center"><span className="text-sm font-black text-slate-800">{w.label} {shortDate(s)}~{shortDate(e)} · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/70">{dayBuckets(s, e).map((d) => leafDay(d.start, 1))}</div>}</div>;
+    return <div key={key} className="border-b border-l-4 border-l-emerald-300 border-b-slate-100 bg-emerald-50/30 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[250px_1fr_60px] md:items-center"><span className="text-sm font-black text-slate-800">{w.label} {shortDate(s)}~{shortDate(e)} · {list.length}건</span>{summaryChips(list, s, e)}<span className="text-right text-xs font-bold text-blue-600">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/70">{dayBuckets(s, e).map((d) => leafDay(d.start, 1))}</div>}</div>;
   };
   const monthNode = (m: number) => {
     const mb = monthBucket(m);
     const list = rowsBetween(mb.start, mb.end);
     const key = `month:${m}`;
     const isOpen = !!openKeys[key];
-    return <div key={key} className="border-b border-l-4 border-l-blue-500 border-b-slate-100 bg-blue-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{mb.label} · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{weeksInMonth(year, m).map((w) => weekNode(w, `month:${m}:`))}</div>}</div>;
+    return <div key={key} className="border-b border-l-4 border-l-blue-500 border-b-slate-100 bg-blue-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{mb.label} · {list.length}건</span>{summaryChips(list, mb.start, mb.end)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{weeksInMonth(year, m).map((w) => weekNode(w, `month:${m}:`))}</div>}</div>;
   };
   const title = period === "day" ? "금일 방문 상세" : period === "week" ? "주간 방문 상세" : period === "month" ? "월간 방문 상세" : period === "quarter" ? "분기 방문 상세" : "연간 방문 상세";
-  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-base font-black text-slate-950 lg:text-lg">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-l-4 border-l-indigo-500 border-b-slate-100 bg-indigo-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{q}분기 · {list.length}건</span>{summaryChips(list)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
+  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-between border-b border-slate-100 px-5 py-4 text-left"><div><h3 className="text-base font-black text-slate-950 lg:text-lg">{title}</h3><p className="mt-0.5 text-xs font-semibold text-slate-400">조회 범위에 맞춰 접었다 펼쳐서 확인합니다.</p></div><span className="text-xs font-bold text-slate-500">{open ? "접기" : "펼치기"}</span></button>{open && <>{!rows.length && <div className="p-10 text-center text-sm text-slate-400">저장된 방문 기록이 없습니다.</div>}{period === "day" && leafDay(start)}{period === "week" && dayBuckets(start, end).map((d) => leafDay(d.start))}{period === "month" && weeksInMonth(year, month).map((w) => weekNode(w))}{period === "quarter" && [0, 1, 2].map((i) => monthNode((quarter - 1) * 3 + i + 1))}{period === "year" && [1, 2, 3, 4].map((q) => { const first = (q - 1) * 3 + 1; const lastMonth = first + 2; const key = `quarter:${q}`; const isOpen = !!openKeys[key]; const qEnd = `${year}-${pad(lastMonth)}-${pad(new Date(year, lastMonth, 0).getDate())}`; const list = rowsBetween(`${year}-${pad(first)}-01`, qEnd); return <div key={key} className="border-b border-l-4 border-l-indigo-500 border-b-slate-100 bg-indigo-50/50 last:border-b-0"><button type="button" onClick={() => toggle(key)} className="grid w-full gap-3 px-5 py-3 text-left md:grid-cols-[180px_1fr_60px] md:items-center"><span className="text-base font-black text-slate-900">{q}분기 · {list.length}건</span>{summaryChips(list, `${year}-${pad(first)}-01`, qEnd)}<span className="text-right text-xs font-bold text-blue-700">{isOpen ? "접기" : "펼치기"}</span></button>{isOpen && <div className="bg-white/60">{[0, 1, 2].map((i) => monthNode(first + i))}</div>}</div>; })}</>}</section>;
 }

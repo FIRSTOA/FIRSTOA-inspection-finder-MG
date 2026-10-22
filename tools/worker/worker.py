@@ -8,7 +8,8 @@ FIRSTOA 작업 실행기 — 노트북(사무실 상시 PC)에서 24시간 도�
 하는 일 (1분에 한 바퀴)
   ① 심박: worker_heartbeat 에 "살아 있음"을 적는다. 15분 끊기면 DB 파수꾼(worker-watchdog 크론)이 담당자에게 웹푸시.
   ② 일감: worker_jobs 에서 queued 를 하나씩 잡아(claim) 처리한다 — ping · backup · relay · poster. (음성·OCR 은 자리만 있다)
-  ③ 시계: 매일 02:30 KST 전체 표 백업, 5분마다 카톡 PC 발송 중계(봇이 못 보낸 outbox), 월요일 10시 키맨 포스터.
+  ③ 시계: 매일 02:30 KST 전체 표 백업, 5분마다 카톡 PC 발송 중계(봇이 못 보낸 outbox), 월요일 10시 키맨 포스터,
+          (스위치 FIRSTOA_KAKAO_EXPORT=1 일 때만) 매일 06:30 카톡 PC 대화 내용 저장 → 드라이브 수신함.
 
 설치·운영은 README.md. 수동 확인: python worker.py --once (한 바퀴) · python worker.py --job ping · python worker.py --backup
 """
@@ -24,7 +25,7 @@ from datetime import timedelta
 
 from config import HOST, KAKAO_PC_DIR, LOG_DIR, RestError, kst_now, load_state, log, rest, save_state
 
-VERSION = "2026-10-21a"
+VERSION = "2026-10-23a"
 WORKER_NAME = os.environ.get("FIRSTOA_WORKER_NAME", f"worker@{HOST}")
 LOOP_SECONDS = 60
 BACKUP_AT = (2, 30)            # KST 02:30 이후 그날 첫 바퀴에
@@ -32,6 +33,9 @@ RELAY_EVERY = 60               # 초 — 봇이 2분 넘게 못 가져간 outbox
 POSTER_HOUR = 10               # 월요일 10시대 (2026-10-21 사용자: 8시 → 10시, 출근 전 카톡 금지 규칙)
 RELAY_ENABLED = os.environ.get("FIRSTOA_RELAY", "1") != "0"
 POSTER_ENABLED = os.environ.get("FIRSTOA_POSTER", "1") != "0"
+KAKAO_EXPORT_AT = (6, 30)      # KST 06:30~08:00 사이 하루 1회 — 사람이 카톡 PC 를 쓰기 전(보내기가 아니라 저장이라 야간 규칙과 무관)
+KAKAO_EXPORT_UNTIL = 8         # 08시가 넘으면 그날은 건너뜀(실행기가 늦게 켜져도 근무 중엔 누르지 않는다)
+KAKAO_EXPORT_ENABLED = os.environ.get("FIRSTOA_KAKAO_EXPORT", "0") == "1"  # 기본 꺼짐 — export_rooms.py --probe 로 Ctrl+S 확인 뒤에만 켠다(2026-10-23)
 
 sys.path.insert(0, KAKAO_PC_DIR)  # poster_send / outbox_relay 재사용
 
@@ -70,6 +74,14 @@ def job_poster(payload: dict) -> str:
     args = [sys.executable, os.path.join(KAKAO_PC_DIR, "poster_send.py"), "--weekly"] + (["--plan"] if payload.get("plan") else [])
     run = subprocess.run(args, cwd=KAKAO_PC_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1200)
     tail = (run.stdout or "").strip().splitlines()[-6:]
+    return f"exit {run.returncode} · " + " / ".join(tail)
+
+
+def job_kakao_export(payload: dict) -> str:
+    """카톡 PC 대화 내용 저장 → 구글 드라이브 '카톡 자동적재 수신함' (tools/kakao-pc/export_rooms.py --export). 창이 열린 방만"""
+    args = [sys.executable, os.path.join(KAKAO_PC_DIR, "export_rooms.py"), "--export"]
+    run = subprocess.run(args, cwd=KAKAO_PC_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=540)  # 9분 — 심박 파수꾼 15분 안쪽(export_rooms 자체 상한 8분)
+    tail = (run.stdout or "").strip().splitlines()[-4:]
     return f"exit {run.returncode} · " + " / ".join(tail)
 
 
@@ -171,6 +183,15 @@ def scheduled(state: dict) -> list:
             state["poster_last"] = f"실패: {e}"
             log(f"포스터 실패 — {e}")
         ran.append("poster")
+    if (KAKAO_EXPORT_ENABLED and (now.hour, now.minute) >= KAKAO_EXPORT_AT and now.hour < KAKAO_EXPORT_UNTIL
+            and state.get("kakao_export_date") != today):
+        state["kakao_export_date"] = today  # 실패해도 그날은 다시 안 한다
+        try:
+            state["kakao_export_last"] = job_kakao_export({})
+        except Exception as e:
+            state["kakao_export_last"] = f"실패: {e}"
+            log(f"카톡 저장 실패 — {e}")
+        ran.append("kakao_export")
     return ran
 
 
@@ -227,7 +248,7 @@ def main() -> int:
     if not single_instance():
         log("이미 실행 중 — 종료")
         return 0
-    log(f"실행기 시작 {WORKER_NAME} v{VERSION} (중계 {'켬' if RELAY_ENABLED else '끔'} · 포스터 {'켬' if POSTER_ENABLED else '끔'})")
+    log(f"실행기 시작 {WORKER_NAME} v{VERSION} (중계 {'켬' if RELAY_ENABLED else '끔'} · 포스터 {'켬' if POSTER_ENABLED else '끔'} · 카톡 저장 {'켬' if KAKAO_EXPORT_ENABLED else '끔'})")
     state = load_state()
     while True:
         try:

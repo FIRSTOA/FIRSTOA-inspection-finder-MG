@@ -7,6 +7,7 @@ import { notify } from "./toast";
 import PortalSelect from "./PortalSelect";
 import VendorCodeAdmin from "./VendorCodeAdmin";
 import RoomDeliveryBoard from "./RoomDeliveryBoard";
+import KpiTargetsEditor from "./kpi/KpiTargetsEditor";
 
 /**
  * 카톡방·전송 설정 관리.
@@ -262,6 +263,7 @@ export default function SystemAdmin() {
               ))}
             </div>
           </div>
+          {!loading && <KpiTargetsEditor key={valueOf("KPI_TARGETS")} value={valueOf("KPI_TARGETS")} busy={busy === "KPI_TARGETS"} onSave={saveConfig} />}
         </div>
       </section>
 

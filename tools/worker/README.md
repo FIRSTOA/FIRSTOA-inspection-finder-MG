@@ -9,6 +9,7 @@
 | 전체 표 백업 | 매일 02:30 KST | `backup_tables.py` — 60여 표를 `구글 드라이브\FIRSTOA-백업\<날짜>\` 에 jsonl.gz, 14회차 보관 |
 | 카톡 PC 발송 중계 | 1분마다 | 봇이 2분 넘게 못 가져간 outbox 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`) |
 | 월요 키맨 포스터 | 월 10시(2026-10-21 08→10, 서버 안전망 cron 10:30) | `tools/kakao-pc/poster_send.py --weekly` |
+| 카톡 대화 내용 저장(기본 꺼짐) | `FIRSTOA_KAKAO_EXPORT=1` 일 때만 매일 06:30~08:00 1회 | `tools/kakao-pc/export_rooms.py --export` — 열린 방 창만 Ctrl+S 로 저장 → 드라이브 `카톡 자동적재 수신함`. 켜기 전 `--probe` 필수(docs/manual/ops/06-laptop-worker.md) |
 | 일감 처리 | 들어올 때 | `worker_jobs` 의 queued 행을 잡아 실행 — `ping` `backup` `relay` `poster` (음성·OCR 은 자리만) |
 
 ## 처음부터 (아무것도 안 깔린 새 노트북) — 한 줄

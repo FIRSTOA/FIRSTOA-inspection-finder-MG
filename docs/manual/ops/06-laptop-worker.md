@@ -18,6 +18,7 @@
 | 카톡 PC 발송 중계 | 1분마다 | 봇이 **2분 넘게** 못 가져간 `outbox` 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`). 보낸 행은 삭제, `room_activity` 에 `pc_send` 기록 |
 | 야간 발송 금지 | **22:00~08:00 KST** | 중계는 보내지 않고 들고 있다가 08:00 이후 첫 1분에 보냄(한 번에 3방 상한) |
 | 월요 키맨 포스터 | **월요일 10시대** (`POSTER_HOUR = 10`) | `poster_send.py --weekly` — 사진으로 보냄. 서버 안전망 cron 은 10:30 |
+| 카톡 대화 내용 저장 | **스위치 켤 때만**(`FIRSTOA_KAKAO_EXPORT=1`, 기본 꺼짐) 매일 **06:30~08:00 KST** 첫 바퀴 1회 | `tools/kakao-pc/export_rooms.py --export` — `room_map` 방 중 **창이 열려 있는 방만** Ctrl+S → 저장 창에 `<방이름>_YYYYMMDD.txt` 경로 붙여넣기 → 구글 드라이브 `카톡 자동적재 수신함`. 뒤는 Apps Script `Drive.gs` 가 적재(아래 절) |
 | 일감 | 들어올 때 | `worker_jobs` 의 `status=queued` 행: `ping` `backup` `relay` `poster` `kakao_photo` (음성·OCR 은 자리만) |
 
 > 파일 불일치: `tools/worker/README.md` 표에는 "월 08시"로 적혀 있지만 코드(`worker.py` POSTER_HOUR)는 10시다(2026-10-21 변경). 코드가 사실. `tools/kakao-pc/README.md` 의 `C:\firstoa\` 경로·"월요일 08:00 작업 등록"도 옛 설치 방식이다(지금은 실행기가 부른다).
@@ -62,7 +63,28 @@ python ..\kakao-pc\poster_send.py --check      # 열린 방 창과 이번 주 �
 - 로그: `tools\worker\logs\worker-<날짜>.txt`, 백업 `logs\backup-<날짜>.txt`, 중계·포스터 `tools\kakao-pc\poster_log.txt`
 - 상태: `tools\worker\state.json`(마지막 백업 날짜·결과, 중계 시각, 포스터 주차)
 - 일감 시험(SQL Editor): `insert into worker_jobs(kind, payload, created_by) values ('ping', '{"note":"test"}', '이름');` → 1분 안에 `status=done`
-- 끄기 환경 변수: `FIRSTOA_RELAY=0`(중계), `FIRSTOA_POSTER=0`(포스터)
+- 끄기 환경 변수: `FIRSTOA_RELAY=0`(중계), `FIRSTOA_POSTER=0`(포스터). 켜기(기본 꺼짐): `FIRSTOA_KAKAO_EXPORT=1`(카톡 대화 내용 저장)
+
+## 카톡 대화 내용 매일 저장 (export_rooms.py, 2026-10-23 · 기본 꺼짐)
+뒤쪽은 이미 있다: 구글 드라이브 `카톡 자동적재 수신함` 에 카톡 TXT 가 들어오면 Apps Script `apps-script/first-data/src/Drive.gs` 의 시간 트리거 `ingestFromDriveFolder` 가 파일 첫 줄의 방 이름으로 분류·증분 적재하고 `처리됨`/`확인필요` 로 옮긴다. 이 스크립트는 "저장 버튼을 누르는 손"만 한다.
+
+안전 원칙: **메뉴·좌표 클릭 없음**(채팅방 메뉴에 "채팅방 나가기"가 있다 — `docs/tasks/tab-search-kakao-history.md` 5-1). 단축키 Ctrl+S 하나와 윈도 표준 저장 창만 쓴다. 검색으로 방을 열지 않는다(열린 창만). 키 누르기 전마다 맨 앞 창 확인, Esc 는 카톡이 새로 띄운 창이 맨 앞일 때만, 파일 이름은 클립보드 붙여넣기 뒤 클립보드 비움(WM_SETTEXT·Ctrl+A 없음), 같은 이름 파일은 덮어쓰지 않음, 방 사이 3초, 실패 3번이면 그날 중단.
+
+켜는 순서 (노트북에서, **데스크톱에서 돌리지 않는다**):
+1. 시험할 업무방 하나를 카톡 PC 에서 더블클릭해 창으로 열어 둔다.
+2. **probe**(저장 안 함 — Ctrl+S 뒤 뜨는 창의 클래스·제목만 기록하고 Esc):
+   ```
+   python tools\kakao-pc\export_rooms.py --probe --room "방이름"
+   ```
+   - `✓ 저장 창이 맞음` → 3번으로. 스크린샷 `tools\kakao-pc\logs\export_probe.png` 로 눈으로도 확인.
+   - `? 표준 대화 상자지만 제목 '…' 이 목록에 없음` → 저장 창이 맞으면 `setx FIRSTOA_KAKAO_SAVE_TITLE "그 제목"`.
+   - `✗ 단축키 불가 · 수동 확인 필요` → **켜지 않는다**(이 카톡 버전은 Ctrl+S 가 저장이 아님). 팀장에게 로그 전달.
+3. 한 방만 실제 저장: `python tools\kakao-pc\export_rooms.py --export --rooms "방이름"` → 수신함에 `방이름_YYYYMMDD.txt` 가 생기고, **첫 줄이 "○○ 님과 카카오톡 대화"** 인지 연다(Drive.gs 가 이 줄로 방을 고른다). 1시간 안에 `처리됨` 으로 옮겨지면 끝까지 동작.
+4. 켜기: `setx FIRSTOA_KAKAO_EXPORT 1` → `Stop-ScheduledTask -TaskName 'FIRSTOA Worker' ; Start-ScheduledTask -TaskName 'FIRSTOA Worker'` → 로그 첫 줄에 `카톡 저장 켬`.
+5. 끄기: `setx FIRSTOA_KAKAO_EXPORT 0` 후 작업 재시작.
+
+기타: `--list`(대상 방·창 열림 여부만, 키 안 누름), `--category 점검,AS`(업무 종류만), `--dir "<폴더>"` 또는 `FIRSTOA_KAKAO_EXPORT_DIR`(기본 = 구글 드라이브\카톡 자동적재 수신함. 폴더가 없으면 **만들지 않고** 멈춘다 — 로컬에서 새로 만들면 Drive.gs 가 보는 폴더와 다른 폴더가 된다). 로그는 `poster_log.txt` 의 `[내보내기]` 줄, 결과는 `state.json` 의 `kakao_export_last`.
+주의: PC 카톡 저장은 **그 PC 에 남은 대화만** 나온다. 봇 계정은 10/21 재로그인이라 그 전 대화는 없을 수 있다. Drive.gs 는 시트의 방 매핑(getRoomMap)으로 고르므로 거기 없는 방 파일은 `확인필요` 로 간다.
 
 ## 카톡 PC 자동화 금지 규칙 (실측 사고 기반, 코드 고칠 때 필수)
 `.claude/agents/kakao-pc-rules.md` 가 원문. 요약:

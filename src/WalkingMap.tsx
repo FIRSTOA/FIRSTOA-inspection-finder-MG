@@ -22,6 +22,7 @@ import { notify } from "./toast";
 import { addressCore, mapQuery } from "./address";
 import { maskRrn } from "./privacy";
 import { restoreMaskedImport } from "./workinPrivacy";
+import { monthlyUnits, teamWorkinProgress } from "./workinProgress";
 
 type MapLabel = {
   code: string;
@@ -225,11 +226,9 @@ function isCompleted(place: MapPlace) {
   return place.label === "G5" || place.label === "G12";
 }
 
+// 홈 KPI(K2)와 같은 함수 — 셈법은 workinProgress.ts 한 곳에서만 고친다(2026-10-23).
 function monthlyInspectionUnits(place: MapPlace) {
-  if (place.label === "G2") return 1;
-  if (place.label === "G3") return 2;
-  if (place.label === "G5" || place.label === "G12") return 3;
-  return 0;
+  return monthlyUnits(place.label);
 }
 
 const koreanHolidays: Record<number, string[]> = {
@@ -2254,16 +2253,15 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
   const conditionTitle = `${teamFilter}팀 · ${quarterFilter}분기 · ${kindFilter === "ALL" ? "전체 워킨맵" : workKinds.find((item) => item.value === kindFilter)?.label}${inspectDaysFilter > 0 ? ` · 점검 ${inspectDaysFilter}일 초과` : ""}`;
   const teamProgress = useMemo(() => teams.map((team) => {
     const rows = places.filter((place) => place.team === team && place.quarter === progressQuarter);
-    const quarterlyInspections = rows.filter((place) => place.kind === "quarter");
-    const monthlyInspections = rows.filter((place) => place.kind === "monthly");
+    const inspection = teamWorkinProgress(rows.map((p) => ({ team, label: p.label || "", kind: p.kind || "" })), [team])[0];
     const renewals = rows.filter((place) => place.kind === "renewal");
     const managedRenewals = renewals.filter((place) => renewalGrade(place) !== "V");
     const renewalDates = managedRenewals.filter((place) => place.label !== "G5").map((place) => ({ place, grade: renewalGrade(place), end: projectedContractEnd(place, progressYear, progressQuarter) })).filter((item): item is { place: MapPlace; grade: string; end: NonNullable<ReturnType<typeof projectedContractEnd>> } => Boolean(item.end)).sort((a, b) => a.end.key - b.end.key);
     const renewalMonths = renewalQuarterMonths(progressQuarter).map((month) => [`${month}월`, renewalDates.filter((item) => item.end.month === month).length] as const);
     return {
       team,
-      inspectionDone: quarterlyInspections.filter(isCompleted).length + monthlyInspections.reduce((sum, place) => sum + monthlyInspectionUnits(place), 0),
-      inspectionTotal: quarterlyInspections.length + monthlyInspections.length * 3,
+      inspectionDone: inspection.done,
+      inspectionTotal: inspection.total,
       renewalDone: managedRenewals.filter((place) => place.label === "G5").length,
       renewalTotal: managedRenewals.length,
       urgentRenewals: (["S", "SS"] as const).map((grade) => ({ grade, renewal: renewalDates.find((item) => item.grade === grade) || null })),

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "afb18867aa",
+    "date": "2026-10-22",
+    "note": "주민번호 화면 노출 막기 — 통합 검색·조회(CSV 포함)·미수·통합이력·워킨맵·AI 답변에서 가림"
+  },
+  {
     "hash": "bd8c51c7ac",
     "date": "2026-10-22",
     "note": "일정 여러 명 배정(최대 3명) + 필드 탭 맨 위 검색 1단계 + 블로그 댓글 칸"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "57a7c54503",
     "date": "2026-09-24",
     "note": "주간현황판·골든미팅카드도 OKR과 같은 셀 방식(한 번 눌러 선택 → Del 삭제 → 더블클릭·타이핑 편집, 화살표·Tab·Ctrl+Enter로 칸 이동, 골든미팅카드 목표·월별 결과는 글자색) · OKR 머리는 제목 왼쪽, 연도·월·기간 오른쪽으로 하고 1~12월 나열 대신 분기별 1/2/3월 버튼 판이 뜨는 월 선택"
-  },
-  {
-    "hash": "6867170e03",
-    "date": "2026-09-24",
-    "note": "OKR 탭 — 파트 안에 [팀원 집계] 보기(통합집계처럼 목표별 팀원 판정·조치 필요 인원·파트 종합판정 제안, 팀원별 달성률 카드) · 셀 사이를 키보드로 옮기기(선택 상태 화살표·Tab, 편집 중 Tab/Shift+Tab/Ctrl+Enter, 판정 칸도 포함)"
   }
 ];

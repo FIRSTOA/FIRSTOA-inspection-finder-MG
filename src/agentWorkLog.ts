@@ -4,6 +4,18 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-22",
+    "hash": "afb18867aa",
+    "agent": "debugger",
+    "summary": "주민번호 화면 노출 막기 — 통합 검색·조회(CSV 포함)·미수·통합이력·워킨맵·AI 답변에서 가림"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "afb18867aa",
+    "agent": "qa-checker",
+    "summary": "주민번호 화면 노출 막기 — 통합 검색·조회(CSV 포함)·미수·통합이력·워킨맵·AI 답변에서 가림"
+  },
+  {
+    "date": "2026-10-22",
     "hash": "bd8c51c7ac",
     "agent": "feature-planner",
     "summary": "일정 여러 명 배정(최대 3명) + 필드 탭 맨 위 검색 1단계 + 블로그 댓글 칸"
