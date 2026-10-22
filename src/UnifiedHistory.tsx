@@ -17,6 +17,7 @@ import { isKeymanChange, recentChangesFor, daysSince, type ContactChange } from 
 import { normalizeId, parseInspectionBlocks, vendorMatchKey, type InspBlock } from "./ids";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { notify } from "./toast";
+import { maskRrn, maskRrnValue } from "./privacy";
 
 /**
  * 특이사항 본문 렌더 — 노션에서 이관한 글에는 사진·파일이 마크다운 링크로 들어있다.
@@ -199,7 +200,7 @@ function recordSummary(cat: string, rec: Record<string, unknown>, exclude: strin
     const text = String(value ?? "").trim();
     if (!album) album = text.match(ALBUM_RX)?.[0] || "";
     if (skip.has(key) || key.startsWith("_") || !text) continue;
-    fields.push({ key, value: text });
+    fields.push({ key, value: maskRrnValue(text, key) });   // 화면용 — 주민번호 가림(2026-10-22)
   }
   return { date, fields, album };
 }
@@ -958,7 +959,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
             const vendorName = recordVendor(record) || queryVendor;
             const { date, fields, album } = recordSummary(activeCat, record, [who.key, directRegion.key]);
             // 같은 업체 기록 목록에서 업체명을 제목으로 반복하면 내용이 안 보인다 — 대표 문장이 제목
-            const title = priorityPreview(activeCat, record) || vendorName;
+            const title = maskRrn(priorityPreview(activeCat, record) || vendorName);
             // 한 방문에 기기 여러 대(원문 블록) — 첫 기기(구조화 컬럼)만 보여주면 나머지 기기가 사라진다
             const blocks = (activeCat === "점검" || activeCat === "AS") ? cachedBlocks(record) : [];
             return <details key={`${vendorName}-${date}-${index}`} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-300">
@@ -983,7 +984,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
               <div className="border-t border-slate-200 bg-slate-50">
                 {(() => {
                   // 점검·AS는 FIELD에서 검색할 때와 똑같이 — 직원들이 매일 보는 원문 양식 그대로 (라벨 분해는 더 헷갈린다)
-                  const rawText = (activeCat === "점검" || activeCat === "AS") ? String(record["_원문"] || "").trim() : "";
+                  const rawText = (activeCat === "점검" || activeCat === "AS") ? maskRrn(String(record["_원문"] || "").trim()) : "";
                   if (rawText) return (
                     <div className="bg-white px-4 py-3 sm:px-5">
                       <pre className="whitespace-pre-wrap break-words font-sans text-[13px] font-medium leading-6 text-slate-800">{rawText}</pre>

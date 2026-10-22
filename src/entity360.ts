@@ -14,6 +14,7 @@ import { historyCoreName, vendorMatchKey } from "./ids";
 import { kstDate } from "./visits";
 import { ACTIVITY_LABELS } from "./operations";
 import { selectRows } from "./supabase";
+import { maskDeep, maskRrn } from "./privacy";
 
 /**
  * 코드 체계가 둘이다(2026-10-10 실측):
@@ -452,10 +453,11 @@ export function toEvent(src: SourceDef, row: Row, loose: boolean): EventItem {
   const snippet = src.snippetKeys.map((k) => { const v = str(row, k); return v && v !== title ? v : ""; }).filter(Boolean).join(" · ");
   return {
     key: `${src.table}:${String(row.id ?? "")}`, source: src, row, loose,
-    date: dateOf(row, src.dateKeys), title: title.slice(0, 160), snippet: snippet.slice(0, 220),
-    author: firstOf(row, src.authorKeys), team: firstOf(row, src.teamKeys),
+    // 화면·AI 로 나가는 글은 주민번호 가림(2026-10-22). row(원본)는 그대로 — 검색·매칭 키
+    date: dateOf(row, src.dateKeys), title: maskRrn(title).slice(0, 160), snippet: maskRrn(snippet).slice(0, 220),
+    author: maskRrn(firstOf(row, src.authorKeys)), team: firstOf(row, src.teamKeys),
     model: firstOf(row, src.modelKeys), serial: firstOf(row, src.serialKeys), asset: firstOf(row, src.assetKeys),
-    vendor: firstOf(row, [...src.nameCols, ...(src.looseCols || [])]),
+    vendor: maskRrn(firstOf(row, [...src.nameCols, ...(src.looseCols || [])])),
   };
 }
 /** 이 기록의 업체가 검색한 업체와 다른가 — 같은 자산기번이 다른 업체에서 쓰이던 이력(이동 기기)을 표시할 때 */
@@ -598,7 +600,8 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
   const counts = results.map((r) => ({ label: r.source.label, group: r.source.group, exact: r.exact.length, loose: r.loose.length, ok: r.ok, rawSkipped: !!r.rawSkipped }));
   const dated = exact.map((ev) => ev.date).filter(Boolean).sort();
   const todayYmd = kstDate(today);
-  return {
+  // 상태 카드(주소·키맨·메모·임대 조건…)는 화면과 AI 질문(compactForAsk)으로 나간다 — 통째로 주민번호 가림(2026-10-22)
+  return maskDeep<State>({
     address, addressFrom, keyman, keymanFrom,
     tel: mode(lease.map((r) => str(r, "일반전화"))), grade: mode(lease.map((r) => str(r, "등급"))), leaseStatus: mode(lease.map((r) => str(r, "임대여부"))),
     devices,
@@ -646,5 +649,5 @@ export function deriveState(e: Entity, results: SourceResult[], today = new Date
       ...lease.map((r) => str(r, "추가조건")).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).map((text) => ({ kind: "임대조건" as const, pinned: false, from: "임대리스트", text })),
     ].filter((n) => n.text),
     counts, total: exact.length, oldest: dated[0] || "", newest: dated[dated.length - 1] || "",
-  };
+  });
 }

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link2, RefreshCw, Search } from "lucide-react";
 import { selectAllRows, selectRows, upsertRow } from "./supabase";
 import { clearWorkinCodeCache } from "./vendorCodes";
+import { maskCode } from "./privacy";
 
 type PlaceRow = { id: number; name: string; team: string; kind: string; quarter: number };
 type MasterRow = { code: string; name: string; device_count: number };
@@ -109,7 +110,7 @@ export default function VendorCodeAdmin() {
                       className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-left transition hover:border-blue-400 hover:bg-blue-50 disabled:opacity-40">
                       <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-800">{m.name}</span>
                       <span className="shrink-0 text-[10px] font-bold text-slate-400">기기 {m.device_count}대</span>
-                      <span className="shrink-0 font-mono text-[10px] font-bold text-slate-300">{m.code}</span>
+                      <span className="shrink-0 font-mono text-[10px] font-bold text-slate-300">{maskCode(m.code)}</span>
                     </button>
                   ))}
                   {!results.length && query.trim().length >= 2 && !searching && <div className="px-1 py-1 text-[11px] font-semibold text-slate-400">검색 결과 없음 — 임대리스트에 없는 곳(신규·타사)일 수 있습니다.</div>}

@@ -1,6 +1,7 @@
 import { addUsage, emptyUsage, loadPrices, logUsage, priceUsage } from "../_shared/ai-usage.ts";
 import GUIDE_PAGES from "../_shared/app-guide.json" with { type: "json" };
 import { APP_GUIDE_EXTRA } from "../_shared/app-guide-extra.ts";
+import { maskDeep, maskRrn } from "../_shared/privacy.ts";
 /**
  * 전체 데이터에 물어보기 — "C팀 미수 중 CS가 체크할 곳", "10월 초과 업체 중 N등급" 같은 묶음 질문 (2026-10-10)
  *
@@ -115,7 +116,8 @@ async function queryRows(args: Record<string, unknown>) {
   try {
     const rows = await rest(`${table}?${parts.join("&")}`) as Record<string, unknown>[];
     const cap = cat.long ? 1600 : 140;
-    return { table, count: rows.length, truncated: rows.length >= limit, rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, trimTo(v, cap)]))) };
+    // 주민번호 가림(2026-10-22) — 모델이 보는 행과 앱에 돌려주는 행 모두. 조건(filters)은 원본 값으로 걸린다
+    return { table, count: rows.length, truncated: rows.length >= limit, rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, trimTo(maskDeep(v, k), cap)]))) };
   } catch (e) { return { error: String((e as Error).message) }; }
 }
 
@@ -231,7 +233,7 @@ Deno.serve(async (req) => {
         const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k), model);
         const usd = priceUsage(usage, prices);
         await logUsage(sbUrl, sbHeaders, { fn: "data-ask", model, question, author: String(body.author || ""), usage, usd, ms: Date.now() - t0 });
-        return Response.json({ answer: String(answer).trim().slice(0, 6000), rows: lastRows.slice(0, 120), table: lastTable, calls, model, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });
+        return Response.json({ answer: maskRrn(String(answer).trim()).slice(0, 6000), rows: maskDeep(lastRows.slice(0, 120)), table: lastTable, calls, model, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });
       }
       input = [];
       for (const call of fnCalls) {

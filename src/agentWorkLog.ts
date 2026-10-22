@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-22",
+    "hash": "bd8c51c7ac",
+    "agent": "feature-planner",
+    "summary": "일정 여러 명 배정(최대 3명) + 필드 탭 맨 위 검색 1단계 + 블로그 댓글 칸"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "bd8c51c7ac",
+    "agent": "developer",
+    "summary": "일정 여러 명 배정(최대 3명) + 필드 탭 맨 위 검색 1단계 + 블로그 댓글 칸"
+  },
+  {
+    "date": "2026-10-22",
+    "hash": "bd8c51c7ac",
+    "agent": "qa-checker",
+    "summary": "일정 여러 명 배정(최대 3명) + 필드 탭 맨 위 검색 1단계 + 블로그 댓글 칸"
+  },
+  {
+    "date": "2026-10-22",
     "hash": "43df4054ae",
     "agent": "feature-planner",
     "summary": "FIELD 매뉴얼 체계: 사용자용 16장 + 운영·이관용 12장(docs/manual), 일정 여러 명 배정·탭 검색 설계안"

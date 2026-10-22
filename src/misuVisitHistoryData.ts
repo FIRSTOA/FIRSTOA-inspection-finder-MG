@@ -6,6 +6,7 @@
 // 이전 기록(D10): misu 표의 카톡 행(2023-11~2026-06-23) + 시트 _raw 의 경영체크·전략체크·CS체크 메모 → 회색, 체크리스트엔 안 셈.
 import { kstDate } from "./visits";
 import { selectAllRows, selectRows, updateRows } from "./supabase";
+import { maskRrn } from "./privacy";
 import {
   effectiveMisuVisits, formatKstDateTime, formatMisuAmount, groupMisuVisitsByVendor, isOffHours, kstParts, matchMisuVendor,
   mergeMisuTimeline, misuVendorStatus, misuVisitLines, normMisuVendorName, PHOTO_SLOTS, PHOTO_SLOT_LABEL,
@@ -83,7 +84,7 @@ export function kakaoRowToLegacy(row: Rec): MisuLegacyEntry | null {
   if (!text) return null;
   if (/미수금 조회 결과/.test(text)) return null;
   if (author && text.startsWith(`${author}:`)) text = text.slice(author.length + 1).trim();
-  return { at: legacyAt(s(row["입력일"]) || s(row["_등록시각"])), source: "카톡", author: author || undefined, text };
+  return { at: legacyAt(s(row["입력일"]) || s(row["_등록시각"])), source: "카톡", author: author || undefined, text: maskRrn(text) };   // 화면용 — 주민번호 가림(2026-10-22)
 }
 
 /** 시트 행 _raw 의 경영체크·전략체크·CS체크 메모 → 이전 기록(날짜는 마지막 체크일, 없으면 입력일). 빈 메모는 뺀다. */
@@ -93,7 +94,7 @@ export function sheetMemosToLegacy(row: Rec): MisuLegacyEntry[] {
   for (const [col, who] of [["경영체크", "경영담당"], ["전략체크", "전략담당"], ["CS체크", "CS담당"]] as const) {
     const text = cell(row, col);
     if (!text) continue;
-    out.push({ at, source: col, author: cell(row, who) || undefined, text });
+    out.push({ at, source: col, author: cell(row, who) || undefined, text: maskRrn(text) });   // 화면용 — 주민번호 가림(2026-10-22)
   }
   return out;
 }

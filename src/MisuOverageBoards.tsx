@@ -4,6 +4,7 @@ import { selectAllRows, selectRows } from "./supabase";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import type { MisuVisit } from "./misuVisit";
 import { requestMisuSupplement } from "./misuSupplement";
+import { maskRrnValue } from "./privacy";
 
 // [방문 이력](CS 방문이력 조회, 2026-10-22) — 누를 때만 내려받는다
 const MisuVisitHistory = lazy(() => import("./MisuVisitHistory"));
@@ -92,7 +93,8 @@ type DetailLayout = {
 
 export function SheetDetailModal({ title, row, fields, onClose, layout }: { title: string; row: SheetRecord; fields: string[]; onClose: () => void; layout?: DetailLayout }) {
   const raw = (row["_raw"] && typeof row["_raw"] === "object" ? row["_raw"] : {}) as Record<string, unknown>;
-  const valueOf = (key: string) => str(row, key) || String(raw[key] ?? "").trim();
+  // 상세 팝업의 모든 칸(배지·숫자·묶음·나머지·원문)이 여기서 글자를 얻는다 — 거래처코드 칸 주민번호 가림(2026-10-22)
+  const valueOf = (key: string) => maskRrnValue(str(row, key) || String(raw[key] ?? "").trim(), key);
   const used = new Set<string>(["_업체명"]);
   const badges = ["등급", "지역", "임대여부", "관리담당자", "관리 담당자"].map((key) => { used.add(key); return [key, valueOf(key)] as [string, string]; }).filter(([, v]) => v);
   const metrics = (layout?.metrics || []).map(([key, kind, label]) => { used.add(key); return { key, kind, label: label || key, value: valueOf(key) }; }).filter((m) => m.value);

@@ -15,6 +15,7 @@ import type { Cost, Usage } from "../supabase/functions/_shared/ai-usage.ts";
 import UnifiedHistory from "./UnifiedHistory";
 import AnswerImage from "./AnswerImage";
 import { extractSvg, mobilePhonesIn } from "./answerSvg";
+import { maskCode, maskDeep, maskRrn } from "./privacy";
 import {
   buildEntity, countRows, daysSince, deriveState, entityTokensFromQuestion, gather, gatherModelRefs, identKey, isOtherVendor, isStrongCandidate, rawTextOf, resolveCandidates, SOURCES, toEvents,
   type Candidate, type Entity, type EventItem, type Group, type ModelRef, type SourceResult, type State,
@@ -41,7 +42,7 @@ function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
     m: ev.model, sn: ev.serial, as: ev.asset, ...(isOtherVendor(ev, entity) ? { other: ev.vendor.slice(0, 40) } : {}),
   }));
   return {
-    entity: { name: entity.name, code: entity.code, leaseCode: entity.leaseCode, names: entity.names.slice(0, 8), serials: entity.serials, assets: entity.assets },
+    entity: { name: entity.name, code: maskCode(entity.code), leaseCode: entity.leaseCode, names: entity.names.slice(0, 8), serials: entity.serials, assets: entity.assets },
     state: {
       address: state.address, addressFrom: state.addressFrom, keyman: state.keyman, tel: state.tel, grade: state.grade, leaseStatus: state.leaseStatus,
       devices: state.devices, misu: state.misu, overage: state.overage, recontract: state.recontract, bulman: state.bulman, notes: state.notes.slice(0, 12).map((n) => `${n.kind}: ${n.text}`),
@@ -147,7 +148,7 @@ export default function Search360({ author }: { author: string }) {
       const body = { question: text, author, ...compactForAsk(e, st, evs) };
       const res = await invokeEdgeFunction<{ answer?: string; error?: string; usage?: Usage; cost?: Cost }>("entity-ask", body, 90_000);
       if (res.error) throw new Error(res.error);
-      setAnswers((cur) => [{ q: text, a: String(res.answer || "").trim(), used: body.events.length, usage: res.usage, cost: res.cost }, ...cur].slice(0, 6));
+      setAnswers((cur) => [{ q: text, a: maskRrn(String(res.answer || "").trim()), used: body.events.length, usage: res.usage, cost: res.cost }, ...cur].slice(0, 6));
     } catch (err) {
       notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
     } finally { setAsking(false); }
@@ -179,7 +180,7 @@ export default function Search360({ author }: { author: string }) {
     try {
       const res = await invokeEdgeFunction<{ answer?: string; rows?: Record<string, unknown>[]; table?: string; calls?: string[]; error?: string; usage?: Usage; cost?: Cost }>("data-ask", { question: q, author }, 180_000);
       if (res.error) throw new Error(res.error);
-      setDataAnswers((cur) => [{ q, a: String(res.answer || "").trim(), rows: res.rows || [], table: res.table || "", calls: res.calls || [], usage: res.usage, cost: res.cost }, ...cur].slice(0, 5));
+      setDataAnswers((cur) => [{ q, a: maskRrn(String(res.answer || "").trim()), rows: maskDeep(res.rows || []), table: res.table || "", calls: res.calls || [], usage: res.usage, cost: res.cost }, ...cur].slice(0, 5));
     } catch (err) {
       notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
     } finally { setDataAsking(false); }
@@ -368,7 +369,7 @@ export default function Search360({ author }: { author: string }) {
             {candidates.map((c) => (
               <button key={`${c.code}|${c.leaseCode}`} type="button" onClick={() => void pick(c, query)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-blue-400">
                 <div className="truncate text-[13px] font-black text-slate-900">{c.name}</div>
-                <div className="mt-0.5 text-[10.5px] font-bold text-slate-500">{c.code ? `코드 ${c.code}` : `임대 코드 ${c.leaseCode}`} · 기기 {c.deviceCount}대 · <span className={EXACT_HOW.has(c.how) ? "text-emerald-700" : "text-amber-700"}>{c.how}</span></div>
+                <div className="mt-0.5 text-[10.5px] font-bold text-slate-500">{c.code ? `코드 ${maskCode(c.code)}` : `임대 코드 ${c.leaseCode}`} · 기기 {c.deviceCount}대 · <span className={EXACT_HOW.has(c.how) ? "text-emerald-700" : "text-amber-700"}>{c.how}</span></div>
               </button>
             ))}
             <button type="button" onClick={() => void pick(null, query)} className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-[12px] font-bold text-slate-500 hover:border-slate-500">코드 없이 "{query}" 글자 그대로 모으기</button>
@@ -383,7 +384,7 @@ export default function Search360({ author }: { author: string }) {
             <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-black text-slate-500">"{entity.query}" → {entity.code ? `거래처 코드 ${entity.code}` : entity.leaseCode ? `임대 코드 ${entity.leaseCode}` : "코드 없음 · 글자 그대로"}{entity.leaseCode && entity.code ? ` · 임대 코드 ${entity.leaseCode}` : ""}{foundBy && <span className="ml-2 text-indigo-300">{foundBy}</span>}{candidates.length > 1 && <button type="button" onClick={() => setPhase("choose")} className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-slate-900 hover:bg-slate-100">다른 후보 {candidates.length - 1}</button>}</div>
+                  <div className="text-[11px] font-black text-slate-500">"{entity.query}" → {entity.code ? `거래처 코드 ${maskCode(entity.code)}` : entity.leaseCode ? `임대 코드 ${entity.leaseCode}` : "코드 없음 · 글자 그대로"}{entity.leaseCode && entity.code ? ` · 임대 코드 ${entity.leaseCode}` : ""}{foundBy && <span className="ml-2 text-indigo-300">{foundBy}</span>}{candidates.length > 1 && <button type="button" onClick={() => setPhase("choose")} className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black text-slate-900 hover:bg-slate-100">다른 후보 {candidates.length - 1}</button>}</div>
                   <div className="mt-0.5 text-[20px] font-black leading-tight text-slate-900">{entity.name}</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {state.grade && chip(`${state.grade}등급`, "bg-slate-900 text-white")}
@@ -396,7 +397,7 @@ export default function Search360({ author }: { author: string }) {
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-1.5">
                   <button type="button" onClick={() => setHistVendor(entity.name)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-900 hover:bg-slate-100">통합이력 ↗</button>
-                  <button type="button" onClick={() => { void navigator.clipboard.writeText(`${entity.name} (${entity.code || entity.leaseCode})\n주소 ${state.address}\n키맨 ${state.keyman}\n전화 ${state.tel}`).then(() => notify("복사했습니다", "success")); }} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-900 hover:bg-slate-100">복사</button>
+                  <button type="button" onClick={() => { void navigator.clipboard.writeText(`${entity.name} (${maskCode(entity.code) || entity.leaseCode})\n주소 ${state.address}\n키맨 ${state.keyman}\n전화 ${state.tel}`).then(() => notify("복사했습니다", "success")); }} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-900 hover:bg-slate-100">복사</button>
                   <button type="button" onClick={() => { setPhase("idle"); setEntity(null); setResults([]); setInput(""); setRouteNote(""); }} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-900 hover:bg-slate-100">새 검색</button>
                 </div>
               </div>
@@ -540,7 +541,7 @@ export default function Search360({ author }: { author: string }) {
                 <div className="sticky top-0 z-[1] flex items-center gap-2 border-b border-slate-100 bg-white/95 px-4 py-1.5 backdrop-blur"><span className="text-[11px] font-black text-slate-700">{month === "날짜 없음" ? month : `${month.slice(0, 4)}년 ${Number(month.slice(5))}월`}</span><span className="text-[10px] font-bold text-slate-400">{list.length}건</span></div>
                 <div className="divide-y divide-slate-100">
                   {list.map((ev) => {
-                    const raw = rawTextOf(ev.row); const open = openRaw === ev.key;
+                    const raw = maskRrn(rawTextOf(ev.row)); const open = openRaw === ev.key;
                     return (
                       <div key={ev.key} className={`px-4 py-2.5 text-xs ${ev.loose ? "bg-amber-50/40" : ""}`}>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

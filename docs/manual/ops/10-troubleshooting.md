@@ -89,3 +89,6 @@ where d.status <> 'succeeded' order by d.start_time desc limit 20;
 
 ## 12. 출근 전·심야에 카톡이 나갔다
 - 규칙: 자동 메시지는 KST 10시 이후, 야간 22:00~08:00 은 봇·노트북 모두 보류. 위반이면 어느 경로(cron 일정·엣지 가드·노트북 시계)인지 `room_activity.source` 와 cron 일정(UTC!)으로 찾는다. cron 은 UTC 라 `0 1 * * *` = KST 10:00.
+
+## 13. 화면에 주민번호가 보인다 / 시리얼이 `******` 로 가려졌다
+- 가림 규칙은 한 파일 `supabase/functions/_shared/privacy.ts`(앱은 `src/privacy.ts` 로 다시 내보냄, 테스트 tests/privacy*.test.ts). 새 화면이 원본 행을 그대로 그리면 `maskRrn`(글)·`maskRrnValue(값, 칸이름)`·`maskDeep(행)` 을 거치게 하고, AI 답이면 entity-ask·data-ask 를 다시 배포했는지 본다. 하이픈 없는 13자리는 기기 시리얼과 구별이 안 돼 "거래처 코드/주민번호" 칸·이름표가 있을 때만 가린다. DB 원본(임대리스트 시트)은 고치지 않는다 — 정리는 시트 담당 부서에.

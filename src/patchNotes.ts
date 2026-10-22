@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "bd8c51c7ac",
+    "date": "2026-10-22",
+    "note": "일정 여러 명 배정(최대 3명) + 필드 탭 맨 위 검색 1단계 + 블로그 댓글 칸"
+  },
+  {
     "hash": "701ab4327f",
     "date": "2026-10-22",
     "note": "노트북 README 키맨 포스터 시각 정정(월 08시 → 10시, 옛 작업 스케줄러 방식 안내)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "6867170e03",
     "date": "2026-09-24",
     "note": "OKR 탭 — 파트 안에 [팀원 집계] 보기(통합집계처럼 목표별 팀원 판정·조치 필요 인원·파트 종합판정 제안, 팀원별 달성률 카드) · 셀 사이를 키보드로 옮기기(선택 상태 화살표·Tab, 편집 중 Tab/Shift+Tab/Ctrl+Enter, 판정 칸도 포함)"
-  },
-  {
-    "hash": "53c799af49",
-    "date": "2026-09-24",
-    "note": "주간현황판·OKR — 위 필터 바를 제목 블록 안으로(조회 조건은 글자 드롭다운, 기간 탭·월 버튼은 제목 오른쪽) · OKR 열 너비를 머리 가장자리 끌어 조절(브라우저에 기억, 두 번 누르면 기본) · 주간현황판 외근 표 머리 줄바꿈 방지 · 골든미팅카드 머리 색을 주간현황판과 같게"
   }
 ];

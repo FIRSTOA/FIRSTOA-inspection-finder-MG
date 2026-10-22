@@ -15,6 +15,8 @@ import SupplyBoard from "./SupplyBoard";
 import { kstDate } from "./visits";
 import { okrWeeksInMonth } from "./okr";
 import { calendarRange } from "./periodRange";
+import { maskDeep } from "./privacy";
+import { editFieldState, lookupCsv, lookupText } from "./lookupCells";
 
 type Row = Record<string, unknown>;
 
@@ -42,15 +44,8 @@ function weekOf(date: string): { start: string; end: string } {
 const shiftDays = (date: string, days: number) => { const d = new Date(`${date}T12:00:00+09:00`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const md = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
 
-const SHEET_ERROR = /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NULL!|ERROR!?)$/i;
-function text(row: Row, key: string) {
-  const value = row[key];
-  if (value === null || value === undefined) return "";
-  if (Array.isArray(value)) return value.map((v) => (typeof v === "object" ? JSON.stringify(v) : String(v))).join(", ");   // work_kinds 같은 배열은 쉼표로
-  if (typeof value === "object") return JSON.stringify(value);
-  const out = String(value);
-  return SHEET_ERROR.test(out.trim()) ? "" : out;   // 시트 수식 에러값은 빈칸 취급
-}
+// 표 칸·모바일 카드·상세 제목·CSV 글자 — 주민번호 가림 포함(2026-10-22, src/lookupCells.ts)
+const text = lookupText;
 
 /** 1,234 형태로 보이는 값이면 숫자로 취급해 오른쪽 정렬·등폭이 자연스럽게 */
 function shortValue(value: string, key: string) {
@@ -58,10 +53,6 @@ function shortValue(value: string, key: string) {
   if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 16).replace("T", " ");
   if (key === "photos" || value.startsWith("[")) return value === "[]" ? "-" : value;
   return value;
-}
-
-function csvCell(value: string) {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 export default function DataLookup({ author = "" }: { author?: string }) {
@@ -293,10 +284,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   const hideClass = (column: LookupColumn) => column.hideBelow === "lg" ? "hidden lg:block" : column.hideBelow === "sm" ? "hidden sm:block" : "";
 
   const exportCsv = () => {
-    const header = visibleColumns.map((column) => column.label);
-    const lines = [header.map(csvCell).join(",")];
-    rows.forEach((row) => lines.push(visibleColumns.map((column) => csvCell(text(row, column.key))).join(",")));
-    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["﻿" + lookupCsv(visibleColumns, rows)], { type: "text/csv;charset=utf-8" });   // 주민번호 가림 포함(lookupText)
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -309,7 +297,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     if (!detail) return [] as Array<[string, string]>;
     return Object.entries(detail)
       .filter(([key]) => !key.startsWith("_dupKey") && key !== "id" && key !== "_edit_log")
-      .map(([key, value]) => [key, value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)] as [string, string])
+      .map(([key, raw]) => { const value = maskDeep(raw, key); return [key, value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)] as [string, string]; })   // 주민번호 가림
       .filter(([, value]) => value.trim());
   }, [detail]);
 
@@ -557,11 +545,19 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                 {detailFields.filter(([key]) => !["_원문", "원문", "source_text", "report_text", "_raw", "photos", "remote_meta"].includes(key)).map(([key, value]) => {
                   const phone = value.match(/0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
                   const editable = editDraft !== null && (EDITABLE_FIELDS[category.table] || []).includes(key);
+                  // 입력칸은 원본 값으로 시작. 원본에 주민번호가 든 칸은 잠금(가린 글자 표시) — 2026-10-22
+                  const edit = editable ? editFieldState(detail, key) : null;
                   return (
                     <div key={key} className="flex items-start justify-between gap-3 border-b border-slate-50 py-1.5 last:border-0">
                       <span className="w-24 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{key.replace(/^_/, "")}</span>
-                      {editable
-                        ? <input value={editDraft[key] ?? value} onChange={(e) => setEditDraft((cur) => ({ ...(cur || {}), [key]: e.target.value }))}
+                      {editable && edit?.locked
+                        ? <span className="min-w-0 flex-1">
+                            <input value={edit.shown} readOnly aria-readonly="true" data-locked="rrn"
+                              className="w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 text-sm font-bold text-slate-500 outline-none" />
+                            <span className="mt-0.5 block text-[11px] font-bold text-amber-700">개인정보가 들어 있어 이 칸은 여기서 고칠 수 없습니다(관리자에게)</span>
+                          </span>
+                        : editable
+                        ? <input value={editDraft[key] ?? edit?.initial ?? ""} onChange={(e) => setEditDraft((cur) => ({ ...(cur || {}), [key]: e.target.value }))}
                             className="min-w-0 flex-1 rounded-lg border border-blue-300 bg-blue-50/40 px-2 py-1 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                         : <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{value}</span>}
                       {!editable && phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white transition hover:bg-emerald-700">📞</a>}
@@ -601,7 +597,8 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                         className="mr-auto rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600">취소</button>
                       <button type="button" disabled={editBusy || !Object.keys(editDraft).length}
                         onClick={async () => {
-                          const changed = Object.entries(editDraft).filter(([key, next]) => next.trim() !== String(detail[key] ?? "").trim());
+                          // 잠긴 칸(원본에 주민번호)은 저장 대상에서 뺀다 — 2026-10-22
+                          const changed = Object.entries(editDraft).filter(([key, next]) => !editFieldState(detail, key).locked && next.trim() !== String(detail[key] ?? "").trim());
                           // _원문에도 같은 라벨 줄이 있으면 함께 고친다 — FIELD 불러오기·통합이력이 원문을 읽어서,
                           // 컬럼만 고치면 거기엔 옛 값이 그대로 남는다(실제 지적). 변경 전 값은 _edit_log에 남긴다.
                           const raw = typeof detail["_원문"] === "string" ? String(detail["_원문"]) : "";
@@ -610,7 +607,8 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                             const lines = raw.split("\n");
                             let touched = false;
                             for (const key of EDITABLE_FIELDS[category.table] || []) {
-                              const next = (editDraft[key] ?? String(detail[key] ?? "")).trim();
+                              if (editFieldState(detail, key).locked) continue;   // 잠긴 칸은 원문 줄도 건드리지 않는다
+                              const next = (editDraft[key] ?? String(detail[key] ?? "")).trim();   // 원본 기준(가린 값 아님)
                               if (!next) continue;
                               const hits = lines.map((line, index) => ({ index, m: line.match(new RegExp(`^(\\s*${key}\\s*[:：]\\s*)(.*)$`)) }))
                                 .filter((h): h is { index: number; m: RegExpMatchArray } => !!h.m);

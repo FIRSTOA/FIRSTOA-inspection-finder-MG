@@ -5,7 +5,7 @@
  * - 업체 찾기·키 묶음·표 수집은 통합 검색 360(src/entity360.ts)을 그대로 쓴다: gather(e, { only }) 로 그 탭 표만.
  * - SOURCES 에 없는 표(misu_visits)는 SOURCES 를 고치지 않고 여기 EXTRA_SOURCES 로 덧붙여 같은 조건 조립 함수로 모은다.
  * - 건수는 세지 않는다(건수 원본 = src/workCount.ts). 요약은 "마지막 사건" 날짜만.
- * - 주민번호 모양 값(앞6-뒤7)은 화면에 내보내기 전에 가린다(maskRrn).
+ * - 주민번호 모양 값(앞6-뒤7)은 화면에 내보내기 전에 가린다(maskRrn — 본문은 src/privacy.ts, 2026-10-22 옮김).
  *
  * React 없는 순수 로직 + 조회 한 함수(runTabSearch). 테스트: tests/tabSearch.test.ts
  */
@@ -14,6 +14,7 @@ import {
   type Entity, type Row, type SourceDef, type SourceResult,
 } from "./entity360";
 import { selectRows } from "./supabase";
+import { maskRrn } from "./privacy";
 
 // ── 탭 정의 ─────────────────────────────────────────────────
 export type TabKey =
@@ -142,8 +143,8 @@ export function sourcesOf(spec: TabSpec): SourceDef[] {
 }
 
 // ── 개인정보 가림 ─────────────────────────────────────────────
-/** 주민번호 모양(앞 6자리-뒤 7자리, 뒤 첫 자리 1~4)을 가린다. 하이픈·공백 없이 붙은 13자리도. 더 긴 숫자열 속은 건드리지 않는다 */
-export const maskRrn = (s: string): string => String(s ?? "").replace(/(?<!\d)(\d{6})[-\s]?([1-4])\d{6}(?!\d)/g, "$1-$2******");
+// 본문은 src/privacy.ts(엣지 함수와 공용). 2026-10-22 전엔 하이픈 없는 13자리도 가려 기기 시리얼(8001104…)까지 가려졌다 — 이제 이름표가 있을 때만
+export { maskRrn };
 
 // ── 결과 → 타임라인 줄 ─────────────────────────────────────────
 export type TabLine = {

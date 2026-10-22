@@ -20,6 +20,8 @@ import { maxUpdatedAt, mergePlaces, staleIdsFromStamps, updatedAtMs } from "./pl
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 import { notify } from "./toast";
 import { addressCore, mapQuery } from "./address";
+import { maskRrn } from "./privacy";
+import { restoreMaskedImport } from "./workinPrivacy";
 
 type MapLabel = {
   code: string;
@@ -2498,7 +2500,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
       const ok = await askConfirm(`${importTeam}팀 ${importQuarter}분기 ${kindLabel} 기존 ${existing}곳을 지우고 새 파일 ${pendingImport.length}곳으로 교체합니다. 되돌릴 수 없어요 — 계속할까요?`, { danger: true, okLabel: "교체" });
       if (!ok) return;
     }
-    const imported = pendingImport.map((place) => ({ ...place, team: importTeam, quarter: importQuarter, kind: importKind }));
+    // 가린 값("900101-1******")이 원본을 덮지 않게 — 같은 팀·분기·업무의 기존 장소 값 유지, 없으면 비움(2026-10-22)
+    const scopeExisting = places.filter((place) => place.team === importTeam && place.quarter === importQuarter && place.kind === importKind);
+    const restored = restoreMaskedImport(pendingImport.map((place) => ({ ...place, team: importTeam, quarter: importQuarter, kind: importKind })), scopeExisting);
+    const imported = restored.places;
+    if (restored.kept || restored.cleared) notify(`가린 값 ${restored.kept + restored.cleared}건 — 기존 값 유지 ${restored.kept}건 · 비움 ${restored.cleared}건`, "info");
     // 교체: 새 목록을 먼저 넣고, 그 다음 "새 목록에 없는" 옛 행만 지운다 — 먼저 지우다 LTE 가 끊기면 팀 목록이 반쯤 사라지던 것(2026-10-10 점검).
     // 새 목록이 비었을 때(전부 지우기)만 예전처럼 바로 지운다
     if (sharedReady && importMode === "replace" && !imported.length) {
@@ -2558,14 +2564,15 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
         "라벨": place.label,
         "지도에서": place.visible ? "ON" : "OFF",
         "이름": place.name,
-        "코멘트": place.comment,
+        "코멘트": maskRrn(place.comment),   // 직원이 가져가는 파일 — 메모와 같이 가림(2026-10-22)
         "전화번호": place.phone,
         "주소": place.address,
         "상세주소": place.addressDetail,
         "위도": place.latitude,
         "경도": place.longitude,
       };
-      for (let index = 0; index < exportMemoCount; index += 1) values[`메모${index + 1}`] = place.memos[index] || "";
+      // 내려받는 엑셀도 화면과 같이 주민번호 가림(2026-10-22) — 다시 가져오면 가린 칸은 기존 값 유지(restoreMaskedImport)
+      for (let index = 0; index < exportMemoCount; index += 1) values[`메모${index + 1}`] = maskRrn(place.memos[index] || "");
       return values;
     });
     const workbook = new ExcelJS.Workbook();
@@ -2852,13 +2859,13 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                     </div>
                     <div>
                       <div className="font-black text-slate-400">기기·코멘트</div>
-                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{place.comment || "-"}</div>
+                      <div className="mt-1 whitespace-pre-wrap font-semibold leading-5">{maskRrn(place.comment) || "-"}</div>
                     </div>
                     <details>
                       <summary className="cursor-pointer font-black text-slate-400">메모 {place.memos.length}개</summary>
                       {place.memos.length ? (
                         <div className="mt-1 divide-y divide-slate-100 border-y border-slate-100">
-                          {place.memos.map((memo, index) => <div key={`${place.id}-${index}`} className="whitespace-pre-wrap py-2 font-semibold leading-5">{memo}</div>)}
+                          {place.memos.map((memo, index) => <div key={`${place.id}-${index}`} className="whitespace-pre-wrap py-2 font-semibold leading-5">{maskRrn(memo)}</div>)}
                         </div>
                       ) : <div className="mt-1 font-semibold text-slate-400">기록된 메모가 없습니다.</div>}
                     </details>
@@ -3274,7 +3281,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
             </section>
             <section className="px-4 py-4">
               <div className="text-xs font-black text-slate-400">메모</div>
-              {place.memos.length ? <div className="mt-2 divide-y divide-slate-100">{place.memos.map((memo, index) => <div key={`${place.id}-mobile-memo-${index}`} className="whitespace-pre-wrap py-3 text-sm font-semibold leading-6">{memo}</div>)}</div> : <div className="mt-2 text-sm font-semibold text-slate-400">기록된 메모가 없습니다.</div>}
+              {place.memos.length ? <div className="mt-2 divide-y divide-slate-100">{place.memos.map((memo, index) => <div key={`${place.id}-mobile-memo-${index}`} className="whitespace-pre-wrap py-3 text-sm font-semibold leading-6">{maskRrn(memo)}</div>)}</div> : <div className="mt-2 text-sm font-semibold text-slate-400">기록된 메모가 없습니다.</div>}
             </section>
           </main>
         </div>;

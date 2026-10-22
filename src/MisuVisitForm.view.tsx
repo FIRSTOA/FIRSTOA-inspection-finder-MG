@@ -8,6 +8,7 @@
 //     validation={validateMisuVisit(draft)} previewLines={misuVisitLines(draft)} … />
 // 칩 문구 기본값은 misuVisit.ts 의 상수와 같은 문자열이다. 바뀌면 options 로 넘긴다.
 import { useState, type ReactNode } from "react";
+import { maskCode } from "./privacy";
 import {
   AlertCircle, AlertTriangle, Building2, Camera, Check, ChevronDown, Clock, ImagePlus, Info, Loader2,
   RotateCcw, Search, Send, ShieldCheck, X,
@@ -477,7 +478,7 @@ export default function MisuVisitFormView(p: MisuVisitFormViewProps) {
                 <button type="button" onClick={p.onClearVendor} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700" aria-label="업체 다시 고르기"><X size={18} aria-hidden /></button>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                {([["팀", p.selectedVendor.team ? `${p.selectedVendor.team}팀` : ""], ["미수", p.selectedVendor.months || ""], ["잔액", p.selectedVendor.balance || ""], ["거래처코드", p.selectedVendor.companyCode || ""], ["임순", p.selectedVendor.leaseSeq || ""]] as Array<[string, string]>)
+                {([["팀", p.selectedVendor.team ? `${p.selectedVendor.team}팀` : ""], ["미수", p.selectedVendor.months || ""], ["잔액", p.selectedVendor.balance || ""], ["거래처코드", maskCode(p.selectedVendor.companyCode || "")], ["임순", p.selectedVendor.leaseSeq || ""]] as Array<[string, string]>)
                   .filter(([, x]) => x).map(([k, x]) => (
                     <span key={k} className="inline-flex items-baseline gap-1"><span className="text-[11px] font-medium text-slate-400">{k}</span><span className={`text-[12px] font-bold text-slate-800 ${k === "거래처코드" || k === "임순" ? "font-mono" : "tabular-nums"}`}>{x}</span></span>
                   ))}

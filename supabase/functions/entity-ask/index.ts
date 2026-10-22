@@ -1,4 +1,5 @@
 import { addUsage, emptyUsage, loadPrices, logUsage, priceUsage } from "../_shared/ai-usage.ts";
+import { maskDeep, maskRrn } from "../_shared/privacy.ts";
 /**
  * 통합 검색 360 — "이 업체에 대해 물어보기" (2026-10-10)
  *
@@ -37,7 +38,8 @@ Deno.serve(async (req) => {
     const t0 = Date.now();
     const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
     if (!apiKey) return Response.json({ error: "OPENAI_API_KEY missing" }, { status: 500, headers: jsonHeaders });
-    const body = await req.json().catch(() => ({}));
+    // 주민번호 가림(2026-10-22) — 앱이 이미 가려 보내지만, 옛 앱·직접 호출도 모델에 원본이 가지 않게 서버에서 한 번 더(자르기 전에 가린다)
+    const body = maskDeep(await req.json().catch(() => ({})));
     const question = String(body.question || "").trim().slice(0, 500);
     if (!question) return Response.json({ error: "question 이 필요합니다" }, { status: 400, headers: jsonHeaders });
     const events = Array.isArray(body.events) ? body.events.slice(0, 400) : [];
@@ -80,7 +82,7 @@ Deno.serve(async (req) => {
     const prices = await loadPrices(sbUrl, sbHeaders, (k) => Deno.env.get(k), model);
     const usd = priceUsage(usage, prices);
     await logUsage(sbUrl, sbHeaders, { fn: "entity-ask", model, question, author: String(body.author || ""), usage, usd, ms: Date.now() - t0 });
-    return Response.json({ answer: String(answer).trim().slice(0, 4000), model, used: payload.events.length, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });
+    return Response.json({ answer: maskRrn(String(answer).trim()).slice(0, 4000), model, used: payload.events.length, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
   }

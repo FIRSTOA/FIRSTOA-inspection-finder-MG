@@ -4,6 +4,7 @@
 // 사용자 결정(2026-10-22): D2 2차 경고는 사진 4칸 필수(칸마다 촬영 불가 사유를 고르면 통과, 1차는 경고만),
 // D3 08~21시 밖 방문은 경고 + 사유 필수, D4 방 없으면 저장만(이 파일과 무관), D10 옛 카톡 기록은 회색 '이전 기록'(체크리스트엔 안 셈).
 import { kstDate } from "./visits";
+import { maskCode } from "./privacy";
 
 // ───────── 타입 ─────────
 export type MisuRound = "1차 안내" | "2차 경고" | "추가";
@@ -447,7 +448,8 @@ export function formatMisuAmount(months: string, balance: string): string {
 }
 
 function vendorLine(d: Pick<MisuVisit, "vendor" | "company_code" | "lease_seq">): string {
-  const codes = [s(d.company_code) && `거래처코드 ${s(d.company_code)}`, s(d.lease_seq) && `임순 ${s(d.lease_seq)}`].filter(Boolean);
+  // 카톡방에 나가는 글 — 개인 고객 거래처코드는 주민번호라 가린다(2026-10-22). 저장 칸 company_code 는 원본 그대로(매칭 키)
+  const codes = [s(d.company_code) && `거래처코드 ${maskCode(s(d.company_code))}`, s(d.lease_seq) && `임순 ${s(d.lease_seq)}`].filter(Boolean);
   return `${s(d.vendor)}${codes.length ? ` (${codes.join(" · ")})` : ""}`;
 }
 
@@ -647,7 +649,8 @@ export function buildLegalCopyText(visits: MisuVisit[], info: { vendor?: string;
   const latest = eff[0];
   const vendor = s(info.vendor) || s(latest?.vendor);
   const codes = [
-    s(info.company_code || latest?.company_code) && `거래처코드 ${s(info.company_code || latest?.company_code)}`,
+    // 법무 복사본도 직원 손을 거친다 — 주민번호 가림(2026-10-22). 실번호가 필요하면 법무가 임대리스트 원본에서
+    s(info.company_code || latest?.company_code) && `거래처코드 ${maskCode(s(info.company_code || latest?.company_code))}`,
     s(info.lease_seq || latest?.lease_seq) && `임순 ${s(info.lease_seq || latest?.lease_seq)}`,
     formatMisuAmount(s(info.misu_months || latest?.misu_months), s(info.misu_balance || latest?.misu_balance)) && `미수 ${formatMisuAmount(s(info.misu_months || latest?.misu_months), s(info.misu_balance || latest?.misu_balance))}`,
   ].filter(Boolean);
