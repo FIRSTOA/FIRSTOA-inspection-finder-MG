@@ -2,8 +2,10 @@
  * 홈 지표 판 — 미처리 토탈(2026-10-19): 접수 6종 미처리 + 지난 일정 미처리를 한 목록으로.
  * 탭: 전체 · A~E · 경영/운영/영업. 목록은 "접수·AS" 묶음 + "물류" 묶음. 접수 행 → 서비스접수 미처리 현황, AS일정 행 → 일정리스트 미처리, 물류 → 네이버 캘린더 안내.
  * 모양·폴링은 OverduePanel 과 같다(60초, 숨은 탭 쉼, 포커스 때 새로).
+ * 2026-10-24 속도: 홈이 다른 화면 뒤에 숨어 있으면(KeepAlive) 폴링·포커스 조회를 멈춘다 — 전에는 다른 탭을 쓰는 중에도 60초마다,
+ * 그리고 탭을 바꿀 때마다(KeepAlive 가 focus 를 쏨) 접수·일정·시트를 다시 읽었다. 겹친 호출은 하나로.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock } from "lucide-react";
 import { selectRows } from "./supabase";
 import { kstDate } from "./visits";
@@ -14,6 +16,7 @@ import { fetchOpenReceptions } from "./deptReceptionApi";
 import { loadSheetOpen, mergeSheetAndDb } from "./receptionSheetOpen";
 import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
+import { useScreenActive } from "./screenActive";
 import {
   countUnhandledTabs, mergeUnhandled, rowsForTab, splitByGroup, UNHANDLED_BADGE,
   type TicketInput, type UnhandledKind, type UnhandledRow, type UnhandledTab,
@@ -32,7 +35,9 @@ export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: {
   const [tab, setTab] = useState<UnhandledTab>("전체");
   // 시트 기준(C3) 안내·90일 넘은 시트 건수. 스위치 꺼짐이면 sheetMode=false(지금과 같은 DB 숫자)
   const [sheetInfo, setSheetInfo] = useState<{ sheetMode: boolean; notice: string; over90: number }>({ sheetMode: false, notice: "", over90: 0 });
-  const load = useCallback(async () => {
+  const active = useScreenActive();
+  const busy = useRef(false);
+  const loadOnce = useCallback(async () => {
     const today = kstDate();
     const from = new Date(Date.now() - 180 * 86400_000 + 9 * 3600_000).toISOString().slice(0, 10);
     const [rec, tic, sheetRes] = await Promise.allSettled([
@@ -56,13 +61,19 @@ export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: {
       setRows(mergeUnhandled(dbRows, tic.status === "fulfilled" ? tic.value : [], today));
     }
   }, []);
+  const load = useCallback(async () => {
+    if (busy.current) return; // 첫 조회와 화면 복귀 focus 가 겹쳐도 한 번만
+    busy.current = true;
+    try { await loadOnce(); } finally { busy.current = false; }
+  }, [loadOnce]);
   useEffect(() => {
+    if (!active) return; // 다른 화면이 떠 있으면(KeepAlive 숨김) 쉰다
     const first = window.setTimeout(() => { void load(); }, 0);
     const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 60_000);
     const onFocus = () => { void load(); };
     window.addEventListener("focus", onFocus);
     return () => { window.clearTimeout(first); window.clearInterval(timer); window.removeEventListener("focus", onFocus); };
-  }, [load]);
+  }, [load, active]);
   const counts = useMemo(() => countUnhandledTabs(rows || []), [rows]);
   const list = useMemo(() => rowsForTab(rows || [], tab), [rows, tab]);
   const groups = useMemo(() => splitByGroup(list), [list]);

@@ -3,6 +3,48 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-23",
+    "hash": "0ed131d5f3",
+    "agent": "feature-planner",
+    "summary": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
+  },
+  {
+    "date": "2026-10-23",
+    "hash": "0ed131d5f3",
+    "agent": "ui-designer",
+    "summary": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
+  },
+  {
+    "date": "2026-10-23",
+    "hash": "0ed131d5f3",
+    "agent": "developer",
+    "summary": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
+  },
+  {
+    "date": "2026-10-23",
+    "hash": "0ed131d5f3",
+    "agent": "debugger",
+    "summary": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
+  },
+  {
+    "date": "2026-10-23",
+    "hash": "0ed131d5f3",
+    "agent": "qa-checker",
+    "summary": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
+  },
+  {
+    "date": "2026-10-23",
+    "hash": "0ed131d5f3",
+    "agent": "field-deploy-check",
+    "summary": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
+  },
+  {
+    "date": "2026-10-23",
+    "hash": "0ed131d5f3",
+    "agent": "kakao-pc-rules",
+    "summary": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
+  },
+  {
     "date": "2026-10-22",
     "hash": "afb18867aa",
     "agent": "debugger",

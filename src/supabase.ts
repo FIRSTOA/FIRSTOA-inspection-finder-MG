@@ -190,8 +190,10 @@ export async function selectAllRowsFast<T>(table: string, query: string, pageSiz
   const first = await fetchPage(0);
   if (first.length < pageSize) return first;
   const pages: T[][] = [first];
-  for (let offset = pageSize; ; offset += pageSize * concurrency) {
-    const batch = await Promise.all(Array.from({ length: concurrency }, (_, index) => fetchPage(offset + index * pageSize)));
+  // 2026-10-24 속도: 동시 수를 2→4→최대로 늘려 간다 — 2천 행 표가 빈 쪽 5번을 헛요청하던 것(7번→3번). 결과·순서는 같다
+  let width = Math.min(2, concurrency);
+  for (let offset = pageSize; ; offset += pageSize * width, width = Math.min(width * 2, concurrency)) {
+    const batch = await Promise.all(Array.from({ length: width }, (_, index) => fetchPage(offset + index * pageSize)));
     let done = false;
     for (const page of batch) {
       pages.push(page);

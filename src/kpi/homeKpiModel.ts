@@ -132,6 +132,37 @@ export function splitSources(want: Set<KpiSource>, full: boolean): Set<KpiSource
 }
 
 /**
+ * 여러 쪽(1,000행 단위)으로 나눠 받는 무거운 원본(2026-10-24 실측, 8/31~분기 말):
+ * 점검·AS 2,000행 3.6MB · 활동 기록 2,069행 3.7MB · 워킨맵 4,014행 · 방문 2,002행 · 재계약 1,200행 · 확장성.
+ * 첫 로드는 이것들을 뒤로 미루고 나머지(한두 번 조회)로 먼저 그린다.
+ */
+export const HEAVY_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>(["field", "expansion", "events", "workin", "visits", "recontract"]);
+
+/** 첫 로드 두 단계: [가벼운 원본(+명단) 먼저, 무거운 원본 뒤에]. 숫자는 같은 loadKpiBundle·같은 함수 — 순서만 나눈다 */
+export function firstLoadPhases(sources: Set<KpiSource>): [Set<KpiSource>, Set<KpiSource>] {
+  const light = new Set([...sources].filter((s) => !HEAVY_SOURCES.has(s)));
+  const heavy = new Set([...sources].filter((s) => HEAVY_SOURCES.has(s)));
+  return [light, heavy];
+}
+
+/**
+ * 위젯 보기 계산 캐시(2026-10-24 속도). 같은 묶음·같은 기간이면 다시 세지 않는다.
+ * 왜: 홈 관제 덱 시계가 1초마다 홈 전체를 다시 그려, 현황판이 매초 달성표(34 지표 × 전체·팀·개인)·띠·추세를 새로 셌다
+ * (실측 Node 75~90ms/회 — 사무실 PC·폰에선 몇 배, 다른 탭에 있어도 숨은 홈이 계속 돌았다).
+ * 묶음은 읽을 때마다 새 객체(mergeBundle)라 새로 읽으면 자연히 새로 센다.
+ */
+const viewCache = new WeakMap<KpiBundle, { teamOf: ModelCtx["teamOf"]; m: Map<string, unknown> }>();
+export function cachedView<T>(b: KpiBundle, ctx: ModelCtx, key: string, make: () => T): T {
+  let c = viewCache.get(b);
+  if (!c || c.teamOf !== ctx.teamOf) { c = { teamOf: ctx.teamOf, m: new Map() }; viewCache.set(b, c); }
+  const k = `${ctx.period}|${key}`;
+  if (c.m.has(k)) return c.m.get(k) as T;
+  const v = make();
+  c.m.set(k, v);
+  return v;
+}
+
+/**
  * 새 묶음을 앞 묶음 위에 덮는다. 새로 못 읽은 원본(error)은 앞의 값(facts)을 남겨 "마지막 값"으로 쓴다 — 상태는 error 로 바뀐다.
  * okAt = 원본별 마지막 성공 시각(오류 칸 "N분 전 값" 표시용).
  */

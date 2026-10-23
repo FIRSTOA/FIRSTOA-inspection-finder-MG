@@ -105,10 +105,28 @@ function useTelemetry(withTotals: boolean) {
   return data;
 }
 
-function useClock() {
+/**
+ * 시계. 화면이 숨어 있으면(KeepAlive) 멈춘다.
+ * 2026-10-24 속도: 1초 시계를 홈 본체에 두면 홈 전체(KPI 현황판 포함)가 매초 다시 그려져, 다른 탭에 있어도 숨은 홈이 계속 셌다.
+ * 초 단위는 LiveClock 만, 홈 본체(인사말·날짜·분기·주차)는 1분 단위.
+ */
+function useClock(stepMs: number) {
+  const active = useScreenActive();
   const [now, setNow] = useState(() => new Date());
-  useEffect(() => { const t = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(t); }, []);
+  useEffect(() => {
+    if (!active) return;
+    const first = window.setTimeout(() => setNow(new Date()), 0); // 다시 보일 때 바로 맞춤
+    const t = window.setInterval(() => setNow(new Date()), stepMs);
+    return () => { window.clearTimeout(first); window.clearInterval(t); };
+  }, [active, stepMs]);
   return now;
+}
+
+/** 관제 덱 큰 시계(HH:MM:SS) — 1초마다 이 칸만 다시 그린다 */
+function LiveClock() {
+  const now = useClock(1000);
+  const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+  return <span className="font-mono text-[42px] font-black leading-none tabular-nums tracking-tight sm:text-[54px]">{clock}</span>;
 }
 
 /** 숫자가 이전 값에서 목표값까지 올라간다(0.9초). 움직임 줄이기 설정이면 즉시. */
@@ -204,7 +222,7 @@ const OPS_OPEN_KEY = "home_ops_open_v1";
 function readOpsOpen(): boolean { try { return localStorage.getItem(OPS_OPEN_KEY) !== "0"; } catch { return true; } }
 
 export default function Home({ onGoField, onNavigate }: { onGoField: () => void; onNavigate?: (screen: Screen) => void }) {
-  const now = useClock();
+  const now = useClock(60_000);
   // 운영·시스템 접힘(기본 펼침, 접으면 기기에 기억). 접혀 있으면 그 안의 부품을 그리지 않아 폴링·조회가 멈춘다
   const [opsOpen, setOpsOpen] = useState(readOpsOpen);
   const toggleOps = () => {
@@ -222,7 +240,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
 
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   const dateLabel = useMemo(() => new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(now), [now.getDate()]); // eslint-disable-line react-hooks/exhaustive-deps
-  const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
   const weekNo = Math.ceil((((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7);
 
   const agentPillValue = useMemo(() => {
@@ -267,7 +284,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         <div className="relative border-b border-white/[0.08] px-4 py-5 sm:px-6">
           <div className="flex items-center gap-2 text-[10.5px] font-black tracking-[0.22em] text-blue-300"><Radio size={13} className="animate-pulse motion-reduce:animate-none" />FIRSTOA CS · KPI</div>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-mono text-[42px] font-black leading-none tabular-nums tracking-tight sm:text-[54px]">{clock}</span>
+            <LiveClock />
             <span className="text-sm font-bold text-slate-300">{dateLabel}</span>
           </div>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px] font-black">
