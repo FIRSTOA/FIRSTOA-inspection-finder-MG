@@ -6,6 +6,7 @@
  *  ③ 요청 수 상한 — 실측 행 수(2026-10-24)로 흉내 낸 표에서 첫 단계·전체 요청 수가 늘지 않게
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { kpiRanges, type KpiFacts } from "../src/kpi/kpiCompute";
@@ -13,7 +14,7 @@ import { ALL_KPI_SOURCES, loadKpiBundle, type KpiBundle } from "../src/kpi/kpiDa
 import { parseKpiTargets, type KpiSource } from "../src/kpi/kpiDefs";
 import { toFieldRows, type FieldRaw } from "../src/workCount";
 import {
-  HEAVY_SOURCES, HOME_KPI_DEFAULT_LAYOUT, cachedView, firstLoadPhases, mergeBundle, sourcesForLayout, tableRows, todayItems,
+  FAST_SOURCES, HEAVY_SOURCES, HOME_KPI_DEFAULT_LAYOUT, cachedView, firstLoadPhases, mergeBundle, sourcesForLayout, tableRows, todayItems,
 } from "../src/kpi/homeKpiModel";
 import Home from "../src/Home";
 
@@ -112,11 +113,31 @@ describe("③ 요청 수 상한(실측 행 수 흉내)", () => {
   });
 });
 
-describe("홈 렌더 — 초 시계는 LiveClock 한 칸", () => {
-  it("HH:MM:SS 가 그대로 보인다", () => {
+describe("홈 렌더 — 1초 시계 없음(2026-10-24 한 줄 머리)", () => {
+  it("HH:MM:SS 큰 시계가 없고, 홈 본체 시계는 60초 하나뿐", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("[]", { status: 200 })));
-    const html = renderToString(createElement(Home, { onGoField: () => {} }));
+    const html = renderToString(createElement(Home, { onGoField: () => {} })).replace(/<!-- -->/g, "");
     vi.unstubAllGlobals();
-    expect(html).toMatch(/\d{2}:\d{2}:\d{2}/);
+    expect(html).not.toMatch(/\d{2}:\d{2}:\d{2}/);
+    expect(html).toMatch(/\d+주차/);
+    const src = readFileSync("src/Home.tsx", "utf8");
+    expect(src).not.toMatch(/function LiveClock|<LiveClock/);
+    expect(src).not.toMatch(/useClock\(1000\)/);
+    expect(src.match(/useClock\(/g)?.length).toBe(1 + 1); // 정의 1 + 호출 1(60초)
+    expect(src).toMatch(/useClock\(60_000\)/);
+  });
+});
+
+describe("② IT 퀴즈·실습 원본(2026-10-24)은 가벼운 쪽 — 첫 단계에 같이 읽는다", () => {
+  it("firstLoadPhases: itQuiz·itPractice 는 첫 단계, 60초 갱신에도 포함", () => {
+    const want = sourcesForLayout(HOME_KPI_DEFAULT_LAYOUT);
+    expect(want.has("itQuiz")).toBe(true);
+    expect(want.has("itPractice")).toBe(true);
+    const [light, heavy] = firstLoadPhases(want);
+    for (const s of ["itQuiz", "itPractice"] as KpiSource[]) {
+      expect(light.has(s)).toBe(true);
+      expect(heavy.has(s)).toBe(false);
+      expect(FAST_SOURCES.has(s)).toBe(true);
+    }
   });
 });

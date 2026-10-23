@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "82c0179aea",
+    "date": "2026-10-24",
+    "note": "홈 KPI 현황판 뒤 앱 느려짐 수정 — 1초 시계 분리·계산 캐시·첫 로드 2단계·숨은 홈 조회 중지·페이지 조회 램프"
+  },
+  {
     "hash": "0ed131d5f3",
     "date": "2026-10-23",
     "note": "홈 CS KPI 현황판 + 내 현황 숫자 통일 + 카톡 대화 매일 저장 매크로(스위치 꺼짐)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b6185e1439",
     "date": "2026-09-24",
     "note": "OKR 팀원 집계 — 통합집계처럼 목표별 '미흡항목 피드백 & 다음 달 개선 방향' 열(파트장이 적음, 글자색·✨초안 가능, 파트 종합 행에 저장)"
-  },
-  {
-    "hash": "6478f090c3",
-    "date": "2026-09-24",
-    "note": "OKR·주간현황판·골든미팅카드 — 칸 높이 100% 꼼수(h-px) 제거로 글자 겹침과 안쪽 이중 스크롤바 해소(빈 곳 클릭은 표가 안쪽 칸으로 넘김), Pillar 막대에서 Pillar 바꾸기는 확인 후(실수로 묶음이 옮겨져 Pillar 3이 사라진 실사고), 팀원 집계는 명단의 팀원 전부를 열로(기록 없어도), 월 선택 판은 분기 | 1 2 3 구분선"
   }
 ];

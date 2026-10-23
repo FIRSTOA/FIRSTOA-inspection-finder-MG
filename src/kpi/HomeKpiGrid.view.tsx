@@ -48,8 +48,9 @@ const SPAN: Record<KpiSize, string> = {
   "2x1": "col-span-2 md:col-span-3 lg:col-span-6",
   "2x2": "col-span-2 md:col-span-3 md:row-span-2 lg:col-span-6 lg:row-span-2",
   "4x1": "col-span-2 md:col-span-6 lg:col-span-12",
+  "4x2": "col-span-2 md:col-span-6 md:row-span-2 lg:col-span-12 lg:row-span-2",
 };
-const SIZE_LABEL: Record<KpiSize, string> = { "1x1": "작게", "2x1": "넓게", "2x2": "크게", "4x1": "한 줄" };
+const SIZE_LABEL: Record<KpiSize, string> = { "1x1": "작게", "2x1": "넓게", "2x2": "크게", "4x1": "한 줄", "4x2": "전체 크게" };
 
 const TOKENS: Record<KpiTheme, { btn: string; btnOn: string; bar: string; text: string; sub: string; panel: string; skeleton: string; outline: string }> = {
   deck: {

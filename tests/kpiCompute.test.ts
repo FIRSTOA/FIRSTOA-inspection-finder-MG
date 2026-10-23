@@ -10,7 +10,7 @@ import { blogPeriods, countBlog, type BlogRow } from "../src/blogSheet";
 import { teamWorkinProgress, type WorkinPlaceLite } from "../src/workinProgress";
 import {
   bizDays, countOverageVisits, dailyNeedText, fieldKpi, expansionKpi, kpiCount, kpiProgress, kpiRanges, kpiTargetFor, kpiTodayLine, okrKpi,
-  recontractOverdue, toFormRows, unhandledKpis, workinPace, type FormRaw, type KpiFacts, type RosterMember,
+  kpiRowStatus, okrWeekResult, recontractOverdue, titledNames, toFormRows, unhandledKpis, workinPace, type FormRaw, type KpiFacts, type RosterMember,
 } from "../src/kpi/kpiCompute";
 import { KPI_DEFS, mainKpiIds, parseKpiTargets } from "../src/kpi/kpiDefs";
 
@@ -314,5 +314,64 @@ describe("양식 표 KPI(새로 정의한 것) — 팀·재전송·팀장 규칙
     ];
     const o = recontractOverdue(toFormRows(raws, "날짜", teamOf), TODAY);
     expect([o.count, o.textDates]).toEqual([1, 1]);
+  });
+});
+
+describe("달성표 행 상태(2026-10-24) — 달성·순항·부족·목표 없음·원본 없음", () => {
+  it("판정 표", () => {
+    const st = (actual: number | null, target: number | null, elapsed: number | null, basis: Parameters<typeof kpiRowStatus>[0]["basis"], extra: { better?: "up" | "down"; goalPct?: number | null } = {}) =>
+      kpiRowStatus({ actual, target, elapsed, basis, ...extra });
+    expect(st(null, 10, 50, "perPersonWeek")).toBe("pending"); // 원본 없음 — 0 아님
+    expect(st(5, null, 50, "none")).toBe("none");
+    expect(st(10, 10, 50, "perPersonWeek")).toBe("done"); // 실적 ≥ 목표
+    expect(st(12, 10, 50, "perPersonWeek")).toBe("done");
+    expect(st(5, 10, 50, "perPersonWeek")).toBe("onTrack"); // 50% ≥ 경과 50%
+    expect(st(4, 10, 50, "perPersonWeek")).toBe("behind");
+    expect(st(4, 10, null, "perPersonWeek")).toBe("behind"); // 경과 모름 = 100
+    expect(st(400, 1000, 30, "workin")).toBe("onTrack"); // 분기 점검 40% ≥ 경과 30%
+    expect(st(0, 0, 50, "zero", { better: "down" })).toBe("done"); // 미처리 0 = 정상
+    expect(st(2, 0, null, "zero", { better: "down" })).toBe("behind");
+    expect(st(9, 10, 10, "ratio", { goalPct: 100 })).toBe("behind"); // 비율은 경과를 안 본다
+    expect(st(10, 10, 10, "ratio", { goalPct: 100 })).toBe("done");
+    expect(st(3, 10, 10, "ratio", { goalPct: null })).toBe("none");
+  });
+});
+
+describe("⑥ 오버홀(K33)만 직책자(팀장·파트장·부파트장) 제외 — 집계·목표 인원 모두", () => {
+  const roster: RosterMember[] = [
+    { name: "한왕주", team: "C", title: "" }, { name: "박영현", team: "C", title: "파트장" }, { name: "이민구", team: "C", title: "부파트장" },
+    { name: "엄재현", team: "E", title: "" }, { name: "이권선", team: "A", title: "팀장" },
+  ];
+  const office = (author: string, count: number) => ({ work_date: "2026-10-20", author, values: { overhaul: { count } } });
+  const f: KpiFacts = { roster, office: [office("한왕주", 2), office("박영현", 5), office("이민구", 3), office("엄재현", 1), office("이권선", 4)] };
+
+  it("집계: 직책자 기록은 빼고 프로만", () => {
+    expect(kpiCount("K33", f, {}, R.week, ctx)?.n).toBe(3); // 한왕주 2 + 엄재현 1
+    expect(kpiCount("K33", f, { team: "C" }, R.week, ctx)?.n).toBe(2);
+    expect(titledNames(roster)).toEqual(new Set(["박영현", "이민구", "이권선"]));
+  });
+  it("목표 인원도 직책자 제외(인당 주 2) — 개인 칸에도 직책자 없음", () => {
+    const rows = kpiProgress("K33", f, { ranges: R, period: "week", settings: parseKpiTargets(""), teamOf });
+    expect(rows[0]).toMatchObject({ scope: "all", headcount: 2, actual: 3, target: 4 });
+    expect(rows.find((r) => r.key === "C")).toMatchObject({ headcount: 1, target: 2 });
+    expect(rows.filter((r) => r.scope === "person").map((r) => r.key).sort()).toEqual(["엄재현", "한왕주"]);
+  });
+  it("다른 KPI(PC 확장성)는 팀장 팀만 제외 — 파트장·부파트장도 인원에 든다", () => {
+    const rows = kpiProgress("K7", { ...f, expansion: [] }, { ranges: R, period: "week", settings: parseKpiTargets(""), teamOf });
+    expect(rows[0].headcount).toBe(5);
+    expect(rows.filter((r) => r.scope === "person")).toHaveLength(5);
+  });
+});
+
+describe("⑤ OKR 주 단위 — okrWeekResult", () => {
+  it("파트 종합 판정 우선, 없으면 그 주 팀원 판정 중 가장 나쁜 것. 판정 없는 파트 = 미작성", () => {
+    const goals = [1, 2].map((no) => ({ no, pillar: "P", bottleneck: "", objective: `목표${no}`, criteria: "" }));
+    const rep = (team: string, member: string, js: string[]): OkrReport => ({ ...emptyReport("2026-10-W3", team, member), rows: js.map((j, i) => ({ no: i + 1, actual: "", judgment: j, reason: "", plan: "", evidence: "" })) });
+    const reports = [rep("A", "", ["완료", "완료"]), rep("A", "한X", ["미착수", "미착수"]), rep("B", "이호준", ["완료", "미흡"]), rep("B", "박X", ["부분달성", ""])];
+    const r = okrWeekResult({ id: "2026-10-W3", weeks: [], goals, reports });
+    expect(r.byTeam).toEqual([{ team: "A", pct: 100 }, { team: "B", pct: 0 }, { team: "C", pct: null }, { team: "D", pct: null }]);
+    expect(r.pct).toBe(50);
+    expect(r.missingTeams).toEqual(["C", "D"]);
+    expect(kpiCount("K19", { okr: { cycle: null, quarter: null, reports: [], week: { id: "2026-10-W3", weeks: [], goals, reports } } }, {}, R.week, ctx)).toEqual({ n: 2, d: 4 });
   });
 });

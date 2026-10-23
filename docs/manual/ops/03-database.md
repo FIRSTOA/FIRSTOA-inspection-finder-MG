@@ -40,6 +40,8 @@
 | `misu_visits` | 미수 방문이력(1방문 1행, 수정 불가) |
 | `visit_logs`, `activity_events` | 방문 기록·활동 이벤트(팀 현황·순위표) |
 | `okr_cycles`, `okr_reports` | OKR |
+| `it_quiz_attempts` | IT 학습 › 기술 퀴즈 완료 1회 = 1행 — 홈 KPI(K34) 원본. **SQL 실행 대기**(아래) |
+| `it_practice_logs` | IT 학습 [실습 기록] 1건 = 1행 — 홈 KPI(K21) 원본. **SQL 실행 대기**(아래) |
 | `supply_requests`, `supply_events` | 부품·자가 신청 |
 | `counter_sms_*` | 마감 문자(카운터) |
 | `photo_albums`, `photo_assets` | 사진 앨범 |
@@ -50,6 +52,20 @@
 | `push_subscriptions` | 웹푸시 구독 |
 
 > 위 표 상당수는 저장소에 CREATE 문이 없었다. 라이브 정의를 `supabase/schema-snapshot-20261019.sql` 에 기록해 두었다(복구 참고용, 실행 대상 아님).
+
+### 2-4. IT 학습 기록 표 2개 (2026-10-24, SQL 실행 대기)
+파일 `supabase/it-learning-logs-20261024.sql`(표·인덱스·권한·RLS·되돌리기 주석, **두 번 실행해도 안전**). 2026-10-24 라이브 조회로 두 표 모두 **아직 없음**을 확인했다. IT파트 시트는 남의 데이터라 건드리지 않고, 우리 쪽 "푼 기록·실습 기록"만 새 표에 남긴다.
+
+| 표 | 열 |
+|---|---|
+| `it_quiz_attempts` | `id` uuid PK · `author` text 필수(공백 불가) · `kst_date` date(기본 오늘 KST) · `level` text · `total` int >0 · `score` int 0~total · `created_at` timestamptz |
+| `it_practice_logs` | `id` uuid PK · `author` text 필수 · `kst_date` date · `title` text 필수(공백 불가) · `memo` text · `photo_url` text(사진 1장, 공개 URL) · `created_at` |
+
+- 인덱스: 표마다 `(kst_date, author)`.
+- 권한: anon·authenticated **select·insert 만**(update·delete 없음 = 남기기만). RLS 켬, 정책은 표마다 read/insert 2개. → 앱은 `insertRow` 만 쓴다(`upsertRows` 는 UPDATE 권한이 없어 실패).
+- 앱 코드 `src/itLogs.ts`: 표가 없으면(404·PGRST205·42P01) `ItLogsMissingError` → IT 학습 화면은 "표 준비 중" 안내, 홈 KPI 는 "준비 중 · SQL 실행 대기". 그래서 **앱을 먼저 배포해도 된다**(안전한 순서: 앱 배포 → SQL 실행 → 확인).
+- 실행: /sql-handoff 절차(04장). 확인 쿼리·anon 시험·되돌리기(`drop table`, 기록이 쌓였으면 먼저 내보내기)는 SQL 파일 맨 아래 주석.
+- 백업 목록(`tools/worker/backup_tables.py`)에 넣을지는 표가 만들어진 뒤 판단.
 
 ## 3. 백업
 - 노트북 실행기가 매일 02:30 KST 에 약 60표를 jsonl.gz 로 `내 드라이브\FIRSTOA-백업\<날짜>\` 에 남긴다(14회차 보관, `tools/worker/backup_tables.py`). 10-21 회차: 표 62개·210,972행·실패 0(AGENTS.md).
@@ -114,6 +130,7 @@ where n.nspname = 'public' and c.relkind = 'r' order by 1;
 | reception-dept-types.sql + reception-dept-types-rename.sql | 실행됨 (type CHECK 에 '영업팀', `DEPT_RECEPTION_ENABLED` 키) |
 | okr-quarter.sql | 실행됨 (`okr_*_bak_20261020` 표). **재실행 금지** — 앱에서 고친 OKR 을 덮는다 |
 | okr-month-tidy-20261021.sql | (확인 필요) |
+| it-learning-logs-20261024.sql | **미실행(실행 대기)** — `it_quiz_attempts`·`it_practice_logs` 없음(2026-10-24 확인) |
 | misu-visits.sql | 실행됨 (`misu_visits` 표) |
 | mirror-hidden-ledger-20261022.sql | 실행됨 (`mirror_hidden` 표 + 트리거 8개) |
 | keyman-poster-cron-1030.sql | 실행됨 (jobid 10 일정 `30 1 * * 1`) |

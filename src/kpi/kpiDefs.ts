@@ -27,7 +27,9 @@ export type KpiScreen = { screen: "weekly" | "lookup" | "okr" | "walkingMap" | "
 /** 숫자 원본(로더 단위) — kpiData.ts 가 이 단위로 한 번씩만 읽는다 */
 export type KpiSource =
   | "roster" | "field" | "expansion" | "events" | "workin" | "overage" | "recontract" | "bulman" | "misu"
-  | "unhandled" | "receptionWeek" | "keyman" | "okr" | "blog" | "praise" | "customerPraise" | "visits" | "office";
+  | "unhandled" | "receptionWeek" | "keyman" | "okr" | "blog" | "praise" | "customerPraise" | "visits" | "office"
+  /** IT 학습 기록 표(2026-10-24, supabase/it-learning-logs-20261024.sql) — 표가 없으면 "준비 중" */
+  | "itQuiz" | "itPractice";
 /** 상태: 바로 됨 · 원본 표 실행 대기(표 없으면 "준비 중") · 원본 없음(회색 안내, 연결 필요) */
 export type KpiStatus = "ready" | "pending-table" | "unlinked";
 /** 셀 수 있는 범위 */
@@ -163,6 +165,7 @@ export const KPI_DEFS: KpiDef[] = [
     loads: ["events"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 재계약" }, today: true,
   },
   {
+    // 2026-10-24 홈 개편: 따로 위젯 없이 홈 '미처리 전체' 카드의 한 줄(합산)과 달성표 [전체 지표]에만 나온다
     id: "K12", name: "재계약 확인 지남", unit: "곳", group: "고객가치·영업", period: "open", periods: [], scopes: AT, widget: "number", sizes: ["1x1"],
     basis: "재계약 표 · 업체별 마지막 기록 · 다음확인일(날짜 칸) < 오늘 · 최종상태 갱신완료·종료 아님 · 글자로 적힌 옛 확인일은 따로 셈",
     source: "kpiCompute.recontractOverdue (Q8: 계약서 7영업일 확인 대신)", loads: ["recontract"], status: "ready",
@@ -225,10 +228,10 @@ export const KPI_DEFS: KpiDef[] = [
   },
   // ── D. 성장·OKR ──
   {
-    id: "K19", name: "OKR 달성률", unit: "%", group: "성장·OKR", period: "month", periods: ["month"], scopes: AT, widget: "ring", sizes: ["1x1", "2x1"],
-    basis: "이번 달 파트 종합 판정 · 완료·해당없음 / 판정 있는 목표(판정 없는 칸은 분모 제외) · A~D(E 제외)",
-    source: "okr.achievementRate·judgmentCounts — OKR 월 통합집계 파트 카드와 같은 식", loads: ["okr"], status: "ready",
-    targetBasis: "ratio", target: { value: 100, from: `${OKR_Q4} 전 목표 100%` }, main: false, better: "up", teams: "A~D", screen: { screen: "okr", tab: "월 통합집계" }, today: false,
+    id: "K19", name: "OKR 달성률", unit: "%", group: "성장·OKR", period: "week", periods: ["week", "month"], scopes: AT, widget: "ring", sizes: ["1x1", "2x1"],
+    basis: "이번 주(월~금 주차) 파트 판정 — 파트 종합 판정, 없으면 그 주 팀원 판정 중 가장 나쁜 것 · 완료·해당없음 / 판정 있는 목표 · A~D(E 제외) · 이번 주 판정이 없는 파트는 0% 가 아니라 '미작성' · [이번 달] = 월 파트 종합",
+    source: "okr.achievementRate·judgmentCounts(입력 = 이번 주 okr_reports, 2026-10-24 사용자 '프로들은 주만 쓴다') — 월은 OKR 월 통합집계 파트 카드와 같은 식", loads: ["okr"], status: "ready",
+    targetBasis: "ratio", target: { value: 100, from: `${OKR_Q4} 전 목표 100%` }, main: false, better: "up", teams: "A~D", screen: { screen: "okr", tab: "주차 기록" }, today: false,
   },
   {
     id: "K20", name: "블로그 답글", unit: "건", group: "성장·OKR", period: "week", periods: ALL_P, scopes: ATP, widget: "goal", sizes: ["1x1", "2x1"],
@@ -238,14 +241,14 @@ export const KPI_DEFS: KpiDef[] = [
   },
   {
     id: "K21", name: "IT 실습(기술력)", unit: "회", group: "성장·OKR", period: "week", periods: ["week", "month", "quarter"], scopes: ATP, widget: "goal", sizes: ["1x1"],
-    basis: "원본 없음(연결 필요) — IT 시트(itSheet)에는 실습 기록 탭이 없고 OKR 7 보고 글뿐",
-    source: "없음", loads: [], status: "unlinked", targetBasis: "perPersonWeek", target: { perPersonWeek: 1, from: `사용자 2026-10-23 'IT 실습 기술력 주 1회'(${OKR_Q4} 7번)` },
-    main: true, better: "up", teams: "A~E", screen: { screen: "itHistory", tab: "IT 학습" }, today: false,
+    basis: "IT 학습 › [실습 기록](it_practice_logs) 한 행 = 1회 · 작성자 = 기기에서 고른 작성자 · 날짜 = KST · 팀장 제외 · 목표 = 인원 × 주 1회",
+    source: "itLogs.loadItPracticeLogs(it_practice_logs, 2026-10-24) — 표가 없으면 준비 중", loads: ["itPractice", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 1, from: `사용자 2026-10-23 'IT 실습 기술력 주 1회'(${OKR_Q4} 7번)` },
+    main: true, better: "up", teams: "A~E", screen: { screen: "itHistory", tab: "IT 학습 › 실습 기록" }, today: false,
   },
   {
     id: "K34", name: "IT 퀴즈", unit: "회", group: "성장·OKR", period: "week", periods: ["week", "month", "quarter"], scopes: ATP, widget: "goal", sizes: ["1x1"],
-    basis: "원본 없음(연결 필요) — 기술 퀴즈(ItLearningHistory)는 점수를 저장하지 않는다",
-    source: "없음", loads: [], status: "unlinked", targetBasis: "perPersonWeek", target: { perPersonWeek: 2, from: "사용자 2026-10-23 'IT 퀴즈 주 2회'" },
+    basis: "IT 학습 › 기술 퀴즈 완료 1번 = 1회(it_quiz_attempts) · 작성자 = 기기에서 고른 작성자 · 날짜 = KST · 팀장 제외 · 목표 = 인원 × 주 2회",
+    source: "itLogs.loadItQuizAttempts(it_quiz_attempts, 2026-10-24) — 표가 없으면 준비 중", loads: ["itQuiz", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 2, from: "사용자 2026-10-23 'IT 퀴즈 주 2회'" },
     main: true, better: "up", teams: "A~E", screen: { screen: "itHistory", tab: "기술 퀴즈" }, today: false,
   },
   {
@@ -265,19 +268,10 @@ export const KPI_DEFS: KpiDef[] = [
   },
 ];
 
-export const KPI_BY_ID: Record<KpiId, KpiDef> = Object.fromEntries(KPI_DEFS.map((d) => [d.id, d])) as Record<KpiId, KpiDef>;
+/** 재계약 확인 지남 정의(사용자 2026-10-24 "뭘까" — 홈 미처리 카드 ⓘ 에 이 문장 그대로) */
+export const RECONTRACT_OVERDUE_DEFINITION = "재계약 표에서 업체별 마지막 기록의 \"다음확인일\"이 오늘보다 지났는데 최종상태가 갱신완료·종료가 아닌 곳.";
 
-/** 1단계 고정 배치(설계안 6절 추천 8개, Q1). K7+K8 은 한 위젯(확장성), K16+K17 은 한 위젯(미처리) */
-export const KPI_STAGE1_LAYOUT: Array<{ ids: KpiId[]; size: KpiSize }> = [
-  { ids: ["K1"], size: "1x1" },
-  { ids: ["K2"], size: "1x1" },
-  { ids: ["K7", "K8"], size: "2x1" },
-  { ids: ["K10"], size: "2x1" },
-  { ids: ["K16", "K17"], size: "2x2" },
-  { ids: ["K3"], size: "1x1" },
-  { ids: ["K19"], size: "1x1" },
-  { ids: ["K12"], size: "1x1" },
-];
+export const KPI_BY_ID: Record<KpiId, KpiDef> =Object.fromEntries(KPI_DEFS.map((d) => [d.id, d])) as Record<KpiId, KpiDef>;
 
 /** 원본이 없거나 셈법이 다른 파일에 묻혀 만들지 않은 KPI 와 이유 */
 export const KPI_NOT_BUILT: Array<{ id: string; name: string; reason: string }> = [

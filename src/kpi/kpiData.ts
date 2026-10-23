@@ -17,7 +17,8 @@ import { workinProgressQuery, type WorkinPlaceLite } from "../workinProgress";
 import { fetchOpenReceptions } from "../deptReceptionApi";
 import { loadSheetOpen, mergeSheetAndDb } from "../receptionSheetOpen";
 import { mergeUnhandled, type TicketInput, type UnhandledRow } from "../homeUnhandled";
-import { getOkrCycle, getOkrReports, monthCycleId, quarterIdOfMonth } from "../okr";
+import { currentWeekOf, getOkrCycle, getOkrReports, getOkrReportsIn, isLegacyMonthId, monthCycleId, monthScreenGoals, quarterIdOfMonth, weekCycleId, weeksOfMonth } from "../okr";
+import { loadItPracticeLogs, loadItQuizAttempts } from "../itLogs";
 import { fetchBlogRows } from "../blogSheet";
 import { loadMisuVisits, isTableMissingError } from "../misuVisitHistoryData";
 import { KPI_BY_ID, KPI_DEFS, KPI_TARGETS_CONFIG_KEY, parseKpiTargets, type KpiId, type KpiSettings, type KpiSource } from "./kpiDefs";
@@ -100,7 +101,9 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
   const sources: Partial<Record<KpiSource, KpiSourceStatus>> = {};
   const ok = (s: KpiSource, notice?: string) => { sources[s] = { status: "ok", at: Date.now(), ...(notice ? { notice } : {}) }; };
   const fail = (s: KpiSource, e: unknown) => {
-    sources[s] = isTableMissingError(e) ? { status: "missing", at: Date.now(), error: "원본 표가 아직 없습니다(SQL 실행 대기) — 준비 중" } : { status: "error", at: Date.now(), error: msg(e) };
+    // IT 학습 기록 표(itLogs)는 표가 없으면 ItLogsMissingError 를 던진다(구현서B 계약) — 둘 다 "준비 중"
+    const missing = isTableMissingError(e) || (e instanceof Error && e.name === "ItLogsMissingError");
+    sources[s] = missing ? { status: "missing", at: Date.now(), error: "원본 표가 아직 없습니다(SQL 실행 대기) — 준비 중" } : { status: "error", at: Date.now(), error: msg(e) };
   };
   const run = async <T,>(s: KpiSource, p: () => Promise<T>, put: (v: T) => void) => {
     if (!want.has(s)) return;
@@ -116,7 +119,7 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
   if (want.has("roster")) {
     try {
       const members = await fetchMembers();
-      facts.roster = members.filter((m) => m.active && ["A", "B", "C", "D", "E"].includes(m.team)).map<RosterMember>((m) => ({ name: m.name, team: m.team }));
+      facts.roster = members.filter((m) => m.active && ["A", "B", "C", "D", "E"].includes(m.team)).map<RosterMember>((m) => ({ name: m.name, team: m.team, title: String(m.title || "").trim() }));
       ok("roster");
     } catch (e) { fail("roster", e); }
   }
@@ -139,13 +142,29 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     run("okr", async (): Promise<OkrFacts> => {
       const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
       const id = monthCycleId(y, m);
-      const [cycle, quarter, reports] = await Promise.all([getOkrCycle(id), getOkrCycle(quarterIdOfMonth(y, m)), getOkrReports(id, "")]);
-      return { cycle, quarter, reports };
+      // 주 단위(2026-10-24): 오늘이 든 주차(월~금, 주가 시작한 달 기준 — 10/1 은 9월 4주차)와 그 달 주차 기록 한 번에
+      const cw = currentWeekOf(today);
+      const weeks = weeksOfMonth(cw.year, cw.month);
+      const sameMonth = cw.year === y && cw.month === m;
+      const [cycle, quarter, reports, weekReports, wCycle, wQuarter] = await Promise.all([
+        getOkrCycle(id), getOkrCycle(quarterIdOfMonth(y, m)), getOkrReports(id, ""), getOkrReportsIn(weeks.map((w) => w.id)),
+        sameMonth ? Promise.resolve(null) : getOkrCycle(monthCycleId(cw.year, cw.month)),
+        sameMonth ? Promise.resolve(null) : getOkrCycle(quarterIdOfMonth(cw.year, cw.month)),
+      ]);
+      const wc = sameMonth ? cycle : wCycle;
+      const wq = sameMonth ? quarter : wQuarter;
+      const goals = !wc ? [] : isLegacyMonthId(wc.id) ? wc.goals : monthScreenGoals(wc, wq).goals;
+      return {
+        cycle, quarter, reports,
+        week: { id: weekCycleId(cw.year, cw.month, cw.weekNo), weeks: weeks.map((w) => ({ id: w.id, weekNo: w.weekNo, label: `${w.weekNo}주` })), goals, reports: weekReports },
+      };
     }, (v) => { facts.okr = v; }),
     run("blog", () => fetchBlogRows(), (v) => { facts.blog = v; }),
     run("praise", () => selectAllRows<PraiseRow>("praise_posts", `select=from_author,to_name,created_at&created_at=gte.${kstStartIso(from)}&order=created_at.asc`), (v) => { facts.praise = v; }),
     run("customerPraise", () => selectAllRows<CustomerPraiseRow>("field_sheet_sync_jobs", `select=author,created_at&category=eq.praise&created_at=gte.${kstStartIso(from)}&order=created_at.asc`), (v) => { facts.customerPraise = v; }),
     run("visits", () => getTeamVisits(from, to, { columns: "id,work_date,author,vendor,visited,status" }), (v) => { facts.visits = v.map<VisitLite>((x) => ({ workDate: x.workDate, author: x.author, vendor: x.vendor, visited: x.visited })); }),
+    run("itQuiz", () => loadItQuizAttempts(from, to), (v) => { facts.itQuiz = v; }),
+    run("itPractice", () => loadItPracticeLogs(from, to), (v) => { facts.itPractice = v; }),
     run("office", () => selectAllRows<OfficeLite>("office_logs", `select=work_date,author,values&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc`), (v) => { facts.office = v; }),
   ]);
 

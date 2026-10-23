@@ -23,14 +23,14 @@ import {
 import { teamWorkinProgress, type WorkinPlaceLite } from "../workinProgress";
 import { countUnhandledTabs, rowsForTab, UNHANDLED_TABS, type UnhandledRow, type UnhandledTab } from "../homeUnhandled";
 import {
-  OKR_TEAMS, achievementRate, findReport, isAlert, isLegacyMonthId, judgmentCounts, monthScreenGoals, normalizeJudgment, resultRowFor,
-  type OkrCycle, type OkrReport, type OkrResultRow,
+  OKR_TEAMS, achievementRate, emptyResultRow, findReport, isAlert, isLegacyMonthId, judgmentCounts, monthScreenGoals, normalizeJudgment, resultRowFor, worstOfJudgments,
+  type OkrCycle, type OkrGoal, type OkrJudgment, type OkrReport, type OkrResultRow,
 } from "../okr";
 import { blogTeamOf, countBlog, type BlogRow } from "../blogSheet";
 import { effectiveMisuVisits, type MisuVisit } from "../misuVisit";
 import { weekCompletionRate } from "../deptReception";
 import { isYmd } from "../recontractSchedule";
-import { KPI_BY_ID, KPI_DEFS, type KpiId, type KpiPeriodKey, type KpiScopeKind, type KpiTarget } from "./kpiDefs";
+import { KPI_BY_ID, KPI_DEFS, type KpiId, type KpiPeriodKey, type KpiScopeKind, type KpiTarget, type KpiTargetBasis } from "./kpiDefs";
 
 /* ───────────── 기간 ───────────── */
 
@@ -163,14 +163,22 @@ export function kpiTone(id: KpiId, value: number | null, rate: number | null, el
 
 /* ───────────── 원본 행(로더가 채운다) ───────────── */
 
-export type RosterMember = { name: string; team: string };
+/** title = cs_members.title(팀장/파트장/부파트장, 빈값 = 프로) — 오버홀(K33)만 직책자를 뺀다 */
+export type RosterMember = { name: string; team: string; title?: string };
 export type PraiseRow = { from_author: string; to_name: string; created_at: string };
 export type CustomerPraiseRow = { author: string; created_at: string };
 export type VisitLite = { workDate: string; author: string; vendor: string; visited: boolean };
 export type OfficeLite = { work_date: string; author: string; values: Record<string, { count?: number; minutes?: number } | undefined> | null };
 export type KeymanRow = { greeting_done: boolean | null; category: string | null };
 export type ReceptionWeekRow = { status: string; receipt_date: string };
-export type OkrFacts = { cycle: OkrCycle | null; quarter: OkrCycle | null; reports: OkrReport[] };
+/**
+ * 주 단위 OKR(2026-10-24 사용자 "프로들은 주만 쓴다"): 이번 주 id(weekCycleId)·그 달 주차 목록·그 달 화면 목표·그 달 주차 기록 전부.
+ * goals = 주차가 속한 달의 monthScreenGoals(옛 달은 달 goals) — OKR 화면이 주차에 쓰는 목표와 같다.
+ */
+export type OkrWeekFacts = { id: string; weeks: Array<{ id: string; weekNo: number; label: string }>; goals: OkrGoal[]; reports: OkrReport[] };
+export type OkrFacts = { cycle: OkrCycle | null; quarter: OkrCycle | null; reports: OkrReport[]; week?: OkrWeekFacts };
+/** IT 학습 기록 한 행(itLogs 로더 결과) — date = KST YYYY-MM-DD */
+export type ItLogLite = { author: string; date: string };
 
 /** 원본 묶음 — 못 읽은 원본은 비워 둔다(그 KPI 는 null = 못 셈) */
 export type KpiFacts = Partial<{
@@ -193,6 +201,8 @@ export type KpiFacts = Partial<{
   customerPraise: CustomerPraiseRow[];
   visits: VisitLite[];
   office: OfficeLite[];
+  itQuiz: ItLogLite[];
+  itPractice: ItLogLite[];
 }>;
 
 /* ───────────── 공통: 양식 표(초과조정·재계약·불만) 행 정리 ───────────── */
@@ -358,7 +368,9 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
     }
     case "K33": {
       if (!f.office) return null;
-      const n = f.office.filter((o) => o.work_date >= r.from && o.work_date <= r.to && !isMgr(o.author) && teamOk(ctx.teamOf(o.author)) && (!s.author || o.author === s.author))
+      // 오버홀만 직책자(팀장·파트장·부파트장) 제외 — 사용자 2026-10-24. 다른 KPI 는 팀장만 제외(기존 그대로)
+      const titled = titledNames(f.roster);
+      const n = f.office.filter((o) => o.work_date >= r.from && o.work_date <= r.to && !isMgr(o.author) && !titled.has(String(o.author || "").trim()) && teamOk(ctx.teamOf(o.author)) && (!s.author || o.author === s.author))
         .reduce((a, o) => a + (Number(o.values?.overhaul?.count) || 0), 0);
       return { n };
     }
@@ -398,7 +410,11 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
     }
     case "K19": {
       if (!f.okr || s.author) return null;
-      const rows = OKR_TEAMS.filter((t) => teamOk(t)).flatMap((t) => okrTeamRows(f.okr!.cycle, f.okr!.quarter, f.okr!.reports, t));
+      // 주 범위(7일 이하)면 이번 주 주차 기록, 아니면 이번 달 파트 종합(기존)
+      const w = f.okr.week;
+      const weekMode = dayDiff(r.from, r.to) <= 6;
+      if (weekMode && !w) return null;
+      const rows = OKR_TEAMS.filter((t) => teamOk(t)).flatMap((t) => (weekMode && w ? okrWeekTeamRows(w.goals, w.reports, w.id, t) : okrTeamRows(f.okr!.cycle, f.okr!.quarter, f.okr!.reports, t)));
       return { n: rows.filter((x) => ["완료", "해당없음"].includes(normalizeJudgment(x.judgment))).length, d: rows.filter((x) => normalizeJudgment(x.judgment)).length };
     }
     case "K20": {
@@ -418,7 +434,11 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
       if (!f.customerPraise) return null;
       return { n: f.customerPraise.filter((p) => { const d = kstDayOf(p.created_at); return d >= r.from && d <= r.to && !isMgr(p.author) && teamOk(ctx.teamOf(p.author)) && (!s.author || p.author === s.author); }).length };
     }
-    case "K21": case "K34": return null; // 원본 없음(연결 필요)
+    case "K21": case "K34": {
+      const list = id === "K21" ? f.itPractice : f.itQuiz;
+      if (!list) return null; // 표 없음·못 읽음 = null(0 아님)
+      return { n: list.filter((x) => { const a = String(x.author || "").trim(); return x.date >= r.from && x.date <= r.to && !!a && !isMgr(a) && teamOk(ctx.teamOf(a)) && (!s.author || a === s.author); }).length };
+    }
   }
 }
 
@@ -476,6 +496,18 @@ export type KpiProgressRow = {
 
 export type KpiSettingsLite = { targets: Partial<Record<KpiId, KpiTarget>>; holidays: readonly string[] };
 
+/** 오버홀(K33) 집계·목표 인원에서 빼는 직책(cs_members.title) — 사용자 2026-10-24 */
+export const OVERHAUL_EXCLUDED_TITLES: ReadonlySet<string> = new Set(["팀장", "파트장", "부파트장"]);
+/** 명단에서 직책자 이름 */
+export function titledNames(roster: RosterMember[] | undefined): Set<string> {
+  return new Set((roster || []).filter((m) => OVERHAUL_EXCLUDED_TITLES.has(String(m.title || "").trim())).map((m) => m.name));
+}
+/** KPI 별 인원 명단 — 오버홀만 직책자 제외, 나머지는 명단 그대로(명단은 이미 팀장 팀 제외) */
+export function rosterFor(id: KpiId, roster: RosterMember[] | undefined): RosterMember[] | undefined {
+  if (id !== "K33" || !roster) return roster;
+  return roster.filter((m) => !OVERHAUL_EXCLUDED_TITLES.has(String(m.title || "").trim()));
+}
+
 /** 명단(A~E 활성, 팀장 제외) → 팀별 인원 */
 export function headcountByTeam(roster: RosterMember[] | undefined): Record<string, number> {
   const out: Record<string, number> = {};
@@ -487,7 +519,8 @@ export function kpiProgress(id: KpiId, f: KpiFacts, opts: { ranges: KpiRanges; p
   const def = KPI_BY_ID[id];
   const range = rangeOfPeriod(opts.ranges, opts.period);
   const ctx: KpiCtx = { today: opts.ranges.today, teamOf: opts.teamOf };
-  const heads = headcountByTeam(f.roster);
+  const roster = rosterFor(id, f.roster);
+  const heads = headcountByTeam(roster);
   const teams = def.teams === "A~D" ? [...OKR_TEAMS] as string[] : def.teams === "없음" ? [] : [...KPI_TEAMS];
   const total = teams.reduce((a, t) => a + (heads[t] || 0), 0);
   const ratio = def.targetBasis === "ratio" || def.targetBasis === "workin";
@@ -506,7 +539,7 @@ export function kpiProgress(id: KpiId, f: KpiFacts, opts: { ranges: KpiRanges; p
   if (def.scopes.includes("all")) rows.push(make("all", "전체", "CS 전체", "", total, {}));
   if (def.scopes.includes("team")) for (const t of teams) rows.push(make("team", t, t === "E" ? "CSS(E)" : `${t}팀`, t, heads[t] || 0, { team: t }));
   if (def.scopes.includes("person")) {
-    for (const t of teams) for (const m of (f.roster || []).filter((x) => x.team === t)) rows.push(make("person", m.name, m.name, t, 1, { author: m.name }));
+    for (const t of teams) for (const m of (roster || []).filter((x) => x.team === t)) rows.push(make("person", m.name, m.name, t, 1, { author: m.name }));
   }
   return rows;
 }
@@ -696,6 +729,67 @@ export function okrKpi(okr: OkrFacts, r: KpiRanges, target?: KpiTarget): KpiValu
     }),
     extra: { 미흡: counts["미흡"], 미착수: counts["미착수"], alerts: all.filter((x) => isAlert(x.judgment)).length, goals: all.length },
   });
+}
+
+/* K19 주 단위(2026-10-24) — 셈법은 achievementRate·judgmentCounts 그대로, 입력만 그 주 기록 */
+
+/**
+ * 한 파트의 그 주 판정 행: 목표마다 파트 종합(member '') 판정이 있으면 그것, 없으면 그 주 팀원 판정 중 가장 나쁜 것
+ * (okr.lastJudgmentInMonth 가 주 하나에 쓰는 규칙과 같다 — worstOfJudgments). 판정이 하나도 없으면 빈 판정 행.
+ */
+export function okrWeekTeamRows(goals: OkrGoal[], reports: OkrReport[], weekId: string, team: string): OkrResultRow[] {
+  const inWeek = reports.filter((r) => r.cycle_id === weekId && r.team === team);
+  const summary = findReport(inWeek.filter((r) => !r.member), team, "");
+  const members = inWeek.filter((r) => r.member);
+  return goals.map((g) => {
+    const own = resultRowFor(summary, g.no);
+    if (normalizeJudgment(own.judgment)) return own;
+    return { ...emptyResultRow(g.no), judgment: worstOfJudgments(members.map((m) => resultRowFor(m, g.no).judgment)) };
+  });
+}
+
+export type OkrWeekResult = {
+  /** A~D 전체 달성률(판정 없는 칸 분모 제외). 판정이 하나도 없으면 null(0% 아님) */
+  pct: number | null;
+  counts: Record<OkrJudgment, number>;
+  /** 그 주 판정이 하나도 없는 파트 — "이번 주 OKR 미작성 n팀" */
+  missingTeams: string[];
+  byTeam: Array<{ team: string; pct: number | null }>;
+};
+export function okrWeekResult(w: OkrWeekFacts, weekId: string = w.id): OkrWeekResult {
+  const per = OKR_TEAMS.map((team) => ({ team, rows: okrWeekTeamRows(w.goals, w.reports, weekId, team) }));
+  const all = per.flatMap((p) => p.rows);
+  return {
+    pct: achievementRate(all),
+    counts: judgmentCounts(all),
+    missingTeams: per.filter((p) => !p.rows.some((x) => normalizeJudgment(x.judgment))).map((p) => p.team),
+    byTeam: per.map((p) => ({ team: p.team, pct: achievementRate(p.rows) })),
+  };
+}
+
+/* ───────────── 달성표 행 상태(2026-10-24 홈 개편 ③) ───────────── */
+
+/** done 달성 · onTrack 순항(실적/목표 ≥ 기간 경과 비율) · behind 부족 · none 목표 없음 · pending 원본 없음 */
+export type KpiRowStatus = "done" | "onTrack" | "behind" | "none" | "pending";
+
+/**
+ * 행·칸 상태. actual null = 원본 없음(pending), 목표 없음 = none.
+ *  · 작을수록 좋은 지표(zero): 실적 ≤ 목표 = done, 아니면 behind
+ *  · 비율 지표(ratio): rate = 분자/분모 % 를 목표 %(goalPct) 와 비교 — 누적이 아니라 경과 비율은 안 본다. 목표 % 없거나 분모 0 이면 none
+ *  · 그 밖(누적 — 인당 목표·워킨맵): 실적 ≥ 목표 = done, 실적/목표 % ≥ 경과 % = onTrack, 그 미만 behind. 경과 % 를 모르면(오늘) 100 으로 본다
+ */
+export function kpiRowStatus(
+  o: { actual: number | null; target: number | null; elapsed: number | null; basis: KpiTargetBasis; better?: "up" | "down"; goalPct?: number | null },
+): KpiRowStatus {
+  if (o.actual === null) return "pending";
+  if (o.basis === "zero" || o.better === "down") return o.actual <= (o.target ?? 0) ? "done" : "behind";
+  if (o.basis === "ratio") {
+    if (!o.goalPct || !o.target) return "none";
+    return (pct(o.actual, o.target) ?? 0) >= o.goalPct ? "done" : "behind";
+  }
+  if (o.target === null || o.basis === "none") return "none";
+  if (o.target <= 0 || o.actual >= o.target) return "done";
+  return (o.actual / o.target) * 100 >= (o.elapsed ?? 100) ? "onTrack" : "behind";
 }
 
 /* ───────────── 인사말 줄 "내 이번 주" (Q9) ───────────── */

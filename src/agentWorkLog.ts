@@ -3,6 +3,18 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-24",
+    "hash": "82c0179aea",
+    "agent": "debugger",
+    "summary": "홈 KPI 현황판 뒤 앱 느려짐 수정 — 1초 시계 분리·계산 캐시·첫 로드 2단계·숨은 홈 조회 중지·페이지 조회 램프"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "82c0179aea",
+    "agent": "qa-checker",
+    "summary": "홈 KPI 현황판 뒤 앱 느려짐 수정 — 1초 시계 분리·계산 캐시·첫 로드 2단계·숨은 홈 조회 중지·페이지 조회 램프"
+  },
+  {
     "date": "2026-10-23",
     "hash": "0ed131d5f3",
     "agent": "feature-planner",

@@ -1,25 +1,26 @@
 /**
- * 홈 KPI 위젯 — 표시 전용(계산·조회 없음). 설계안 docs/tasks/home-kpi-dashboard.md 4-1절.
+ * 홈 KPI 위젯 — 표시 전용(계산·조회 없음). 설계안 docs/tasks/home-kpi-dashboard.md 4-1절 · 개편 지시서 docs/tasks/home-redesign-2026-10-24.md.
  * 숫자는 kpiCompute.ts 가 내고 컨테이너(HomeKpiBoard)가 props 로 넣는다. 이 파일은 kpi/* 다른 파일을 import 하지 않는다.
  *
  * 위젯 종류(kind): number 숫자 카드 · ring % 링 · teamBars 팀별 막대 · spark 추세 · progress 목표 진행 · list 밀린 일 목록
- *   + quarterGoal 분기 목표 진행(실적/목표·%·필요 페이스 vs 지금 페이스) · kpiTable KPI 달성표(전체/A~E/개인, [주요 목표][전체 지표])
- *   + todayStrip 금일 현황 칩 띠(가로 스크롤). 원본 없는 값은 회색 "원본 연결 필요".
- * 상태(status): loading 뼈대 · ready 값 · empty "0 · 기록 없음" · error "—" + [다시] + 마지막 성공 값 · pending "준비 중"(원본 표 없음)
+ *   + kpiTable KPI 달성표(주인공: 상태 알약·CS 전체·팀 칸·행 펼치기 = 팀 막대·개인 칩) · quarterGoal 분기 점검 진행(팀 5줄)
+ *   + unhandledTotal 미처리 합산 카드 · okr OKR(링·판정 수·주별 막대) · todayStrip 금일 현황 칩 띠(가로 스크롤).
+ * 로딩 상태(KpiLoadStatus): loading 뼈대 · ready 값 · empty "기록 없음" · error "—" + [다시] + 마지막 성공 값 · pending "준비 중"(원본 표 없음)
  *   → 로딩·오류·준비 중은 절대 0 으로 보이지 않는다(설계안 3절 원칙 5).
+ *   ※ 옛 이름 KpiStatus(=로딩 상태)는 KpiLoadStatus 로 바꿨다. KpiStatus 는 지표 판정(달성·순항·부족·목표없음·준비 중).
  * 머리: 제목 · 기간 칩 · (i) 단추 = "숫자 기준: …" 펼침(폰은 hover 가 없어서 누르면 펼친다). 바닥: 기준 한 줄(말줄임, 전문은 title).
- * 색: 상태색 = 달성 초록 · 경과보다 뒤짐 노랑 · 경과의 절반 미만 빨강 · 판정 없음 회색.
- * 톤: theme="deck"(기본, 홈 검은 판 #0B0F17 안의 반투명 카드 — Home.tsx Metric 과 같은 결) / "light"(흰 화면에 놓을 때).
+ * 톤: theme="deck"(기본, 홈 검은 판 #0B0F17 안의 반투명 카드) / "light"(흰 화면에 놓을 때).
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, ChevronRight, Clock3, Info, Minus, RefreshCw, type LucideIcon } from "lucide-react";
 
 // ── 타입(props) ─────────────────────────────────────────────────────────────
-export type KpiSize = "1x1" | "2x1" | "2x2" | "4x1";
+export type KpiSize = "1x1" | "2x1" | "2x2" | "4x1" | "4x2";
 export type KpiTone = "ok" | "warn" | "bad" | "idle";
-export type KpiStatus = "loading" | "ready" | "empty" | "error" | "pending";
+/** 위젯 로딩 상태(예전 이름 KpiStatus). */
+export type KpiLoadStatus = "loading" | "ready" | "empty" | "error" | "pending";
 export type KpiTheme = "deck" | "light";
-export type KpiKind = "number" | "ring" | "teamBars" | "spark" | "progress" | "list" | "quarterGoal" | "kpiTable" | "todayStrip";
+export type KpiKind = "number" | "ring" | "teamBars" | "spark" | "progress" | "list" | "quarterGoal" | "kpiTable" | "unhandledTotal" | "okr" | "todayStrip";
 
 /** 팀(A~E) 한 줄. target 이 있으면 막대에 목표선·상태색. */
 export type KpiTeamValue = { team: string; label?: string; value: number; target?: number | null; tone?: KpiTone; sub?: string };
@@ -34,38 +35,38 @@ export type KpiNumberView = {
   kind: "number";
   value: number;
   unit: string;
-  target?: number | null;          // 있으면 "목표 N · 75%"
-  prevValue?: number | null;       // 있으면 전주(전기) 대비 화살표
-  prevLabel?: string;              // 기본 "지난주"
-  better?: "up" | "down";          // 미처리처럼 줄어야 좋은 숫자는 "down"(화살표 색 반전)
-  tone?: KpiTone;                  // 큰 숫자 옆 점(예: 재계약 확인 지남 = bad)
-  sub?: string;                    // 한 줄 보조 글
-  teams?: KpiTeamValue[];          // 2x1 이상에서 팀별 미니 막대
-  points?: KpiSeriesPoint[];       // 2x1 이상에서 미니 추세
+  target?: number | null;
+  prevValue?: number | null;
+  prevLabel?: string;
+  better?: "up" | "down";
+  tone?: KpiTone;
+  sub?: string;
+  teams?: KpiTeamValue[];
+  points?: KpiSeriesPoint[];
 };
 export type KpiRingView = {
   kind: "ring";
   numerator: number;
   denominator: number;
-  unit?: string;                   // 분자/분모 단위(예: "단위", "개")
-  pace?: number | null;            // 경과율 %(0~100). 있으면 "경과 24% · 앞섬/뒤짐"과 상태색
-  tone?: KpiTone;                  // 직접 지정하면 pace 판정 대신 사용
-  chips?: KpiChip[];               // "미흡 2 · 미착수 1"
-  teams?: KpiTeamValue[];          // 2x1·2x2 에서 팀별 %(value=분자, target=분모)
+  unit?: string;
+  pace?: number | null;            // 경과율 %(0~100)
+  tone?: KpiTone;
+  chips?: KpiChip[];
+  teams?: KpiTeamValue[];
 };
 export type KpiTeamBarsView = {
   kind: "teamBars";
   unit: string;
   rows: KpiTeamValue[];
-  target?: number | null;          // 팀 공통 목표선(행별 target 이 우선)
-  total?: number | null;           // 머리 오른쪽 합계(없으면 표시 안 함 — 위젯은 더하지 않는다)
-  legend?: string;                 // "PC · 복합기" 처럼 값 뜻
+  target?: number | null;
+  total?: number | null;
+  legend?: string;
 };
 export type KpiSparkView = {
   kind: "spark";
   unit: string;
   points: KpiSeriesPoint[];
-  value?: number | null;           // 큰 숫자(없으면 마지막 점 값)
+  value?: number | null;
   prevValue?: number | null;
   prevLabel?: string;
   better?: "up" | "down";
@@ -75,87 +76,64 @@ export type KpiProgressView = {
   value: number;
   target: number;
   unit: string;
-  pace?: number | null;            // 경과율 %(막대 위 점선)
-  remainLabel?: string;            // "남은 기간 8일"
-  teams?: KpiTeamValue[];          // 파트별 "A 2/2"
+  pace?: number | null;
+  remainLabel?: string;
+  teams?: KpiTeamValue[];
 };
 export type KpiListView = {
   kind: "list";
   total: number;
   unit: string;
   items: KpiListItem[];
-  chips?: KpiChip[];               // "접수 14 · 일정 5 · 물류 2"
-  emptyText?: string;              // 기본 "밀린 일이 없습니다"
-};
-/** 페이스 한 줄: "분기 말일 · 49일 → 필요 7.5건/일 · 지금 5.6건/일". need·now 는 kpiCompute 가 낸다(위젯은 비교만). */
-export type KpiPaceLine = { label: string; need: number; now: number; unit?: string; tone?: KpiTone };
-/** 분기 목표 진행 — 워킨맵 진행률과 같은 꼴. 큰 줄 "점검 373/1469 · 25%" + 막대 + 페이스 줄들. */
-export type KpiQuarterGoalView = {
-  kind: "quarterGoal";
-  label: string;                   // "점검"
-  value: number;
-  target: number;
-  unit?: string;                   // "대"(큰 줄 단위, 생략 가능)
-  pace?: number | null;            // 경과율 %(막대 위 점선)
-  lines: KpiPaceLine[];            // 보통 [분기 말일, 말일 10일 전]. unit 기본 "건/일"
-  teams?: KpiTeamValue[];          // 2x1 이상에서 팀별 실적/목표 칩
+  chips?: KpiChip[];
+  emptyText?: string;
 };
 
-/** 달성표 한 칸. target=null 이면 "실적만"(목표 "—", 막대 없음). actual=null 이면 "원본 연결 필요". */
-export type KpiActual = { actual: number | null; target: number | null };
-export type KpiTableTeam = KpiActual & { team: string };
-export type KpiTablePerson = KpiActual & { name: string; team: string };
+// ── 개편(2026-10-24) 뷰 타입 — 구현서A 가 같은 모양으로 채운다 ───────────────────
+/** 지표 판정: 달성·순항·부족·목표 없음·준비 중. */
+export type KpiStatus = "done" | "onTrack" | "behind" | "none" | "pending";
+/** 범위. E 는 화면에 "CSS". */
+export type KpiScope = "CS" | "A" | "B" | "C" | "D" | "E";
+export type KpiPersonCell = { name: string; team: string; value: number; target: number | null; done: boolean };
 export type KpiTableRow = {
-  id: string;
-  label: string;                   // "블로그 인당 주 2"
-  unit: string;
-  period?: string;                 // "주" · "월" · "분기"(행마다 목표 기간이 다를 때)
-  total: KpiActual;                // CS 전체
-  teams: KpiTableTeam[];           // A~E(없는 팀은 "—")
-  people?: KpiTablePerson[];       // 펼치면 개인
-  pending?: boolean;               // 원본 없음 → 줄 전체 회색 "원본 연결 필요"
-  pendingText?: string;
-  main?: boolean;                  // [주요 목표] 보기에 나옴
-  group?: string;                  // [전체 지표] 묶음 머리: "현장"·"영업"·"접수"·"소통·성장"
+  id: string; name: string; unit: string; targetLabel: string; basis: string;
+  status: KpiStatus; pace: number | null; // 기간 경과 0~1 (막대 점선)
+  cells: Array<{ scope: KpiScope; value: number | null; target: number | null; status: KpiStatus }>;
+  teamBars: Array<{ team: string; value: number; target: number | null; pct: number | null }>;
+  people: KpiPersonCell[];
+  trend?: { delta: number | null; label: string }; // 목표 없는 지표용
+  cellState: "ready" | "pending" | "error"; pendingText?: string; main: boolean;
   onOpen?: () => void;
 };
-export type KpiPeriod = "오늘" | "이번 주" | "이번 달" | "분기";
-/** KPI 달성표: 행 = KPI, 열 = CS 전체 / A~E, 펼치면 개인. PC 는 표, 폰은 KPI 카드 → 팀 → 개인. */
-export type KpiTableView = {
-  kind: "kpiTable";
-  rows: KpiTableRow[];
-  teamOrder?: string[];            // 기본 ["A","B","C","D","E"]
-  groupOrder?: string[];           // 기본 ["현장","영업","접수","소통·성장"], 없는 묶음은 "기타"로 끝에
-  pace?: number | null;            // 경과율 % — 미달 색 판정(없으면 100% 미만 = 노랑, 50% 미만 = 빨강)
-  period?: KpiPeriod;              // 기간 칩(제어형). 주면 [오늘][이번 주][이번 달][분기] 칩이 보인다
-  periods?: KpiPeriod[];           // 보일 기간 칩(기본 4개)
-  onPeriodChange?: (p: KpiPeriod) => void;
-  mode?: "main" | "all";           // 보기 칩 초기값(기본 "main"). 이후는 위젯 안에서 바뀐다
-};
+export type KpiTableView = { kind: "kpiTable"; period: "week" | "month" | "quarter"; view: "main" | "all"; rows: KpiTableRow[]; counts: { main: number; all: number }; onPeriod: (p: "week" | "month" | "quarter") => void; onView: (v: "main" | "all") => void };
+export type KpiQuarterGoalView = { kind: "quarterGoal"; basis: "end" | "early"; onBasis: (b: "end" | "early") => void; endLabel: string; bizDaysLeft: number; elapsed: number;
+  teams: Array<{ team: string; done: number; total: number; pct: number; headcount: number; need: number | null; now: number | null }> };
+export type KpiUnhandledTotalView = { kind: "unhandledTotal"; total: number; parts: Array<{ label: string; value: number | null; tone?: string }>; breakdown: Array<{ label: string; value: number; tone?: string }>; oldest?: string; weekDelta?: number | null; defs: Array<{ label: string; text: string }> };
+export type KpiOkrView = { kind: "okr"; period: "week" | "month"; onPeriod: (p: "week" | "month") => void; pct: number | null; counts: Array<{ label: string; value: number; tone: string }>; weeks: Array<{ label: string; pct: number | null; current: boolean }>; missingTeams: string[] };
 
 /** 금일 현황 칩 하나. value=null 이면 "—", pending 이면 회색 "원본 연결 필요". */
 export type KpiTodayItem = { key: string; label: string; value: number | null; unit: string; tone?: KpiTone; pending?: boolean; onOpen?: () => void };
 export type KpiTodayStripView = { kind: "todayStrip"; items: KpiTodayItem[] };
 
-export type KpiView = KpiNumberView | KpiRingView | KpiTeamBarsView | KpiSparkView | KpiProgressView | KpiListView | KpiQuarterGoalView | KpiTableView | KpiTodayStripView;
+export type KpiView = KpiNumberView | KpiRingView | KpiTeamBarsView | KpiSparkView | KpiProgressView | KpiListView | KpiQuarterGoalView | KpiTableView | KpiUnhandledTotalView | KpiOkrView | KpiTodayStripView;
 
 export type KpiWidgetProps = {
   kind: KpiKind;                   // 로딩 중에도 뼈대 모양을 맞추려고 view 와 따로 받는다
-  title: string;
-  basis: string;                   // "활동 기록 · 기기 대수 · 작성자 팀 · 팀장 제외" — 앞에 "숫자 기준: "을 붙여 보여 준다
-  status: KpiStatus;
+  title: string;                   // kpiTable 은 "KPI 달성표" 만 — 기간("· 이번 주")은 위젯이 view.period 로 붙인다
+  basis: string;                   // 앞에 "숫자 기준: "을 붙여 보여 준다
+  status: KpiLoadStatus;
   view?: KpiView;                  // status=ready 일 때 필수(kind 가 다르면 빈 상태로 그림)
-  period?: string;                 // "이번 주" 칩
+  period?: string;                 // "이번 주" 칩(kpiTable 은 안 그림 — 자체 기간 칩)
   icon?: LucideIcon;
-  size?: KpiSize;                  // 그리드가 넘겨 준다. 크면 같은 데이터를 더 보여 줄 뿐
+  size?: KpiSize;
   theme?: KpiTheme;
-  errorText?: string;              // 기본 "불러오지 못했습니다"
-  lastOk?: { text: string; at?: string };  // 오류 때 "마지막 값 312대 · 12분 전"
-  pendingText?: string;            // 기본 "원본 표가 준비되면 표시됩니다"
-  emptyText?: string;              // 기본 "기록 없음"
+  errorText?: string;
+  lastOk?: { text: string; at?: string };
+  pendingText?: string;
+  emptyText?: string;
   onRetry?: () => void;
-  onOpen?: () => void;             // 누르면 같은 숫자의 목록 화면으로
-  openLabel?: string;              // 기본 "자세히"
+  onOpen?: () => void;
+  openLabel?: string;
   disabled?: boolean;              // 편집 모드에서 그리드가 true — 눌러도 이동하지 않음
 };
 
@@ -190,10 +168,32 @@ const TONE_DOT: Record<KpiTone, string> = { ok: "bg-emerald-400", warn: "bg-ambe
 const NEUTRAL_BAR = "bg-gradient-to-r from-violet-500 to-blue-400";
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400";
 
+// 지표 판정 색: 달성 초록 · 순항 파랑 · 부족 빨강 · 목표 없음 회색 · 준비 중 점선 회색
+const STATUS_LABEL: Record<KpiStatus, string> = { done: "달성", onTrack: "순항", behind: "부족", none: "목표 없음", pending: "준비 중" };
+const STATUS_PILL: Record<KpiTheme, Record<KpiStatus, string>> = {
+  deck: {
+    done: "bg-emerald-500/15 text-emerald-300", onTrack: "bg-sky-500/15 text-sky-300", behind: "bg-rose-500/15 text-rose-300",
+    none: "bg-white/[0.07] text-slate-400", pending: "border border-dashed border-slate-500 text-slate-400",
+  },
+  light: {
+    done: "bg-emerald-50 text-emerald-700", onTrack: "bg-sky-50 text-sky-700", behind: "bg-rose-50 text-rose-700",
+    none: "bg-slate-100 text-slate-500", pending: "border border-dashed border-slate-300 text-slate-500",
+  },
+};
+const STATUS_TEXT: Record<KpiTheme, Record<KpiStatus, string>> = {
+  deck: { done: "text-emerald-300", onTrack: "text-sky-300", behind: "text-rose-300", none: "text-slate-300", pending: "text-slate-500" },
+  light: { done: "text-emerald-600", onTrack: "text-sky-600", behind: "text-rose-600", none: "text-slate-600", pending: "text-slate-400" },
+};
+const STATUS_BAR: Record<KpiStatus, string> = { done: "bg-emerald-400", onTrack: "bg-sky-400", behind: "bg-rose-500", none: "bg-slate-400", pending: "bg-slate-500" };
+
 // ── 표시용 작은 도우미(계산이 아니라 글자 만들기) ─────────────────────────────
 const fmt = (n: number) => (Number.isFinite(n) ? n.toLocaleString("ko-KR") : "—");
 const pctOf = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
 const clamp = (n: number, lo = 0, hi = 100) => Math.min(hi, Math.max(lo, n));
+const rate = (n: number) => (Number.isFinite(n) ? n.toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—");
+/** 팀 이름: 내부 E 는 화면에 CSS. */
+const teamName = (s: string) => (s === "E" ? "CSS" : s);
+const toneOf = (s?: string): KpiTone => (s === "ok" || s === "warn" || s === "bad" || s === "idle" ? s : "idle");
 /** 목표 대비 % 와 경과율로 상태색. 경과율이 없으면 100% 이상만 초록, 나머지 회색. */
 function toneFor(pct: number | null, pace?: number | null): KpiTone {
   if (pct === null) return "idle";
@@ -211,8 +211,8 @@ function teamTone(t: KpiTeamValue, commonTarget?: number | null): KpiTone | null
   if (t.value >= target / 2) return "warn";
   return "bad";
 }
-const isWide = (s?: KpiSize) => s === "2x1" || s === "2x2" || s === "4x1";
-const isTall = (s?: KpiSize) => s === "2x2";
+const isWide = (s?: KpiSize) => s === "2x1" || s === "2x2" || s === "4x1" || s === "4x2";
+const isTall = (s?: KpiSize) => s === "2x2" || s === "4x2";
 
 /** 숫자가 이전 값에서 올라간다(0.7초). 움직임 줄이기면 즉시 — Home.tsx useCountUp 과 같은 방식. */
 function useCountUp(target: number, ms = 700) {
@@ -246,11 +246,10 @@ function Delta({ value, prev, label = "지난주", better = "up", theme }: { val
   const up = diff > 0;
   const good = better === "up" ? up : !up;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
-  // 전 값이 0 이면 %가 무한대라 차이 수만 쓴다
-  const rate = prev > 0 ? `${up ? "+" : ""}${Math.round((diff / prev) * 100)}%` : `${up ? "+" : ""}${fmt(diff)}`;
+  const r = prev > 0 ? `${up ? "+" : ""}${Math.round((diff / prev) * 100)}%` : `${up ? "+" : ""}${fmt(diff)}`;
   return (
     <span className={`inline-flex items-center gap-0.5 text-[11px] font-black tabular-nums ${good ? tones.ok : tones.bad}`}>
-      <Icon size={13} aria-hidden /><span className="sr-only">{up ? "증가" : "감소"} </span>{rate}
+      <Icon size={13} aria-hidden /><span className="sr-only">{up ? "증가" : "감소"} </span>{r}
       <span className="ml-0.5 font-bold opacity-70">{label} 대비</span>
     </span>
   );
@@ -299,7 +298,7 @@ function TeamBarList({ rows, unit, target, theme, compact }: { rows: KpiTeamValu
 /** 추세 선(SVG 직접 — 차트 라이브러리 없음). 마지막 점 강조. */
 function Sparkline({ points, theme, height = 44, label }: { points: KpiSeriesPoint[]; theme: KpiTheme; height?: number; label: string }) {
   const t = THEMES[theme];
-  const gid = useId().replace(/[^a-zA-Z0-9_-]/g, ""); // url(#…) 안에 쓸 수 있는 글자만
+  const gid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   if (points.length < 2) return <div className={`grid place-items-center text-[11px] font-bold ${t.muted}`} style={{ height }}>추세를 그릴 점이 부족합니다</div>;
   const W = 100, H = 40, pad = 3;
   const max = Math.max(1, ...points.map((p) => p.value));
@@ -321,7 +320,6 @@ function Sparkline({ points, theme, height = 44, label }: { points: KpiSeriesPoi
           <polygon points={`0,${H} ${line} ${W},${H}`} fill={`url(#spark-${gid})`} />
           <polyline points={line} fill="none" className="stroke-blue-400" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
         </svg>
-        {/* 끝 점은 SVG 밖에서 그린다 — preserveAspectRatio=none 이면 원이 찌그러진다 */}
         <span aria-hidden className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-300 ring-2 ring-blue-400/30" style={{ left: "100%", top: `${(y(last.value) / H) * 100}%` }} />
       </div>
       <figcaption className={`mt-1 flex justify-between font-mono text-[9.5px] font-bold tabular-nums ${t.muted}`}>
@@ -343,6 +341,17 @@ function Ring({ pct, tone, theme, size = 76 }: { pct: number | null; tone: KpiTo
       </svg>
       <span className={`absolute inset-0 grid place-items-center font-mono text-[18px] font-black tabular-nums ${t.text}`}>{pct === null ? "—" : `${pct}%`}</span>
     </div>
+  );
+}
+
+/** 막대 + 기간 경과 점선(paceFrac 0~1). 색은 호출하는 쪽이 정한다. */
+function Bar({ pct, barClass, paceFrac, theme, h = "h-2", label }: { pct: number | null; barClass: string; paceFrac?: number | null; theme: KpiTheme; h?: string; label?: string }) {
+  const t = THEMES[theme];
+  return (
+    <span className={`relative block ${h} w-full overflow-hidden rounded-full ${t.track}`} role={label ? "progressbar" : undefined} aria-label={label} aria-valuemin={label ? 0 : undefined} aria-valuemax={label ? 100 : undefined} aria-valuenow={label ? clamp(pct ?? 0) : undefined} aria-hidden={label ? undefined : true}>
+      <span className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 motion-reduce:transition-none ${barClass}`} style={{ width: `${clamp(pct ?? 0)}%` }} />
+      {paceFrac !== null && paceFrac !== undefined ? <span aria-hidden className={`absolute inset-y-0 w-0 border-l-2 border-dashed ${t.goalLine}`} style={{ left: `${clamp(paceFrac * 100)}%` }} /> : null}
+    </span>
   );
 }
 
@@ -397,10 +406,7 @@ function RingBody({ v, size, theme }: { v: KpiRingView; size?: KpiSize; theme: K
             return (
               <li key={r.team} className="flex items-center gap-2.5" title={`${r.label || r.team} ${fmt(r.value)}/${fmt(r.target ?? 0)}`}>
                 <span className={`w-9 shrink-0 truncate text-[12px] font-black ${t.sub}`}>{r.label || r.team}</span>
-                <span className={`relative h-2 flex-1 overflow-hidden rounded-full ${t.track}`}>
-                  <span className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 motion-reduce:transition-none ${TONE_BAR[tt]}`} style={{ width: `${clamp(p ?? 0)}%` }} />
-                  {v.pace !== null && v.pace !== undefined ? <span aria-hidden className={`absolute inset-y-0 w-0 border-l border-dashed ${t.goalLine}`} style={{ left: `${clamp(v.pace)}%` }} /> : null}
-                </span>
+                <span className="flex-1"><Bar pct={p} barClass={TONE_BAR[tt]} paceFrac={v.pace !== null && v.pace !== undefined ? v.pace / 100 : null} theme={theme} /></span>
                 <span className={`w-10 shrink-0 text-right font-mono text-[11px] font-black tabular-nums ${t.text}`}>{p === null ? "—" : `${p}%`}</span>
               </li>
             );
@@ -453,10 +459,7 @@ function ProgressBody({ v, size, theme }: { v: KpiProgressView; size?: KpiSize; 
         <span className={`text-[12px] font-black ${t.sub}`}>{v.unit}</span>
         <span className={`ml-auto font-mono text-[14px] font-black tabular-nums ${TONE_TEXT[theme][tone]}`}>{pct === null ? "—" : `${pct}%`}</span>
       </div>
-      <div className={`relative mt-2 h-3 overflow-hidden rounded-full ${t.track}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0} aria-label={`목표 대비 ${pct ?? 0}%`}>
-        <span className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 motion-reduce:transition-none ${TONE_BAR[tone]}`} style={{ width: `${clamp(pct ?? 0)}%` }} />
-        {v.pace !== null && v.pace !== undefined ? <span aria-hidden className={`absolute inset-y-0 w-0 border-l-2 border-dashed ${t.goalLine}`} style={{ left: `${clamp(v.pace)}%` }} title={`경과 ${Math.round(v.pace)}%`} /> : null}
-      </div>
+      <div className="mt-2"><Bar pct={pct} barClass={TONE_BAR[tone]} paceFrac={v.pace !== null && v.pace !== undefined ? v.pace / 100 : null} theme={theme} h="h-3" label={`목표 대비 ${pct ?? 0}%`} /></div>
       <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-bold ${t.sub}`}>
         <span>{remain > 0 ? <>남은 <b className={`font-black tabular-nums ${t.text}`}>{fmt(remain)}</b>{v.unit}</> : <span className={TONE_TEXT[theme].ok}>목표 달성</span>}</span>
         {v.remainLabel && <span>{v.remainLabel}</span>}
@@ -520,286 +523,394 @@ function ListBody({ v, size, theme, onOpen, disabled }: { v: KpiListView; size?:
   );
 }
 
-// ── 분기 목표 진행(quarterGoal) ─────────────────────────────────────────────
-const rate = (n: number) => (Number.isFinite(n) ? n.toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : "—");
-/** 지금 페이스가 필요 페이스 이상 = 초록, 80% 이상 = 노랑(주황), 그 아래 = 빨강. */
-function paceTone(l: KpiPaceLine): KpiTone {
-  if (l.tone) return l.tone;
-  if (l.need <= 0 || l.now >= l.need) return "ok";
-  return l.now >= l.need * 0.8 ? "warn" : "bad";
+/** 머리 칩 공용 모양(켜짐 = 흰/검정 반전). */
+function chipClass(on: boolean, theme: KpiTheme) {
+  const t = THEMES[theme];
+  return `inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-[11.5px] font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} ${on ? (theme === "deck" ? "bg-white text-slate-950" : "bg-slate-900 text-white") : `${t.chip} ${t.hover}`}`;
 }
 
-function QuarterGoalBody({ v, size, theme }: { v: KpiQuarterGoalView; size?: KpiSize; theme: KpiTheme }) {
+// ── 분기 점검 진행(quarterGoal) — 팀 5줄만 ─────────────────────────────────
+/** 지금 페이스가 필요 페이스 이상 = 초록, 80% 이상 = 노랑, 그 아래 = 빨강. */
+function paceToneNum(need: number | null, now: number | null): KpiTone {
+  if (need === null || now === null) return "idle";
+  if (need <= 0 || now >= need) return "ok";
+  return now >= need * 0.8 ? "warn" : "bad";
+}
+
+function QuarterGoalBody({ v, theme, disabled }: { v: KpiQuarterGoalView; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
   const tones = TONE_TEXT[theme];
-  const pct = pctOf(v.value, v.target);
-  const tone = toneFor(pct, v.pace);
+  const elapsedPct = clamp(v.elapsed > 1 ? v.elapsed : v.elapsed * 100);
   return (
     <div>
-      <div className="flex flex-wrap items-baseline gap-x-1.5">
-        <span className={`text-[13px] font-black ${t.sub}`}>{v.label}</span>
-        <span className={`font-mono text-[24px] font-black leading-none tabular-nums ${t.text}`}>{fmt(v.value)}<span className={`text-[15px] ${t.muted}`}>/{fmt(v.target)}</span></span>
-        {v.unit && <span className={`text-[12px] font-black ${t.sub}`}>{v.unit}</span>}
-        <span className={`font-mono text-[18px] font-black tabular-nums ${tones[tone]}`}>· {pct === null ? "—" : `${pct}%`}</span>
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <div className="flex gap-1" role="group" aria-label="기준일">
+          <button type="button" aria-pressed={v.basis === "end"} disabled={disabled} onClick={() => v.onBasis("end")} className={chipClass(v.basis === "end", theme)}>말일</button>
+          <button type="button" aria-pressed={v.basis === "early"} disabled={disabled} onClick={() => v.onBasis("early")} className={chipClass(v.basis === "early", theme)}>말일 10일 전</button>
+        </div>
+        <span className={`text-[11px] font-bold ${t.sub}`}>{v.endLabel} · 영업일 <b className={`font-mono font-black tabular-nums ${t.text}`}>{fmt(v.bizDaysLeft)}</b>일 남음</span>
       </div>
-      <div className={`relative mt-2 h-3 overflow-hidden rounded-full ${t.track}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0} aria-label={`${v.label} 목표 대비 ${pct ?? 0}%`}>
-        <span className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 motion-reduce:transition-none ${TONE_BAR[tone]}`} style={{ width: `${clamp(pct ?? 0)}%` }} />
-        {v.pace !== null && v.pace !== undefined ? <span aria-hidden className={`absolute inset-y-0 w-0 border-l-2 border-dashed ${t.goalLine}`} style={{ left: `${clamp(v.pace)}%` }} /> : null}
-      </div>
-      {v.pace !== null && v.pace !== undefined && <div className={`mt-1 text-[10px] font-bold ${t.muted}`}>점선 = 기간 경과 {Math.round(v.pace)}%</div>}
-      {v.lines.length > 0 && (
-        <ul className={`mt-2 space-y-1 border-t pt-2 ${t.divider}`}>
-          {v.lines.map((l) => {
-            const lt = paceTone(l);
-            const unit = l.unit ?? "건/일";
+      {v.teams.length === 0 ? (
+        <p className={`rounded-xl border border-dashed px-3 py-4 text-center text-[12px] font-bold ${t.divider} ${t.sub}`}>점검 대상 팀이 없습니다.</p>
+      ) : (
+        <ul className={`divide-y rounded-xl border ${t.divider}`}>
+          {v.teams.map((r) => {
+            const tone = toneFor(r.total > 0 ? r.pct : null, elapsedPct);
+            const pt = paceToneNum(r.need, r.now);
             return (
-              <li key={l.label} className="flex flex-wrap items-baseline gap-x-1.5 text-[11.5px] font-bold leading-5">
-                <span className={t.sub}>{l.label}</span>
-                <ArrowRight size={11} aria-hidden className={`self-center ${t.muted}`} />
-                {l.need <= 0 ? <span className={tones.ok}>목표 달성</span> : (
-                  <>
-                    <span className={t.text}>필요 <b className="font-mono font-black tabular-nums">{rate(l.need)}</b>{unit}</span>
-                    <span className={t.muted}>·</span>
-                    <span className={tones[lt]}>지금 <b className="font-mono font-black tabular-nums">{rate(l.now)}</b>{unit}</span>
-                    {lt !== "ok" && <span className="sr-only">(필요 페이스보다 느립니다)</span>}
-                  </>
-                )}
+              <li key={r.team} className="px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-12 shrink-0 text-[12.5px] font-black ${t.text}`}>{teamName(r.team)}팀</span>
+                  <span className={`font-mono text-[12.5px] font-black tabular-nums ${t.text}`}>{fmt(r.done)}<span className={t.muted}>/{fmt(r.total)}</span></span>
+                  <span className={`ml-auto font-mono text-[14px] font-black tabular-nums ${r.total > 0 ? tones[tone] : t.muted}`}>{r.total > 0 ? `${Math.round(r.pct)}%` : "대상 없음"}</span>
+                </div>
+                <div className="mt-1.5"><Bar pct={r.total > 0 ? r.pct : 0} barClass={TONE_BAR[tone]} paceFrac={elapsedPct / 100} theme={theme} label={`${teamName(r.team)}팀 점검 ${Math.round(r.pct)}%`} /></div>
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-[11.5px] font-bold leading-5">
+                  {r.need === null ? <span className={t.muted}>필요 페이스를 계산할 수 없습니다</span> : r.need <= 0 ? <span className={tones.ok}>목표 달성</span> : (
+                    <>
+                      <span className={t.text}>필요 <b className="font-mono font-black tabular-nums">{rate(r.need)}</b>/일·인</span>
+                      <ArrowRight size={11} aria-hidden className={`self-center ${t.muted}`} />
+                      <span className={tones[pt]}>지금 <b className="font-mono font-black tabular-nums">{r.now === null ? "—" : rate(r.now)}</b>/일·인</span>
+                      {pt === "bad" || pt === "warn" ? <span className="sr-only">(필요 페이스보다 느립니다)</span> : null}
+                    </>
+                  )}
+                  <span className={t.muted}>· {fmt(r.headcount)}명</span>
+                </div>
               </li>
             );
           })}
         </ul>
       )}
-      {isWide(size) && v.teams?.length ? (
-        <ul className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-5">
-          {v.teams.map((r) => {
-            const p = r.target ? pctOf(r.value, r.target) : null;
-            return (
-              <li key={r.team} className={`flex items-center justify-between gap-1 rounded-lg px-2 py-1 text-[11px] font-black ${t.chip}`} title={`${r.label || r.team} ${fmt(r.value)}/${fmt(r.target ?? 0)}`}>
-                <span>{r.label || r.team}</span>
-                <span className={`font-mono tabular-nums ${tones[r.tone ?? toneFor(p, v.pace)]}`}>{p === null ? fmt(r.value) : `${p}%`}</span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      <div className={`mt-1.5 text-[10px] font-bold ${t.muted}`}>점선 = 기간 경과 {Math.round(elapsedPct)}%</div>
     </div>
   );
 }
 
 // ── KPI 달성표(kpiTable) ────────────────────────────────────────────────────
-const DEFAULT_TEAMS = ["A", "B", "C", "D", "E"];
-const DEFAULT_GROUPS = ["현장", "영업", "접수", "소통·성장"];
-const DEFAULT_PERIODS: KpiPeriod[] = ["오늘", "이번 주", "이번 달", "분기"];
-/** 미달 색: 100% 이상 초록 · 경과율 있으면 그 기준 · 없으면 50% 이상 노랑, 미만 빨강. */
-function cellTone(pct: number, pace?: number | null): KpiTone {
-  if (pct >= 100) return "ok";
-  if (pace !== null && pace !== undefined) return toneFor(pct, pace);
-  return pct >= 50 ? "warn" : "bad";
+const PERIOD_LABEL: Record<KpiTableView["period"], string> = { week: "이번 주", month: "이번 달", quarter: "분기" };
+const TEAM_SCOPES: KpiScope[] = ["A", "B", "C", "D", "E"];
+/** PC 열: 지표 · 상태 · CS 전체 · 팀 5칸. */
+const TABLE_GRID = "lg:grid lg:grid-cols-[minmax(0,1.7fr)_4.75rem_minmax(0,1.5fr)_repeat(5,minmax(0,1fr))]";
+
+function StatusPill({ status, theme }: { status: KpiStatus; theme: KpiTheme }) {
+  return <span className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-full px-2 py-0.5 text-[10.5px] font-black ${STATUS_PILL[theme][status]}`}>{STATUS_LABEL[status]}</span>;
 }
 
-function TableCell({ a, theme, pace, pendingText, align = "right" }: { a: KpiActual | undefined; theme: KpiTheme; pace?: number | null; pendingText?: string; align?: "left" | "right" }) {
+const cellOf = (r: KpiTableRow, scope: KpiScope) => r.cells.find((c) => c.scope === scope);
+const cellPct = (c?: { value: number | null; target: number | null }) => (c && c.value !== null && c.target ? Math.round((c.value / c.target) * 100) : null);
+const placeholderText = (r: KpiTableRow) => (r.cellState === "error" ? "불러오지 못했습니다" : r.pendingText || "준비 중 · SQL 실행 대기");
+const isPlaceholder = (r: KpiTableRow) => r.cellState !== "ready" || r.status === "pending";
+
+function TrendMark({ trend, theme }: { trend?: KpiTableRow["trend"]; theme: KpiTheme }) {
   const t = THEMES[theme];
-  if (!a || a.actual === null) {
-    return <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-black ${t.chip} opacity-70`} title={pendingText || "원본 연결 필요"}>{pendingText || "원본 연결 필요"}</span>;
-  }
-  // 목표 없는 지표 = 실적만(목표 "—", 막대 없음)
-  if (!a.target) {
-    return <span className={`font-mono text-[12px] font-black tabular-nums ${t.text}`}>{fmt(a.actual)}<span className={t.muted}>/—</span></span>;
-  }
-  const pct = Math.round((a.actual / a.target) * 100);
-  const tone = cellTone(pct, pace);
+  if (!trend) return null;
+  const d = trend.delta;
+  const Icon = d === null || d === 0 ? Minus : d > 0 ? ArrowUpRight : ArrowDownRight;
+  const color = d === null || d === 0 ? t.muted : d > 0 ? TONE_TEXT[theme].ok : TONE_TEXT[theme].bad;
   return (
-    <span className={`inline-flex min-w-18 flex-col gap-1 ${align === "right" ? "items-end" : "items-start"}`} title={`${fmt(a.actual)} / ${fmt(a.target)} · ${pct}%`}>
-      <span className={`font-mono text-[12px] font-black tabular-nums ${TONE_TEXT[theme][tone]}`}>{fmt(a.actual)}<span className={t.muted}>/{fmt(a.target)}</span></span>
-      <span className={`relative h-1.5 w-full overflow-hidden rounded-full ${t.track}`} aria-hidden>
-        <span className={`absolute inset-y-0 left-0 rounded-full ${TONE_BAR[tone]}`} style={{ width: `${clamp(pct)}%` }} />
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-black tabular-nums ${color}`}>
+      <Icon size={13} aria-hidden />{d === null ? "비교 기록 없음" : `${d > 0 ? "+" : ""}${fmt(d)}`}<span className={`ml-0.5 font-bold ${t.muted}`}>{trend.label}</span>
+    </span>
+  );
+}
+
+/** CS 전체 큰 숫자 + 막대. 목표 없으면 실적만 크게 + 추세. */
+function CsSummary({ r, theme }: { r: KpiTableRow; theme: KpiTheme }) {
+  const t = THEMES[theme];
+  const c = cellOf(r, "CS");
+  if (isPlaceholder(r)) return <span className={`text-[11.5px] font-black ${r.cellState === "error" ? TONE_TEXT[theme].bad : t.muted}`}>{placeholderText(r)}</span>;
+  if (!c || c.value === null) return <span className={`text-[12px] font-black ${t.muted}`}>—</span>;
+  if (!c.target) {
+    return (
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className={`font-mono text-[20px] font-black leading-none tabular-nums ${t.text}`}>{fmt(c.value)}<span className={`ml-1 font-sans text-[11px] font-bold ${t.sub}`}>{r.unit}</span></span>
+        <TrendMark trend={r.trend} theme={theme} />
       </span>
+    );
+  }
+  const pct = cellPct(c);
+  return (
+    <span className="flex min-w-0 flex-col gap-1.5" title={`${fmt(c.value)} / ${fmt(c.target)} · ${pct}%`}>
+      <span className="flex items-baseline gap-1.5">
+        <span className={`font-mono text-[20px] font-black leading-none tabular-nums ${STATUS_TEXT[theme][c.status]}`}>{fmt(c.value)}<span className={`text-[14px] ${t.muted}`}>/{fmt(c.target)}</span></span>
+        <span className={`font-mono text-[11px] font-black tabular-nums ${t.sub}`}>{pct}%</span>
+      </span>
+      <Bar pct={pct} barClass={STATUS_BAR[c.status]} paceFrac={r.pace} theme={theme} h="h-2" label={`${r.name} CS 전체 ${pct}%`} />
+    </span>
+  );
+}
+
+/** 팀 칸: 숫자 + 얇은 막대(색 = 상태). */
+function TeamCell({ c, theme }: { c?: KpiTableRow["cells"][number]; theme: KpiTheme }) {
+  const t = THEMES[theme];
+  if (!c || c.value === null) return <span className={`text-[11px] font-black ${t.muted}`}>—</span>;
+  if (!c.target) return <span className={`font-mono text-[12px] font-black tabular-nums ${t.text}`}>{fmt(c.value)}</span>;
+  const pct = cellPct(c);
+  return (
+    <span className="flex min-w-0 flex-col gap-1" title={`${teamName(c.scope)} ${fmt(c.value)} / ${fmt(c.target)} · ${pct}%`}>
+      <span className={`font-mono text-[11.5px] font-black tabular-nums ${STATUS_TEXT[theme][c.status]}`}>{fmt(c.value)}<span className={t.muted}>/{fmt(c.target)}</span></span>
+      <Bar pct={pct} barClass={STATUS_BAR[c.status]} theme={theme} h="h-1" />
+    </span>
+  );
+}
+
+/** 펼친 내용: ⓐ 팀별 가로 막대 ⓑ 개인 칩(팀별 묶음) ⓒ 숫자 기준 + 화면 열기. */
+function RowDetail({ r, theme, disabled }: { r: KpiTableRow; theme: KpiTheme; disabled?: boolean }) {
+  const t = THEMES[theme];
+  const order = (team: string) => { const i = TEAM_SCOPES.indexOf(team as KpiScope); return i < 0 ? 99 : i; };
+  const groups = new Map<string, KpiPersonCell[]>();
+  for (const p of r.people) groups.set(p.team, [...(groups.get(p.team) ?? []), p]);
+  const groupList = [...groups.entries()].sort((a, b) => order(a[0]) - order(b[0])).map(([team, list]) => [team, [...list].sort((a, b) => b.value - a.value)] as const);
+  const paceFrac = r.pace;
+  const empty = r.teamBars.length === 0 && r.people.length === 0;
+  return (
+    <div className="space-y-3">
+      {r.teamBars.length > 0 && (
+        <ul className="space-y-1.5" aria-label="팀별 실적">
+          {r.teamBars.map((b) => {
+            const pct = b.pct ?? (b.target ? Math.round((b.value / b.target) * 100) : null);
+            const st: KpiStatus = pct === null ? "none" : pct >= 100 ? "done" : paceFrac !== null && pct >= paceFrac * 100 ? "onTrack" : "behind";
+            return (
+              <li key={b.team} className="flex items-center gap-2.5" title={`${teamName(b.team)} ${fmt(b.value)}${b.target ? ` / 목표 ${fmt(b.target)}` : ""}`}>
+                <span className={`w-11 shrink-0 text-[12px] font-black ${t.sub}`}>{teamName(b.team)}</span>
+                <span className="flex-1"><Bar pct={pct} barClass={STATUS_BAR[st]} paceFrac={b.target ? paceFrac : null} theme={theme} h="h-2.5" /></span>
+                <span className={`w-24 shrink-0 text-right font-mono text-[11.5px] font-black tabular-nums ${t.text}`}>
+                  {fmt(b.value)}{b.target ? <span className={t.muted}>/{fmt(b.target)}</span> : null}
+                  <span className={`ml-1 ${STATUS_TEXT[theme][st]}`}>{pct === null ? "" : `${pct}%`}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {groupList.length > 0 && (
+        <div className="space-y-2" aria-label="개인별 실적">
+          {groupList.map(([team, list]) => (
+            <div key={team} className="flex flex-wrap items-start gap-1.5">
+              <span className={`mt-1 w-11 shrink-0 text-[11px] font-black ${t.muted}`}>{teamName(team)}</span>
+              <ul className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                {list.map((p) => {
+                  const cls = p.done ? STATUS_PILL[theme].done : p.target !== null ? STATUS_PILL[theme].behind : t.chip;
+                  return (
+                    <li key={`${p.team}-${p.name}`} className={`inline-flex min-h-8 items-center gap-1 rounded-lg px-2.5 text-[11.5px] font-black ${cls}`}>
+                      <span>{p.name}</span>
+                      <span className="font-mono tabular-nums">{fmt(p.value)}{p.target !== null ? `/${fmt(p.target)}` : ""}</span>
+                      <span className="sr-only">{p.done ? "달성" : p.target !== null ? "부족" : ""}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+      {empty && <p className={`text-[11.5px] font-bold ${t.sub}`}>팀·개인 세부 기록이 아직 없습니다.</p>}
+      <div className={`flex flex-wrap items-center gap-x-3 border-t pt-1 ${t.divider}`}>
+        <span className={`min-w-0 flex-1 py-1 text-[10.5px] font-semibold leading-4 ${t.muted}`}>숫자 기준: {r.basis}</span>
+        {r.onOpen && !disabled && (
+          <button type="button" onClick={r.onOpen} className={`inline-flex min-h-11 items-center gap-0.5 px-1 text-[12px] font-black ${t.link} ${focusRing}`}>화면 열기<ArrowRight size={13} aria-hidden /></button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RowName({ r, theme }: { r: KpiTableRow; theme: KpiTheme }) {
+  const t = THEMES[theme];
+  return (
+    <span className="min-w-0">
+      <span className={`block truncate text-[13px] font-black ${t.text}`} title={r.name}>{r.name}</span>
+      <span className={`block truncate text-[10.5px] font-bold ${t.muted}`} title={`${r.unit} · ${r.targetLabel}`}>{r.unit} · {r.targetLabel}</span>
     </span>
   );
 }
 
 function KpiTableBody({ v, theme, disabled }: { v: KpiTableView; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
-  const [mode, setMode] = useState<"main" | "all">(v.mode ?? "main");
-  const [teamsOpen, setTeamsOpen] = useState<Set<string>>(() => new Set());   // 폰: KPI 카드 → 팀
-  const [peopleOpen, setPeopleOpen] = useState<Set<string>>(() => new Set()); // PC·폰: → 개인
-  const toggle = (set: Set<string>, id: string, apply: (s: Set<string>) => void) => { const n = new Set(set); if (n.has(id)) n.delete(id); else n.add(id); apply(n); };
-  const teamOrder = v.teamOrder ?? DEFAULT_TEAMS;
-  const mainRows = v.rows.filter((r) => r.main);
-  const shownRows = mode === "main" ? mainRows : v.rows;
-  // [전체 지표]는 묶음 머리별로. 순서 = groupOrder, 모르는 묶음·묶음 없음은 "기타"로 끝에
-  const groups: Array<{ name: string; rows: KpiTableRow[] }> = (() => {
-    if (mode === "main") return [{ name: "", rows: shownRows }];
-    const order = v.groupOrder ?? DEFAULT_GROUPS;
-    const map = new Map<string, KpiTableRow[]>();
-    for (const r of shownRows) { const g = r.group && order.includes(r.group) ? r.group : "기타"; map.set(g, [...(map.get(g) ?? []), r]); }
-    return [...order, "기타"].filter((g) => map.has(g)).map((g) => ({ name: g, rows: map.get(g)! }));
-  })();
-  const teamOf = (r: KpiTableRow, team: string) => r.teams.find((x) => x.team === team);
-  const chip = (on: boolean) => `inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-[11.5px] font-black transition ${focusRing} ${on ? (theme === "deck" ? "bg-white text-slate-950" : "bg-slate-900 text-white") : `${t.chip} ${t.hover}`}`;
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const periods = ["week", "month", "quarter"] as const;
 
   return (
     <div>
-      {/* 보기 칩 · 기간 칩 */}
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <div className="flex gap-1" role="group" aria-label="보기">
-          <button type="button" aria-pressed={mode === "main"} onClick={() => setMode("main")} className={chip(mode === "main")}>주요 목표<span className="font-mono opacity-70">{mainRows.length}</span></button>
-          <button type="button" aria-pressed={mode === "all"} onClick={() => setMode("all")} className={chip(mode === "all")}>전체 지표<span className="font-mono opacity-70">{v.rows.length}</span></button>
+      {/* 기간 칩 · 보기 칩 */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex flex-wrap gap-1" role="group" aria-label="기간">
+          {periods.map((p) => <button key={p} type="button" aria-pressed={v.period === p} disabled={disabled} onClick={() => v.onPeriod(p)} className={chipClass(v.period === p, theme)}>{PERIOD_LABEL[p]}</button>)}
         </div>
-        {v.onPeriodChange && (
-          <>
-            <span aria-hidden className={`mx-0.5 h-5 w-px ${t.track}`} />
-            <div className="flex flex-wrap gap-1" role="group" aria-label="기간">
-              {(v.periods ?? DEFAULT_PERIODS).map((p) => (
-                <button key={p} type="button" aria-pressed={v.period === p} onClick={() => v.onPeriodChange?.(p)} disabled={disabled} className={chip(v.period === p)}>{p}</button>
-              ))}
-            </div>
-          </>
-        )}
+        <div className="flex flex-wrap gap-1" role="group" aria-label="보기">
+          <button type="button" aria-pressed={v.view === "main"} disabled={disabled} onClick={() => v.onView("main")} className={chipClass(v.view === "main", theme)}>주요 목표<span className="font-mono opacity-70">{v.counts.main}</span></button>
+          <button type="button" aria-pressed={v.view === "all"} disabled={disabled} onClick={() => v.onView("all")} className={chipClass(v.view === "all", theme)}>전체 지표<span className="font-mono opacity-70">{v.counts.all}</span></button>
+        </div>
       </div>
 
-      {shownRows.length === 0 ? (
+      {v.rows.length === 0 ? (
         <p className={`rounded-xl border border-dashed px-3 py-4 text-center text-[12px] font-bold ${t.divider} ${t.sub}`}>
-          {mode === "main" ? "주요 목표로 정한 지표가 없습니다. [전체 지표]에서 모든 실적을 볼 수 있습니다." : "표시할 지표가 없습니다."}
+          {v.view === "main" ? "주요 목표로 정한 지표가 없습니다. [전체 지표]에서 모든 실적을 볼 수 있습니다." : "표시할 지표가 없습니다."}
         </p>
       ) : (
         <>
-          {/* PC·태블릿: 표(넘치면 표만 가로 스크롤) */}
-          <div className={`hidden overflow-x-auto rounded-xl border md:block ${t.divider}`}>
-            <table className="w-full min-w-160 border-collapse text-left">
-              <thead>
-                <tr className={`border-b text-[10.5px] font-black ${t.divider} ${t.sub}`}>
-                  <th scope="col" className="px-3 py-2">지표</th>
-                  <th scope="col" className="px-2 py-2 text-right">CS 전체</th>
-                  {teamOrder.map((tm) => <th key={tm} scope="col" className="px-2 py-2 text-right">{tm}팀</th>)}
-                </tr>
-              </thead>
-              {groups.map((g) => (
-                <tbody key={g.name || "main"} className={`divide-y ${t.divider}`}>
-                  {g.name && <tr><th colSpan={teamOrder.length + 2} scope="colgroup" className={`px-3 pb-1 pt-3 text-[10.5px] font-black tracking-wide ${t.muted}`}>{g.name}</th></tr>}
-                  {g.rows.map((r) => {
-                    const pOpen = peopleOpen.has(r.id);
-                    const hasPeople = !r.pending && !!r.people?.length;
-                    return (
-                      <FragmentRow key={r.id}>
-                        <tr className={r.pending ? "opacity-60" : ""}>
-                          <th scope="row" className="px-1 py-1 text-left align-middle">
-                            <div className="flex items-center">
-                              {hasPeople ? (
-                                <button type="button" aria-expanded={pOpen} onClick={() => toggle(peopleOpen, r.id, setPeopleOpen)} className={`flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 text-left ${t.hover} ${focusRing}`}>
-                                  <ChevronRight size={14} aria-hidden className={`shrink-0 transition-transform motion-reduce:transition-none ${pOpen ? "rotate-90" : ""} ${t.muted}`} />
-                                  <RowLabel r={r} theme={theme} />
-                                </button>
-                              ) : <div className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 px-2 pl-7"><RowLabel r={r} theme={theme} /></div>}
-                              {r.onOpen && !disabled && <button type="button" onClick={r.onOpen} aria-label={`${r.label} 화면으로`} className={`grid size-11 shrink-0 place-items-center rounded-lg ${t.link} ${focusRing}`}><ArrowRight size={14} aria-hidden /></button>}
-                            </div>
-                          </th>
-                          {r.pending ? (
-                            <td colSpan={teamOrder.length + 1} className={`px-3 py-2 text-[11.5px] font-black ${t.muted}`}>
-                              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${t.chip}`}><span aria-hidden className="size-1.5 rounded-full bg-slate-400" />{r.pendingText || "원본 연결 필요"}</span>
-                            </td>
-                          ) : (
-                            <>
-                              <td className="px-2 py-2 text-right align-middle"><TableCell a={r.total} theme={theme} pace={v.pace} /></td>
-                              {teamOrder.map((tm) => <td key={tm} className="px-2 py-2 text-right align-middle"><TableCell a={teamOf(r, tm)} theme={theme} pace={v.pace} pendingText="—" /></td>)}
-                            </>
-                          )}
-                        </tr>
-                        {pOpen && hasPeople && (
-                          <tr>
-                            <td colSpan={teamOrder.length + 2} className="px-3 pb-3 pt-1">
-                              <PeopleList people={r.people!} teamOrder={teamOrder} theme={theme} pace={v.pace} />
-                            </td>
-                          </tr>
-                        )}
-                      </FragmentRow>
-                    );
-                  })}
-                </tbody>
-              ))}
-            </table>
+          {/* PC: 표 모양(가로 스크롤 없음) */}
+          <div className={`hidden overflow-hidden rounded-xl border lg:block ${t.divider}`}>
+            <div className={`${TABLE_GRID} items-center gap-2 border-b px-3 py-2 text-[10.5px] font-black ${t.divider} ${t.sub}`} role="row">
+              <span>지표</span><span>상태</span><span>CS 전체</span>
+              {TEAM_SCOPES.map((s) => <span key={s}>{teamName(s)}팀</span>)}
+            </div>
+            <ul className={`divide-y ${t.divider}`}>
+              {v.rows.map((r) => {
+                const isOpen = open.has(r.id);
+                const ph = isPlaceholder(r);
+                return (
+                  <li key={r.id} className={ph && r.cellState !== "error" ? "opacity-70" : ""}>
+                    <button type="button" aria-expanded={ph ? undefined : isOpen} disabled={ph} onClick={() => toggle(r.id)} className={`${TABLE_GRID} min-h-14 w-full items-center gap-2 px-3 py-2 text-left ${ph ? "" : t.hover} ${focusRing}`}>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <ChevronRight size={14} aria-hidden className={`shrink-0 transition-transform motion-reduce:transition-none ${isOpen ? "rotate-90" : ""} ${ph ? "opacity-0" : t.muted}`} />
+                        <RowName r={r} theme={theme} />
+                      </span>
+                      <StatusPill status={r.status} theme={theme} />
+                      {ph ? (
+                        <span className="col-span-6"><CsSummary r={r} theme={theme} /></span>
+                      ) : (
+                        <>
+                          <CsSummary r={r} theme={theme} />
+                          {TEAM_SCOPES.map((s) => <TeamCell key={s} c={cellOf(r, s)} theme={theme} />)}
+                        </>
+                      )}
+                    </button>
+                    {isOpen && !ph && <div className="px-3 pb-3 pl-9"><RowDetail r={r} theme={theme} disabled={disabled} /></div>}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
-          {/* 폰: KPI 카드 → 누르면 팀 → 개인 */}
-          <div className="space-y-3 md:hidden">
-            {groups.map((g) => (
-              <section key={g.name || "main"} aria-label={g.name || "주요 목표"}>
-                {g.name && <h4 className={`mb-1.5 text-[10.5px] font-black tracking-wide ${t.muted}`}>{g.name}</h4>}
-                <ul className="space-y-1.5">
-                  {g.rows.map((r) => {
-                    const tOpen = teamsOpen.has(r.id);
-                    const pOpen = peopleOpen.has(r.id);
-                    return (
-                      <li key={r.id} className={`overflow-hidden rounded-xl border ${t.divider} ${r.pending ? "opacity-60" : ""}`}>
-                        <button type="button" aria-expanded={r.pending ? undefined : tOpen} disabled={r.pending} onClick={() => toggle(teamsOpen, r.id, setTeamsOpen)} className={`flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left ${r.pending ? "" : t.hover} ${focusRing}`}>
-                          <span className="min-w-0 flex-1"><RowLabel r={r} theme={theme} /></span>
-                          {r.pending
-                            ? <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${t.chip}`}>{r.pendingText || "원본 연결 필요"}</span>
-                            : <TableCell a={r.total} theme={theme} pace={v.pace} />}
-                          {!r.pending && <ChevronDown size={15} aria-hidden className={`shrink-0 transition-transform motion-reduce:transition-none ${tOpen ? "rotate-180" : ""} ${t.muted}`} />}
-                        </button>
-                        {tOpen && !r.pending && (
-                          <div className={`border-t px-3 pb-2 pt-1 ${t.divider}`}>
-                            <ul className={`divide-y ${t.divider}`}>
-                              {teamOrder.map((tm) => (
-                                <li key={tm} className="flex min-h-10 items-center justify-between gap-2 py-1">
-                                  <span className={`text-[12px] font-black ${t.sub}`}>{tm}팀</span>
-                                  <TableCell a={teamOf(r, tm)} theme={theme} pace={v.pace} pendingText="—" />
-                                </li>
-                              ))}
-                            </ul>
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                              {r.people?.length ? (
-                                <button type="button" aria-expanded={pOpen} onClick={() => toggle(peopleOpen, r.id, setPeopleOpen)} className={chip(pOpen)}>
-                                  개인 {r.people.length}명 {pOpen ? "접기" : "보기"}
-                                </button>
-                              ) : null}
-                              {r.onOpen && !disabled && <button type="button" onClick={r.onOpen} className={`inline-flex min-h-11 items-center gap-0.5 px-2 text-[11.5px] font-black ${t.link} ${focusRing}`}>자세히<ArrowRight size={12} aria-hidden /></button>}
-                            </div>
-                            {pOpen && r.people?.length ? <div className="mt-1.5"><PeopleList people={r.people} teamOrder={teamOrder} theme={theme} pace={v.pace} /></div> : null}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))}
-          </div>
+          {/* 폰·태블릿: 지표 카드 목록(탭하면 펼침) */}
+          <ul className="space-y-1.5 lg:hidden">
+            {v.rows.map((r) => {
+              const isOpen = open.has(r.id);
+              const ph = isPlaceholder(r);
+              return (
+                <li key={r.id} className={`overflow-hidden rounded-xl border ${t.divider} ${ph && r.cellState !== "error" ? "opacity-70" : ""}`}>
+                  <button type="button" aria-expanded={ph ? undefined : isOpen} disabled={ph} onClick={() => toggle(r.id)} className={`flex min-h-11 w-full flex-col gap-2 px-3 py-2.5 text-left ${ph ? "" : t.hover} ${focusRing}`}>
+                    <span className="flex items-center gap-2">
+                      <RowName r={r} theme={theme} />
+                      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+                        <StatusPill status={r.status} theme={theme} />
+                        {!ph && <ChevronDown size={15} aria-hidden className={`transition-transform motion-reduce:transition-none ${isOpen ? "rotate-180" : ""} ${t.muted}`} />}
+                      </span>
+                    </span>
+                    <CsSummary r={r} theme={theme} />
+                  </button>
+                  {isOpen && !ph && <div className={`border-t px-3 pb-2 pt-2.5 ${t.divider}`}><RowDetail r={r} theme={theme} disabled={disabled} /></div>}
+                </li>
+              );
+            })}
+          </ul>
         </>
       )}
     </div>
   );
 }
 
-/** <tbody> 안에서 tr 두 개(행 + 펼친 개인)를 key 하나로 묶는다. */
-function FragmentRow({ children }: { children: ReactNode }) { return <>{children}</>; }
-
-function RowLabel({ r, theme }: { r: KpiTableRow; theme: KpiTheme }) {
+// ── 미처리 합산(unhandledTotal) ─────────────────────────────────────────────
+function UnhandledTotalBody({ v, theme }: { v: KpiUnhandledTotalView; theme: KpiTheme }) {
   const t = THEMES[theme];
+  const tones = TONE_TEXT[theme];
+  const [defsOpen, setDefsOpen] = useState(false);
+  const defsId = useId();
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-      <span className={`min-w-0 truncate text-[12.5px] font-black ${t.text}`} title={r.label}>{r.label}</span>
-      {r.period && <span className={`shrink-0 rounded-full px-1.5 text-[9.5px] font-black ${t.chip}`}>{r.period}</span>}
-      <span className={`shrink-0 text-[10px] font-bold ${t.muted}`}>{r.unit}</span>
-    </span>
+    <div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="flex items-baseline gap-1">
+          <Big value={v.total} className={`text-[34px] font-black leading-none ${v.total ? tones.bad : tones.ok}`} />
+          <span className={`text-[13px] font-black ${t.sub}`}>건</span>
+        </span>
+        {v.weekDelta !== null && v.weekDelta !== undefined && <Delta value={v.total} prev={v.total - v.weekDelta} better="down" theme={theme} />}
+        <button type="button" onClick={() => setDefsOpen((o) => !o)} aria-expanded={defsOpen} aria-controls={defsId} aria-label="미처리 뜻 풀이 보기" title="미처리 뜻 풀이" className={`-my-2 ml-auto grid size-11 shrink-0 place-items-center rounded-full ${t.muted} transition hover:text-current ${focusRing}`}>
+          <Info size={15} aria-hidden />
+        </button>
+      </div>
+      {v.total === 0 && v.parts.every((p) => p.value !== null) && <p className={`mt-1 text-[12px] font-black ${tones.ok}`}>미처리가 없습니다.</p>}
+      {v.parts.length > 0 && (
+        <p className={`mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] font-bold ${t.sub}`}>
+          {v.parts.map((p, i) => (
+            <span key={p.label} className="inline-flex items-center gap-1.5">
+              {i > 0 && <span aria-hidden className={t.muted}>·</span>}
+              <span>{p.label} <b className={`font-mono font-black tabular-nums ${p.value !== null && p.value > 0 && p.tone ? tones[toneOf(p.tone)] : p.value === null ? t.muted : t.text}`}>{p.value === null ? "—" : fmt(p.value)}</b></span>
+            </span>
+          ))}
+        </p>
+      )}
+      {v.breakdown.length > 0 && (
+        <ul className="mt-2 grid grid-cols-3 gap-1">
+          {v.breakdown.map((b) => (
+            <li key={b.label} className={`flex items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-[11px] font-black ${t.chip}`}>
+              <span className="truncate">{b.label}</span>
+              <span className={`font-mono tabular-nums ${b.value > 0 && b.tone ? tones[toneOf(b.tone)] : t.text}`}>{fmt(b.value)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {v.oldest && <p className={`mt-2 truncate text-[11px] font-bold ${t.sub}`} title={v.oldest}>가장 오래된 건 · {v.oldest}</p>}
+      {defsOpen && (
+        <dl id={defsId} className={`mt-2 space-y-1.5 rounded-lg border px-2.5 py-2 text-[11px] leading-4 ${t.tipBox}`}>
+          {v.defs.map((d) => (
+            <div key={d.label}><dt className="font-black">{d.label}</dt><dd className="font-semibold opacity-90">{d.text}</dd></div>
+          ))}
+        </dl>
+      )}
+    </div>
   );
 }
 
-/** 개인 목록: 팀 순서 → 이름순은 넘겨준 순서 그대로. 칸마다 실적/목표·막대. */
-function PeopleList({ people, teamOrder, theme, pace }: { people: KpiTablePerson[]; teamOrder: string[]; theme: KpiTheme; pace?: number | null }) {
+// ── OKR(okr) ────────────────────────────────────────────────────────────────
+function OkrBody({ v, theme, disabled }: { v: KpiOkrView; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
-  const rank = (team: string) => { const i = teamOrder.indexOf(team); return i < 0 ? teamOrder.length : i; };
-  const sorted = [...people].sort((a, b) => rank(a.team) - rank(b.team));
+  const tones = TONE_TEXT[theme];
+  const unitWord = v.period === "week" ? "주" : "달";
+  const ringTone: KpiTone = v.pct === null ? "idle" : v.pct >= 80 ? "ok" : v.pct >= 50 ? "warn" : "bad";
   return (
-    <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
-      {sorted.map((p) => (
-        <li key={`${p.team}-${p.name}`} className={`flex min-h-10 items-center justify-between gap-2 rounded-lg px-2.5 py-1 ${t.chip}`}>
-          <span className="min-w-0 truncate text-[12px] font-black">{p.name} <span className={`text-[10px] font-bold ${t.muted}`}>{p.team}</span></span>
-          <TableCell a={p} theme={theme} pace={pace} />
-        </li>
-      ))}
-    </ul>
+    <div>
+      <div className="mb-2 flex gap-1" role="group" aria-label="OKR 기간">
+        <button type="button" aria-pressed={v.period === "week"} disabled={disabled} onClick={() => v.onPeriod("week")} className={chipClass(v.period === "week", theme)}>이번 주</button>
+        <button type="button" aria-pressed={v.period === "month"} disabled={disabled} onClick={() => v.onPeriod("month")} className={chipClass(v.period === "month", theme)}>이번 달</button>
+      </div>
+      <div className="flex items-center gap-3">
+        <Ring pct={v.pct} tone={ringTone} theme={theme} />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {v.pct === null && <div className={`text-[11.5px] font-black ${t.muted}`}>이번 {unitWord} 판정 기록이 아직 없습니다</div>}
+          {v.counts.length > 0 && (
+            <ul className="flex flex-wrap gap-1">
+              {v.counts.map((c) => (
+                <li key={c.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-black ${t.chip}`}>
+                  <span aria-hidden className={`size-1.5 rounded-full ${TONE_DOT[toneOf(c.tone)]}`} />{c.label}<span className="font-mono tabular-nums">{fmt(c.value)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+      {v.weeks.length > 0 && (
+        <ul className="mt-3 grid grid-cols-4 gap-2" aria-label="주별 달성률">
+          {v.weeks.map((w) => (
+            <li key={w.label} className="flex flex-col items-center gap-1" title={`${w.label} ${w.pct === null ? "기록 없음" : `${w.pct}%`}`}>
+              <span className={`font-mono text-[10.5px] font-black tabular-nums ${w.current ? t.text : t.sub}`}>{w.pct === null ? "—" : `${w.pct}%`}</span>
+              <span className={`relative flex h-12 w-full items-end overflow-hidden rounded-md ${t.track} ${w.current ? "ring-1 ring-sky-400" : ""}`}>
+                {w.pct === null
+                  ? <span aria-hidden className={`absolute inset-x-0 bottom-0 border-t border-dashed ${t.divider}`} />
+                  : <span className={`w-full rounded-md ${w.current ? "bg-sky-400" : "bg-slate-500"}`} style={{ height: `${Math.max(4, clamp(w.pct))}%` }} />}
+              </span>
+              <span className={`text-[10.5px] font-black ${w.current ? t.text : t.muted}`}>{w.label}{w.current && <span className="sr-only"> (이번 주)</span>}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {v.missingTeams.length > 0 && (
+        <p className={`mt-2 flex items-start gap-1 text-[11.5px] font-black leading-4 ${tones.warn}`}>
+          <AlertTriangle size={13} aria-hidden className="mt-px shrink-0" />이번 {unitWord === "주" ? "주" : "달"} OKR 미작성 {v.missingTeams.length}팀 · {v.missingTeams.map(teamName).join(", ")}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -836,9 +947,10 @@ function TodayStripBody({ v, theme, disabled }: { v: KpiTodayStripView; theme: K
 // ── 상태(로딩·빈·오류·준비 중) ────────────────────────────────────────────────
 function Skeleton({ kind, theme }: { kind: KpiKind; theme: KpiTheme }) {
   const s = THEMES[theme].skeleton;
-  if (kind === "ring") return <div className="flex items-center gap-3" aria-hidden><span className={`size-19 animate-pulse rounded-full ${s}`} /><span className="flex-1 space-y-2"><span className={`block h-3 w-20 animate-pulse rounded ${s}`} /><span className={`block h-3 w-14 animate-pulse rounded ${s}`} /></span></div>;
+  if (kind === "ring" || kind === "okr") return <div className="flex items-center gap-3" aria-hidden><span className={`size-19 animate-pulse rounded-full ${s}`} /><span className="flex-1 space-y-2"><span className={`block h-3 w-20 animate-pulse rounded ${s}`} /><span className={`block h-3 w-14 animate-pulse rounded ${s}`} /></span></div>;
   if (kind === "todayStrip") return <div className="flex gap-2 overflow-hidden" aria-hidden>{[0, 1, 2, 3].map((i) => <span key={i} className={`h-11 w-24 shrink-0 animate-pulse rounded-xl ${s}`} />)}</div>;
-  if (kind === "teamBars" || kind === "list" || kind === "kpiTable") return <div className="space-y-2.5" aria-hidden>{[0, 1, 2].map((i) => <span key={i} className={`block h-3 animate-pulse rounded ${s}`} />)}</div>;
+  if (kind === "kpiTable") return <div className="space-y-2" aria-hidden><span className={`block h-11 w-2/3 animate-pulse rounded-full ${s}`} />{[0, 1, 2, 3].map((i) => <span key={i} className={`block h-12 animate-pulse rounded-xl ${s}`} />)}</div>;
+  if (kind === "teamBars" || kind === "list" || kind === "quarterGoal") return <div className="space-y-2.5" aria-hidden>{[0, 1, 2].map((i) => <span key={i} className={`block h-3 animate-pulse rounded ${s}`} />)}</div>;
   if (kind === "spark") return <div aria-hidden><span className={`block h-7 w-20 animate-pulse rounded ${s}`} /><span className={`mt-2 block h-11 animate-pulse rounded ${s}`} /></div>;
   return <div aria-hidden><span className={`block h-8 w-24 animate-pulse rounded ${s}`} /><span className={`mt-2 block h-3 w-32 animate-pulse rounded ${s}`} /></div>;
 }
@@ -862,8 +974,13 @@ function ErrorBody({ theme, text, lastOk, onRetry, disabled }: { theme: KpiTheme
 }
 
 // ── 위젯 ────────────────────────────────────────────────────────────────────
+/** 빈 상태에서 "0" 을 크게 보이면 안 되는 종류(표·진행·OKR·합산은 글자만). */
+const NO_ZERO_EMPTY: KpiKind[] = ["kpiTable", "quarterGoal", "okr", "unhandledTotal"];
+/** 본문 전체를 단추로 만들면 안쪽 단추와 겹치는 종류. */
+const NO_BODY_BUTTON: KpiKind[] = ["list", "kpiTable", "todayStrip", "quarterGoal", "unhandledTotal", "okr"];
+
 /**
- * KPI 위젯 하나. 그리드 칸을 꽉 채운다(h-full). onOpen 이 있으면 본문 전체가 단추(목록형은 줄마다 단추 + 머리 "자세히").
+ * KPI 위젯 하나. 그리드 칸을 꽉 채운다(h-full). onOpen 이 있으면 본문 전체가 단추(안쪽 단추가 있는 종류는 바닥 "자세히" 만).
  */
 export function KpiWidget(props: KpiWidgetProps) {
   const { kind, title, basis, status, view, period, icon: Icon, size = "1x1", theme = "deck", onOpen, openLabel = "자세히", disabled } = props;
@@ -872,25 +989,29 @@ export function KpiWidget(props: KpiWidgetProps) {
   const tipId = useId();
   const basisText = `숫자 기준: ${basis}`;
   const ready = status === "ready" && view && view.kind === kind;
-  const effective: KpiStatus = status === "ready" && !ready ? "empty" : status;
+  const effective: KpiLoadStatus = status === "ready" && !ready ? "empty" : status;
+  const isTable = kind === "kpiTable";
+  const headTitle = isTable && view?.kind === "kpiTable" ? `${title} · ${PERIOD_LABEL[view.period]}` : title;
 
   let body: ReactNode;
   if (effective === "loading") body = <Skeleton kind={kind} theme={theme} />;
   else if (effective === "error") body = <ErrorBody theme={theme} text={props.errorText} lastOk={props.lastOk} onRetry={props.onRetry} disabled={disabled} />;
   else if (effective === "pending") body = (
     <div>
-      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-black ${t.chip}`}><span aria-hidden className="size-1.5 rounded-full bg-slate-400" />준비 중</span>
+      <span className={`inline-flex items-center gap-1.5 rounded-full border border-dashed border-slate-500 px-2.5 py-1 text-[12px] font-black ${t.sub}`}><span aria-hidden className="size-1.5 rounded-full bg-slate-400" />준비 중</span>
       <p className={`mt-2 text-[11.5px] font-bold leading-4 ${t.sub}`}>{props.pendingText || "원본 표가 준비되면 표시됩니다."}</p>
     </div>
   );
   else if (effective === "empty") body = kind === "list"
     ? <p className={`rounded-xl border border-dashed px-3 py-3 text-center text-[12px] font-bold ${t.divider} ${TONE_TEXT[theme].ok}`}>{props.emptyText || "밀린 일이 없습니다"}</p>
-    : (
-      <div>
-        <span className={`text-[30px] font-black leading-none tabular-nums ${t.muted}`}>0</span>
-        <p className={`mt-1.5 text-[11.5px] font-bold ${t.sub}`}>{props.emptyText || "이 기간에 기록이 없습니다"}</p>
-      </div>
-    );
+    : NO_ZERO_EMPTY.includes(kind)
+      ? <p className={`rounded-xl border border-dashed px-3 py-4 text-center text-[12px] font-bold ${t.divider} ${t.sub}`}>{props.emptyText || "보여 드릴 기록이 아직 없습니다."}</p>
+      : (
+        <div>
+          <span className={`text-[30px] font-black leading-none tabular-nums ${t.muted}`}>0</span>
+          <p className={`mt-1.5 text-[11.5px] font-bold ${t.sub}`}>{props.emptyText || "이 기간에 기록이 없습니다"}</p>
+        </div>
+      );
   else {
     const v = view!;
     body = v.kind === "number" ? <NumberBody v={v} size={size} theme={theme} />
@@ -898,23 +1019,24 @@ export function KpiWidget(props: KpiWidgetProps) {
       : v.kind === "teamBars" ? <TeamBarsBody v={v} theme={theme} />
       : v.kind === "spark" ? <SparkBody v={v} size={size} theme={theme} />
       : v.kind === "progress" ? <ProgressBody v={v} size={size} theme={theme} />
-      : v.kind === "quarterGoal" ? <QuarterGoalBody v={v} size={size} theme={theme} />
+      : v.kind === "quarterGoal" ? <QuarterGoalBody v={v} theme={theme} disabled={disabled} />
       : v.kind === "kpiTable" ? <KpiTableBody v={v} theme={theme} disabled={disabled} />
+      : v.kind === "unhandledTotal" ? <UnhandledTotalBody v={v} theme={theme} />
+      : v.kind === "okr" ? <OkrBody v={v} theme={theme} disabled={disabled} />
       : v.kind === "todayStrip" ? <TodayStripBody v={v} theme={theme} disabled={disabled} />
       : <ListBody v={v} size={size} theme={theme} onOpen={onOpen} disabled={disabled} />;
   }
 
-  // 본문 전체를 단추로: 값이 있을 때만(오류·로딩 땐 [다시] 단추와 겹치지 않게)
-  const bodyClickable = Boolean(onOpen) && !disabled && (effective === "ready" || effective === "empty") && kind !== "list" && kind !== "kpiTable" && kind !== "todayStrip";
+  const bodyClickable = Boolean(onOpen) && !disabled && (effective === "ready" || effective === "empty") && !NO_BODY_BUTTON.includes(kind);
 
   return (
-    <article className={`flex h-full min-w-0 flex-col rounded-2xl ${t.card}`} aria-label={title} aria-busy={effective === "loading" || undefined}>
+    <article className={`flex h-full min-w-0 flex-col rounded-2xl ${t.card}`} aria-label={headTitle} aria-busy={effective === "loading" || undefined}>
       <header className="flex items-start gap-1.5 px-4 pt-3">
-        {Icon && <Icon size={14} aria-hidden className={`mt-0.75 shrink-0 ${t.muted}`} />}
-        <h3 className={`min-w-0 flex-1 text-[11.5px] font-black leading-5 tracking-wide ${t.title}`}>
-          <span className="line-clamp-2">{title}</span>
+        {Icon && <Icon size={isTable ? 17 : 14} aria-hidden className={`shrink-0 ${isTable ? "mt-1" : "mt-0.75"} ${t.muted}`} />}
+        <h3 className={`min-w-0 flex-1 font-black tracking-wide ${isTable ? `text-[16px] leading-6 sm:text-[17px] ${t.text}` : `text-[11.5px] leading-5 ${t.title}`}`}>
+          <span className="line-clamp-2">{headTitle}</span>
         </h3>
-        {period && <span className={`mt-px shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${t.chip}`}>{period}</span>}
+        {period && !isTable && <span className={`mt-px shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${t.chip}`}>{period}</span>}
         {/* 기준 단추: PC 는 hover title, 폰은 눌러서 펼침. 보이는 크기는 작게, 누르는 칸은 44px */}
         <button
           type="button"
@@ -931,11 +1053,11 @@ export function KpiWidget(props: KpiWidgetProps) {
       {tipOpen && <p id={tipId} className={`mx-4 mb-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold leading-4 ${t.tipBox}`}>{basisText}</p>}
 
       {bodyClickable ? (
-        <button type="button" onClick={onOpen} aria-label={`${title} — ${openLabel}`} className={`group flex-1 rounded-xl px-4 pb-2 pt-1 text-left transition ${t.hover} ${focusRing}`}>
+        <button type="button" onClick={onOpen} aria-label={`${headTitle} — ${openLabel}`} className={`group flex-1 rounded-xl px-4 pb-2 pt-1 text-left transition ${t.hover} ${focusRing}`}>
           {body}
         </button>
       ) : (
-        <div className="flex-1 px-4 pb-2 pt-1">{body}</div>
+        <div className="min-w-0 flex-1 px-4 pb-2 pt-1">{body}</div>
       )}
 
       <footer className={`mt-auto flex items-center gap-2 border-t px-4 ${t.divider}`}>

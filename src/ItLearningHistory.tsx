@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, CheckCircle2, ChevronRight, Database, GraduationCap, Link2, LoaderCircle, Megaphone, Plus, Search, Settings2, Wrench } from "lucide-react";
 import ItDetail from "./ItDetail";
+import ItPracticeForm from "./ItPracticeForm";
+import { createOnceGuard, ItLogsMissingError, saveQuizAttempt } from "./itLogs";
 import { asItRows, buildQuiz, getTabRows, IT_SHEET_URL, type ItRow, type ItTabKey, type QuizQuestion, searchRows, sheetTabUrl, valueByPrefix } from "./itSheet";
 import { getItTechApiUrl, itTechApi, saveItTechApiUrl } from "./itTechApi";
 
@@ -66,6 +68,9 @@ export default function ItLearningHistory({ author }: { author: string }) {
   const [quizChoices, setQuizChoices] = useState<string[]>([]);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [wrongNotes, setWrongNotes] = useState<QuizQuestion[]>([]);
+  const [quizSaveState, setQuizSaveState] = useState<"idle" | "saved" | "missing" | "noauthor" | "error">("idle");
+  const quizRunId = useRef(0);
+  const quizSaveGuard = useRef(createOnceGuard());
 
   const [form, setForm] = useState<Record<string, string>>({ ...EMPTY_FORM, 작성자: author || "" });
 
@@ -136,9 +141,24 @@ export default function ItLearningHistory({ author }: { author: string }) {
       const { rows: base } = await getTabRows("knowledge"); // IT기술력DB의 퀴즈문제·퀴즈답으로 4지선다를 만든다
       const picked = buildQuiz(base, quizCount, quizLevel);
       if (!picked.length) { notify("error", "선택한 레벨의 문제가 없습니다."); return; }
+      quizRunId.current += 1; setQuizSaveState("idle");
       setQuizPool(picked); setQuizIndex(0); setQuizScore(0); setQuizChoices([]); setQuizSubmitted(false); setWrongNotes([]);
     } catch (error) { notify("error", error instanceof Error ? error.message : "퀴즈를 불러오지 못했습니다."); }
     finally { setLoading(false); }
+  };
+
+  // 완료 화면에 닿는 순간 1회만 기록(퀴즈 시작마다 runId 가 바뀐다) — KPI 용
+  const recordQuizAttempt = async () => {
+    if (!author) { setQuizSaveState("noauthor"); return; }
+    const key = String(quizRunId.current);
+    if (!quizSaveGuard.current.take(key)) return;
+    try {
+      await saveQuizAttempt({ author, level: quizLevel, total: quizPool.length, score: quizScore });
+      setQuizSaveState("saved");
+    } catch (error) {
+      if (error instanceof ItLogsMissingError) setQuizSaveState("missing");
+      else { quizSaveGuard.current.release(key); setQuizSaveState("error"); }
+    }
   };
 
   const currentQuiz = quizIndex >= 0 ? quizPool[quizIndex] : null;
@@ -155,7 +175,7 @@ export default function ItLearningHistory({ author }: { author: string }) {
     setQuizSubmitted(true);
   };
   const nextQuiz = () => {
-    if (quizIndex + 1 >= quizPool.length) setQuizIndex(quizPool.length);
+    if (quizIndex + 1 >= quizPool.length) { setQuizIndex(quizPool.length); void recordQuizAttempt(); }
     else { setQuizIndex((index) => index + 1); setQuizChoices([]); setQuizSubmitted(false); }
   };
 
@@ -206,6 +226,8 @@ export default function ItLearningHistory({ author }: { author: string }) {
       </div>
     </section>
 
+    <ItPracticeForm author={author} />
+
     {connectionOpen && <section className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
       <div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row">
         <input value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="IT 담당자가 준 Apps Script 웹 앱 /exec 주소" className="h-10 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500" />
@@ -243,6 +265,7 @@ export default function ItLearningHistory({ author }: { author: string }) {
         <button type="button" onClick={() => void startQuiz()} disabled={loading} className="mt-6 h-11 rounded-full bg-blue-600 px-7 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] hover:bg-blue-700 disabled:bg-slate-300">{loading ? "문제 만드는 중…" : "퀴즈 시작"}</button>
       </div>
       : quizIndex >= quizPool.length ? <div className="mx-auto max-w-2xl py-8 text-center"><CheckCircle2 size={40} className="mx-auto text-emerald-600" /><div className="mt-3 text-3xl font-black text-slate-950">{quizScore}/{quizPool.length}</div><p className="mt-1 text-sm font-bold text-slate-500">정답률 {Math.round((quizScore / quizPool.length) * 100)}%</p>
+        {quizSaveState !== "idle" && <p className="mt-2 text-[11px] font-semibold text-slate-400">{quizSaveState === "saved" ? "퀴즈 기록이 홈 KPI 에 반영됩니다." : quizSaveState === "missing" ? "기록 표 준비 중" : quizSaveState === "noauthor" ? "작성자를 선택하면 퀴즈 기록이 KPI 에 잡힙니다" : "퀴즈 기록을 저장하지 못했습니다."}</p>}
         {wrongNotes.length > 0 && <div className="mt-6 space-y-2 text-left"><h4 className="text-sm font-black text-slate-900">오답노트 {wrongNotes.length}건</h4>{wrongNotes.map((item, index) => <div key={index} className="rounded-lg border-l-4 border-rose-400 bg-rose-50 p-3"><div className="text-xs font-black text-rose-700">{item.카테고리} · {item.부품명}</div><div className="mt-1 text-sm font-bold text-slate-800">{item.문제}</div><div className="mt-1 text-xs font-semibold text-emerald-700">정답: {item.isMulti ? item.multiAnswer?.join(", ") : item.정답}</div>{item.AI해설 && <div className="mt-1 text-xs font-semibold text-violet-800">{item.AI해설}</div>}</div>)}</div>}
         <button type="button" onClick={() => setQuizIndex(-1)} className="mt-6 rounded-full bg-slate-900 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800">다시 풀기</button></div>
       : currentQuiz && <div className="mx-auto max-w-2xl"><div className="flex items-center justify-between text-xs font-black tabular-nums text-slate-400"><span>{quizIndex + 1}/{quizPool.length}</span><span>점수 {quizScore}</span></div>

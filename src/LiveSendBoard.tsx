@@ -3,6 +3,8 @@
  * 왼쪽: 방 20~30개를 상태 색(지연·전송 중·정상·조용)으로 한눈에 — 어느 방이 막혔는지 바로 보이게.
  * 오른쪽: 최근 전송 흐름 — 오늘 누가 어느 양식을 어디로 보냈는지 한 줄씩(activity_events) + 지금 밀린 글(outbox).
  * 위: 폰 봇 / 노트북 실행기 / 밀린 글 / 오늘 배달 요약. 15초마다 새로 읽는다(홈 나머지 지표는 60초).
+ * 2026-10-24(사용자 9): 머리 큰 숫자 = "봇 n · 노트북 n"(오늘 배달한 방 수), 방 줄마다 배달 주체 📱(폰 봇)·💻(노트북).
+ *   room_activity 는 방마다 마지막 활동 한 줄뿐이라(배달 건수 칸 없음) 숫자는 "방" 단위다 — 건수를 세려면 배달 기록 표가 필요.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Laptop, RefreshCw } from "lucide-react";
@@ -21,6 +23,8 @@ const STATUS_STYLE: Record<RoomStatus, { tile: string; dot: string }> = {
   ok: { tile: "border-emerald-400/25 bg-emerald-500/10 text-emerald-50", dot: "bg-emerald-400" },
   quiet: { tile: "border-white/[0.08] bg-white/[0.03] text-slate-400", dot: "bg-slate-500" },
 };
+/** 배달 주체 아이콘 — 방 마지막 활동이 봇/노트북 배달일 때만 */
+const DELIVERER: Record<string, { icon: string; label: string }> = { bot_send: { icon: "📱", label: "폰 봇" }, pc_send: { icon: "💻", label: "노트북" } };
 const kstDayStartIso = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); };
 
 async function load(): Promise<Snapshot> {
@@ -67,6 +71,11 @@ export default function LiveSendBoard() {
           <div className={`flex items-center gap-2 ${eyebrow}`}><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>Live · 카톡 전송 현황</div>
           <h3 className="mt-0.5 text-[15px] font-black text-white">모든 방과 전송을 한눈에 <span className="text-[11px] font-bold text-slate-500">· 15초마다 갱신{snap ? ` · ${relMin(new Date(snap.at).toISOString())}` : ""}</span></h3>
         </div>
+        <div className="ml-auto flex items-baseline gap-3 font-mono tabular-nums" aria-label="오늘 배달한 방 수">
+          <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">📱 봇</span>{snap ? sum.botToday : "—"}</span>
+          <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">💻 노트북</span>{snap ? sum.pcToday : "—"}</span>
+          <span className="text-[10.5px] font-bold text-slate-500">방 · 오늘</span>
+        </div>
         <button type="button" onClick={() => void refresh()} className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-black text-slate-300 transition hover:bg-white/20"><RefreshCw size={11} />새로고침</button>
       </div>
 
@@ -80,7 +89,7 @@ export default function LiveSendBoard() {
           <span className="relative flex h-2.5 w-2.5 shrink-0">{workerTone === "ok" && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" />}<span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${dotOf(workerTone)}`} /></span>
           <Laptop size={14} className="shrink-0 text-slate-400" /><span className="min-w-0"><span className={`block ${eyebrow}`}>노트북 실행기 · 대신 보내기</span><span className="block truncate text-[12.5px] font-black text-slate-100">{workerText}</span></span>
         </div>
-        {[["방", `${sum.rooms}`], ["오늘 배달", snap ? `봇 ${sum.botToday} · 노트북 ${sum.pcToday}` : "—"]].map(([l, v]) => (
+        {[["방", `${sum.rooms}`], ["밀린 글", snap ? `${sum.pending}건` : "—"]].map(([l, v]) => (
           <div key={l} className={`px-3 py-2 ${card}`}><span className={`block ${eyebrow}`}>{l}</span><span className="block truncate font-mono text-[14px] font-black tabular-nums text-white">{v}</span></div>
         ))}
       </div>
@@ -97,7 +106,7 @@ export default function LiveSendBoard() {
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-4">
             {visible.map((r) => (
               <div key={r.room} title={`${r.room}\n${r.uses.join(", ") || "매핑 없음"}\n${r.act ? `${SOURCE_LABEL[r.act.source || ""] || r.act.source} · ${relMin(r.act.last_at)}` : "활동 기록 없음"}`} className={`flex min-w-0 flex-col gap-0.5 rounded-xl border px-2.5 py-2 ${STATUS_STYLE[r.status].tile}`}>
-                <span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_STYLE[r.status].dot}`} /><span className="truncate text-[11.5px] font-black">{r.room}</span></span>
+                <span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_STYLE[r.status].dot}`} /><span className="min-w-0 flex-1 truncate text-[11.5px] font-black">{r.room}</span>{DELIVERER[r.act?.source || ""] && <span className="shrink-0 text-[11px]" role="img" aria-label={`${DELIVERER[r.act!.source!].label}가 배달`}>{DELIVERER[r.act!.source!].icon}</span>}</span>
                 <span className="truncate text-[10px] font-semibold opacity-80">{r.pending ? `밀림 ${r.pending}건 · ${r.oldestMin}분` : r.act ? `${(SOURCE_LABEL[r.act.source || ""] || "활동").replace("이 배달", "").replace("가 배달", "")} · ${relMin(r.act.last_at)}` : "기록 없음"}</span>
               </div>
             ))}

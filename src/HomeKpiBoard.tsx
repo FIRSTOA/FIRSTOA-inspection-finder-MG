@@ -14,30 +14,31 @@ import { notify } from "./toast";
 import { kstDate } from "./visits";
 import { teamForAuthor } from "./operations";
 import { useScreenActive } from "./screenActive";
-import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
-import type { UnhandledRow } from "./homeUnhandled";
 import HomeUnhandledPanel from "./HomeUnhandledPanel";
 import HomeReceptionPanel from "./HomeReceptionPanel";
 import { loadKpiBundle } from "./kpi/kpiData";
-import { KPI_BY_ID, type KpiPeriodKey, type KpiScreen, type KpiSource } from "./kpi/kpiDefs";
+import { KPI_BY_ID, type KpiScreen, type KpiSource } from "./kpi/kpiDefs";
 import { HomeKpiGrid, type KpiGridWidget, type KpiLayoutItem } from "./kpi/HomeKpiGrid.view";
-import { KpiWidget, type KpiStatus, type KpiView } from "./kpi/KpiWidgets.view";
+import { KpiWidget, type KpiLoadStatus, type KpiView } from "./kpi/KpiWidgets.view";
 import {
-  FAST_REFRESH_MS, HOME_KPI_DEFAULT_LAYOUT, HOME_WIDGETS, PERIOD_KEYS, PERIOD_LABEL, SLOW_REFRESH_MS,
-  cachedView, expansionView, firstLoadPhases, lastOkAgo, mergeBundle, numberView, okrView, overageView, periodChip, quarterGoalView, readHomeLayout,
-  sourcesForLayout, sparkView, splitSources, tableRows, todayItems, unhandledView, widgetState, writeHomeLayout,
-  type HomeKpiState, type HomeWidgetDef,
+  FAST_REFRESH_MS, HOME_KPI_DEFAULT_LAYOUT, HOME_WIDGETS, SLOW_REFRESH_MS,
+  cachedView, firstLoadPhases, lastOkAgo, mergeBundle, okrView, quarterGoalView, readHomeLayout,
+  sourcesForLayout, splitSources, tableRows, todayItems, widgetState, writeHomeLayout,
+  type HomeKpiState, type HomeWidgetDef, type TablePeriod,
 } from "./kpi/homeKpiModel";
 
 export type HomeKpiBoardProps = {
   /** 위젯·표 행·띠 칩을 누르면 열 화면(App 의 screen 값) */
   onNavigate?: (screen: KpiScreen["screen"]) => void;
-  /** 미처리 위젯: 지난 일정 줄 → 일정리스트 미처리(Home openOverdue) */
+  /** 미처리 일정 칸: 지난 일정 줄 → 일정리스트 미처리(Home openOverdue) */
   onOpenOverdue?: () => void;
-  /** 미처리 위젯: 접수 줄·머리 → 서비스접수(미처리 현황판) */
+  /** 미처리 칸·카드: 접수 → 서비스접수(미처리 현황판) */
   onOpenReception?: () => void;
-  /** 읽을 때마다 묶음을 알려 준다(관제 덱 인사말 "이번 주 내 점검" — 같은 원본을 두 번 읽지 않게) */
+  /** 읽을 때마다 묶음을 알려 준다(홈 한 줄 머리 "갱신 n분 전"·절약 효과 — 같은 원본을 두 번 읽지 않게) */
   onLoaded?: (state: HomeKpiState) => void;
+  /** 편집 모드 — 홈 한 줄 머리의 [편집] 이 켠다(2026-10-24). 주지 않으면 그리드 안의 [편집] */
+  editing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 };
 
 const storage = (): Storage | null => {
@@ -50,25 +51,27 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 function headline(v: KpiView | null): string {
   if (!v) return "";
   switch (v.kind) {
-    case "number": return `${v.value.toLocaleString("ko-KR")}${v.unit}`;
-    case "spark": return `${(v.value ?? v.points.at(-1)?.value ?? 0).toLocaleString("ko-KR")}${v.unit}`;
-    case "ring": return v.denominator ? `${Math.round((v.numerator / v.denominator) * 100)}%` : "";
-    case "progress": return `${v.value}/${v.target}${v.unit}`;
-    case "teamBars": return v.total !== null && v.total !== undefined ? `${v.total}${v.unit}` : "";
-    case "list": return `${v.total}${v.unit}`;
-    case "quarterGoal": return `${v.value}/${v.target}`;
+    case "quarterGoal": { const d = v.teams.reduce((a, t) => a + t.done, 0), n = v.teams.reduce((a, t) => a + t.total, 0); return `${d}/${n}`; }
+    case "okr": return v.pct === null ? "" : `${v.pct}%`;
+    case "unhandledTotal": return `${v.total}건`;
     default: return "";
   }
 }
 
-export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReception, onLoaded }: HomeKpiBoardProps) {
+export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReception, onLoaded, editing: editingProp, onEditingChange }: HomeKpiBoardProps) {
   const active = useScreenActive();
   const [layout, setLayout] = useState<KpiLayoutItem[]>(() => readHomeLayout(storage()));
   const [layoutNotice, setLayoutNotice] = useState("");
-  const [period, setPeriod] = useState<KpiPeriodKey>("week"); // Q4: 기본 "이번 주"(월~일)
+  const [period, setPeriod] = useState<TablePeriod>("week"); // 달성표 기간 — 기본 "이번 주"(월~일)
+  const [tableView, setTableView] = useState<"main" | "all">("main");
+  const [goalBasis, setGoalBasis] = useState<"end" | "early">("end"); // 분기 점검 진행 기준 — 기본 말일
+  const [okrPeriod, setOkrPeriod] = useState<"week" | "month">("week"); // OKR — 기본 이번 주(사용자 2026-10-24)
   const [state, setState] = useState<HomeKpiState | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [editing, setEditing] = useState(false);
+  const [innerEditing, setInnerEditing] = useState(false);
+  const controlled = editingProp !== undefined;
+  const editing = controlled ? editingProp : innerEditing;
+  const setEditing = useCallback((v: boolean) => { if (!controlled) setInnerEditing(v); onEditingChange?.(v); }, [controlled, onEditingChange]);
   const stateRef = useRef<HomeKpiState | null>(null);
   const busy = useRef(false);
   const lastFull = useRef(0);
@@ -136,78 +139,61 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
     onNavigate(screen.screen);
     notify(`'${screen.tab}'에서 같은 숫자를 볼 수 있습니다.`);
   }, [onNavigate]);
-  const openReception = useCallback(() => {
-    // 서비스접수 화면이 이미 떠 있으면(KeepAlive) localStorage 를 다시 읽지 않으므로 이벤트도 같이(HomeUnhandledPanel 과 같은 방식)
-    try { localStorage.setItem(RECEPTION_RIGHT_KEY, "board"); } catch { /* 저장 못 해도 이벤트로 연다 */ }
-    window.dispatchEvent(new CustomEvent(SHOW_BOARD_EVENT));
-    onOpenReception?.();
-  }, [onOpenReception]);
-  const openUnhandledRow = useCallback((r: UnhandledRow) => {
-    if (r.source === "reception") openReception();
-    else onOpenOverdue?.();
-  }, [openReception, onOpenOverdue]);
 
   const bundle = state?.bundle ?? null;
   const ctx = useMemo(() => ({ teamOf: teamForAuthor, period }), [period]);
 
   const renderWidget = (w: HomeWidgetDef, size: KpiGridWidget["sizes"][number], inEdit: boolean) => {
-    // 기존 홈 부품 그대로(팀장 결정 2026-10-23) — 자기 로더·자기 갱신. 숨기면 그리지 않아 조회도 멈춘다
-    if (w.kind === "panel") {
+    // 기존 홈 미처리 칸(팀장 결정 2026-10-23) — 자기 로더·자기 갱신. 숨기면 그리지 않아 조회도 멈춘다
+    if (w.id === "unhandledPanel") {
       return (
         <div className="h-full min-w-0 [&>*]:h-full">
-          {w.id === "unhandledPanel"
-            ? <HomeUnhandledPanel onOpenOverdue={() => onOpenOverdue?.()} onOpenReception={() => onOpenReception?.()} />
-            : <HomeReceptionPanel onOpen={() => onOpenReception?.()} />}
+          <HomeUnhandledPanel onOpenOverdue={() => onOpenOverdue?.()} onOpenReception={() => onOpenReception?.()} />
         </div>
       );
+    }
+    // 미처리 전체(2026-10-24) — 접수는 자기 로더(현황판 같은 계산), 물류·재계약은 현황판 묶음
+    if (w.id === "receptionPanel") {
+      return <HomeReceptionPanel onOpen={() => onOpenReception?.()} bundle={bundle} size={size} disabled={inEdit} />;
     }
     const st = widgetState(w, bundle);
     const first = KPI_BY_ID[w.kpis[0]];
     let view: KpiView | null = null;
-    let chip = w.kpis.length ? periodChip(w.kpis[0], period) : PERIOD_LABEL[period];
+    let chip: string | undefined;
     let emptyText: string | undefined;
-    let onOpen: (() => void) | undefined = onNavigate ? () => open(first.screen) : undefined;
-    let openLabel = first.screen.tab;
+    let onOpen: (() => void) | undefined = onNavigate && first ? () => open(first.screen) : undefined;
+    let openLabel = first?.screen.tab;
     if (bundle) {
       switch (w.id) {
         case "today": {
           view = { kind: "todayStrip", items: cachedView(bundle, ctx, "today", () => todayItems(bundle, ctx)).map((it) => ({ ...it, onOpen: onNavigate ? () => open(KPI_BY_ID[it.id].screen) : undefined })) };
           chip = "오늘"; onOpen = undefined; break;
         }
-        case "K2": view = cachedView(bundle, ctx, "K2", () => quarterGoalView(bundle)); emptyText = "이번 분기 워킨맵 대상이 없습니다"; openLabel = "워킨맵"; break;
+        case "K2": {
+          const v = cachedView(bundle, ctx, `K2|${goalBasis}`, () => quarterGoalView(bundle, goalBasis));
+          view = v ? { ...v, onBasis: setGoalBasis } : null;
+          chip = "분기"; emptyText = "이번 분기 워킨맵 대상이 없습니다"; openLabel = "워킨맵"; break;
+        }
         case "table": {
-          view = {
-            kind: "kpiTable", pace: period === "week" ? bundle.ranges.weekElapsedRate : period === "month" ? bundle.ranges.monthElapsedRate : period === "quarter" ? bundle.ranges.quarterElapsedRate : null,
-            rows: cachedView(bundle, ctx, "table", () => tableRows(bundle, ctx)).map((r) => ({ ...r, onOpen: onNavigate ? () => open(KPI_BY_ID[r.id as keyof typeof KPI_BY_ID].screen) : undefined })),
-          };
-          chip = PERIOD_LABEL[period]; onOpen = undefined; break;
+          const all = cachedView(bundle, ctx, "table", () => tableRows(bundle, ctx));
+          const rows = (tableView === "main" ? all.filter((r) => r.main) : all)
+            .map((r) => ({ ...r, onOpen: onNavigate ? () => open(KPI_BY_ID[r.id as keyof typeof KPI_BY_ID].screen) : undefined }));
+          view = { kind: "kpiTable", period, view: tableView, rows, counts: { main: all.filter((r) => r.main).length, all: all.length }, onPeriod: setPeriod, onView: setTableView };
+          onOpen = undefined; break;
         }
-        case "K1": case "K12": {
-          const id = w.id;
-          view = cachedView(bundle, ctx, id, () => numberView(id, bundle, ctx));
-          if (view?.kind === "number" && view.value === 0) { emptyText = w.id === "K12" ? "확인일 지난 열린 재계약이 없습니다" : "이 기간에 점검 기록이 없습니다"; }
-          break;
-        }
-        case "K3": view = cachedView(bundle, ctx, "K3", () => sparkView("K3", bundle, ctx)); break;
-        case "exp": view = cachedView(bundle, ctx, "exp", () => expansionView(bundle, ctx)); break;
-        case "K10": { const o = cachedView(bundle, ctx, "K10", () => overageView(bundle, ctx)); view = o?.view ?? null; if (o) chip = PERIOD_LABEL[o.period]; break; }
-        case "K19": view = cachedView(bundle, ctx, "K19", () => okrView(bundle)); emptyText = "이번 달 판정이 아직 없습니다"; break;
-        case "unhandled": {
-          view = unhandledView(bundle, openUnhandledRow);
-          emptyText = "밀린 일이 없습니다"; onOpen = openReception; openLabel = "미처리 현황";
-          break;
+        case "K19": {
+          const v = cachedView(bundle, ctx, `K19|${okrPeriod}`, () => okrView(bundle, okrPeriod));
+          view = v ? { ...v, onPeriod: setOkrPeriod } : null;
+          chip = okrPeriod === "week" ? "이번 주" : "이번 달";
+          emptyText = okrPeriod === "week" ? "이번 주 OKR 기록이 아직 없습니다" : "이번 달 판정이 아직 없습니다"; break;
         }
       }
     }
-    // 상태: 원본 상태(위젯 KPI) → 값이 0·비었으면 "기록 없음"
-    let status: KpiStatus = st.status;
-    if (status === "ready") {
-      const isEmpty = !view || (view.kind === "number" && view.value === 0) || (view.kind === "list" && view.total === 0);
-      if (isEmpty) status = "empty";
-    }
+    let status: KpiLoadStatus = st.status;
+    if (status === "ready" && !view) status = "empty";
     const basis = w.id === "table"
-      ? "행마다 KPI 정의의 기준 · 칸 = 실적/목표(목표 = 인당 목표 × 인원 · 관리 탭 KPI_TARGETS) · 비율 지표는 분자/분모 · 목표 없는 지표는 n/— · 팀장 제외"
-      : w.id === "today" ? "오늘(KST) · 칩마다 해당 KPI 기준(달성표·각 위젯과 같은 함수)"
+      ? "행마다 KPI 정의의 기준 · 상태 = 달성(실적 ≥ 목표) · 순항(실적/목표 ≥ 기간 경과) · 부족 · 목표 없음 · 목표 = 인당 목표 × 인원(관리 탭 KPI_TARGETS) · 비율 지표는 분자/분모 · 팀장 제외(오버홀은 팀장·파트장·부파트장 제외)"
+      : w.id === "today" ? "오늘(KST) · 칩마다 해당 KPI 기준(달성표와 같은 함수)"
         : w.kpis.map((id) => KPI_BY_ID[id].basis).join(" / ");
     const notice = st.notice;
     return (
@@ -240,26 +226,6 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
   // 원본은 읽었지만 알릴 것(접수 일부 실패·시트 기준 안내·명단 못 읽음) — 기준 툴팁에만 두지 않고 위에 한 줄로
   const sourceNotices = bundle ? layout.filter((x) => !x.hidden).map((x) => HOME_WIDGETS.find((w) => w.id === x.id)).flatMap((w) => (w ? [widgetState(w, bundle).notice] : [])) : [];
   const notices = [...new Set([loadError, bundle?.settings.error ? `목표 설정: ${bundle.settings.error}` : "", ...sourceNotices].filter(Boolean))];
-  const r = bundle?.ranges;
-  const chips = (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <h2 className="mr-1 text-[10.5px] font-black tracking-[0.18em] text-blue-300">CS KPI 현황판</h2>
-      <div className="flex flex-wrap gap-1" role="group" aria-label="기간">
-        {PERIOD_KEYS.map((p) => (
-          <button
-            key={p}
-            type="button"
-            aria-pressed={period === p}
-            onClick={() => setPeriod(p)}
-            disabled={editing}
-            className={`inline-flex min-h-11 items-center rounded-full px-3 text-[11.5px] font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 disabled:opacity-50 ${period === p ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-300 hover:bg-white/[0.12] hover:text-white"}`}
-          >{PERIOD_LABEL[p]}</button>
-        ))}
-      </div>
-      {r && <span className="text-[10.5px] font-bold text-slate-500">{r.quarterNo}분기 경과 {r.quarterElapsedRate}% · 이번 달 {r.monthElapsedRate}%</span>}
-    </div>
-  );
-
   return (
     <div className="relative border-b border-white/[0.08] px-4 py-4 sm:px-6">
       {notices.map((n) => <p key={n} role="alert" className="mb-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11.5px] font-bold text-amber-300">{n}</p>)}
@@ -269,8 +235,8 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
         onLayoutChange={changeLayout}
         defaultLayout={HOME_KPI_DEFAULT_LAYOUT}
         theme="deck"
-        toolbarStart={chips}
         notice={layoutNotice}
+        editable={controlled ? editing : true}
         editing={editing}
         onEditingChange={setEditing}
       />

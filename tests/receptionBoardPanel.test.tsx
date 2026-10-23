@@ -126,6 +126,6 @@ describe("현황판 감싸개", () => {
 
   it("서버 렌더: 첫 화면은 불러오는 중", () => {
     expect(renderToString(createElement(ReceptionBoardPanel, {}))).toContain("불러오는 중");
-    expect(renderToString(createElement(HomeReceptionPanel, { onOpen: () => {} }))).toContain("미처리 접수");
+    expect(renderToString(createElement(HomeReceptionPanel, { onOpen: () => {} }))).toContain("미처리 전체"); // 2026-10-24 홈 개편: 미처리 전체 합산 카드
   });
 });
