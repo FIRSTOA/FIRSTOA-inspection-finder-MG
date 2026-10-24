@@ -18,6 +18,7 @@ import {
 } from "../src/kpi/homeKpiModel";
 import Home from "../src/Home";
 import { invalidateConfigCaches } from "../src/supabase";
+import { invalidateMembersCache } from "../src/authors";
 
 const TODAY = "2026-10-23";
 const teamOf = (a: string) => ({ 한왕주: "C", 이민구: "C", 엄재현: "E" } as Record<string, string>)[a] || "미지정";
@@ -156,6 +157,7 @@ describe("④ 설정·명단은 다른 원본과 동시에 — 팀 판정은 명
   afterEach(() => { vi.unstubAllGlobals(); });
 
   function stubSlowRoster() {
+    invalidateMembersCache(); // 명단 5분 세션 캐시가 앞 테스트에서 채워졌어도 실제 조회 순서를 본다
     const started: string[] = [];
     let releaseRoster: () => void = () => {};
     const rosterGate = new Promise<void>((r) => { releaseRoster = r; });

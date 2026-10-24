@@ -5,17 +5,36 @@ import { isYmd } from "./recontractSchedule";
  * 오버홀 기록 시트(공개 구글 시트, 읽기 전용) — 한 행 = 오버홀·수리 1건. 블로그 시트(blogSheet.ts)와 같은 CSV 직접 읽기.
  * 열: 번호,날짜("23/10/27(금)" = yy/mm/dd(요일)),년,월,담당자,부서명(강북A/경기D/외부인력/퇴사자…),모델명,부품명,오버홀품목,수리품목,
  *     소요시간,오버홀포인트,수리포인트,주차별,수리가공,오버홀가공.
- * 탭 = app_config OVERHAUL_SHEET_TAB(없으면 "리스트(26년)") — 탭 이름으로 gviz CSV 를 읽는다(gid 0 은 25/08 까지 옛 데이터).
- * 실측(2026-10-24): 첫 줄이 머리글이 아닐 수 있고, 날짜는 "2026/1/2"·"26/10/01"·"23/10/27(금)" 섞임, 번호는 "2,308", 빈 줄은 "" 또는 0,0 만.
+ * 탭 = app_config OVERHAUL_SHEET_TAB(없으면 "리스트(26년)") — 탭 이름(아래 표에 있는 것)·gid 숫자·gid= 가 든 시트 주소 중 하나.
+ * 읽기는 export?format=csv&gid=(blogSheet·itSheet 와 같은 길). gviz(tq?tqx=out:csv&sheet=) 는 쓰지 않는다 —
+ * 2026-10-24 실측: gviz 는 열 형식을 추정해 숫자·날짜로 본 열의 글자 칸을 지워 머리글 줄이 ",,,,담당자,부서명,…"(날짜·오버홀포인트 빠짐)로 와서
+ * 머리글 탐색이 실패했고(라이브 K33 "불러오지 못함"), headers=2 로 붙여도 앞 행(1~523)·년/월 칸이 빠졌다.
+ * 실측(2026-10-24): 첫 줄이 "-1,,,," 이고 둘째 줄이 머리글, 날짜는 "2026/1/2"·"26/10/01"·"23/10/27(금)" 섞임, 번호는 "2,308", 빈 줄은 "" 또는 0,0 만.
  * KPI K33 "오버홀 점" = 오버홀포인트 합. 수리포인트는 따로(보조 글자).
  */
 export const OVERHAUL_SHEET_ID = "1lFZdrSZiKoPaRUar2txEtzRdPCoJ6oRd6Ox5kKUqNEg";
 export const OVERHAUL_SHEET_TAB_KEY = "OVERHAUL_SHEET_TAB";
 export const OVERHAUL_SHEET_DEFAULT_TAB = "리스트(26년)";
 export const OVERHAUL_SHEET_URL = `https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/edit`;
-/** 탭 이름 → 공개 CSV 주소(gviz) */
-export const overhaulCsvUrl = (tab: string = OVERHAUL_SHEET_DEFAULT_TAB) =>
-  `https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+/** 알려진 탭 이름 → gid(2026-10-24 시트 htmlview 실측). 새 탭은 여기 추가하거나 설정에 gid 숫자/주소를 적는다 */
+export const OVERHAUL_TAB_GIDS: Readonly<Record<string, string>> = {
+  "리스트(26년)": "0",
+  "리스트(23년~25년3분기)": "1322158055",
+};
+/** 설정값(탭 이름·gid 숫자·gid= 가 든 주소) → gid. 모르는 탭 이름이면 "" */
+export function overhaulGidOf(tab: string): string {
+  const s = String(tab || "").trim() || OVERHAUL_SHEET_DEFAULT_TAB;
+  if (/^\d+$/.test(s)) return s;
+  const inUrl = s.match(/[#?&]gid=(\d+)/);
+  if (inUrl) return inUrl[1];
+  return OVERHAUL_TAB_GIDS[s] ?? "";
+}
+/** 설정값 → 공개 CSV 주소(export). 모르는 탭 이름은 던진다(설정에 gid 를 적어야 함) */
+export const overhaulCsvUrl = (tab: string = OVERHAUL_SHEET_DEFAULT_TAB) => {
+  const gid = overhaulGidOf(tab);
+  if (!gid) throw new Error(`오버홀 시트 탭 "${tab}"의 gid 를 모릅니다 — 관리 탭 OVERHAUL_SHEET_TAB 에 그 탭 주소(…#gid=숫자)나 gid 숫자를 적어 주세요`);
+  return `https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/export?format=csv&gid=${gid}`;
+};
 
 export type OverhaulRow = {
   author: string;
@@ -90,7 +109,7 @@ const inflight = new Map<string, Promise<OverhaulRow[]>>();
 /** 캐시 비우기(테스트·[다시] 단추용) */
 export function clearOverhaulCache(): void { cache.clear(); inflight.clear(); }
 
-/** 공개 CSV(gviz, 탭 이름) 읽기 — 같은 탭은 5분 동안 다시 받지 않는다(이 탭 세션 메모리). 실패는 던진다(삼키지 않음) */
+/** 공개 CSV(export, 탭 이름→gid) 읽기 — 같은 탭은 5분 동안 다시 받지 않는다(이 탭 세션 메모리). 실패는 던진다(삼키지 않음) */
 export async function loadOverhaulRows(tab: string = OVERHAUL_SHEET_DEFAULT_TAB, opts: { force?: boolean } = {}): Promise<OverhaulRow[]> {
   const key = String(tab || "").trim() || OVERHAUL_SHEET_DEFAULT_TAB;
   const hit = cache.get(key);

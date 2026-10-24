@@ -5,7 +5,7 @@
  *  - AS 등록(시트에 쓰기)만 담당자의 Apps Script 주소가 있을 때 — 주소는 이 기기에 저장된다.
  */
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, ChevronRight, GraduationCap, Link2, Megaphone, Plus, Search, Settings2, Wrench } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronRight, GraduationCap, Link2, Megaphone, Pencil, Plus, Search, Settings2, Wrench } from "lucide-react";
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
 import ItDetail from "./ItDetail";
@@ -37,9 +37,9 @@ const EMPTY_FORM: Record<string, string> = {
 function SearchField({ value, onChange, onSearch, placeholder, disabled }: { value: string; onChange: (value: string) => void; onSearch: () => void; placeholder: string; disabled?: boolean }) {
   return <div className="flex gap-2">
     <div className="relative min-w-0 flex-1">
-      <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-      <input value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder={placeholder} disabled={disabled}
-        className="h-10 w-full rounded-full bg-white/[0.08] pl-9 pr-4 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:bg-white/[0.13] disabled:opacity-50" />
+      <Search size={15} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSearch(); }} placeholder={placeholder} disabled={disabled} aria-label={placeholder}
+        className={`${UI.inputIcon} h-11! lg:h-10! disabled:opacity-50`} />
     </div>
     <button type="button" onClick={onSearch} disabled={disabled} className={`${UI.btn} shrink-0 px-5`}>검색</button>
   </div>;
@@ -52,6 +52,7 @@ export default function ItLearningHistory({ author }: { author: string }) {
   const [endpoint, setEndpoint] = useState(getItTechApiUrl());
   const [endpointDraft, setEndpointDraft] = useState(getItTechApiUrl());
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [practiceOpen, setPracticeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [query, setQuery] = useState("");
@@ -209,28 +210,28 @@ export default function ItLearningHistory({ author }: { author: string }) {
     {notice && <div role="status" className={`fixed inset-x-4 top-20 z-[5000] rounded-lg px-4 py-3 text-sm font-bold text-white shadow-xl sm:inset-x-auto sm:right-4 sm:max-w-sm ${notice.kind === "success" ? "bg-emerald-600" : notice.kind === "error" ? "bg-rose-600" : "bg-slate-800"}`}>{notice.text}</div>}
 
     <section className={UI.card}>
-      <div className={`flex flex-wrap items-center justify-between gap-3 ${UI.heroHead}`}>
-        <div className="min-w-0">
-          <h2 className="text-base font-black text-white lg:text-lg">IT 학습·처리이력</h2>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">IT파트가 관리하는 PC DB 시트를 그대로 읽습니다 — 지식·처리이력·영업상담·교육자료 검색과 기술 퀴즈는 설정 없이 바로.</p>
+      <div className={UI.pageHead}>
+        <div className="min-w-0 flex-1 basis-64">
+          <h2 className={UI.pageTitle}>IT 학습·처리이력</h2>
+          <p className={UI.pageDesc}>IT파트가 관리하는 PC DB 시트를 그대로 읽습니다. 지식·처리이력·영업상담·교육자료 검색과 기술 퀴즈는 설정 없이 바로 쓰실 수 있습니다.</p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <button type="button" onClick={() => setConnectionOpen((open) => !open)} className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-xs font-black transition lg:min-h-9 ${connected ? "bg-emerald-400/15 text-emerald-300 hover:bg-emerald-400/25" : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"}`}>
-            <Settings2 size={14} />{connected ? "AS 등록 연결됨" : "AS 등록 연결"}</button>
-          <a href={IT_SHEET_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-full bg-white/10 px-3.5 text-[11px] font-bold text-slate-300 transition hover:bg-white/20 hover:text-white lg:min-h-9">시트 원본 ↗</a>
+        <div className={UI.pageActions}>
+          <button type="button" aria-expanded={practiceOpen} onClick={() => setPracticeOpen((open) => !open)} className={practiceOpen ? UI.btn : UI.btnGhost}>
+            <Pencil size={14} aria-hidden />실습 기록</button>
+          <button type="button" aria-expanded={connectionOpen} onClick={() => setConnectionOpen((open) => !open)} className={`${UI.btnGhost} ${connected ? "border-emerald-200! bg-emerald-50! text-emerald-700!" : ""}`}>
+            <Settings2 size={14} aria-hidden />{connected ? "AS 등록 연결됨" : "AS 등록 연결"}</button>
+          <a href={IT_SHEET_URL} target="_blank" rel="noreferrer" className={UI.btnGhost}>시트 원본 ↗</a>
         </div>
       </div>
-      <div className="flex overflow-x-auto">
+      <ItPracticeForm author={author} open={practiceOpen} />
+      <div className={UI.pageTabs} role="tablist" aria-label="IT 학습 메뉴">
         {VIEWS.map(({ key, label, icon: Icon }) => (
-          <button key={key} type="button" onClick={() => switchView(key)}
-            className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3.5 text-sm font-black transition ${view === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:text-slate-700"}`}>
-            <Icon size={15} />{label}
+          <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => switchView(key)} className={UI.pageTab(view === key)}>
+            <Icon size={15} aria-hidden />{label}
           </button>
         ))}
       </div>
     </section>
-
-    <ItPracticeForm author={author} />
 
     {connectionOpen && <section className={`${UI.card} ${UI.body}`}>
       <div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row">
@@ -241,13 +242,13 @@ export default function ItLearningHistory({ author }: { author: string }) {
     </section>}
 
     {isListView(view) && <section className={UI.card}>
-      <div className="bg-[#151A23] p-3.5"><SearchField value={query} onChange={setQuery} onSearch={() => void run()} disabled={loading} placeholder={PLACEHOLDER[view]} />
+      <div className={UI.toolbar}><SearchField value={query} onChange={setQuery} onSearch={() => void run()} disabled={loading} placeholder={PLACEHOLDER[view]} />
         {recentQueries.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1">
-          <span className="text-[11px] font-black text-slate-500">최근</span>
+          <span className="text-[11px] font-black text-slate-400">최근</span>
           {recentQueries.map((item) => (
-            <button key={item} type="button" onClick={() => { setQuery(item); void run(view, item); }} className={UI.chipDark(false)}>{item}</button>
+            <button key={item} type="button" onClick={() => { setQuery(item); void run(view, item); }} className={UI.chip(false)}>{item}</button>
           ))}
-          <button type="button" onClick={() => { setRecentQueries([]); try { localStorage.removeItem("it_recent_queries_v1"); } catch { /* 무시 */ } }} className="inline-flex min-h-11 items-center px-2 text-[11px] font-bold text-slate-500 transition hover:text-slate-300 lg:min-h-9">지우기</button>
+          <button type="button" onClick={() => { setRecentQueries([]); try { localStorage.removeItem("it_recent_queries_v1"); } catch { /* 무시 */ } }} className="inline-flex min-h-11 items-center px-2 text-[11px] font-bold text-slate-400 transition hover:text-slate-700 lg:min-h-9">지우기</button>
         </div>}</div>
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-400">
         <span className="tabular-nums">{loading ? "불러오는 중…" : `검색 결과 ${rows.length.toLocaleString()}건`}</span>

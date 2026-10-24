@@ -132,7 +132,7 @@ export const KPI_DEFS: KpiDef[] = [
   {
     id: "K33", name: "오버홀", unit: "점", group: "현장 실행", period: "week", periods: ALL_P, scopes: ATP, widget: "goal", sizes: ["1x1", "2x1"],
     basis: "오버홀 기록 구글 시트 · 한 행 = 1건 · 날짜 칸(yy/mm/dd·yyyy/m/d) · 점 = 오버홀포인트 합(수리포인트는 사람 칸에 따로) · 팀 = 명단 팀(없으면 부서명 끝 글자) · 외부인력·퇴사자·직책자 제외 · 목표 = 인원 × 주 2점",
-    source: "overhaulSheet.loadOverhaulRows·countOverhaul(탭 = app_config OVERHAUL_SHEET_TAB, 없으면 '리스트(26년)' · gviz CSV)",
+    source: "overhaulSheet.loadOverhaulRows·countOverhaul(탭 = app_config OVERHAUL_SHEET_TAB, 없으면 '리스트(26년)' · export CSV gid)",
     loads: ["overhaul", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 2, from: "사용자 2026-10-23 '오버홀 인당 주 2점'" },
     main: true, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "내 현황 › 사무실" }, today: true,
   },

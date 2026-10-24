@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { AlertCircle, ChevronDown, Loader2, MessageSquareText, RotateCcw, Search, X } from "lucide-react";
 import type { Candidate } from "./entity360";
-import type { Coverage, TabLine, TabSpec } from "./tabSearch";
+import { relatedLines, type Coverage, type TabLine, type TabSpec } from "./tabSearch";
 
 export type TabSearchViewProps = {
   spec: TabSpec;
@@ -28,7 +28,44 @@ export type TabSearchViewProps = {
 
 const PAGE = 40;
 
-function LineRow({ line }: { line: TabLine }) {
+/** 펼침 — 주요 칸 · 원문 · 같은 업체 같은 종류 최근 5건(이미 모은 줄에서). 글은 tabSearch.toLines 에서 주민번호를 가린 값 */
+function LineDetail({ line, related }: { line: TabLine; related: TabLine[] }) {
+  const fields: [string, string][] = [
+    ["날짜", line.date || "날짜 없음"],
+    ["작성", [line.author, line.team].filter(Boolean).join(" · ")],
+    ["업체", line.vendor],
+    ["기기", line.device],
+    ["내용", line.title],
+    ["상세", line.detail],
+  ];
+  return (
+    <div className="mx-3 mb-2 space-y-1.5 rounded-lg bg-slate-50 p-2 text-[11px] leading-5 text-slate-700">
+      <dl className="grid grid-cols-[2.5rem_1fr] gap-x-2">
+        {fields.filter(([, v]) => v).map(([k, v]) => (
+          <div key={k} className="contents"><dt className="font-bold text-slate-400">{k}</dt><dd className="min-w-0 break-words">{v}</dd></div>
+        ))}
+      </dl>
+      {line.raw && line.raw !== line.title && (
+        <div>
+          <div className="font-bold text-slate-400">원문</div>
+          <div className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-white p-1.5">{line.raw}</div>
+        </div>
+      )}
+      <div>
+        <div className="font-bold text-slate-400">같은 업체 {line.logiKind || line.kind} 최근 {related.length}건</div>
+        {related.length === 0 ? <div className="text-slate-400">이 기록 말고는 없음</div> : (
+          <ul>
+            {related.map((r) => (
+              <li key={r.key} className="flex gap-1.5"><span className="shrink-0 font-bold tabular-nums">{r.date || "날짜 없음"}</span><span className="min-w-0 truncate">{r.title}</span></li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LineRow({ line, all }: { line: TabLine; all: TabLine[] }) {
   const [open, setOpen] = useState(false);
   return (
     <li className="border-b border-slate-100 bg-white last:border-b-0">
@@ -43,9 +80,7 @@ function LineRow({ line }: { line: TabLine }) {
         <div className={`mt-0.5 text-[13px] font-bold text-slate-900 ${open ? "" : "line-clamp-1"}`}>{line.title}</div>
         {(line.detail || line.device) && <div className={`text-[11px] text-slate-500 ${open ? "" : "line-clamp-1"}`}>{[line.detail, line.device].filter(Boolean).join(" · ")}</div>}
       </button>
-      {open && line.raw && line.raw !== line.title && (
-        <div className="mx-3 mb-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-2 text-[11px] leading-5 text-slate-700">{line.raw}</div>
-      )}
+      {open && <LineDetail line={line} related={relatedLines(all, line)} />}
     </li>
   );
 }
@@ -60,7 +95,7 @@ export default function TabSearchView(p: TabSearchViewProps) {
       <div className="flex h-10 items-center gap-2 rounded-xl bg-white/10 px-3 focus-within:bg-white/15">
         <Search size={15} className="shrink-0 text-white/60" aria-hidden="true" />
         <input
-          type="search" value={p.query} onChange={(ev) => p.onQuery(ev.target.value)}
+          type="search" autoComplete="off" value={p.query} onChange={(ev) => p.onQuery(ev.target.value)}
           placeholder={p.spec.question} aria-label={`${p.spec.label} 이력 검색`}
           className="min-w-0 flex-1 bg-transparent text-[13px] font-bold text-white placeholder:font-normal placeholder:text-white/50 focus:outline-none"
         />
@@ -146,7 +181,7 @@ function DoneList(p: TabSearchViewProps) {
           {!!p.coverage?.missing.length && <div className="text-slate-400">아직 표가 없어 건너뜀: {p.coverage.missing.join(" · ")}</div>}
         </div>
       ) : (
-        <ul>{exact.slice(0, shown).map((l) => <LineRow key={l.key} line={l} />)}</ul>
+        <ul>{exact.slice(0, shown).map((l) => <LineRow key={l.key} line={l} all={p.lines} />)}</ul>
       )}
       {exact.length > shown && (
         <button type="button" onClick={() => setShown((n) => n + PAGE)} className="block w-full border-t border-slate-100 py-2 text-center text-[11px] font-bold text-slate-500 hover:bg-slate-50">
@@ -158,7 +193,7 @@ function DoneList(p: TabSearchViewProps) {
           <button type="button" onClick={() => setLooseOpen((v) => !v)} aria-expanded={looseOpen} className="flex w-full items-center gap-1 px-3 py-2 text-left text-[11px] font-bold text-amber-800 hover:bg-amber-50">
             <ChevronDown size={12} className={looseOpen ? "rotate-180" : ""} />이름 일부만 일치 {loose.length}줄 — 같은 업체인지 확인 필요
           </button>
-          {looseOpen && <ul>{loose.slice(0, 60).map((l) => <LineRow key={l.key} line={l} />)}</ul>}
+          {looseOpen && <ul>{loose.slice(0, 60).map((l) => <LineRow key={l.key} line={l} all={p.lines} />)}</ul>}
         </div>
       )}
       {!!p.coverage?.rawSkipped.length && <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">원문 속 기번 검색이 오래 걸려 건너뜀: {p.coverage.rawSkipped.join(" · ")}</div>}

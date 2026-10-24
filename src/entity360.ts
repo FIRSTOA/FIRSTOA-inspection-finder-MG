@@ -336,7 +336,9 @@ export const sameVendorKey = (a: string, b: string): boolean => {
   if (!a || !b) return false;
   if (a === b) return true;
   const [s, l] = a.length <= b.length ? [a, b] : [b, a];
-  return s.length >= 5 && l.startsWith(s);
+  if (s.length >= 5 && l.startsWith(s)) return true;
+  // 낱말 순서만 바뀐 같은 이름 — "어울림디자인스튜디오" vs 재계약 기록 "어울림스튜디오디자인"(2026-10-24). 6자 이상·글자 구성이 완전히 같을 때만
+  return s.length >= 6 && s.length === l.length && Array.from(s).sort().join("") === Array.from(l).sort().join("");
 };
 export function matchesEntity(src: SourceDef, row: Row, e: Entity): boolean {
   const nameCols = uniq([...src.nameCols, ...(src.looseCols || []), ...src.titleKeys.filter((k) => /vendor|업체|상호|company|name/.test(k))]);

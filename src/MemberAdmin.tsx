@@ -4,6 +4,8 @@ import { Pencil, Search, UserPlus, UserRound, Undo2 } from "lucide-react";
 import { AUTHOR_TEAMS, CS_DEPT, addMember, deleteMember, displayTitle, fetchMembers, renameDeptGroup, renameTeamGroup, restoreMember, saveTeamGroups, teamLabel as csTeamLabel, updateMember, useTeamGroups, type MemberRow } from "./authors";
 import FormModal from "./FormModal";
 import PortalSelect from "./PortalSelect";
+import { UI } from "./ui/card";
+import StateBox from "./ui/StateBox";
 
 /**
  * 인원 관리 — 회사 전체 명단을 ERP식 한 표로.
@@ -110,7 +112,7 @@ export default function MemberAdmin() {
   const load = async () => {
     setLoading(true);
     try {
-      setRows(await fetchMembers());
+      setRows(await fetchMembers(true));
       setError("");
     } catch (e) {
       setError((e as Error).message || "명단을 불러오지 못했습니다.");
@@ -191,11 +193,40 @@ export default function MemberAdmin() {
 
   const titleChip = (row: MemberRow) => {
     const label = displayTitle(row);
-    return <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${TITLE_TONE[label] || TITLE_TONE.프로}`}>{label}</span>;
+    return <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${TITLE_TONE[label] || TITLE_TONE.프로}`}>{label}</span>;
   };
 
+  // 수정·삭제 단추 — 마우스 올림에 기대지 않고 항상 보인다(폰 min-h-11, PC 표 안에서만 lg:min-h-9)
+  const rowActions = (row: MemberRow) => (
+    <span className="flex items-center justify-end gap-2">
+      <button type="button" title="정보 수정" aria-label={`${row.name} 정보 수정`} disabled={busyId === row.id}
+        onClick={() => setEdit({ row, dept: row.dept, team: row.team, teamCustom: !(TEAM_OPTIONS[row.dept] || []).includes(row.team), title: row.title })}
+        className={`${UI.btnGhost} px-3!`}>
+        <Pencil size={14} />수정
+      </button>
+      <button type="button" disabled={busyId === row.id}
+        onClick={async () => { if (await askConfirm(`${row.name} 님을 명단에서 삭제할까요?\n\n되돌릴 수 없습니다. 과거 기록의 이름은 그대로 남습니다.`)) void act(row.id, () => deleteMember(row.id)); }}
+        className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-full border border-rose-200 bg-white px-3 text-sm font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 lg:min-h-9">삭제</button>
+    </span>
+  );
+
+  // 폰(md 미만) 카드 한 줄
+  const memberCard = (row: MemberRow) => (
+    <div key={row.id} className="px-4 py-3">
+      <div className="flex items-center gap-2">
+        <UserRound size={14} className="shrink-0 text-slate-300" />
+        <span className="min-w-0 flex-1 truncate text-sm font-black text-slate-900">{row.name}</span>
+        {titleChip(row)}
+      </div>
+      <p className="mt-1 break-keep pl-6 text-xs font-semibold text-slate-500">
+        {row.dept}{row.team ? ` · ${teamLabel(row.dept, row.team)}` : ""} <span className="tabular-nums text-slate-400">· 수정 {modifiedLabel(row)}</span>
+      </p>
+      <div className="mt-2">{rowActions(row)}</div>
+    </div>
+  );
+
   const memberTr = (row: MemberRow) => (
-    <tr key={row.id} className="group border-b border-slate-50 transition hover:bg-slate-50/60">
+    <tr key={row.id} className="border-b border-slate-50 transition hover:bg-slate-50/60">
       <td className="px-4 py-2">
         <span className="flex items-center gap-2">
           <UserRound size={14} className="shrink-0 text-slate-300" />
@@ -204,22 +235,11 @@ export default function MemberAdmin() {
       </td>
       <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold text-slate-500">{row.dept}</td>
       <td className="whitespace-nowrap px-4 py-2">
-        {row.team ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{teamLabel(row.dept, row.team)}</span> : <span className="text-xs text-slate-300">—</span>}
+        {row.team ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">{teamLabel(row.dept, row.team)}</span> : <span className="text-xs text-slate-300">—</span>}
       </td>
       <td className="whitespace-nowrap px-4 py-2">{titleChip(row)}</td>
       <td className="whitespace-nowrap px-4 py-2 text-xs font-semibold tabular-nums text-slate-500">{modifiedLabel(row)}</td>
-      <td className="px-4 py-2">
-        <span className="flex items-center justify-end gap-1">
-          <button type="button" title="정보 수정" disabled={busyId === row.id}
-            onClick={() => setEdit({ row, dept: row.dept, team: row.team, teamCustom: !(TEAM_OPTIONS[row.dept] || []).includes(row.team), title: row.title })}
-            className="rounded-full p-1.5 text-slate-300 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">
-            <Pencil size={13} />
-          </button>
-          <button type="button" disabled={busyId === row.id}
-            onClick={async () => { if (await askConfirm(`${row.name} 님을 명단에서 삭제할까요?\n\n되돌릴 수 없습니다. 과거 기록의 이름은 그대로 남습니다.`)) void act(row.id, () => deleteMember(row.id)); }}
-            className="whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-black text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:opacity-0 lg:group-hover:opacity-100">삭제</button>
-        </span>
-      </td>
+      <td className="px-4 py-2">{rowActions(row)}</td>
     </tr>
   );
 
@@ -228,88 +248,117 @@ export default function MemberAdmin() {
       <td colSpan={6} className={strong
         ? "border-y border-slate-200 bg-slate-100/90 px-4 py-1.5 text-xs font-black text-slate-700"
         : "border-b border-slate-100 bg-slate-50/70 px-4 py-1 text-[11px] font-black tracking-wide text-slate-500"}>
-        {label} <span className="ml-1 text-[10px] font-bold tabular-nums text-slate-400">{count}명</span>
+        {label} <span className="ml-1 text-[11px] font-bold tabular-nums text-slate-400">{count}명</span>
       </td>
     </tr>
   );
 
+  // 폰용 구분줄(표 구분행과 같은 뜻)
+  const dividerDiv = (label: string, count: number, strong = false) => (
+    <div className={strong
+      ? "border-y border-slate-200 bg-slate-100/90 px-4 py-2 text-xs font-black text-slate-700"
+      : "border-y border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-black text-slate-500"}>
+      {label} <span className="ml-1 text-[11px] font-bold tabular-nums text-slate-400">{count}명</span>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-[#1E252F] px-5 py-4">
-          <div>
-            <h3 className="text-base font-black text-white lg:text-lg">인원 관리 <span className="text-[11px] font-bold text-slate-400">회사 전체</span></h3>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">부서 칩으로 거르고, 행에 마우스를 올리면 ✎ 수정·삭제가 나타납니다. 직책이 없으면 "프로".</p>
+      <section className={UI.card}>
+        {/* 허브(AdminHub)가 다크 머리를 이미 가지므로 여기는 연회색 머리 + 밝은 툴바 */}
+        <div className={UI.head}>
+          <div className="min-w-0">
+            <h3 className={UI.title}>인원 관리 <span className="text-[11px] font-bold text-slate-400">회사 전체</span></h3>
+            <p className={UI.desc}>부서 칩으로 거르고, 각 줄의 [수정]·[삭제]로 바꿉니다. 직책이 없으면 "프로"입니다.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-black tabular-nums text-slate-300">재직 {active.length}명</span>
-            {left.length > 0 && <button type="button" onClick={() => setShowLeft((current) => !current)} className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-black text-slate-300 transition hover:bg-white/10">예전 퇴사 처리 {left.length}명 {showLeft ? "숨기기" : "보기"}</button>}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`${UI.badge} ${UI.tone.off} tabular-nums`}>재직 {active.length}명</span>
+            {left.length > 0 && <button type="button" onClick={() => setShowLeft((current) => !current)} className={UI.btnGhost}>예전 퇴사 처리 {left.length}명 {showLeft ? "숨기기" : "보기"}</button>}
             <button type="button" onClick={() => { const dept = deptFilter === "전체" ? "CS팀" : deptFilter; setDraft({ ...draft, dept, team: TEAM_OPTIONS[dept]?.[0] ?? "" }); setAddOpen(true); }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">
+              className={UI.btn}>
               <UserPlus size={15} />인원 추가
             </button>
           </div>
         </div>
 
-        {/* 다크 툴바 — 검색 + 부서 필터 */}
-        <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
-          <label className="flex items-center gap-2 rounded-full bg-white/[0.08] px-3.5 py-1.5 transition focus-within:bg-white/[0.14]">
-            <Search size={13} className="shrink-0 text-slate-500" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름·팀 검색"
-              className="w-24 bg-transparent text-xs font-bold text-white outline-none placeholder:text-slate-500 lg:w-36" />
+        {/* 툴바 — 검색 + 부서 필터 */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3 lg:px-5">
+          <label className="relative block w-full sm:w-56">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름·팀 검색" aria-label="이름·팀 검색"
+              className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 lg:h-10" />
           </label>
           {["전체", ...DEPTS].map((dept) => {
             const count = dept === "전체" ? active.length : deptCount(dept);
             const on = deptFilter === dept;
             return (
-              <button key={dept} type="button" onClick={() => setDeptFilter(dept)}
-                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-black transition ${on ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`}>
-                {dept} <span className={`tabular-nums ${on ? "text-slate-400" : "text-slate-500"}`}>{count}</span>
+              <button key={dept} type="button" onClick={() => setDeptFilter(dept)} className={UI.chip(on)}>
+                {dept} <span className={`ml-1 tabular-nums ${on ? "text-slate-300" : "text-slate-400"}`}>{count}</span>
               </button>
             );
           })}
-          <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "new", text: "" })} className="whitespace-nowrap rounded-full border border-dashed border-white/25 px-3 py-1.5 text-xs font-black text-slate-400 transition hover:bg-white/[0.1] hover:text-slate-200">＋ 그룹</button>
+          <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "new", text: "" })} className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-dashed border-slate-300 px-3.5 text-[12px] font-black text-slate-500 transition hover:bg-slate-50 lg:min-h-9">＋ 그룹</button>
         </div>
 
         {/* 그룹(부서)·소그룹(팀) 손질 — 부서를 고르면 나온다. 사용자 선택 창과 같은 등록부 */}
         {(deptFilter !== "전체" || groupEdit) && (
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px]">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px]">
             {groupEdit ? (
               <>
                 <span className="font-black text-slate-500">{groupEdit.kind === "dept" ? "그룹" : "소그룹"} {groupEdit.mode === "new" ? "추가" : `이름 바꾸기${groupEdit.team !== undefined ? ` (${teamLabel(deptFilter, groupEdit.team)})` : ""}`}</span>
                 <input autoFocus value={groupEdit.text} onChange={(e) => setGroupEdit({ ...groupEdit, text: e.target.value })}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void applyGroupEdit(); } if (e.key === "Escape") setGroupEdit(null); }}
                   placeholder={groupEdit.mode === "new" ? (groupEdit.kind === "dept" ? "새 그룹 이름 (예: 영업2팀)" : "새 소그룹 이름") : "새 이름"}
-                  className="min-w-0 flex-1 rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-blue-500" />
-                <button type="button" onClick={() => void applyGroupEdit()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-black text-white">저장</button>
-                <button type="button" onClick={() => setGroupEdit(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-500">취소</button>
+                  className="h-11 min-w-0 flex-1 rounded-lg border border-blue-300 bg-white px-3 text-[13px] font-semibold outline-none focus:border-blue-500 lg:h-10" />
+                <button type="button" onClick={() => void applyGroupEdit()} className={UI.btn}>저장</button>
+                <button type="button" onClick={() => setGroupEdit(null)} className={UI.btnGhost}>취소</button>
               </>
             ) : (
               <>
                 <span className="font-black text-slate-600">그룹 · {deptFilter}</span>
-                <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "rename", text: deptFilter })} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100">이름 바꾸기</button>
-                <button type="button" onClick={() => void deleteDeptGroup()} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-600">그룹 삭제</button>
-                <span className="mx-1 h-4 w-px bg-slate-300" />
+                <button type="button" onClick={() => setGroupEdit({ kind: "dept", mode: "rename", text: deptFilter })} className={`${UI.btnGhost} text-xs!`}>이름 바꾸기</button>
+                <button type="button" onClick={() => void deleteDeptGroup()} className={`${UI.btnGhost} text-xs! hover:bg-rose-50 hover:text-rose-600`}>그룹 삭제</button>
+                <span className="mx-1 hidden h-4 w-px bg-slate-300 sm:block" />
                 <span className="font-black text-slate-500">소그룹</span>
                 {teamsFor(deptFilter).map((team) => (
                   <span key={team || "_none"} className="inline-flex items-center overflow-hidden rounded-full border border-slate-300 bg-white text-[11px] font-bold text-slate-600">
-                    <span className="px-2 py-1">{teamLabel(deptFilter, team)}{isCsCode(deptFilter, team) ? <span className="ml-1 text-slate-400">{team}</span> : null}</span>
-                    {team !== "" && <button type="button" title="이름 바꾸기" onClick={() => setGroupEdit({ kind: "team", mode: "rename", team, text: isCsCode(deptFilter, team) ? teamLabel(deptFilter, team) : team })} className="border-l border-slate-200 px-1.5 py-1 hover:bg-slate-100"><Pencil size={11} /></button>}
-                    {team !== "" && <button type="button" title="소그룹 삭제 (비어 있을 때만)" onClick={() => void deleteTeamGroup(team)} className="border-l border-slate-200 px-1.5 py-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600">×</button>}
+                    <span className="px-3 py-2.5">{teamLabel(deptFilter, team)}{isCsCode(deptFilter, team) ? <span className="ml-1 text-slate-400">{team}</span> : null}</span>
+                    {team !== "" && <button type="button" title="이름 바꾸기" aria-label="소그룹 이름 바꾸기" onClick={() => setGroupEdit({ kind: "team", mode: "rename", team, text: isCsCode(deptFilter, team) ? teamLabel(deptFilter, team) : team })} className="inline-flex min-h-11 min-w-11 items-center justify-center border-l border-slate-200 hover:bg-slate-100 lg:min-h-9 lg:min-w-9"><Pencil size={13} /></button>}
+                    {team !== "" && <button type="button" title="소그룹 삭제 (비어 있을 때만)" aria-label="소그룹 삭제" onClick={() => void deleteTeamGroup(team)} className="inline-flex min-h-11 min-w-11 items-center justify-center border-l border-slate-200 text-sm text-slate-400 hover:bg-rose-50 hover:text-rose-600 lg:min-h-9 lg:min-w-9">×</button>}
                   </span>
                 ))}
-                <button type="button" onClick={() => setGroupEdit({ kind: "team", mode: "new", text: "" })} className="rounded-full border border-dashed border-slate-300 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100">＋ 소그룹</button>
+                <button type="button" onClick={() => setGroupEdit({ kind: "team", mode: "new", text: "" })} className="inline-flex min-h-11 items-center rounded-full border border-dashed border-slate-300 bg-white px-3.5 text-[11px] font-bold text-slate-600 hover:bg-slate-100 lg:min-h-9">＋ 소그룹</button>
                 {deptFilter === CS_DEPT && <span className="text-slate-400">A~E 글자는 배정 코드라 표시명만 바뀝니다</span>}
               </>
             )}
           </div>
         )}
 
-        {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
-        {loading && <div className="p-10 text-center text-sm font-bold text-slate-400">명단을 불러오는 중…</div>}
+        {error && <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
+        {loading && <StateBox inside kind="loading" message="명단을 불러오는 중입니다…" />}
+
+        {/* 폰: 카드 목록(가로 스크롤 없음). 표와 같은 구분(부서 → 팀)과 같은 단추를 쓴다 */}
+        {!loading && (
+          <div className="md:hidden">
+            {grouped.map((group) => (
+              <Fragment key={group.dept}>
+                {deptFilter === "전체" && dividerDiv(group.dept, group.count, true)}
+                {group.sections.map((section) => (
+                  <Fragment key={section.key}>
+                    {section.label && dividerDiv(section.label, section.rows.length)}
+                    <div className="divide-y divide-slate-100">{section.rows.map(memberCard)}</div>
+                  </Fragment>
+                ))}
+              </Fragment>
+            ))}
+            {!grouped.length && (
+              <StateBox inside kind="empty" message={search.trim() ? `"${search.trim()}" 검색 결과가 없습니다.` : "등록된 인원이 없습니다."} hint={search.trim() ? undefined : "위의 [인원 추가]로 등록해 주세요."} />
+            )}
+          </div>
+        )}
 
         {!loading && (
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80 text-left text-[11px] font-black tracking-wide text-slate-400">
@@ -334,8 +383,8 @@ export default function MemberAdmin() {
                   </Fragment>
                 ))}
                 {!grouped.length && (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-xs font-bold text-slate-300">
-                    {search.trim() ? `"${search.trim()}" 검색 결과가 없습니다` : "인원 없음 — 우측 상단 \"인원 추가\"로 등록하세요"}
+                  <tr><td colSpan={6}>
+                    <StateBox inside kind="empty" message={search.trim() ? `"${search.trim()}" 검색 결과가 없습니다.` : "등록된 인원이 없습니다."} hint={search.trim() ? undefined : "위의 [인원 추가]로 등록해 주세요."} />
                   </td></tr>
                 )}
               </tbody>
@@ -345,24 +394,26 @@ export default function MemberAdmin() {
       </section>
 
       {showLeft && left.length > 0 && (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-            <h3 className="text-base font-black text-slate-950">퇴사자</h3>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">예전 방식(퇴사 처리)으로 빠진 행입니다. 다시 쓰면 복구, 필요 없으면 삭제하세요.</p>
+        <section className={UI.card}>
+          <div className={UI.head}>
+            <div>
+              <h3 className={UI.title}>퇴사자</h3>
+              <p className={UI.desc}>예전 방식(퇴사 처리)으로 빠진 행입니다. 다시 쓰면 복구, 필요 없으면 삭제해 주세요.</p>
+            </div>
           </div>
           <div className="divide-y divide-slate-100">
             {left.map((row) => (
-              <div key={row.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="min-w-0 flex-1">
+              <div key={row.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
+                <span className="min-w-0 flex-1 basis-40">
                   <span className="block truncate text-sm font-black text-slate-500">{row.name} <span className="text-[11px] font-bold text-slate-400">{row.dept}{row.team ? ` · ${row.team}` : ""}</span></span>
-                  <span className="block text-[10px] font-bold tabular-nums text-slate-400">{row.joined_on || "-"} 입사 · {row.left_on || "-"} 퇴사</span>
+                  <span className="block text-[11px] font-bold tabular-nums text-slate-400">{row.joined_on || "-"} 입사 · {row.left_on || "-"} 퇴사</span>
                 </span>
                 <button type="button" disabled={busyId === row.id} onClick={() => void act(row.id, () => restoreMember(row.id))}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
-                  <Undo2 size={13} />복구
+                  className={`${UI.btnGhost} shrink-0`}>
+                  <Undo2 size={14} />복구
                 </button>
                 <button type="button" disabled={busyId === row.id} onClick={async () => { if (await askConfirm(`${row.name} 님을 완전히 삭제할까요?`)) void act(row.id, () => deleteMember(row.id)); }}
-                  className="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-[11px] font-black text-rose-600 transition hover:bg-rose-100 disabled:opacity-40">삭제</button>
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-white px-4 text-sm font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-40 lg:min-h-9">삭제</button>
               </div>
             ))}
           </div>
@@ -373,9 +424,9 @@ export default function MemberAdmin() {
       {addOpen && (
         <FormModal title="인원 추가" subtitle="등록하면 작성자 목록·요청 대상에 바로 나타납니다" icon={<UserPlus size={17} />} onClose={() => setAddOpen(false)}
           footer={<>
-            <button type="button" onClick={() => setAddOpen(false)} className="rounded-full px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
+            <button type="button" onClick={() => setAddOpen(false)} className="min-h-11 rounded-full px-4 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
             <button type="button" disabled={!draft.name.trim() || adding} onClick={() => void submit()}
-              className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{adding ? "등록 중…" : "추가"}</button>
+              className={`${UI.btn} px-6!`}>{adding ? "등록 중…" : "추가"}</button>
           </>}>
           <div className="space-y-4">
             <label className="block text-xs font-bold text-slate-500">이름 <b className="text-rose-500">*</b>
@@ -404,9 +455,9 @@ export default function MemberAdmin() {
       {edit && (
         <FormModal title={`${edit.row.name} 정보 수정`} subtitle="바꾸면 작성자 목록·요청 대상·프로필에 바로 반영됩니다" icon={<UserRound size={17} />} onClose={() => setEdit(null)}
           footer={<>
-            <button type="button" onClick={() => setEdit(null)} className="rounded-full px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
+            <button type="button" onClick={() => setEdit(null)} className="min-h-11 rounded-full px-4 text-sm font-bold text-slate-500 transition hover:bg-slate-100">취소</button>
             <button type="button" disabled={busyId === edit.row.id} onClick={() => void saveEdit()}
-              className="rounded-full bg-blue-600 px-6 py-2.5 text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 disabled:opacity-40 disabled:shadow-none">{busyId === edit.row.id ? "저장 중…" : "저장"}</button>
+              className={`${UI.btn} px-6!`}>{busyId === edit.row.id ? "저장 중…" : "저장"}</button>
           </>}>
           <div className="space-y-4">
             <div className="text-xs font-bold text-slate-500">부서

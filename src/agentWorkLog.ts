@@ -4,6 +4,60 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "feature-planner",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "ui-designer",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "db-schema",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "developer",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "debugger",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "qa-checker",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "field-deploy-check",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "sql-review",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "745c7aacab",
+    "agent": "ops-monitor",
+    "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"
+  },
+  {
+    "date": "2026-10-24",
     "hash": "edab3b2eec",
     "agent": "ui-designer",
     "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
-import { AlertTriangle, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import { GAS_GET_URL } from "./api";
 import { notify } from "./toast";
@@ -8,7 +8,13 @@ import PortalSelect from "./PortalSelect";
 import VendorCodeAdmin from "./VendorCodeAdmin";
 import RoomDeliveryBoard from "./RoomDeliveryBoard";
 import KpiTargetsEditor from "./kpi/KpiTargetsEditor";
+import { parseKpiTargets } from "./kpi/kpiDefs";
 import { OVERHAUL_SHEET_DEFAULT_TAB, OVERHAUL_SHEET_TAB_KEY } from "./overhaulSheet";
+import { UI } from "./ui/card";
+import StateBox from "./ui/StateBox";
+
+// 카드 머리(제목+설명이 세로로 쌓이는 형태) — UI.head 는 가로 flex 라 여기만 로컬. card.ts 에 올릴 후보(headBlock)
+const HEAD_BLOCK = "border-b border-slate-100 bg-slate-50 px-4 py-3 lg:px-5";
 
 /**
  * 카톡방·전송 설정 관리.
@@ -41,7 +47,11 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
 const ROOM_CATEGORIES = ["점검", "AS", "미수", "재계약", "불만", "초과조정", "자가", "부품", "물류", "PC", "복합기", "IT접수", "마감", "반납", "불량토너", "불량부품"]; // 반납·불량토너·불량부품 = 조회 탭 자가·부품신청의 [반납]·[불량] 글이 가는 방(2026-10-11) // IT접수|* = 서비스접수 IT 건이 가는 방(2026-09-17) · 마감|*(또는 팀) = 카운터 사진이 올라가고 봇이 관리부 목록을 읽는 마감방(2026-10-10, 한 곳에서 관리)
 const ROOM_REGIONS = ["*", "A", "B", "C", "D", "E", "CD"];
 
-export default function SystemAdmin() {
+import { SYSTEM_VIEWS, type SystemView } from "./adminViews";
+export { SYSTEM_VIEWS, type SystemView };
+
+export default function SystemAdmin({ view = "switches" }: { view?: SystemView }) {
+  const [kpiOpen, setKpiOpen] = useState(false);
   const [config, setConfig] = useState<ConfigRow[]>([]);
   // 네이버 계정에 보이는 캘린더 목록(CalDAV PROPFIND) — 팀 완료 캘린더 ID를 공유 URL 없이도 고를 수 있게
   const [naverCalList, setNaverCalList] = useState<Array<{ id: string; name: string; owner: string }> | null>(null);
@@ -93,7 +103,8 @@ export default function SystemAdmin() {
   const loadGas = () => fetch(`${GAS_GET_URL}?action=adminstatus`).then((res) => res.json()).then(setGas).catch((e) => setGasError((e as Error).message));
   const loadCollectRooms = () => fetch(`${GAS_GET_URL}?action=roommap`).then((res) => res.json())
     .then((data) => setCollectRooms(data.rows || [])).catch((e) => setGasError((e as Error).message));
-  useEffect(() => { void loadGas(); void loadCollectRooms(); }, []);
+  // GAS 조회는 [카톡 수집] 칩을 열 때만 한다(다른 칩에서는 불필요한 호출 방지)
+  useEffect(() => { if (view === "collect") { void loadGas(); void loadCollectRooms(); } }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runIngestNow = () => {
     setBusy("ingestnow");
@@ -166,9 +177,13 @@ export default function SystemAdmin() {
   }, [rooms]);
 
   const testMode = isOn("TEST_MODE") || isOn("FIELD_SHEET_TEST_MODE");
+  const kpiSettings = useMemo(() => parseKpiTargets(valueOf("KPI_TARGETS")), [config]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kpiMainCount = Object.values(kpiSettings.targets).filter((t) => t.main).length;
+  const viewInfo = SYSTEM_VIEWS.find(([key]) => key === view);
 
   return (
     <div className="space-y-4">
+      {viewInfo && <p className="px-1 text-[13px] font-semibold leading-5 text-slate-500">{viewInfo[2]}</p>}
       {testMode && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-black text-amber-800">
           <AlertTriangle size={17} className="shrink-0" />
@@ -176,19 +191,23 @@ export default function SystemAdmin() {
         </div>
       )}
 
+      {/* 저장 결과·오류 — 어느 칩에서 저장해도 보이도록 카드 밖에 둔다 */}
+      {error && <div role="alert" className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
+      {notice && <div role="status" className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">{notice}</div>}
+
       {/* 전송 스위치 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+      {view === "switches" && (
+      <section className={UI.card}>
+        <div className={UI.head}>
           <div>
-            <h3 className="text-base font-black text-slate-950 lg:text-lg">전송·연동 스위치</h3>
-            <p className="mt-0.5 text-[11px] font-semibold text-slate-400">지금까지 Supabase 콘솔에서만 바꿀 수 있던 값입니다.</p>
+            <h3 className={UI.title}>전송·연동 스위치</h3>
+            <p className={UI.desc}>지금까지 Supabase 콘솔에서만 바꿀 수 있던 값입니다.</p>
           </div>
-          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />새로고침
+          <button type="button" onClick={() => void load()} className={UI.btnGhost}>
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />새로고침
           </button>
         </div>
-        {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
-        {notice && <div className="border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">{notice}</div>}
+        {loading && !config.length && <StateBox inside kind="loading" message="설정을 불러오는 중입니다…" />}
         <div className="divide-y divide-slate-100">
           {SWITCHES.map((item) => {
             const on = isOn(item.key);
@@ -197,12 +216,12 @@ export default function SystemAdmin() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-black text-slate-900">{item.label}</span>
-                    <span className="font-mono text-[10px] font-bold text-slate-300">{item.key}</span>
+                    <span className="break-all font-mono text-[11px] font-bold text-slate-400">{item.key}</span>
                   </div>
-                  <p className="mt-0.5 text-[11px] font-semibold text-slate-400">{item.desc}</p>
+                  <p className={UI.desc}>{item.desc}</p>
                 </div>
                 <button type="button" disabled={busy === item.key} onClick={() => void saveConfig(item.key, on ? "false" : "true")}
-                  className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-40 ${on ? (item.danger ? "bg-amber-500" : "bg-blue-600") : "bg-slate-200"}`}
+                  className={`relative h-7 w-12 shrink-0 rounded-full transition before:absolute before:-inset-2 disabled:opacity-40 ${on ? (item.danger ? "bg-amber-500" : "bg-blue-600") : "bg-slate-200"}`}
                   aria-pressed={on} aria-label={`${item.label} ${on ? "켜짐" : "꺼짐"}`}>
                   <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? "left-6" : "left-1"}`} />
                 </button>
@@ -212,42 +231,60 @@ export default function SystemAdmin() {
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">테스트 카톡방 이름</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">카카오톡 방 이름입니다. 테스트 모드가 켜지면 모든 전송이 실제 방 대신 이 카톡방으로만 갑니다.</p>
+              <p className={UI.desc}>카카오톡 방 이름입니다. 테스트 모드가 켜지면 모든 전송이 실제 방 대신 이 카톡방으로만 갑니다.</p>
             </div>
             <input defaultValue={valueOf("TEST_ROOM")} onBlur={(e) => { if (e.target.value !== valueOf("TEST_ROOM")) void saveConfig("TEST_ROOM", e.target.value); }}
-              className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-56 lg:h-10" />
           </div>
+        </div>
+      </section>
+      )}
+
+      {/* 기타 설정값 (캘린더·오버홀 시트 탭) */}
+      {view === "misc" && (
+      <section className={UI.card}>
+        <div className={UI.head}>
+          <div>
+            <h3 className={UI.title}>기타 설정값</h3>
+            <p className={UI.desc}>칸을 고친 뒤 다른 곳을 누르면 자동 저장됩니다.</p>
+          </div>
+          <button type="button" onClick={() => void load()} className={UI.btnGhost}>
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />새로고침
+          </button>
+        </div>
+        {loading && !config.length && <StateBox inside kind="loading" message="설정을 불러오는 중입니다…" />}
+        <div className="divide-y divide-slate-100">
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">네이버 캘린더 ID</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">비워두면 연동 계정의 기본 캘린더. 특정 캘린더로 보내려면 그 캘린더의 공유 URL(naver.me/…)을 그대로 붙여넣으세요 — 자동으로 ID로 바뀝니다. (캘린더 설정 → 공개 설정 → URL 복사)</p>
+              <p className={UI.desc}>비워두면 연동 계정의 기본 캘린더. 특정 캘린더로 보내려면 그 캘린더의 공유 URL(naver.me/…)을 그대로 붙여넣으세요 — 자동으로 ID로 바뀝니다. (캘린더 설정 → 공개 설정 → URL 복사)</p>
             </div>
             <input defaultValue={valueOf("NAVER_CALENDAR_ID")} placeholder="defaultCalendarId" onBlur={(e) => { if (e.target.value !== valueOf("NAVER_CALENDAR_ID")) void saveConfig("NAVER_CALENDAR_ID", e.target.value.trim()); }}
-              className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-56 lg:h-10" />
           </div>
           {/* 오버홀 기록 시트 탭(2026-10-24) — 홈 KPI 달성표 K33 오버홀 원본. 비우면 기본 "리스트(26년)" */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">오버홀 시트 탭 이름 (OVERHAUL_SHEET_TAB)</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">홈 KPI 달성표의 오버홀 점수를 읽는 오버홀 기록 시트의 탭 이름입니다. 비워두면 기본 "{OVERHAUL_SHEET_DEFAULT_TAB}". 해가 바뀌어 새 탭을 만들면 여기 이름을 바꾸세요.</p>
+              <p className={UI.desc}>홈 KPI 달성표의 오버홀 점수를 읽는 오버홀 기록 시트의 탭 이름입니다. 비워두면 기본 "{OVERHAUL_SHEET_DEFAULT_TAB}". 해가 바뀌어 새 탭을 만들면 그 탭을 연 주소(…#gid=숫자)나 gid 숫자를 적으세요(앱이 아는 탭 이름은 이름만 적어도 됩니다).</p>
             </div>
             <input defaultValue={valueOf(OVERHAUL_SHEET_TAB_KEY)} placeholder={OVERHAUL_SHEET_DEFAULT_TAB} onBlur={(e) => { if (e.target.value.trim() !== valueOf(OVERHAUL_SHEET_TAB_KEY)) void saveConfig(OVERHAUL_SHEET_TAB_KEY, e.target.value.trim()); }}
-              className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-56 lg:h-10" />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">네이버 재연동 (토큰 갱신)</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">네이버 캘린더에 등록이 안 되기 시작하면(토큰 만료·비밀번호 변경) 연동 계정으로 로그인 한 번이면 됩니다. "연동 완료 ✓" 알림까지 확인하세요.</p>
+              <p className={UI.desc}>네이버 캘린더에 등록이 안 되기 시작하면(토큰 만료·비밀번호 변경) 연동 계정으로 로그인 한 번이면 됩니다. "연동 완료 ✓" 알림까지 확인하세요.</p>
             </div>
             <a href="https://nid.naver.com/oauth2.0/authorize?response_type=code&client_id=V_m8cXZT2YjdGqAJyssK&redirect_uri=https%3A%2F%2Ffirstoa-inspection-finder-mg.vercel.app%2F&state=firstoa"
-              className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100">재연동 열기</a>
+              className="inline-flex min-h-11 items-center rounded-full border border-emerald-300 bg-emerald-50 px-4 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 lg:min-h-9">재연동 열기</a>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">팀별 완료 캘린더 ID</div>
-              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">일정 완료 시 익일통합as에서 이 캘린더로 이동합니다. 비운 팀은 제자리 완료 체크만. A·B는 "강북서AB as" 하나를 같이 씁니다(같은 ID).</p>
+              <p className={UI.desc}>일정 완료 시 익일통합as에서 이 캘린더로 이동합니다. 비운 팀은 제자리 완료 체크만. A·B는 "강북서AB as" 하나를 같이 씁니다(같은 ID).</p>
               <button type="button" onClick={() => void loadNaverCalList()} disabled={naverCalLoading}
-                className="mt-2 rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">
+                className={`${UI.btnGhost} mt-2 text-xs!`}>
                 {naverCalLoading ? "불러오는 중…" : "네이버 캘린더 목록 불러오기"}
               </button>
               {naverCalList && (
@@ -256,9 +293,9 @@ export default function SystemAdmin() {
                   {naverCalList.map((c) => (
                     <li key={c.id} className="flex items-center gap-2">
                       <span className="w-40 truncate font-black text-slate-800">{c.name || "(이름 없음)"}</span>
-                      <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">{c.id}</code>
+                      <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600">{c.id}</code>
                       <button type="button" onClick={() => { void navigator.clipboard.writeText(c.id).then(() => notify(`${c.name} ID 복사 ✓`, "success")).catch(() => notify("복사 실패", "error")); }}
-                        className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 hover:bg-slate-50">복사</button>
+                        className="inline-flex min-h-11 items-center rounded-full border border-slate-200 px-3 text-[11px] font-black text-slate-500 hover:bg-slate-50 lg:min-h-9">복사</button>
                     </li>
                   ))}
                 </ul>
@@ -273,15 +310,40 @@ export default function SystemAdmin() {
               ))}
             </div>
           </div>
-          {!loading && <KpiTargetsEditor key={valueOf("KPI_TARGETS")} value={valueOf("KPI_TARGETS")} busy={busy === "KPI_TARGETS"} onSave={saveConfig} />}
         </div>
       </section>
+      )}
+
+      {/* 홈 KPI 목표 — 기본 접힘. 편집기 내부는 그대로(KpiTargetsEditor) */}
+      {view === "kpi" && (
+      <section className={UI.card}>
+        <button type="button" onClick={() => setKpiOpen((open) => !open)} aria-expanded={kpiOpen}
+          className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 lg:px-5">
+          {kpiOpen ? <ChevronDown size={18} className="shrink-0 text-slate-400" /> : <ChevronRight size={18} className="shrink-0 text-slate-400" />}
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-black text-slate-900">홈 KPI 목표</span>
+            <span className="block text-[11px] font-semibold text-slate-500">
+              {loading ? "불러오는 중입니다…" : `주요 목표 ${kpiMainCount}개 · ${valueOf("KPI_TARGETS").trim() ? "저장된 목표 사용 중" : "기본 목표 사용 중(저장 안 함)"}${kpiSettings.error ? " · 저장값에 오류가 있어 기본값을 씁니다" : ""}`}
+            </span>
+          </span>
+          <span className={`${UI.btnGhost} pointer-events-none shrink-0`}>{kpiOpen ? "접기" : "펼치기"}</span>
+        </button>
+        {kpiOpen && !loading && (
+          <div className="border-t border-slate-100">
+            <KpiTargetsEditor key={valueOf("KPI_TARGETS")} value={valueOf("KPI_TARGETS")} busy={busy === "KPI_TARGETS"} onSave={saveConfig} />
+          </div>
+        )}
+        {kpiOpen && loading && <StateBox inside kind="loading" message="목표를 불러오는 중입니다…" />}
+      </section>
+      )}
 
       {/* 카톡방 매핑 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-          <h3 className="text-base font-black text-slate-950 lg:text-lg">카톡방 매핑</h3>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">업무 종류 · 지역별로 어느 방에 보낼지 정합니다. 지역 <b>*</b> 는 전 지역 공통입니다.</p>
+      {view === "rooms" && (
+      <>
+      <section className={UI.card}>
+        <div className={HEAD_BLOCK}>
+          <h3 className={UI.title}>카톡방 매핑</h3>
+          <p className={UI.desc}>업무 종류 · 지역별로 어느 방에 보낼지 정합니다. 지역 <b>*</b> 는 전 지역 공통입니다.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-4">
           <label className="text-[11px] font-black text-slate-500">업무 종류
@@ -294,10 +356,10 @@ export default function SystemAdmin() {
           </label>
           <label className="min-w-0 flex-1 text-[11px] font-black text-slate-500">카톡방 이름
             <input value={draft.room} onChange={(e) => setDraft({ ...draft, room: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") void addRoom(); }}
-              placeholder="카톡방 정확한 이름" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+              placeholder="카톡방 정확한 이름" className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm lg:h-10 font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </label>
           <button type="button" onClick={() => void addRoom()} disabled={!draft.room.trim() || busy === "room-add"}
-            className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">
+            className={UI.btn}>
             <Plus size={15} />저장
           </button>
         </div>
@@ -308,51 +370,58 @@ export default function SystemAdmin() {
               <div className="divide-y divide-slate-50">
                 {list.map((row) => (
                   <div key={`${row.category}|${row.region}`} className="flex items-center gap-2 px-4 py-2.5">
-                    <span className="w-12 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[10px] font-black text-slate-500">{row.region === "*" ? "공통" : row.region}</span>
+                    <span className="w-12 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[11px] font-black text-slate-500">{row.region === "*" ? "공통" : row.region}</span>
                     <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800" title={row.room}>{row.room}</span>
-                    <button type="button" disabled={busy === `${row.category}|${row.region}`} onClick={() => void removeRoom(row)}
-                      className="shrink-0 rounded-full p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40"><Trash2 size={14} /></button>
+                    <button type="button" aria-label={`${row.category} ${row.region} 방 매핑 삭제`} disabled={busy === `${row.category}|${row.region}`} onClick={() => void removeRoom(row)}
+                      className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:min-h-9 lg:min-w-9"><Trash2 size={15} /></button>
                   </div>
                 ))}
               </div>
             </div>
           ))}
-          {!grouped.length && !loading && <div className="bg-white p-8 text-center text-sm font-bold text-slate-400">등록된 방 매핑이 없습니다.</div>}
+          {!grouped.length && !loading && <div className="bg-white sm:col-span-2 xl:col-span-3"><StateBox inside kind="empty" message="등록된 방 매핑이 없습니다." /></div>}
         </div>
       </section>
 
+      {/* 카톡 발송 현황 — 방별 마지막 배달(폰 봇/노트북 PC)·밀린 글 */}
+      <RoomDeliveryBoard />
+      </>
+      )}
+
+      {view === "collect" && (
+      <>
       {/* First-DATA GAS 상태 — 옛 웹 콘솔에서 이식한 항목 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-          <h3 className="text-base font-black text-slate-950 lg:text-lg">카톡 수집 상태 (First-DATA)</h3>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다.</p>
+      <section className={UI.card}>
+        <div className={HEAD_BLOCK}>
+          <h3 className={UI.title}>카톡 수집 상태 (First-DATA)</h3>
+          <p className={UI.desc}>드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다.</p>
         </div>
-        {gasError && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">GAS 상태 조회 실패: {gasError}</div>}
-        {!gas && !gasError && <div className="p-6 text-center text-sm font-bold text-slate-400">First-DATA에서 상태를 불러오는 중…</div>}
+        {gasError && <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">GAS 상태 조회 실패: {gasError}</div>}
+        {!gas && !gasError && <StateBox inside kind="loading" message="First-DATA에서 상태를 불러오는 중입니다…" />}
         {gas && (
           <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
             <div className="bg-white p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-black text-slate-700">드라이브 수집함 (카톡 TXT 자동 적재)</div>
                 <button type="button" disabled={busy === "ingestnow"} onClick={runIngestNow}
-                  className="rounded-full bg-blue-600 px-3 py-1 text-[10px] font-black text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">
+                  className={`${UI.btn} text-xs!`}>
                   {busy === "ingestnow" ? "수집 중… (몇 분 걸릴 수 있음)" : "지금 수집 실행"}
                 </button>
               </div>
               {ingestResult && <div className="mt-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">{ingestResult}</div>}
               {gas.drive?.enabled ? (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                  <span className={`rounded-full px-2.5 py-1 ${gas.drive.hasTrigger ? "bg-emerald-50 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>트리거 {gas.drive.hasTrigger ? "동작 중" : "없음"}</span>
-                  <span className={`rounded-full px-2.5 py-1 tabular-nums ${(gas.drive.pending || 0) > 0 ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}>대기 파일 {gas.drive.pending ?? 0}개</span>
-                  {gas.drive.interval && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">주기 {gas.drive.interval}</span>}
-                  {gas.drive.folderUrl && <a href={gas.drive.folderUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-slate-600 transition hover:bg-slate-50">폴더 열기</a>}
+                  <span className={`rounded-full px-2.5 py-1 ${gas.drive.hasTrigger ? UI.tone.ok : UI.tone.bad}`}>트리거 {gas.drive.hasTrigger ? "동작 중" : "없음"}</span>
+                  <span className={`rounded-full px-2.5 py-1 tabular-nums ${(gas.drive.pending || 0) > 0 ? UI.tone.warn : UI.tone.off}`}>대기 파일 {gas.drive.pending ?? 0}개</span>
+                  {gas.drive.interval && <span className={`rounded-full px-2.5 py-1 ${UI.tone.off}`}>주기 {gas.drive.interval}</span>}
+                  {gas.drive.folderUrl && <a href={gas.drive.folderUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-full border border-slate-300 bg-white px-3 text-slate-600 transition hover:bg-slate-50 lg:min-h-9">폴더 열기</a>}
                 </div>
               ) : (
                 <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">수집함이 꺼져 있습니다 — 카톡 대화가 DB로 들어오지 않는 상태입니다.</div>
               )}
             </div>
             <div className="bg-white p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-black text-slate-700">일괄 수집 작업 큐</div>
                 {(gas.queue?.jobs?.length || 0) > 0 && (
                   <button type="button" disabled={busy === "kakaoclear"}
@@ -363,7 +432,7 @@ export default function SystemAdmin() {
                         .catch((e) => setGasError((e as Error).message))
                         .finally(() => setBusy(""));
                     }}
-                    className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40">
+                    className={`${UI.btnGhost} text-xs!`}>
                     {busy === "kakaoclear" ? "정리 중…" : "끝난 작업 정리"}
                   </button>
                 )}
@@ -372,7 +441,7 @@ export default function SystemAdmin() {
                 <div className="mt-2 space-y-1">
                   {gas.queue.jobs.slice(0, 5).map((job, index) => (
                     <div key={index} className="flex items-center gap-2 text-[11px] font-bold">
-                      <span className={`rounded-full px-2 py-0.5 ${job.status === "done" ? "bg-emerald-50 text-emerald-700" : job.status === "error" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800"}`}>{job.status || "-"}</span>
+                      <span className={`rounded-full px-2 py-0.5 ${job.status === "done" ? UI.tone.ok : job.status === "error" ? UI.tone.bad : UI.tone.warn}`}>{job.status || "-"}</span>
                       <span className="truncate text-slate-600">{[job.roomType, job.teamLabel].filter(Boolean).join(" · ") || "-"}</span>
                       {job.lastError && <span className="truncate text-rose-500" title={job.lastError}>{job.lastError.slice(0, 40)}</span>}
                     </div>
@@ -387,10 +456,10 @@ export default function SystemAdmin() {
       </section>
 
       {/* 카톡 수집 방 매핑 (받는 방향) — 옛 콘솔의 _room_map 시트를 웹앱에서 관리 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-          <h3 className="text-base font-black text-slate-950 lg:text-lg">카톡 수집 방 매핑 <span className="text-[11px] font-bold text-slate-400">받는 방향</span></h3>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">드라이브에 올린 대화 txt가 어느 분류로 들어갈지 정합니다. 방이름은 txt 첫 줄의 "○○ 님과 카카오톡 대화"와 정확히 일치해야 합니다. (위 카톡방 매핑은 "보내는 방향"으로 별개)</p>
+      <section className={UI.card}>
+        <div className={HEAD_BLOCK}>
+          <h3 className={UI.title}>카톡 수집 방 매핑 <span className="text-[11px] font-bold text-slate-400">받는 방향</span></h3>
+          <p className={UI.desc}>드라이브에 올린 대화 txt가 어느 분류로 들어갈지 정합니다. 방이름은 txt 첫 줄의 "○○ 님과 카카오톡 대화"와 정확히 일치해야 합니다. (위 카톡방 매핑은 "보내는 방향"으로 별개)</p>
         </div>
         <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-4">
           <label className="min-w-0 flex-1 text-[11px] font-black text-slate-500">방이름 (정확히)
@@ -414,16 +483,17 @@ export default function SystemAdmin() {
                 .catch((e) => setGasError((e as Error).message))
                 .finally(() => setBusy(""));
             }}
-            className="rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">저장</button>
+            className={UI.btn}>저장</button>
         </div>
         <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
-          {collectRooms === null && <div className="p-6 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
+          {collectRooms === null && <StateBox inside kind="loading" />}
+          {collectRooms?.length === 0 && <StateBox inside kind="empty" message="등록된 수집 방 매핑이 없습니다." />}
           {collectRooms?.map((row) => (
             <div key={row.roomName} className="flex items-center gap-2 px-4 py-2.5">
-              <span className="w-16 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[10px] font-black text-slate-500">{row.category}</span>
-              <span className="w-10 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[10px] font-black text-slate-500">{row.team || "-"}</span>
+              <span className="w-16 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[11px] font-black text-slate-500">{row.category}</span>
+              <span className="w-10 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[11px] font-black text-slate-500">{row.team || "-"}</span>
               <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800" title={row.roomName}>{row.roomName}</span>
-              <button type="button" disabled={busy === `collect-del-${row.roomName}`}
+              <button type="button" aria-label={`${row.roomName} 수집 매핑 삭제`} disabled={busy === `collect-del-${row.roomName}`}
                 onClick={async () => {
                   if (!await askConfirm(`"${row.roomName}" 수집 매핑을 삭제할까요?`)) return;
                   setBusy(`collect-del-${row.roomName}`);
@@ -433,17 +503,20 @@ export default function SystemAdmin() {
                     .catch((e) => setGasError((e as Error).message))
                     .finally(() => setBusy(""));
                 }}
-                className="shrink-0 rounded-full p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40"><Trash2 size={14} /></button>
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:min-h-9 lg:min-w-9"><Trash2 size={15} /></button>
             </div>
           ))}
         </div>
       </section>
+      </>
+      )}
 
       {/* 시트 동기화 최근 상태 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
-          <h3 className="text-base font-black text-slate-950 lg:text-lg">시트 기입 최근 작업</h3>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">FIELD·접수에서 구글시트로 보낸 요청의 결과입니다. 실패가 쌓이면 Apps Script 배포를 확인하세요.</p>
+      {view === "sheet" && (
+      <section className={UI.card}>
+        <div className={HEAD_BLOCK}>
+          <h3 className={UI.title}>시트 기입 최근 작업</h3>
+          <p className={UI.desc}>FIELD·접수에서 구글시트로 보낸 요청의 결과입니다. 실패가 쌓이면 Apps Script 배포를 확인하세요.</p>
         </div>
         {/* 시트 진단 — 키워드로 실제 시트 행을 찾아본다 (읽기 전용) */}
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
@@ -459,7 +532,7 @@ export default function SystemAdmin() {
             ]} />
           <input value={peekWord} onChange={(e) => setPeekWord(e.target.value)} placeholder="업체명·키워드"
             onKeyDown={(e) => { if (e.key === "Enter" && peekWord.trim()) (e.target as HTMLInputElement).blur(); }}
-            className="w-40 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-bold outline-none focus:border-blue-500" />
+            className="h-11 w-40 rounded-lg border border-slate-300 px-3 text-[13px] font-bold outline-none focus:border-blue-500 lg:h-10" />
           <button type="button" disabled={busy === "peek" || !peekWord.trim()}
             onClick={() => { void (async () => {
               setBusy("peek"); setDiagOut("시트를 읽는 중…");
@@ -472,19 +545,19 @@ export default function SystemAdmin() {
               } catch (e) { setDiagOut(`실패: ${(e as Error).message}`); }
               finally { setBusy(""); }
             })(); }}
-            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
+            className={UI.btnGhost}>
             {busy === "peek" ? "읽는 중…" : "시트에서 찾기"}</button>
           {diagOut && <pre className="w-full whitespace-pre-wrap rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold leading-5 text-slate-600">{diagOut}</pre>}
         </div>
         <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
           {jobs.map((job) => {
             const state = job.sheet_status === "synced" ? "완료" : job.sheet_status === "failed" ? "실패" : "대기";
-            const tone = state === "완료" ? "bg-emerald-50 text-emerald-700" : state === "실패" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-800";
+            const tone = state === "완료" ? UI.tone.ok : state === "실패" ? UI.tone.bad : UI.tone.warn;
             return (
-              <div key={job.id} className="flex items-center gap-3 px-4 py-2.5">
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black ${tone}`}>{state}{job.attempts ? ` ${job.attempts}회` : ""}</span>
-                <span className="w-32 shrink-0 truncate text-xs font-bold text-slate-600">{job.category || "-"}</span>
-                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-500" title={job.last_error || ""}>{job.last_error || (state === "완료" ? `행 ${job.sheet_row ?? "-"}` : "-")}</span>
+              <div key={job.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-black ${tone}`}>{state}{job.attempts ? ` ${job.attempts}회` : ""}</span>
+                <span className="w-24 shrink-0 truncate text-xs font-bold text-slate-600 sm:w-32">{job.category || "-"}</span>
+                <span className="min-w-0 flex-1 basis-32 truncate text-[11px] font-semibold text-slate-500" title={job.last_error || ""}>{job.last_error || (state === "완료" ? `행 ${job.sheet_row ?? "-"}` : "-")}</span>
                 {state !== "완료" && (
                   <button type="button" disabled={busy === `probe-${job.id}`}
                     onClick={() => { void (async () => {
@@ -495,7 +568,7 @@ export default function SystemAdmin() {
                       } catch (e) { setDiagOut(`지문 확인 실패: ${(e as Error).message}`); }
                       finally { setBusy(""); }
                     })(); }}
-                    className="shrink-0 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-40"
+                    className={`${UI.btnGhost} shrink-0 text-xs!`}
                     title="시트에 이미 기입됐는지 확인만 합니다 (아무것도 쓰지 않음)">
                     {busy === `probe-${job.id}` ? "확인 중…" : "지문"}
                   </button>
@@ -503,23 +576,21 @@ export default function SystemAdmin() {
                 {state !== "완료" && (
                   <button type="button" disabled={busy === `retry-${job.id}`}
                     onClick={() => { void (async () => { setBusy(`retry-${job.id}`); try { await invokeEdgeFunction("field-sheet-sync", { jobId: job.id }); await load(); } catch { /* 결과는 목록 갱신으로 확인 */ } finally { setBusy(""); } })(); }}
-                    className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700 transition hover:bg-blue-100 disabled:opacity-40">
+                    className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-4 text-xs font-black text-blue-700 transition hover:bg-blue-100 disabled:opacity-40 lg:min-h-9">
                     {busy === `retry-${job.id}` ? "실행 중…" : "다시 실행"}
                   </button>
                 )}
-                <span className="shrink-0 font-mono text-[10px] font-bold tabular-nums text-slate-400">{String(job.created_at || "").slice(5, 16).replace("T", " ")}</span>
+                <span className="shrink-0 font-mono text-[11px] font-bold tabular-nums text-slate-400">{String(job.created_at || "").slice(5, 16).replace("T", " ")}</span>
               </div>
             );
           })}
-          {!jobs.length && <div className="p-8 text-center text-sm font-bold text-slate-400">{loading ? "불러오는 중…" : "최근 작업 기록이 없습니다."}</div>}
+          {!jobs.length && <StateBox inside kind={loading ? "loading" : "empty"} message={loading ? "불러오는 중입니다…" : "최근 작업 기록이 없습니다."} />}
         </div>
       </section>
-
-      {/* 카톡 발송 현황 — 방별 마지막 배달(폰 봇/노트북 PC)·밀린 글 */}
-      <RoomDeliveryBoard />
+      )}
 
       {/* 거래처 코드 미매칭 확정 — 워킨맵 지점 ↔ 임대리스트 거래처 수동 연결 */}
-      <VendorCodeAdmin />
+      {view === "misc" && <VendorCodeAdmin />}
     </div>
   );
 }

@@ -49,7 +49,7 @@ const TODAY_KPI_IDS = KPI_DEFS.filter((d) => d.today).map((d) => d.id);
 
 /** 순서 = 기본 배치 순서(2026-10-24): 금일 현황 → KPI 달성표(주인공, 전체 폭 두 줄) → 미처리 → OKR */
 export const HOME_WIDGETS: HomeWidgetDef[] = [
-  { id: "today", title: "금일 현황", kind: "todayStrip", kpis: TODAY_KPI_IDS, sizes: ["4x1"], description: "오늘 점검·AS·물류·확장성·칭찬 … 한 줄" },
+  { id: "today", title: "금일 현황", kind: "todayStrip", kpis: TODAY_KPI_IDS, sizes: ["4x1"], description: "오늘 점검·AS·물류·확장성·칭찬 … 한 줄", defaultHidden: true },
   { id: "table", title: "KPI 달성표", kind: "kpiTable", kpis: ALL_KPI_IDS, sizes: ["4x2", "4x1"], description: "지표별 달성·순항·부족 · CS 전체 → 팀 → 개인(행 펼치기, 분기 점검 진행은 K2 행 안)" },
   // 미처리(2026-10-24 하나로): 현황판 묶음의 unhandled(K16 = mergeUnhandled) + recontract(K12 = 재계약 확인 지남)를 그린다 — 따로 읽지 않는다
   { id: "unhandledPanel", title: "미처리", kind: "panel", kpis: ["K16", "K12"], sizes: ["4x1", "2x2"], description: "미처리 합계 · 팀 탭 · 종류 칸(복합기 AS·원격·IT·경영·운영·영업·AS 일정·물류) · 재계약 확인 지남 · 목록" },
@@ -62,7 +62,7 @@ export const HOME_KPI_DEFAULT_LAYOUT: KpiLayoutItem[] = HOME_WIDGETS.map((w) => 
 /* ───────────── 배치 저장 (localStorage, 설계안 4-5 2단계-a) ───────────── */
 
 export const HOME_KPI_LAYOUT_KEY = "home_kpi_layout_v1";
-export const HOME_KPI_LAYOUT_VERSION = 1;
+export const HOME_KPI_LAYOUT_VERSION = 2; // v2(2026-10-24 오후): 금일 현황 기본 숨김 — v1 저장분은 today 만 숨기고 나머지 배치는 유지
 
 /**
  * 저장 글 → 배치. 모양이 틀리거나 버전이 다르면 기본 배치. 모르는 id(2026-10-24 에 없앤 K1·K3·exp·K10·K12·unhandled·receptionPanel·K2 포함)·중복은 버리고,
@@ -75,7 +75,8 @@ export function parseHomeLayout(raw: string | null | undefined): { items: KpiLay
   try { parsed = JSON.parse(raw); } catch { return fallback; }
   if (!parsed || typeof parsed !== "object") return fallback;
   const { v, items } = parsed as { v?: unknown; items?: unknown };
-  if (v !== HOME_KPI_LAYOUT_VERSION || !Array.isArray(items)) return fallback;
+  const fromV1 = v === 1; // v1 → v2 이전: 사용자 배치는 살리고 금일 현황만 숨긴다(사용자 "금일 현황은 없어도 되겠다")
+  if ((v !== HOME_KPI_LAYOUT_VERSION && !fromV1) || !Array.isArray(items)) return fallback;
   const seen = new Set<string>();
   const out: KpiLayoutItem[] = [];
   for (const it of items) {
@@ -84,7 +85,7 @@ export function parseHomeLayout(raw: string | null | undefined): { items: KpiLay
     if (typeof id !== "string" || !(id in HOME_WIDGET_BY_ID) || seen.has(id)) continue;
     const def = HOME_WIDGET_BY_ID[id as HomeWidgetId];
     seen.add(id);
-    out.push({ id, size: def.sizes.includes(size as KpiSize) ? (size as KpiSize) : def.sizes[0], hidden: hidden === true });
+    out.push({ id, size: def.sizes.includes(size as KpiSize) ? (size as KpiSize) : def.sizes[0], hidden: hidden === true || (fromV1 && def.defaultHidden === true) });
   }
   for (const w of HOME_WIDGETS) if (!seen.has(w.id)) out.push({ id: w.id, size: w.sizes[0], hidden: w.defaultHidden === true });
   return { items: out, restored: true };
@@ -304,21 +305,25 @@ export function okrView(b: KpiBundle, period: "week" | "month" = "week", scope: 
   let pctValue: number | null;
   let counts: Record<OkrJudgment, number>;
   let missingTeams: string[];
+  let teamPcts: Array<{ team: string; pct: number | null }>;
   const w = okr.week;
   const sc: OkrScope = period === "month" ? { team: scope.team } : scope;
   if (period === "week") {
     if (!w) return null;
     const r = okrWeekResult(w, w.id, sc);
     pctValue = r.pct; counts = r.counts; missingTeams = r.missingTeams;
+    teamPcts = r.byTeam;
   } else {
     const teams = sc.team === "ALL" ? OKR_TEAMS : OKR_TEAMS.filter((t) => t === sc.team);
     const per = teams.map((team) => ({ team, rows: okrTeamRows(okr.cycle, okr.quarter, okr.reports, team) }));
     pctValue = sc.team === "ALL" ? okrKpi(okr, b.ranges).value : achievementRate(per.flatMap((p) => p.rows));
     counts = judgmentCounts(per.flatMap((p) => p.rows));
     missingTeams = per.filter((p) => !p.rows.some((x) => normalizeJudgment(x.judgment))).map((p) => p.team);
+    teamPcts = per.map((p) => ({ team: p.team, pct: achievementRate(p.rows) }));
   }
   return {
     kind: "okr", period, pct: pctValue,
+    teams: teamPcts,
     counts: [
       { label: "완료", value: counts["완료"], tone: "ok" },
       { label: "부분달성", value: counts["부분달성"], tone: counts["부분달성"] ? "warn" : "idle" },

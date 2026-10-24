@@ -74,6 +74,7 @@
 
 ## 저장소 지도 (짧게)
 - `src/` 프런트 · `api/` Vercel 서버리스 · `public/` 정적(설명서 등)
+  - `src/field/` FIELD 탭 점검·AS·청정기 양식 부품(2026-10-24 App.tsx 에서 분리): `fieldFormModel.ts`(타입·옵션·여분 순수 함수) · `ProcessingFormPanel`·`AirPurifierFormPanel`(양식) · `DevicePicker`·`NumSelect`·`SpareQuickEditor`·`CounterOcrButton`·`AuthorPicker`(부품) · `*.view.tsx`(겉틀·안내 한 줄·단추 줄, 로직 없음). 상태·보내기 흐름은 App.tsx 에 그대로
 - `supabase/*.sql` 표·RLS·cron (1파일 = 1기능, SQL Editor 에서 사람이 실행) · `supabase/functions/*` 엣지 함수(Deno)
 - `apps-script/` GAS 소스(자동 반영 안 됨) · `gas-and-bot/` 메신저봇R 스크립트
 - `tools/worker/` 노트북 실행기 · `tools/kakao-pc/` 카톡 PC 자동화

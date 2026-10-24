@@ -18,8 +18,8 @@ import { buildMessage, formatPhone, mergeTargets, parseBlocks, parseListHeader, 
 import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
 import { counterRoomEntries, prepareCounterSend, sendCounterPhoto, type SendPlan } from "./counterSmsPhoto";
 import { saveActivityEvent } from "./operations";
-import { historyOf, isNewTarget, kstIso, logLines, logWhen, md, mdt, moreActions, primaryAction, sortTargets, statusLine, warnBadge, type CardAction } from "./counterSmsView";
-import { ChipGroup, CounterCard, HelpBox, LogPanel, StatusHeader } from "./CounterSmsParts.view";
+import { historyOf, isNewTarget, kstIso, logLines, logWhen, md, mdt, moreActions, offListTargetIds, primaryAction, sortTargets, statusLine, warnBadge, type CardAction } from "./counterSmsView";
+import { ChipGroup, CounterCard, HelpBox, LogPanel, StatusHeader, ToggleChip } from "./CounterSmsParts.view";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
@@ -108,6 +108,7 @@ export default function CounterSms({ author }: { author: string }) {
   //   merge: 없는 업체만 추가(빠진 업체 그대로) · replace: 새 목록(달이 바뀔 때)
   const [uploadMode, setUploadMode] = useState<"sync" | "merge" | "replace">("sync");
   const [showDone, setShowDone] = useState(false); // 완료된 카드는 접어 둔다 — 열린 업체만 보이게
+  const [offOnly, setOffOnly] = useState(false);   // 관리부 목록 밖 열린 곳만 보기 — 2026-10-24 2단계
   const [newOnly, setNewOnly] = useState(false);   // 신규(목록 생긴 뒤 추가된 업체)만 보기 — 2026-10-24
   const [sortBy, setSortBy] = useState<"stage" | "added">("stage");
   // 완료·추가 이력 컬럼이 있는지(supabase/counter-sms-done.sql 실행 여부) — 없으면 그 기능만 안내하고 나머지는 예전처럼
@@ -589,7 +590,8 @@ export default function CounterSms({ author }: { author: string }) {
           {!batchLoading && batch && (() => {
             // 2026-10-24 단순화: 상태 한 줄·신규·변경 이력·카드 단추 1개+⋯ — 판정은 src/counterSmsView.ts, 표시 틀은 CounterSmsParts.view.tsx. 숫자·저장은 그대로
             const s = statusLine(batch, batchTargets);
-            const groupRows = sortTargets(batchTargets.filter((t) => t.grade_group === gradeTab && (!newOnly || isNewTarget(t, batch))), sortBy, batch);
+            const offIds = offListTargetIds(batch, batchTargets);
+            const groupRows = sortTargets(batchTargets.filter((t) => t.grade_group === gradeTab && (!newOnly || isNewTarget(t, batch)) && (!offOnly || offIds.has(t.id))), sortBy, batch);
             const doneRows = groupRows.filter((t) => t.done_at);
             // 완료는 접어 둔다 — 관리부 목록에서 빠진 업체가 자동 완료되면 카드가 쌓이는데, 할 일은 열린 업체뿐(2026-10-10)
             const shownRows = showDone ? groupRows : groupRows.filter((t) => !t.done_at);
@@ -619,6 +621,7 @@ export default function CounterSms({ author }: { author: string }) {
                 <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
                   <ChipGroup value={sortBy} onChange={setSortBy} options={[["stage", "처리 순"], ["added", "추가된 날짜순"]]} />
                   <ChipGroup value={newOnly ? "new" : "all"} onChange={(v) => setNewOnly(v === "new")} options={[["all", "전체"], ["new", `신규 ${s.fresh}`]]} />
+                  <ToggleChip on={offOnly} count={offIds.size} label="목록 밖" onClick={() => setOffOnly((v) => !v)} />
                 </div>
                 <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
                   {shownRows.map((row) => {
@@ -634,6 +637,7 @@ export default function CounterSms({ author }: { author: string }) {
                       <CounterCard key={row.id} vendor={row.vendor}
                         status={row.done_at ? "done" : row.sent_at ? "sent" : "none"}
                         newLabel={isNew ? `신규 ${md(row.added_at)}` : ""}
+                        offList={offIds.has(row.id)}
                         warn={warnBadge(h)}
                         extraBadges={<>
                           {row.list_kind === "CMS" && <span title="CMS 마감 — 관리부가 따로 올리는 목록. 맞추기는 CMS끼리만" className="shrink-0 rounded bg-cyan-100 px-1.5 py-0.5 text-[11px] font-black text-cyan-800">CMS{row.cms_day ? ` ${row.cms_day}일` : ""}</span>}
@@ -659,7 +663,7 @@ export default function CounterSms({ author }: { author: string }) {
                         }))} />
                     );
                   })}
-                  {!shownRows.length && <div className="col-span-full py-6 text-center text-[12px] font-bold text-slate-400">{newOnly ? "이 등급군에 신규 업체가 없습니다 — [전체]로 돌아가기" : doneRows.length ? "열린 업체가 없습니다 — 이 등급군은 모두 완료" : "이 등급군에 업체가 없습니다."}</div>}
+                  {!shownRows.length && <div className="col-span-full py-6 text-center text-[12px] font-bold text-slate-400">{offOnly ? "이 등급군에 목록 밖 열린 업체가 없습니다 — [목록 밖]을 다시 눌러 돌아가기" : newOnly ? "이 등급군에 신규 업체가 없습니다 — [전체]로 돌아가기" : doneRows.length ? "열린 업체가 없습니다 — 이 등급군은 모두 완료" : "이 등급군에 업체가 없습니다."}</div>}
                   {doneRows.length > 0 && (
                     <button type="button" onClick={() => setShowDone((v) => !v)} className="col-span-full min-h-11 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 text-[12px] font-black text-indigo-600 transition hover:bg-indigo-50">
                       {showDone ? `완료 ${doneRows.length}곳 접기` : `완료 ${doneRows.length}곳 보기 (관리부 목록에서 빠진 업체는 자동 완료)`}

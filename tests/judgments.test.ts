@@ -252,4 +252,18 @@ describe("logisticsTicketInfo — 물류 제목에서 고객사·품목·구분 
     expect(out.vendor).toBe("웅진컴퍼스-서울교육대학교 단기");
     expect(out.category).toBe("철수");
   });
+  // 2026-10-24 디지털자산 거래소 10/23 납품: 80자에서 잘린 제목 전체가 물류 양식 거래처명으로 들어가 이력 검색에 안 걸렸다
+  const CUT_TITLE = "⭐오후 4시반 이후, 각 자리별 IP 현황 사진 참조(노란색 표시 자리는 브라더를 기본 프린터로 하되, 후지도 사용)⭐-납품(일반)/퍼스트/운영";
+  it("일정 본문이 오면 '상호명 :' 줄이 거래처명(순번 괄호는 뗌)", () => {
+    expect(logisticsTicketInfo(CUT_TITLE, "납품  (일반/장기)\n＃. 업종: 교육 및 연구용역\n1. 상호명 : 디지털자산 거래소 공동협의체-메인복합기\n2. 날짜 : 10.23(금)"))
+      .toEqual({ vendor: "디지털자산 거래소 공동협의체-메인복합기", item: "", category: "납품" });
+    expect(logisticsTicketInfo("오후, 전일 시간 조율 필요 -철수(일반)/퍼스트/계약종료/엠텔/ES5473/확인서서명필수", "철수\n7. 상호(사업자등록증 유/무) : ㈜엠텔 (순 3835)\n 8. 담당자 : 허석미").vendor)
+      .toBe("㈜엠텔");
+  });
+  it("본문이 없고 제목이 잘려 고객사 칸이 없으면 거래처명은 비운다(제목 전체를 넣지 않음)", () => {
+    expect(CUT_TITLE.length).toBeGreaterThanOrEqual(80);
+    expect(logisticsTicketInfo(CUT_TITLE)).toEqual({ vendor: "", item: "", category: "납품" });
+    // 잘리지 않은 짧은 제목은 예전대로(titleParts 가 마지막 칸을 고른다)
+    expect(logisticsTicketInfo("★출고준비완료★납품(일반)/퍼스트/운영팀/증설/효성중공업-서초 디오페라").vendor).not.toBe("");
+  });
 });

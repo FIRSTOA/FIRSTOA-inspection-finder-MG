@@ -1013,6 +1013,8 @@ export async function getOkrReportsIn(cycleIds: string[]): Promise<OkrReport[]> 
   const ids = [...new Set(cycleIds.filter(Boolean))];
   if (!ids.length) return [];
   const list = encodeURIComponent(ids.map((id) => `"${id}"`).join(","));
-  const rows = await selectAllRows<OkrReport>("okr_reports", `select=*&cycle_id=in.(${list})&order=cycle_id.asc,team.asc,member.asc`);
+  // 읽기 전용 집계(주차 판정·실적·제안)용 — header(목표 덮어쓰기·피드백 jsonb)는 이 경로에서 쓰지 않아 뺀다(조회 용량↓, 2026-10-24).
+  // 그래서 돌려주는 report 의 header·goals·feedback 은 비어 있다 — 저장(upsert)에 쓰지 말 것.
+  const rows = await selectAllRows<OkrReport>("okr_reports", `select=cycle_id,team,member,rows,updated_at,updated_by&cycle_id=in.(${list})&order=cycle_id.asc,team.asc,member.asc`);
   return rows.map(toReport);
 }

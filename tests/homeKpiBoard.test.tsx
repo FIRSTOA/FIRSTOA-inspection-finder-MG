@@ -56,9 +56,9 @@ const WORKIN = [
 const FACTS: KpiFacts = { roster: ROSTER, field: FIELD, expansion: [], workin: WORKIN };
 
 describe("기본 배치(2026-10-24 마무리 — 위젯 4개, 분기 점검 진행은 달성표 K2 행 안)", () => {
-  it("금일 현황(4x1) → KPI 달성표(4x2) → 미처리(4x1, 2x2 가능) → OKR(2x1)", () => {
+  it("금일 현황(4x1, 기본 숨김 — 2026-10-24 사용자 \"금일 현황은 없어도\") → KPI 달성표(4x2) → 미처리(4x1, 2x2 가능) → OKR(2x1)", () => {
     expect(HOME_KPI_DEFAULT_LAYOUT).toEqual([
-      { id: "today", size: "4x1", hidden: false },
+      { id: "today", size: "4x1", hidden: true },
       { id: "table", size: "4x2", hidden: false },
       { id: "unhandledPanel", size: "4x1", hidden: false },
       { id: "K19", size: "2x1", hidden: false },
@@ -69,7 +69,7 @@ describe("기본 배치(2026-10-24 마무리 — 위젯 4개, 분기 점검 진�
     for (const w of HOME_WIDGETS) expect(w.sizes).toContain(HOME_KPI_DEFAULT_LAYOUT.find((x) => x.id === w.id)!.size);
   });
 
-  it("옛 배치(10-23·10-24)에 남은 없앤 위젯 id(K1·exp·K10·K3·K12·unhandled·receptionPanel·K2)는 버리고, 버전은 1 그대로", () => {
+  it("옛 배치(10-23·10-24)에 남은 없앤 위젯 id(K1·exp·K10·K3·K12·unhandled·receptionPanel·K2)는 버리고, v1 은 금일 현황만 숨겨 v2 로 읽는다", () => {
     const old = JSON.stringify({ v: 1, items: ["today", "K2", "table", "K1", "exp", "K10", "unhandledPanel", "receptionPanel", "K3", "K19", "K12", "unhandled"].map((id) => ({ id, size: id === "table" ? "4x1" : "1x1", hidden: id === "K19" })) });
     const { items, restored } = parseHomeLayout(old);
     expect(restored).toBe(true);
@@ -77,7 +77,8 @@ describe("기본 배치(2026-10-24 마무리 — 위젯 4개, 분기 점검 진�
     expect(items.find((x) => x.id === "table")?.size).toBe("4x1"); // 허용 크기면 사용자가 고른 크기 유지
     expect(items.find((x) => x.id === "unhandledPanel")?.size).toBe("4x1"); // 허용 안 된 크기(1x1) → 첫 크기
     expect(items.find((x) => x.id === "K19")?.hidden).toBe(true);
-    expect(HOME_KPI_LAYOUT_VERSION).toBe(1);
+    expect(items.find((x) => x.id === "today")?.hidden).toBe(true); // v1 이전: 금일 현황은 숨김(2026-10-24 오후)
+    expect(HOME_KPI_LAYOUT_VERSION).toBe(2);
   });
 });
 
@@ -88,12 +89,12 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
     const st = memory();
     const changed = [...HOME_KPI_DEFAULT_LAYOUT].reverse().map((x) => (x.id === "unhandledPanel" ? { ...x, size: "2x2" as const } : x.id === "K19" ? { ...x, hidden: true } : x));
     expect(writeHomeLayout(st, changed)).toBe("");
-    expect(JSON.parse(st.m.get(HOME_KPI_LAYOUT_KEY)!).v).toBe(1);
+    expect(JSON.parse(st.m.get(HOME_KPI_LAYOUT_KEY)!).v).toBe(2);
     expect(readHomeLayout(st)).toEqual(changed);
   });
 
   it("모르는 id·중복은 버리고, 허용 안 된 크기는 첫 크기로, 새 위젯은 끝에 붙인다", () => {
-    const raw = JSON.stringify({ v: 1, items: [{ id: "K19", size: "2x1" }, { id: "옛위젯", size: "1x1" }, { id: "K19", size: "1x1" }, { id: "table", size: "1x1", hidden: true }] });
+    const raw = JSON.stringify({ v: 2, items: [{ id: "K19", size: "2x1" }, { id: "옛위젯", size: "1x1" }, { id: "K19", size: "1x1" }, { id: "table", size: "1x1", hidden: true }] });
     const { items, restored } = parseHomeLayout(raw);
     expect(restored).toBe(true);
     expect(items[0]).toEqual({ id: "K19", size: "2x1", hidden: false });
@@ -103,7 +104,7 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
   });
 
   it("깨진 글·다른 버전·없음 → 기본 배치", () => {
-    for (const raw of [null, "", "{", JSON.stringify({ v: 2, items: [] }), JSON.stringify({ items: [] }), "[]"]) {
+    for (const raw of [null, "", "{", JSON.stringify({ v: 3, items: [] }), JSON.stringify({ items: [] }), "[]"]) {
       expect(parseHomeLayout(raw)).toEqual({ items: HOME_KPI_DEFAULT_LAYOUT, restored: false });
     }
   });
@@ -112,7 +113,7 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
     const full = { getItem: () => null, setItem: () => { throw new Error("QuotaExceeded"); } };
     expect(writeHomeLayout(full, HOME_KPI_DEFAULT_LAYOUT)).toContain("저장하지 못했습니다");
     expect(writeHomeLayout(null, HOME_KPI_DEFAULT_LAYOUT)).toContain("저장할 수 없습니다");
-    expect(serializeHomeLayout([{ id: "K1", size: "1x1" }])).toBe('{"v":1,"items":[{"id":"K1","size":"1x1","hidden":false}]}');
+    expect(serializeHomeLayout([{ id: "K1", size: "1x1" }])).toBe('{"v":2,"items":[{"id":"K1","size":"1x1","hidden":false}]}');
   });
 });
 
@@ -298,6 +299,16 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
     expect(month.scopeLabel).toBe("B파트 · 이번 달");
   });
 
+  it("파트별 미니 바 teams — 전체 A~D, 팀 하나·개인은 그 파트만, 미작성 파트는 null", () => {
+    expect(okrView(okrBundle, "week")!.teams).toEqual([
+      { team: "A", pct: 50 }, { team: "B", pct: 0 }, { team: "C", pct: null }, { team: "D", pct: null },
+    ]);
+    expect(okrView(okrBundle, "week", { team: "A" })!.teams).toEqual([{ team: "A", pct: 50 }]);
+    expect(okrView(okrBundle, "week", { team: "B", member: "이호준" })!.teams).toEqual([{ team: "B", pct: 100 }]);
+    expect(okrView(okrBundle, "month")!.teams?.map((t) => t.team)).toEqual(["A", "B", "C", "D"]); // 월 기록 없음 → 전부 null
+    expect(okrView(okrBundle, "month")!.teams?.every((t) => t.pct === null)).toBe(true);
+  });
+
   it("이번 주 보고서가 하나도 없으면 pct null + 4팀 미작성", () => {
     const empty = bundleOf({ okr: { cycle: null, quarter: null, reports: [], week: { id: "2026-10-W4", weeks, goals, reports } } });
     const v = okrView(empty, "week")!;
@@ -380,15 +391,35 @@ describe("렌더 스모크(서버 렌더, fetch 막음)", () => {
   afterAll(() => { vi.unstubAllGlobals(); });
   const render = (el: Parameters<typeof renderToString>[0]) => renderToString(el).replace(/<!-- -->/g, "");
 
-  it("현황판: 위젯 4개 제목이 뜨고(불러오는 중), 없앤 위젯(미처리 전체 카드·분기 점검 진행 위젯 포함)은 없다", () => {
+  it("현황판: 보이는 위젯 3개 제목이 뜨고(불러오는 중, 금일 현황은 기본 숨김), 없앤 위젯(미처리 전체 카드·분기 점검 진행 위젯 포함)은 없다", () => {
     const html = render(createElement(HomeKpiBoard, {}));
-    for (const t of ["금일 현황", "KPI 달성표", "미처리", "OKR 달성률"]) expect(html).toContain(t);
+    for (const t of ["KPI 달성표", "미처리", "OKR 달성률"]) expect(html).toContain(t);
+    expect(html).not.toContain("금일 현황");
     expect(HOME_WIDGETS.map((w) => w.title)).not.toContain("분기 점검 진행");
     for (const gone of ["미처리 전체", "미처리 일정"]) expect(html).not.toContain(gone);
     for (const tab of ["전체", "A", "E", "경영", "운영", "영업"]) expect(html).toContain(`>${tab}</button>`);
     for (const gone of ["초과사용 제안 방문", "PC·복합기 확장성", "미처리 요약"]) expect(html).not.toContain(gone);
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("편집");
+  });
+
+  it("금일 현황은 숨김일 뿐 삭제 아님: 편집 [위젯 추가]에 1개로 잡히고, 켜서 저장한 배치면 다시 그린다", () => {
+    expect(HOME_WIDGETS.map((w) => w.id)).toContain("today");
+    const editing = render(createElement(HomeKpiBoard, { editing: true }));
+    expect(editing).toMatch(/위젯 추가<span[^>]*>1<\/span>/);
+    // [켜기] = 숨김 풀고 끝에 붙여 저장(HomeKpiGrid show) — 그 저장 글을 읽으면 금일 현황이 다시 보인다
+    const turnedOn = [...HOME_KPI_DEFAULT_LAYOUT.filter((x) => x.id !== "today"), { id: "today", size: "4x1" as const, hidden: false }];
+    const saved = serializeHomeLayout(turnedOn);
+    expect(parseHomeLayout(saved).items.find((x) => x.id === "today")?.hidden).toBe(false);
+    const store = new Map<string, string>([[HOME_KPI_LAYOUT_KEY, saved]]);
+    vi.stubGlobal("window", { localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); } } });
+    try {
+      const html = render(createElement(HomeKpiBoard, {}));
+      expect(html).toContain(`aria-label="금일 현황"`);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("[]", { status: 200 })));
+    }
   });
 
   it("달성표 위젯: 주요 목표/전체 지표 칩과 지표 이름", () => {

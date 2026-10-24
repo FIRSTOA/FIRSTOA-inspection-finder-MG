@@ -92,15 +92,31 @@ let cache: Book | null = readMirror();
 let rowsCache: MemberRow[] = [];
 let inflight: Promise<MemberRow[]> | null = null;
 
-export async function fetchMembers(): Promise<MemberRow[]> {
+let loadedAt: number | null = null;
+export const MEMBERS_CACHE_MS = 5 * 60 * 1000;
+/** 캐시 유효 여부(순수) — 받은 시각이 없거나 시계가 거꾸로 가면 무효 */
+export const membersCacheFresh = (at: number | null, now: number, ttl = MEMBERS_CACHE_MS) => at !== null && now >= at && now - at < ttl;
+
+/** DB 에서 항상 새로 읽는다 — 명단을 고치는 함수(추가·수정·삭제·이동…)가 저장 뒤 부른다(= 캐시 무효화 + 갱신) */
+async function loadMembers(): Promise<MemberRow[]> {
   const rows = await selectRows<MemberRow>("cs_members", "select=*&order=dept.asc,team.asc,sort.asc,name.asc");
   rowsCache = rows;
   cache = bookOf(rows);
+  loadedAt = Date.now();
   if (typeof window !== "undefined") {
     window.localStorage.setItem(MIRROR_KEY, JSON.stringify(cache));
     window.dispatchEvent(new Event(CHANGE_EVENT));
   }
   return rows;
+}
+
+/** 명단 캐시 비우기 — 다음 fetchMembers() 가 DB 에서 새로 읽는다(테스트·강제 새로고침용) */
+export function invalidateMembersCache() { loadedAt = null; }
+
+/** 명단 읽기 — 같은 세션에서 5분 안이면 다시 받지 않는다(2026-10-24 조회 용량). force=true 면 항상 새로 */
+export async function fetchMembers(force = false): Promise<MemberRow[]> {
+  if (!force && loadedAt !== null && membersCacheFresh(loadedAt, Date.now())) return rowsCache;
+  return loadMembers();
 }
 
 function refresh() {
@@ -119,12 +135,12 @@ export async function addMember(team: string, name: string, joinedOn?: string, d
   const found = await findMember(team, clean);
   if (found) await updateRows("cs_members", `id=eq.${found.id}`, { active: true, left_on: null, dept, title, updated_at: new Date().toISOString() });
   else await insertRow("cs_members", { name: clean, team, dept, title, active: true, joined_on: joinedOn || kstDate(), sort: 99 });
-  await fetchMembers();
+  await loadMembers();
 }
 
 export async function updateMember(id: string, patch: Partial<Pick<MemberRow, "name" | "team" | "dept" | "title">>) {
   await updateRows("cs_members", `id=eq.${id}`, { ...patch, updated_at: new Date().toISOString() });
-  await fetchMembers();
+  await loadMembers();
 }
 
 /** 지금 명단(DB에서 읽은 것, 못 읽었으면 시드) — 작성자 → 팀 판정은 반드시 이걸 쓴다(관리 탭 인원 명단 기준) */
@@ -146,23 +162,23 @@ export function useMembers(): MemberRow[] {
 /** 명단에서 삭제 — 행을 지운다(2026-09-20 결정: 퇴사 처리 대신 삭제로 관리). 과거 기록은 이름 문자열로 남아 있어 집계는 안 깨진다 */
 export async function deleteMember(id: string) {
   await deleteRows("cs_members", `id=eq.${encodeURIComponent(id)}`);
-  await fetchMembers();
+  await loadMembers();
 }
 
 /** (예전) 퇴사 처리 — 남아 있는 퇴사자 행 복구용으로만 유지 */
 export async function retireMember(id: string, leftOn?: string) {
   await updateRows("cs_members", `id=eq.${id}`, { active: false, left_on: leftOn || kstDate(), updated_at: new Date().toISOString() });
-  await fetchMembers();
+  await loadMembers();
 }
 
 export async function restoreMember(id: string) {
   await updateRows("cs_members", `id=eq.${id}`, { active: true, left_on: null, updated_at: new Date().toISOString() });
-  await fetchMembers();
+  await loadMembers();
 }
 
 export async function moveMemberTeam(id: string, team: string) {
   await updateRows("cs_members", `id=eq.${id}`, { team, updated_at: new Date().toISOString() });
-  await fetchMembers();
+  await loadMembers();
 }
 
 export function useAuthorBook() {
@@ -286,7 +302,7 @@ export async function renameTeamGroup(dept: string, team: string, next: string):
   await updateRows("cs_members", `dept=eq.${encodeURIComponent(dept)}&team=eq.${encodeURIComponent(team)}`, { team: clean, updated_at: new Date().toISOString() });
   const teams = { ...groupsCache.teams, [dept]: (groupsCache.teams[dept] || []).map((t) => (t === team ? clean : t)) };
   await saveTeamGroups({ teams });
-  await fetchMembers();
+  await loadMembers();
 }
 
 /** 상위 그룹(부서) 이름 바꾸기 — 인원의 dept 값과 등록부를 함께 바꾼다 */
@@ -298,7 +314,7 @@ export async function renameDeptGroup(dept: string, next: string): Promise<void>
   const teams: Record<string, string[]> = {};
   for (const d of groupsCache.depts) teams[d === dept ? clean : d] = groupsCache.teams[d] || [""];
   await saveTeamGroups({ depts, teams });
-  await fetchMembers();
+  await loadMembers();
 }
 
 /** 그룹 등록부를 구독하는 훅 — 처음 한 번 서버에서 읽고, 바뀌면 다시 그린다 */

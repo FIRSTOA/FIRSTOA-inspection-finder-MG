@@ -53,19 +53,24 @@ describe("탭 → 표", () => {
     expect(tabKeyOf("pc", "it")).toBe("it");
     expect(tabKeyOf("pc", "copier")).toBe("copier-exp");
     expect(tabKeyOf("pc", "bo")).toBeNull();
-    expect(tabKeyOf("praise")).toBeNull();
+    // 2026-10-24: 칭찬 탭도 검색칸(고객 칭찬)
+    expect(tabKeyOf("praise")).toBe("praise");
     expect(tabKeyOf("overage-adjust")).toBe("overage");
   });
   it("모든 탭의 표가 SOURCES 또는 EXTRA_SOURCES 에 있다(오타 방지)", () => {
     Object.values(TAB_SPECS).forEach((spec) => {
-      expect(sourcesOf(spec).length).toBe(spec.tables.length + (spec.extra || []).length);
-      spec.summary.forEach((k) => k.tables.forEach((t) => expect([...spec.tables, ...(spec.extra || [])]).toContain(t)));
+      expect(sourcesOf(spec).length).toBe(spec.tables.length + (spec.extra || []).length + (spec.logiTickets ? 1 : 0));
+      const tables = sourcesOf(spec).map((s) => s.table);
+      spec.summary.forEach((k) => k.tables.forEach((t) => {
+        expect(tables).toContain(t); // 요약 표는 그 탭이 모으는 표여야 한다
+      }));
     });
     expect(EXTRA_SOURCES.some((s) => SOURCES.some((x) => x.table === s.table))).toBe(false);
   });
-  it("조회 요청 수 상한 — 점검·AS 5표 = 15, 미수 = misu 3 + misu_visits 2", () => {
-    expect(maxRequestsOf(TAB_SPECS.inspection)).toBe(15);
-    expect(maxRequestsOf(TAB_SPECS.misu)).toBe(5);
+  it("조회 요청 수 상한 — 점검·AS 3표 = 12, 미수 = misu 4 + misu_visits 3, 물류 = 4표 16 + 일정 3", () => {
+    expect(maxRequestsOf(TAB_SPECS.inspection)).toBe(12);
+    expect(maxRequestsOf(TAB_SPECS.misu)).toBe(7);
+    expect(maxRequestsOf(TAB_SPECS.logistics)).toBe(19);
   });
 });
 

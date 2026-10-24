@@ -10,7 +10,7 @@ import { kpiRanges, type KpiFacts } from "../src/kpi/kpiCompute";
 import { ALL_KPI_SOURCES, type KpiBundle } from "../src/kpi/kpiData";
 import { parseKpiTargets, type KpiSource } from "../src/kpi/kpiDefs";
 import { toFieldRows, type FieldRaw } from "../src/workCount";
-import { tableRows, todayItems } from "../src/kpi/homeKpiModel";
+import { HOME_KPI_DEFAULT_LAYOUT, HOME_KPI_LAYOUT_KEY, serializeHomeLayout, tableRows, todayItems } from "../src/kpi/homeKpiModel";
 import {
   HOME_KPI_SNAPSHOT_KEY, HOME_KPI_SNAPSHOT_MAX_AGE_MS, HOME_KPI_SNAPSHOT_MAX_CHARS, HOME_KPI_SNAPSHOT_VERSION,
   buildHomeSnapshot, mergeSnapshotList, parseHomeSnapshot, readHomeSnapshot, snapshotAgo, writeHomeSnapshot,
@@ -111,11 +111,12 @@ describe("새 값 + 캐시 섞기", () => {
 
 describe("홈 첫 화면 — 캐시가 있으면 읽기 전에 숫자를 그린다", () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
-  const renderWith = (stored: string | null) => {
+  const renderWith = (stored: string | null, layout?: string) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW + 5 * 60_000);
     const s = mem();
     if (stored) s.setItem(HOME_KPI_SNAPSHOT_KEY, stored);
+    if (layout) s.setItem(HOME_KPI_LAYOUT_KEY, layout);
     vi.stubGlobal("window", { localStorage: s });
     vi.stubGlobal("fetch", vi.fn(async () => new Response("[]", { status: 200 })));
     return renderToString(createElement(HomeKpiBoard, {})).replace(/<!-- -->/g, "");
@@ -127,8 +128,18 @@ describe("홈 첫 화면 — 캐시가 있으면 읽기 전에 숫자를 그린�
     const mainRow = snap.table.find((r) => r.main);
     expect(mainRow).toBeTruthy();
     expect(html).toContain(mainRow!.name);
-    // 캐시 없으면 같은 순간 달성표·금일 띠는 뼈대(aria-busy), 캐시가 있으면 숫자
+    // 캐시 없으면 같은 순간 달성표는 뼈대(aria-busy), 캐시가 있으면 숫자. 금일 현황은 기본 숨김(2026-10-24)이라 그리지 않는다
     const bare = renderWith(null);
+    expect(bare).toContain(`aria-label="KPI 달성표" aria-busy="true"`);
+    expect(html).not.toContain(`aria-label="KPI 달성표" aria-busy="true"`);
+    expect(html).not.toContain(`aria-label="금일 현황"`);
+  });
+  it("캐시는 금일 현황 유무와 무관: 편집에서 다시 켠 배치여도 '갱신 중' + 달성표·금일 띠가 캐시 값으로", () => {
+    const snap = buildHomeSnapshot(bundleOf(), teamOf, NOW);
+    const shown = serializeHomeLayout(HOME_KPI_DEFAULT_LAYOUT.map((x) => ({ ...x, hidden: false })));
+    const html = renderWith(JSON.stringify(snap), shown);
+    expect(html).toContain("5분 전 값 · 갱신 중");
+    const bare = renderWith(null, shown);
     for (const t of ["KPI 달성표", "금일 현황"]) {
       expect(bare).toContain(`aria-label="${t}" aria-busy="true"`);
       expect(html).not.toContain(`aria-label="${t}" aria-busy="true"`);

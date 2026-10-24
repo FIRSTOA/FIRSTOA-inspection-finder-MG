@@ -6,7 +6,9 @@ import MemberAdmin from "./MemberAdmin";
 import ContactChangeHistory from "./ContactChangeHistory";
 import SyncStatus from "./SyncStatus";
 import SystemAdmin from "./SystemAdmin";
+import { SYSTEM_VIEWS, type SystemView } from "./adminViews";
 import PushSettings from "./PushSettings";
+import { UI } from "./ui/card";
 
 /**
  * 관리 허브 — 값을 바꾸는 화면들을 한 지붕 아래 모은다.
@@ -21,7 +23,7 @@ const TABS: Array<[Tab, string]> = [
   ["members", "인원"],
   ["changes", "담당자·주소 변경"],
   ["sync", "동기화 현황"],
-  ["system", "전송·카톡방"],
+  ["system", "전송·연동"],
   ["push", "알림"],
 ];
 
@@ -36,6 +38,13 @@ export default function AdminHub({ author }: { author: string }) {
     const saved = window.localStorage.getItem("cs_admin_tab_v1") as Tab;
     return TABS.some(([key]) => key === saved) ? saved : "members";
   });
+  // 전송·연동 탭 안의 칩(전송 스위치·카톡방·카톡 수집·시트 기입·KPI 목표·기타 설정) — 마지막 칩도 기억
+  const [sysView, setSysView] = useState<SystemView>(() => {
+    const saved = window.localStorage.getItem("cs_admin_sys_view_v1") as SystemView;
+    return SYSTEM_VIEWS.some(([key]) => key === saved) ? saved : "switches";
+  });
+  useEffect(() => { window.localStorage.setItem("cs_admin_sys_view_v1", sysView); }, [sysView]);
+  const goSystem = (view: SystemView) => { setSysView(view); setTab("system"); };
   const [summary, setSummary] = useState<Summary | null>(null);
   const [drivePending, setDrivePending] = useState<number | null>(null);   // 수집함 대기 txt (GAS라 따로 로드)
 
@@ -74,37 +83,38 @@ export default function AdminHub({ author }: { author: string }) {
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="bg-[#1E252F] px-5 py-4">
+      <section className={UI.card}>
+        {/* 이 화면의 다크 머리는 여기 한 번뿐 — 하위 화면(인원·전송)은 연회색 머리를 쓴다 */}
+        <div className={UI.heroHead}>
           <h2 className="text-base font-black text-white lg:text-lg">관리</h2>
-          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">인원·주소변경·동기화·전송/카톡방 — 웹앱 운영을 한 곳에서</p>
+          <p className={UI.desc}>인원·주소변경·동기화·전송·연동 — 웹앱 운영을 한 곳에서</p>
         </div>
         {/* 다크 상태줄 */}
-        <div className="flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5">
+        <div className={UI.heroBar}>
           {summary ? (
             <>
               <button type="button" onClick={() => setTab("members")}
                 className="flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400 transition hover:bg-white/[0.14] hover:text-slate-200">
                 재직 <b className="tabular-nums text-white">{summary.members}명</b>
               </button>
-              <button type="button" onClick={() => setTab("system")}
+              <button type="button" onClick={() => goSystem("sheet")}
                 className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${summary.sheetFails > 0 ? "bg-rose-400/15 text-rose-300 hover:bg-rose-400/25" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`}>
                 시트기입 실패 <b className={`tabular-nums ${summary.sheetFails > 0 ? "" : "text-white"}`}>{summary.sheetFails}건</b>
               </button>
               {drivePending !== null && (
-                <button type="button" onClick={() => setTab("system")}
+                <button type="button" onClick={() => goSystem("collect")}
                   className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold transition ${drivePending > 0 ? "bg-amber-400/15 text-amber-300 hover:bg-amber-400/25" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`}>
                   수집 대기 <b className={`tabular-nums ${drivePending > 0 ? "" : "text-white"}`}>{drivePending}개</b>
                 </button>
               )}
               <span className="ml-auto flex items-center gap-2">
                 {summary.testMode && (
-                  <button type="button" onClick={() => setTab("system")}
+                  <button type="button" onClick={() => goSystem("switches")}
                     className="flex items-center gap-1 rounded-full bg-amber-400/20 px-2.5 py-1 text-[11px] font-black text-amber-300 transition hover:bg-amber-400/30">
                     <AlertTriangle size={12} />테스트 모드
                   </button>
                 )}
-                <button type="button" onClick={() => setTab("system")}
+                <button type="button" onClick={() => goSystem("switches")}
                   className="flex items-center gap-1.5 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-slate-400 transition hover:bg-white/[0.14]">
                   <span className={`h-1.5 w-1.5 rounded-full ${summary.kakaoOn ? "bg-emerald-400" : "bg-rose-400"}`} />카톡
                   <span className={`h-1.5 w-1.5 rounded-full ${summary.sheetOn ? "bg-emerald-400" : "bg-rose-400"}`} />시트
@@ -112,13 +122,13 @@ export default function AdminHub({ author }: { author: string }) {
               </span>
             </>
           ) : (
-            <span className="py-0.5 text-[11px] font-semibold text-slate-500">현황을 불러오는 중…</span>
+            <span className="py-0.5 text-[11px] font-semibold text-slate-400">현황을 불러오는 중입니다…</span>
           )}
         </div>
         <div className="flex overflow-x-auto">
           {TABS.map(([key, label]) => (
             <button key={key} type="button" onClick={() => setTab(key)}
-              className={`relative shrink-0 whitespace-nowrap px-5 py-3.5 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
+              className={`relative min-h-11 shrink-0 whitespace-nowrap px-5 py-3 text-sm font-black transition ${tab === key ? "text-slate-950 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-blue-600" : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"}`}>{label}</button>
           ))}
         </div>
       </section>
@@ -126,7 +136,17 @@ export default function AdminHub({ author }: { author: string }) {
       {tab === "members" && <MemberAdmin />}
       {tab === "changes" && <ContactChangeHistory />}
       {tab === "sync" && <SyncStatus />}
-      {tab === "system" && <SystemAdmin />}
+      {tab === "system" && (
+        <>
+          <div role="tablist" aria-label="전송·연동 세부 메뉴" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+            {SYSTEM_VIEWS.map(([key, label]) => (
+              <button key={key} type="button" role="tab" aria-selected={sysView === key} onClick={() => setSysView(key)}
+                className={`min-h-11 shrink-0 whitespace-nowrap rounded-full border px-4 text-sm font-black transition lg:min-h-9 ${sysView === key ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>{label}</button>
+            ))}
+          </div>
+          <SystemAdmin view={sysView} />
+        </>
+      )}
       {tab === "push" && <PushSettings author={author} />}
     </div>
   );

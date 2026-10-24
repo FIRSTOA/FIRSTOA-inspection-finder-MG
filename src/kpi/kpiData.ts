@@ -24,9 +24,9 @@ import { loadMisuVisits, isTableMissingError } from "../misuVisitHistoryData";
 import { loadOverhaulRows, overhaulTabFrom } from "../overhaulSheet";
 import { KPI_BY_ID, KPI_DEFS, KPI_TARGETS_CONFIG_KEY, parseKpiTargets, type KpiId, type KpiSettings, type KpiSource } from "./kpiDefs";
 import {
-  BULMAN_COLUMNS, kpiLoadFrom, kpiRanges, OVERAGE_COLUMNS, RECONTRACT_COLUMNS, shiftYmd, toFormRows,
+  BULMAN_COLUMNS, kpiLoadFrom, kpiRanges, OVERAGE_COLUMNS, RECONTRACT_COLUMNS, rosterFromMembers, shiftYmd, toFormRows,
   type CustomerPraiseRow, type FormRaw, type KeymanRow, type KpiFacts, type KpiRanges, type OkrFacts,
-  type PraiseRow, type ReceptionWeekRow, type RosterMember, type VisitLite,
+  type PraiseRow, type ReceptionWeekRow, type VisitLite,
 } from "./kpiCompute";
 
 export type KpiSourceStatus =
@@ -121,7 +121,7 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
   // 조회는 동시에 시작하되, 팀 판정을 쓰는 곳(행 → 팀 변환 put, 로더 안에서 팀을 매기는 ROSTER_FIRST)은 명단이 끝난 뒤에 돈다 — 숫자는 예전 직렬과 같다
   const rosterReady: Promise<void> = !want.has("roster") ? Promise.resolve() : fetchMembers().then(
     (members) => {
-      facts.roster = members.filter((m) => m.active && ["A", "B", "C", "D", "E"].includes(m.team)).map<RosterMember>((m) => ({ name: m.name, team: m.team, title: String(m.title || "").trim() }));
+      facts.roster = rosterFromMembers(members);
       ok("roster");
     },
     (e) => { fail("roster", e); },

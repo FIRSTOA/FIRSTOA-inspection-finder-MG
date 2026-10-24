@@ -192,7 +192,7 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
   <a class="sub" href="#m-retire">퇴사 · 복구</a>
   <a href="#changes">3. 담당자·주소 변경</a>
   <a href="#sync">4. 동기화 현황</a>
-  <a href="#system">5. 전송·카톡방</a>
+  <a href="#system">5. 전송·연동</a>
   <a class="sub" href="#s-switch">전송·연동 스위치</a>
   <a class="sub" href="#s-naver">네이버 캘린더 설정</a>
   <a class="sub" href="#s-rooms">카톡방 매핑(보내는 방향)</a>
@@ -249,10 +249,10 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
     <tr><td><b>인원</b></td><td>회사 전체 명단 — 추가·수정·퇴사·복구</td><td>작성자 선택 목록, 요청 대상, 일정리스트 팀 필터·배정 명단, 중간보고</td></tr>
     <tr><td><b>담당자·주소 변경</b></td><td>FIELD로 들어온 변경 요청을 보고 워킨맵에 반영</td><td>워킨맵 지점의 주소/연락처 (임대리스트는 시트가 원본이라 제외)</td></tr>
     <tr><td><b>동기화 현황</b></td><td>표 13개에 기록이 언제까지 들어왔는지 보기만</td><td>없음(읽기 전용)</td></tr>
-    <tr><td><b>전송·카톡방</b></td><td>카톡 전송·시트 기입·테스트 모드·네이버 캘린더 스위치, 카톡방 이름, 카톡 수집, 시트 기입 재실행, 거래처 코드 연결</td><td><b>회사 전체</b>의 FIELD 전송·시트 기입·네이버 등록</td></tr>
+    <tr><td><b>전송·연동</b></td><td>카톡 전송·시트 기입·테스트 모드·네이버 캘린더 스위치, 카톡방 이름, 카톡 수집, 시트 기입 재실행, 거래처 코드 연결</td><td><b>회사 전체</b>의 FIELD 전송·시트 기입·네이버 등록</td></tr>
     <tr><td><b>알림</b></td><td>지금 쓰는 이 기기의 푸시 알림 켜기/끄기·종류 선택</td><td>이 기기·이 브라우저만</td></tr>
   </tbody></table>
-  <div class="box warn"><b>전송·카톡방 탭은 신중히</b>테스트 모드·카톡 전송·시트 동기화 토글은 나 혼자가 아니라 전 직원의 전송을 바꿉니다. 누르기 전에 무엇을 켜고 끄는지 5번 설명을 꼭 읽으세요.</div>
+  <div class="box warn"><b>전송·연동 탭은 신중히</b>테스트 모드·카톡 전송·시트 동기화 토글은 나 혼자가 아니라 전 직원의 전송을 바꿉니다. 누르기 전에 무엇을 켜고 끄는지 5번 설명을 꼭 읽으세요.</div>
 </section>
 
 <section id="screen">
@@ -269,15 +269,15 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
       <div class="row" style="display:block"><b style="font-size:15px">관리</b><div style="font-size:11px;color:#8FA1B8;font-weight:700">인원·주소변경·동기화·전송/카톡방 — 웹앱 운영을 한 곳에서</div></div>
       <div class="row"><span class="chip">재직 <b style="color:#fff">31명</b></span><span class="chip rose" style="background:rgba(251,113,133,.15)">시트기입 실패 <b>2건</b></span><span class="chip" style="color:#FCD34D;background:rgba(251,191,36,.15)">수집 대기 <b>3개</b></span><span class="spacer"></span><span class="chip" style="color:#FCD34D;background:rgba(251,191,36,.2)">⚠ 테스트 모드</span><span class="chip"><span class="dot g"></span>카톡 <span class="dot r"></span>시트</span></div>
     </div>
-    <div class="tabline" style="border-radius:0 0 12px 12px"><span class="on">인원</span><span>담당자·주소 변경</span><span>동기화 현황</span><span>전송·카톡방</span><span>알림</span></div>
+    <div class="tabline" style="border-radius:0 0 12px 12px"><span class="on">인원</span><span>담당자·주소 변경</span><span>동기화 현황</span><span>전송·연동</span><span>알림</span></div>
   </div>
   <div class="legend">
     <div class="item"><span class="num">1</span><div><b>재직 N명</b> — 지금 재직 인원 수. 누르면 인원 탭으로.</div></div>
-    <div class="item"><span class="num">2</span><div><b>시트기입 실패 N건</b> — 최근 20건의 시트 기입 요청 중 실패(또는 오류가 붙은 대기) 수. 0보다 크면 <span style="color:var(--rose);font-weight:900">빨강</span>. 누르면 전송·카톡방 탭으로(맨 아래 "시트 기입 최근 작업").</div></div>
-    <div class="item"><span class="num">3</span><div><b>수집 대기 N개</b> — 드라이브 수집함에서 아직 처리 안 된 카톡 대화 txt 수. 0보다 크면 <span style="color:var(--amber);font-weight:900">노랑</span>. 누르면 전송·카톡방 탭으로. (First-DATA 응답이 없으면 칩 자체가 안 보임)</div></div>
-    <div class="item"><span class="num">4</span><div><b>⚠ 테스트 모드</b> — 테스트 모드나 시트 테스트 모드 중 하나라도 켜져 있을 때만 나타납니다. 이때는 <b>전 직원의 전송·기입이 실제 방/탭으로 가지 않습니다.</b> 누르면 전송·카톡방 탭으로.</div></div>
-    <div class="item"><span class="num">5</span><div><b>● 카톡 ● 시트</b> — 점이 <span class="dot g"></span>초록이면 켜짐, <span class="dot r"></span>빨강이면 꺼짐(카톡 전송 / 시트 동기화 스위치). 누르면 전송·카톡방 탭으로.</div></div>
-    <div class="item"><span class="num">6</span><div><b>탭</b> — 인원 · 담당자·주소 변경 · 동기화 현황 · 전송·카톡방 · 알림. 마지막 탭을 기억합니다. 탭을 오가면 상태줄 숫자도 다시 읽습니다. 처음엔 "현황을 불러오는 중…".</div></div>
+    <div class="item"><span class="num">2</span><div><b>시트기입 실패 N건</b> — 최근 20건의 시트 기입 요청 중 실패(또는 오류가 붙은 대기) 수. 0보다 크면 <span style="color:var(--rose);font-weight:900">빨강</span>. 누르면 전송·연동 탭으로(맨 아래 "시트 기입 최근 작업").</div></div>
+    <div class="item"><span class="num">3</span><div><b>수집 대기 N개</b> — 드라이브 수집함에서 아직 처리 안 된 카톡 대화 txt 수. 0보다 크면 <span style="color:var(--amber);font-weight:900">노랑</span>. 누르면 전송·연동 탭으로. (First-DATA 응답이 없으면 칩 자체가 안 보임)</div></div>
+    <div class="item"><span class="num">4</span><div><b>⚠ 테스트 모드</b> — 테스트 모드나 시트 테스트 모드 중 하나라도 켜져 있을 때만 나타납니다. 이때는 <b>전 직원의 전송·기입이 실제 방/탭으로 가지 않습니다.</b> 누르면 전송·연동 탭으로.</div></div>
+    <div class="item"><span class="num">5</span><div><b>● 카톡 ● 시트</b> — 점이 <span class="dot g"></span>초록이면 켜짐, <span class="dot r"></span>빨강이면 꺼짐(카톡 전송 / 시트 동기화 스위치). 누르면 전송·연동 탭으로.</div></div>
+    <div class="item"><span class="num">6</span><div><b>탭</b> — 인원 · 담당자·주소 변경 · 동기화 현황 · 전송·연동 · 알림. 마지막 탭을 기억합니다. 탭을 오가면 상태줄 숫자도 다시 읽습니다. 처음엔 "현황을 불러오는 중…".</div></div>
   </div>
 </section>
 
@@ -433,7 +433,7 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 </section>
 
 <section id="system">
-  <h2>5. 전송·카톡방 — 회사 전체 전송을 다루는 곳</h2>
+  <h2>5. 전송·연동 — 회사 전체 전송을 다루는 곳</h2>
   <p class="lead">위에서 아래로 여섯 묶음입니다: <b>전송·연동 스위치</b> → <b>카톡방 매핑</b> → <b>카톡 수집 상태 (First-DATA)</b> → <b>카톡 수집 방 매핑</b> → <b>시트 기입 최근 작업</b> → <b>거래처 코드 미매칭 확정</b>. 테스트 모드가 켜져 있으면 맨 위에 노란 띠 <b>"테스트 모드가 켜져 있습니다 — 전송·기입이 실제 방/탭으로 가지 않습니다."</b>가 먼저 보입니다.</p>
 
   <h3 id="s-switch">전송·연동 스위치</h3>
@@ -615,8 +615,8 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 <section id="faq">
   <h2>7. 이럴 땐 어떻게</h2>
   <div class="faq" style="display:grid;gap:8px">
-    <details><summary>FIELD에서 보냈는데 카톡방에 안 떠요</summary><p>관리 탭 상태줄부터: ① <b>⚠ 테스트 모드</b>가 보이면 전송이 테스트방으로 가고 있습니다 → 전송·카톡방에서 테스트 모드 끄기. ② "카톡" 점이 <span class="dot r"></span>빨강이면 카톡 전송 스위치가 꺼진 것 → 켜기(큐에 쌓인 건은 이후 나갑니다). ③ 둘 다 정상이면 <b>카톡방 매핑</b>에서 그 업무 종류·팀 줄의 방 이름이 카톡 방 이름과 글자까지 같은지 확인.</p></details>
-    <details><summary>시트에 기입이 안 됐어요</summary><p>전송·카톡방 → <b>시트 기입 최근 작업</b>에서 그 건이 "실패"나 "대기"인지 보고 <b>[다시 실행]</b>. 실패가 계속이면 시트 동기화 스위치·시트 테스트 모드를 확인하고, 그래도 안 되면 오류 문구를 관리자에게.</p></details>
+    <details><summary>FIELD에서 보냈는데 카톡방에 안 떠요</summary><p>관리 탭 상태줄부터: ① <b>⚠ 테스트 모드</b>가 보이면 전송이 테스트방으로 가고 있습니다 → 전송·연동에서 테스트 모드 끄기. ② "카톡" 점이 <span class="dot r"></span>빨강이면 카톡 전송 스위치가 꺼진 것 → 켜기(큐에 쌓인 건은 이후 나갑니다). ③ 둘 다 정상이면 <b>카톡방 매핑</b>에서 그 업무 종류·팀 줄의 방 이름이 카톡 방 이름과 글자까지 같은지 확인.</p></details>
+    <details><summary>시트에 기입이 안 됐어요</summary><p>전송·연동 → <b>시트 기입 최근 작업</b>에서 그 건이 "실패"나 "대기"인지 보고 <b>[다시 실행]</b>. 실패가 계속이면 시트 동기화 스위치·시트 테스트 모드를 확인하고, 그래도 안 되면 오류 문구를 관리자에게.</p></details>
     <details><summary>네이버 캘린더에 일정이 안 올라가요</summary><p>① 스위치 <b>네이버 캘린더 미러</b>가 켜져 있는지. ② 갑자기 안 되기 시작했다면 토큰 만료 — <b>[재연동 열기]</b>로 연동 계정 로그인 후 "연동 완료 ✓" 확인. ③ 완료 시 "완료 캘린더 미설정 — 제자리 체크"가 뜨면 <b>팀별 완료 캘린더 ID</b>의 그 팀 칸이 빈 것 → [네이버 캘린더 목록 불러오기]로 ID 복사해 넣기.</p></details>
     <details><summary>새로 온 직원이 작성자 목록에 없어요</summary><p>인원 탭 → <b>[인원 추가]</b> → 이름·부서·팀 넣고 [추가]. 등록 즉시 작성자 목록·요청 대상에 나타납니다. 이미 있는데 안 보이면 퇴사자로 내려가 있을 수 있으니 [퇴사 N명 보기] → <b>복구</b>.</p></details>
     <details><summary>한 사람이 두 팀을 겸직해요</summary><p>인원 탭에서 그 사람 <b>✎</b> → 팀/파트에서 <b>직접 입력…</b> → "A·B"(가운뎃점) → [저장]. 양 팀 일정 필터·배정·중간보고에 함께 잡힙니다.</p></details>

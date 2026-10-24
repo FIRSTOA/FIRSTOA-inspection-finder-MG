@@ -152,11 +152,19 @@ export function ChipGroup<T extends string>({ value, options, onChange }: { valu
   );
 }
 
+/** 켜고 끄는 필터 칩 하나(예: 목록 밖 n) — 0개이고 꺼져 있으면 눌리지 않는다 */
+export function ToggleChip({ on, count, label, onClick }: { on: boolean; count: number; label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} disabled={!count && !on}
+      className={`min-h-9 rounded-full border px-3 text-[11px] font-black tabular-nums transition disabled:opacity-50 ${on ? "border-amber-600 bg-amber-600 text-white" : "border-amber-400 bg-white text-amber-800"}`}>{label} {count}</button>
+  );
+}
+
 const WARN_TONE: Record<WarnBadge["tone"], string> = { red: "bg-rose-600 text-white", orange: "bg-amber-500 text-white", gray: "bg-slate-200 text-slate-700" };
 
 /** 카드 한 장 — 1줄 업체명+상태 알약+신규 / 2줄 대수·번호+주의 배지 / 3줄 날짜 / 주 단추 1개 + ⋯ */
-export function CounterCard({ vendor, status, newLabel, warn, extraBadges, infoLine, dateLine, dateTitle, onOpen, primary, more }: {
-  vendor: string; status: "none" | "sent" | "done"; newLabel: string; warn: WarnBadge | null; extraBadges: ReactNode;
+export function CounterCard({ vendor, status, newLabel, offList = false, warn, extraBadges, infoLine, dateLine, dateTitle, onOpen, primary, more }: {
+  vendor: string; status: "none" | "sent" | "done"; newLabel: string; offList?: boolean; warn: WarnBadge | null; extraBadges: ReactNode;
   infoLine: string; dateLine: string; dateTitle?: string; onOpen: () => void;
   primary: { label: string; onClick: () => void; disabled?: boolean; title?: string; tone: "blue" | "dark" | "indigo" } | null; more: SheetItem[];
 }) {
@@ -173,6 +181,7 @@ export function CounterCard({ vendor, status, newLabel, warn, extraBadges, infoL
         </div>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
           <span className="min-w-0 max-w-full truncate text-[12px] font-bold text-slate-500">{infoLine}</span>
+          {offList && <span title="가장 최근 목록 맞춤에서 관리부 목록에 없던 열린 업체 — 관리부가 끝낸 곳이면 카드 ⋯ 에서 완료" className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-black text-amber-800">관리부 목록 밖</span>}
           {warn && <span title={warn.title} className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-black ${WARN_TONE[warn.tone]}`}>{warn.label}</span>}
           {extraBadges}
         </div>

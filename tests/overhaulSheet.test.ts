@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  countOverhaul, overhaulCsvUrl, overhaulDeptTeam, overhaulTabFrom, parseOverhaulCsv, parseOverhaulDate, OVERHAUL_SHEET_DEFAULT_TAB,
+  clearOverhaulCache, countOverhaul, loadOverhaulRows, overhaulCsvUrl, overhaulDeptTeam, overhaulGidOf, overhaulTabFrom,
+  parseOverhaulCsv, parseOverhaulDate, OVERHAUL_SHEET_DEFAULT_TAB, OVERHAUL_SHEET_ID,
 } from "../src/overhaulSheet";
 
 // 실측 모양(2026-10-24): 위에 빈 칸 섞인 줄 → 머리글 → 행. 날짜 3형식, 번호 쉼표, 빈 줄("" 또는 0,0)
@@ -46,10 +47,63 @@ describe("오버홀 시트 — 날짜 3형식·점수 합·깨진 줄", () => {
     expect(c.byPerson[0]).toMatchObject({ name: "한왕주", points: 2, repairPoints: 0.5, count: 1 });
     expect(countOverhaul(rows, "2026-10-01", "2026-10-31").points).toBe(1);
   });
-  it("부서명 → 팀, 탭 설정, gviz 주소", () => {
+  it("부서명 → 팀, 탭 설정", () => {
     expect(["강북A", "경기D", "CSS", "외부인력", "퇴사자", ""].map(overhaulDeptTeam)).toEqual(["A", "D", "E", "", "", ""]);
     expect(overhaulTabFrom({})).toBe(OVERHAUL_SHEET_DEFAULT_TAB);
     expect(overhaulTabFrom({ OVERHAUL_SHEET_TAB: " 리스트(27년) " })).toBe("리스트(27년)");
-    expect(overhaulCsvUrl("리스트(26년)")).toContain(`gviz/tq?tqx=out:csv&sheet=${encodeURIComponent("리스트(26년)")}`);
+  });
+});
+
+// 2026-10-24 라이브 K33 "불러오지 못함" 재현: gviz CSV 는 열 형식 추정으로 머리글의 날짜·오버홀포인트 칸을 지운다
+describe("오버홀 시트 주소 — gviz 말고 export?format=csv&gid=", () => {
+  const GVIZ_HEAD = [
+    '"-1","","","","","","","","","","","","","","","","",""',
+    '"","","","","담당자","부서명","모델명","부품명","오버홀품목","수리품목","","","","주차별","수리가공","오버홀가공","Column 17","실질주차"',
+    '"2,425","26/10/19","","","김현군","CSS","SL-X3220NR","","오버홀1","수리1","80","1","1","10월4주차","","","",""',
+  ].join("\n");
+  const EXPORT_HEAD = [
+    "-1,,,,,,,,,,,,,,,,,",
+    "0,날짜,년,월,담당자,부서명,모델명,부품명,오버홀품목,수리품목,소요시간,오버홀포인트,수리포인트,주차별,수리가공,오버홀가공,Column 17,실질주차",
+    '"2,425",26/10/19,2026년,10월,김현군,CSS,SL-X3220NR,,오버홀1,수리1,80,1,1,10월4주차,,,,',
+    '"2,429",26/10/19,2026년,10월,이권선,강북A,SL-X3220NR,현상기,오버홀2,,180,2,0,10월4주차,,,,',
+  ].join("\n");
+
+  it("gviz 모양(머리글 칸 지워짐)은 읽을 수 없다 — 그래서 gviz 를 쓰면 안 된다", () => {
+    expect(() => parseOverhaulCsv(GVIZ_HEAD)).toThrow(/머리글/);
+  });
+  it("export 모양(첫 줄 -1, 번호 칸 0 인 머리글)은 읽는다", () => {
+    const rows = parseOverhaulCsv(EXPORT_HEAD);
+    expect(rows).toEqual([
+      { author: "김현군", date: "2026-10-19", points: 1, repairPoints: 1, dept: "CSS" },
+      { author: "이권선", date: "2026-10-19", points: 2, repairPoints: 0, dept: "강북A" },
+    ]);
+  });
+  it("설정값 → gid: 기본 탭 0, 알려진 탭 이름, gid 숫자, 시트 주소, 모르는 이름은 빈 값", () => {
+    expect(overhaulGidOf("")).toBe("0");
+    expect(overhaulGidOf("리스트(26년)")).toBe("0");
+    expect(overhaulGidOf("리스트(23년~25년3분기)")).toBe("1322158055");
+    expect(overhaulGidOf(" 123456 ")).toBe("123456");
+    expect(overhaulGidOf(`https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/edit#gid=987`)).toBe("987");
+    expect(overhaulGidOf("리스트(27년)")).toBe("");
+  });
+  it("주소는 export?format=csv&gid= 이고 gviz 가 아니다, 모르는 탭은 gid 를 달라고 던진다", () => {
+    const url = overhaulCsvUrl("리스트(26년)");
+    expect(url).toBe(`https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/export?format=csv&gid=0`);
+    expect(url).not.toContain("gviz");
+    expect(() => overhaulCsvUrl("리스트(27년)")).toThrow(/gid/);
+  });
+  it("loadOverhaulRows 는 export 주소로 받아 읽는다", async () => {
+    clearOverhaulCache();
+    const fetchMock = vi.fn(async () => new Response(EXPORT_HEAD, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const rows = await loadOverhaulRows(OVERHAUL_SHEET_DEFAULT_TAB, { force: true });
+      expect(rows).toHaveLength(2);
+      expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain("/export?format=csv&gid=0");
+      await expect(loadOverhaulRows("리스트(27년)", { force: true })).rejects.toThrow(/gid/);
+    } finally {
+      vi.unstubAllGlobals();
+      clearOverhaulCache();
+    }
   });
 });

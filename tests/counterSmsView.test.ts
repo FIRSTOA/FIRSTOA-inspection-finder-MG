@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { contactVendorKey } from "../supabase/functions/_shared/counter-sms/vendorKey.ts";
-import { historyOf, isNewTarget, logLines, logWhen, md, mdt, moreActions, primaryAction, sortTargets, statusLine, warnBadge, type ViewBatch, type ViewTarget } from "../src/counterSmsView";
+import { historyOf, isNewTarget, logLines, logWhen, md, mdt, moreActions, offListTargetIds, primaryAction, sortTargets, statusLine, warnBadge, type ViewBatch, type ViewTarget } from "../src/counterSmsView";
 
 // edab3b2 의 CounterSms.tsx:605-614 를 글자 그대로 옮긴 기준 구현
 function legacyHistoryOf(t: ViewTarget, batch: ViewBatch | null) {
@@ -111,5 +111,29 @@ describe("시각은 한국 시각(KST)", () => {
     expect(logWhen("2026-10-23T04:19:00.000Z")).toBe("10-23 13:19");
     expect(logLines({ title: "", created_at: "", log: [{ at: "2026-10-22T16:30:00.000Z", by: "박지은", mode: "merge", added: 0, skipped: ["가나"] }] }, [])[0].when).toBe("10-23 01:30");
     expect(md("")).toBe("");
+  });
+});
+
+describe("관리부 목록 밖 열린 곳(2단계)", () => {
+  it("가장 최근 missing 항목의 업체명과 카드 업체명을 맞추고, 완료 카드는 뺀다", () => {
+    // 이 fixture 의 마지막 auto 항목은 missing: [] — 최근 맞춤에서 모두 목록에 돌아왔으므로 비어야 한다
+    expect(offListTargetIds(batch, targets).size).toBe(0);
+    const b2: ViewBatch = { ...batch, log: [...(batch.log || []).slice(0, 3), { at: "2026-10-21T05:00:00.000Z", by: "자동", mode: "auto", added: 0, skipped: [], missing: ["S 다라기업", "가나상사"] }] };
+    // 가나상사는 완료 → 제외, 다라기업(C·D 두 장)은 상호 접두 "S " 가 달라도 같은 업체로 맞는다
+    expect([...offListTargetIds(b2, targets)].sort()).toEqual(["2", "5"]);
+  });
+  it("missing 칸이 없는 수동 항목·삭제 항목은 건너뛰고 그 앞의 맞춤을 쓴다", () => {
+    const b3: ViewBatch = { ...batch, log: [
+      { at: "2026-10-05T02:00:00.000Z", by: "자동", mode: "auto", added: 0, skipped: [], missing: ["자차상회"] },
+      { at: "2026-10-06T02:00:00.000Z", by: "박지은", mode: "merge", added: 1, skipped: [] },
+      { at: "2026-10-07T02:00:00.000Z", by: "김철수", mode: "remove", added: 0, skipped: [], removed: ["x"], missing: ["다라기업"] },
+    ] };
+    expect([...offListTargetIds(b3, targets)]).toEqual(["3"]);
+    expect(offListTargetIds(null, targets).size).toBe(0);
+  });
+  it("통합 카드는 지점명(vendor_names)으로도 맞는다", () => {
+    const b: ViewBatch = { ...batch, log: [{ at: "2026-10-21T05:00:00.000Z", by: "자동", mode: "auto", added: 0, skipped: [], missing: ["지점가"] }] };
+    const t: ViewTarget[] = [{ id: "9", vendor: "본사나", team: "C", vendor_names: ["본사나", "지점가"], sent_at: null, done_at: null }];
+    expect([...offListTargetIds(b, t)]).toEqual(["9"]);
   });
 });

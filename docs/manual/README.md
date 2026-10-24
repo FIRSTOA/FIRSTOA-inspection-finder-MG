@@ -35,7 +35,7 @@
 | 11 | [user/11-okr.md](user/11-okr.md) | OKR: 분기 → 월 → 주차, 통합집계·파트 종합·팀원 집계·주차, 핵심방향 |
 | 12 | [user/12-walking-map.md](user/12-walking-map.md) | 워킨맵: 분기 점검 지도, 색(G1~G12), FIELD 전송 후 자동 색칠, 진행률 |
 | 13 | [user/13-counter-sms.md](user/13-counter-sms.md) | 카운터 문자전송: 팀 마감 목록 → 내 폰 문자앱, 이중 발송 방지 |
-| 14 | [user/14-admin.md](user/14-admin.md) | 관리: 인원·담당자·주소 변경·동기화 현황·전송·카톡방(스위치)·알림 |
+| 14 | [user/14-admin.md](user/14-admin.md) | 관리: 인원·담당자·주소 변경·동기화 현황·전송·연동(스위치·카톡방·카톡 수집·시트 기입·KPI 목표·기타 설정)·알림 |
 | 15 | [user/15-other-screens.md](user/15-other-screens.md) | 그 밖의 화면(자동 일정·재계약 준비·맛동여지도·공지·학습·해피콜 등) 안내 |
 
 ## 목차 — 운영·이관 (개발·관리자용, `ops/`)

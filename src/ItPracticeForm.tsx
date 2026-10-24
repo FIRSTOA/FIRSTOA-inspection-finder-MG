@@ -6,7 +6,7 @@ import { notify } from "./toast";
 import { kstDate } from "./visits";
 
 /** IT 학습 탭 상단 접이식 [실습 기록] — 제목(필수)·메모·사진 1장 → it_practice_logs. 홈 KPI 에 건수로 잡힌다. */
-export default function ItPracticeForm({ author }: { author: string }) {
+export default function ItPracticeForm({ author, open: controlledOpen }: { author: string; open?: boolean }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
@@ -36,11 +36,15 @@ export default function ItPracticeForm({ author }: { author: string }) {
     } finally { setSaving(false); }
   };
 
-  return <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-    <button type="button" onClick={() => setOpen((v) => !v)} className="flex min-h-11 w-full items-center justify-between px-4 text-left text-sm font-black text-slate-800">
+  // controlledOpen 이 있으면 펼침은 바깥(페이지 머리 단추)이 정한다 — 단추 없이 양식만 그린다. 없으면 예전 접이식 그대로.
+  const controlled = controlledOpen !== undefined;
+  const isOpen = controlled ? controlledOpen : open;
+  if (controlled && !isOpen) return null;
+  return <section className={controlled ? "border-b border-slate-100 bg-slate-50" : "rounded-xl border border-slate-200 bg-white shadow-sm"}>
+    {!controlled && <button type="button" onClick={() => setOpen((v) => !v)} className="flex min-h-11 w-full items-center justify-between px-4 text-left text-sm font-black text-slate-800">
       <span>실습 기록</span>{open ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
-    </button>
-    {open && <div className="space-y-2.5 border-t border-slate-100 p-4">
+    </button>}
+    {isOpen && <div className={`space-y-2.5 p-4 ${controlled ? "" : "border-t border-slate-100"}`}>
       {missing && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">표 준비 중(SQL 실행 대기) — 지금은 저장할 수 없습니다.</p>}
       {!author && <p className="text-[11px] font-semibold text-slate-400">작성자를 선택하면 실습 기록이 KPI 에 잡힙니다.</p>}
       <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="제목 (필수) — 예: 복합기 정착기 분해 실습" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none focus:border-blue-500" />

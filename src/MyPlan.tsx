@@ -23,6 +23,11 @@ import { addressCore, mapQuery } from "./address";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 import { useMembers } from "./authors";
 import { formatAssignees, hasAssignee, joinAssignees, MAX_ASSIGNEES, parseAssignees, primaryAssignee } from "./assignees";
+import { UI } from "./ui/card";
+import StateBox from "./ui/StateBox";
+
+// 목록 한 줄 안의 동작 단추 공통 모양(폰 44px, PC 36px) — card.ts 에 올릴 후보(btnRow)
+const ROW_BTN = "inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 text-center text-xs font-black transition sm:flex-none lg:min-h-9";
 
 export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
@@ -699,40 +704,42 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   };
 
   return (
-    <div className="space-y-2 overflow-x-hidden">
+    // 컨트롤 2줄 + 지도 + 목록을 카드 한 장으로 — 사이는 구분선(border-b)으로만 나눈다
+    <div className={`${UI.card} overflow-x-hidden`}>
       {/* 1줄 — 고르는 것만: 날짜 · 내/팀 · 팀 */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="flex rounded-full bg-slate-100 p-0.5">
-          <button type="button" onClick={() => setDate(kstDate())} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${date === kstDate() ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>오늘</button>
-          <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${date === nextBusinessDay(kstDate()) ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>내일</button>
+      <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
+        <span className={UI.seg}>
+          <button type="button" onClick={() => setDate(kstDate())} className={`${UI.segBtn(date === kstDate())} px-4`}>오늘</button>
+          <button type="button" onClick={() => setDate(nextBusinessDay(kstDate()))} className={`${UI.segBtn(date === nextBusinessDay(kstDate()))} px-4`}>내일</button>
         </span>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-[12px] font-black text-slate-700 outline-none" />
-        <span className="flex rounded-full bg-slate-100 p-0.5">
-          {([["mine", "내 일정"], ["team", "팀 일정"]] as const).map(([v, label]) => <button key={v} type="button" onClick={() => setScope(v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${scope === v ? "bg-slate-900 text-white" : "text-slate-500"}`}>{label}</button>)}
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="일정 날짜" className="h-11 rounded-lg border border-slate-300 px-3 text-[13px] font-black text-slate-700 outline-none focus:border-blue-500 lg:h-10" />
+        <span className={UI.seg}>
+          {([["mine", "내 일정"], ["team", "팀 일정"]] as const).map(([v, label]) => <button key={v} type="button" onClick={() => setScope(v)} className={`${UI.segBtn(scope === v)} px-4`}>{label}</button>)}
         </span>
-        {scope === "team" && <span className="flex rounded-full bg-slate-100 p-0.5">{["A", "B", "C", "D", "E", "전체"].map((tm) => <button key={tm} type="button" onClick={() => setTeamSel(tm)} className={`rounded-full px-2 py-1 text-[11px] font-black ${teamShown === tm ? "bg-slate-900 text-white" : "text-slate-500"}`}>{tm === "전체" ? "전체" : `${tm}팀`}</button>)}</span>}
-        {scope === "mine" && <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
-          <input type="checkbox" checked={includeUnassigned} onChange={(e) => setIncludeUnassigned(e.target.checked)} className="h-3.5 w-3.5 accent-blue-600" />미배정 포함
+        {scope === "team" && <span className="flex flex-wrap items-center gap-1.5">{["A", "B", "C", "D", "E", "전체"].map((tm) => <button key={tm} type="button" onClick={() => setTeamSel(tm)} className={UI.chip(teamShown === tm)}>{tm === "전체" ? "전체" : `${tm}팀`}</button>)}</span>}
+        {scope === "mine" && <label className="flex min-h-11 items-center gap-1.5 text-xs font-bold text-slate-500">
+          <input type="checkbox" checked={includeUnassigned} onChange={(e) => setIncludeUnassigned(e.target.checked)} className="h-4 w-4 accent-blue-600" />미배정 포함
         </label>}
-        <span className="ml-auto text-[11px] font-black text-slate-500">{scope === "team" ? `${myTickets.length}건 · 미배정 ${myTickets.filter((t) => !t.assignee).length}` : `${author} ${myTickets.length}건`}</span>
+        <span className="ml-auto text-xs font-black text-slate-500">{scope === "team" ? `${myTickets.length}건 · 미배정 ${myTickets.filter((t) => !t.assignee).length}` : `${author} ${myTickets.length}건`}</span>
       </div>
       {/* 2줄 — 사람 칩(팀 일정) + 동작 단추 */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {scope === "team" && people.map((p) => { const off = hiddenPeople.has(p); const n = myTickets.filter((t) => hasAssignee(t.assignee, p)).length; return <button key={p} type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has(p)) next.delete(p); else next.add(p); return next; })} title="누르면 지도·목록에서 숨김" className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-200 bg-white text-slate-700"}`}><span className="h-2.5 w-2.5 rounded-full" style={{ background: colorOf(p) }} />{p} {n}</button>; })}
-        {scope === "team" && myTickets.some((t) => !t.assignee) && (() => { const off = hiddenPeople.has("미배정"); const n = myTickets.filter((t) => !t.assignee).length; return <button type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has("미배정")) next.delete("미배정"); else next.add("미배정"); return next; })} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-dashed border-slate-400 bg-white text-slate-600"}`}><span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-500 bg-white" />미배정 {n}</button>; })()}
-        <span className="ml-auto flex flex-wrap items-center gap-1.5">
-          {scope === "team" && <button type="button" onClick={() => setShowInspections((v) => !v)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${showInspections ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-500"}`}>{showInspections ? "점검 포함" : "점검 제외"}</button>}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 pb-3 pt-2">
+        {scope === "team" && people.map((p) => { const off = hiddenPeople.has(p); const n = myTickets.filter((t) => hasAssignee(t.assignee, p)).length; return <button key={p} type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has(p)) next.delete(p); else next.add(p); return next; })} title="누르면 지도·목록에서 숨김" className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-bold lg:min-h-9 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-200 bg-white text-slate-700"}`}><span className="h-2.5 w-2.5 rounded-full" style={{ background: colorOf(p) }} />{p} {n}</button>; })}
+        {scope === "team" && myTickets.some((t) => !t.assignee) && (() => { const off = hiddenPeople.has("미배정"); const n = myTickets.filter((t) => !t.assignee).length; return <button type="button" onClick={() => setHiddenPeople((cur) => { const next = new Set(cur); if (next.has("미배정")) next.delete("미배정"); else next.add("미배정"); return next; })} className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs font-bold lg:min-h-9 ${off ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-dashed border-slate-400 bg-white text-slate-600"}`}><span className="h-2.5 w-2.5 rounded-full border border-dashed border-slate-500 bg-white" />미배정 {n}</button>; })()}
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          {scope === "team" && <button type="button" onClick={() => setShowInspections((v) => !v)} className={showInspections ? UI.chip(true) : UI.btnGhost}>{showInspections ? "점검 포함" : "점검 제외"}</button>}
           {onAddManual && (
             <button type="button" onClick={() => setManual({ text: "", team: "C" })} title="스케줄 원문을 붙여 넣어 내 일정에 추가 — 워킨맵에 없는 곳도 됩니다"
-              className="rounded-full bg-blue-600 px-3 py-1 text-[11px] font-black text-white shadow-sm transition hover:bg-blue-700">＋ 직접 추가</button>
+              className={UI.btn}>＋ 직접 추가</button>
           )}
-          {pinned.length > 0 && <button type="button" onClick={() => savePinned([])} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">순서 초기화</button>}
-          {ordered.length > 0 && <button type="button" onClick={() => void copyPlanText()} title="카톡 스케줄방에 올릴 목록 — 1. 업체명 분기점검 / 2. 업체명 AS …" className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-600 transition hover:bg-slate-50">📋 카톡용 복사</button>}
+          {pinned.length > 0 && <button type="button" onClick={() => savePinned([])} className={UI.btnGhost}>순서 초기화</button>}
+          {ordered.length > 0 && <button type="button" onClick={() => void copyPlanText()} title="카톡 스케줄방에 올릴 목록 — 1. 업체명 분기점검 / 2. 업체명 AS …" className={UI.btnGhost}>📋 카톡용 복사</button>}
         </span>
       </div>
-      <div ref={mapElRef} className={`${scope === "team" ? "h-[38vh] sm:h-[55vh]" : "h-[36vh] sm:h-[42vh]"} w-full overflow-hidden rounded-xl border border-slate-200`} />
+      {/* 지도 — 높이는 그대로(vh), 카드 안이라 자체 테두리·둥근 모서리 없음 */}
+      <div ref={mapElRef} className={`${scope === "team" ? "h-[38vh] sm:h-[55vh]" : "h-[36vh] sm:h-[42vh]"} w-full overflow-hidden border-b border-slate-100`} />
 
-      <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="divide-y divide-slate-100 bg-white">
         {ordered.map((t, i) => {
           const g = getGeo(t);
           const isPinned = pinned.includes(t.id);
@@ -755,9 +762,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black" style={scope === "team" ? (t.assignee ? { background: colorOf(who), color: "#fff" } : { border: "1.5px dashed #64748b", color: "#334155", background: "#fff" }) : { background: isPinned ? "#2563eb" : "#0f172a", color: "#fff" }}>{labelNo(t, i)}</span>
                   <span className="min-w-0 truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
-                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{planTypeLabel(t)}</span>
-                  {scope === "team" && <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black" style={t.assignee ? { background: colorOf(who), color: "#fff" } : { border: "1px dashed #94a3b8", color: "#475569" }}>{formatAssignees(t.assignee, { short: true }) || "미배정"}</span>}
-                  {noMap.includes(t.id) ? <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">지도 제외</span> : !g && <span className="shrink-0 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">지도 좌표 없음</span>}
+                  <span className={`${UI.badge} ${UI.tone.off} shrink-0`}>{planTypeLabel(t)}</span>
+                  {scope === "team" && <span className={`${UI.badge} shrink-0`} style={t.assignee ? { background: colorOf(who), color: "#fff" } : { border: "1px dashed #94a3b8", color: "#475569" }}>{formatAssignees(t.assignee, { short: true }) || "미배정"}</span>}
+                  {noMap.includes(t.id) ? <span className={`${UI.badge} ${UI.tone.off} shrink-0`}>지도 제외</span> : !g && <span className={`${UI.badge} ${UI.tone.warn} shrink-0`}>지도 좌표 없음</span>}
                 </span>
                 {t.issue && <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">{t.issue}</span>}
                 {(() => {
@@ -776,52 +783,53 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 {onRemove && (
                   // 잘못 들어온 일정·빼고 싶은 일정을 동선에서 바로 정리 (일정리스트까지 가지 않게)
                   <button type="button" onClick={(event) => { event.stopPropagation(); onRemove(t); }}
-                    className="absolute right-2 top-2 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black text-slate-400 transition hover:border-rose-300 hover:text-rose-600">삭제</button>
+                    aria-label={`${t.vendor} 일정 삭제`}
+                    className="absolute right-1 top-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-xs font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-600">삭제</button>
                 )}
                 {f && (
                   <span className="mt-1 flex flex-wrap gap-1">
-                    {f.inspection && !f.inspection.done && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-700">점검 {f.inspection.quarter}분기</span>}
-                    {f.inspection?.done && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black text-slate-400">점검완료</span>}
-                    {f.misu && !f.misu.cleared && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-600">미수{f.misu.months ? ` ${f.misu.months}개월` : ""}</span>}
-                    {f.renewal && !f.renewal.done && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-600">재계약{f.renewal.due ? ` ${f.renewal.due}` : ""}</span>}
-                    {f.overage && <span className="rounded bg-purple-50 px-1.5 py-0.5 text-[9px] font-black text-purple-700">초과</span>}
-                    {f.bulman && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-700">불만 {f.bulman.date.slice(2, 4)}년 {Number(f.bulman.date.slice(5, 7))}월</span>}
+                    {f.inspection && !f.inspection.done && <span className={`${UI.badge} ${UI.tone.warn}`}>점검 {f.inspection.quarter}분기</span>}
+                    {f.inspection?.done && <span className={`${UI.badge} ${UI.tone.off}`}>점검완료</span>}
+                    {f.misu && !f.misu.cleared && <span className={`${UI.badge} ${UI.tone.bad}`}>미수{f.misu.months ? ` ${f.misu.months}개월` : ""}</span>}
+                    {f.renewal && !f.renewal.done && <span className={`${UI.badge} ${UI.tone.bad}`}>재계약{f.renewal.due ? ` ${f.renewal.due}` : ""}</span>}
+                    {f.overage && <span className={`${UI.badge} bg-purple-50 text-purple-700`}>초과</span>}
+                    {f.bulman && <span className={`${UI.badge} bg-red-100 text-red-700`}>불만 {f.bulman.date.slice(2, 4)}년 {Number(f.bulman.date.slice(5, 7))}월</span>}
                   </span>
                 )}
               </span>
               {/* 모바일: 버튼줄이 내용 아래 한 줄로 — 내용 칸이 눌려 업체명이 안 보이던 것 방지 */}
-              <span className="flex w-full items-center gap-1.5 sm:w-auto" onClick={(e) => e.stopPropagation()}>
-                <button type="button" onClick={() => setDetail(t)} className="flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-[11px] font-black text-slate-600 transition hover:bg-slate-50 sm:flex-none">상세</button>
-                {onUseField && <button type="button" onClick={() => (onFieldDirect && /^(AS|익일AS|납품철수교체휴가교육|물류)$/.test(t.scheduleType) && !/휴가|연차/.test(t.vendor) ? onFieldDirect(t) : openFieldPick(t))} className="flex-1 rounded-lg bg-slate-900 px-2 py-1.5 text-center text-[11px] font-black text-white transition hover:bg-slate-800 sm:flex-none">FIELD</button>}
+              <span className="flex w-full flex-wrap items-center gap-2 sm:w-auto" onClick={(e) => e.stopPropagation()}>
+                <button type="button" onClick={() => setDetail(t)} className={`${ROW_BTN} border border-slate-300 bg-white text-slate-600 hover:bg-slate-50`}>상세</button>
+                {onUseField && <button type="button" onClick={() => (onFieldDirect && /^(AS|익일AS|납품철수교체휴가교육|물류)$/.test(t.scheduleType) && !/휴가|연차/.test(t.vendor) ? onFieldDirect(t) : openFieldPick(t))} className={`${ROW_BTN} bg-slate-900 text-white hover:bg-slate-800`}>FIELD</button>}
                 {/* 못 간 점검·재계약을 다음 영업일로 — 워킨맵에서 다시 등록하던 불편(2026-08-28). AS는 일정리스트의 익일(사유·보고) 흐름을 쓴다 */}
                 {onDefer && (t.source === "workin" || t.source === "autoplan" || t.scheduleType === "매월점검") && (
                   <button type="button" onClick={() => onDefer(t, nextBusinessDay(t.date))}
-                    className="rounded-lg border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700 transition hover:bg-purple-100">내일로 →</button>
+                    className={`${ROW_BTN} border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100`}>내일로 →</button>
                 )}
                 {/* 길찾기 — N/K/T 세 칸을 [지도] 하나로 모으고 누르면 아래에 펼친다(칸이 좁다, 2026-10-12) */}
-                <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "nav" ? null : { id: t.id, kind: "nav" }))} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "nav" ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>네비</button>
+                <button type="button" onClick={() => setRowMenu((cur) => (cur?.id === t.id && cur.kind === "nav" ? null : { id: t.id, kind: "nav" }))} className={`${ROW_BTN} ${rowMenu?.id === t.id && rowMenu.kind === "nav" ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`}>네비</button>
                 {scope === "team" && onAssign && (
-                  <button type="button" onClick={() => { setAssignPick(null); setRowMenu((cur) => (cur?.id === t.id && cur.kind === "assign" ? null : { id: t.id, kind: "assign" })); }} className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${rowMenu?.id === t.id && rowMenu.kind === "assign" ? "bg-emerald-700 text-white" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>배정</button>
+                  <button type="button" onClick={() => { setAssignPick(null); setRowMenu((cur) => (cur?.id === t.id && cur.kind === "assign" ? null : { id: t.id, kind: "assign" })); }} className={`${ROW_BTN} ${rowMenu?.id === t.id && rowMenu.kind === "assign" ? "bg-emerald-700 text-white" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>배정</button>
                 )}
                 {/* 전화 체크만 하면 되는 건처럼 지도에 안 보여도 되는 일정 — 목록엔 남는다 */}
                 <button type="button" onClick={() => toggleNoMap(t.id)} title={noMap.includes(t.id) ? "지도에 다시 표시" : "지도·동선에서 빼기(목록엔 남음)"}
-                  className={`flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${noMap.includes(t.id) ? "bg-slate-700 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>{noMap.includes(t.id) ? "지도 표시" : "지도 제외"}</button>
+                  className={`${ROW_BTN} ${noMap.includes(t.id) ? "bg-slate-700 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>{noMap.includes(t.id) ? "지도 표시" : "지도 제외"}</button>
                 <button type="button" onClick={() => togglePin(t.id)}
-                  className={`flex-1 rounded-full px-2.5 py-1.5 text-center text-[11px] font-black transition sm:flex-none ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
+                  className={`${ROW_BTN} ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
                   {isPinned ? `고정 ${pinned.filter((id) => (scope === "team" ? ordered.filter((x) => (primaryAssignee(x.assignee) || "미배정") === who) : ordered).some((x) => x.id === id)).indexOf(t.id) + 1}` : "고정"}
                 </button>
               </span>
               {rowMenu?.id === t.id && rowMenu.kind === "nav" && (
-                <span className="flex w-full items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                  <span className="text-[10px] font-black text-slate-400">네비</span>
-                  <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(mapQuery(t.address, t.vendor))} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="rounded-lg bg-[#03C75A] px-3 py-1.5 text-center text-[11px] font-black text-white">네이버</a>
-                  <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className="rounded-lg bg-[#FEE500] px-3 py-1.5 text-center text-[11px] font-black text-slate-900">카카오</a>
-                  <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(mapQuery(t.address, t.vendor))} className="rounded-lg bg-[#2C5FD8] px-3 py-1.5 text-center text-[11px] font-black text-white">티맵</a>
+                <span className="flex w-full items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[11px] font-black text-slate-400">네비</span>
+                  <a href={g ? naverMapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : naverMapLink(mapQuery(t.address, t.vendor))} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className={`${ROW_BTN} bg-[#03C75A] text-white`}>네이버</a>
+                  <a href={kakao} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className={`${ROW_BTN} bg-[#FEE500] text-slate-900`}>카카오</a>
+                  <a href={g ? tmapRouteLink(t.vendor.slice(0, 30), g.lat, g.lng) : tmapRouteLink(mapQuery(t.address, t.vendor))} className={`${ROW_BTN} bg-[#2C5FD8] text-white`}>티맵</a>
                 </span>
               )}
               {rowMenu?.id === t.id && rowMenu.kind === "assign" && onAssign && (
-                <span className="flex w-full flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                  <span className="text-[10px] font-black text-slate-400">배정</span>
+                <span className="flex w-full flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-[11px] font-black text-slate-400">배정</span>
                   {/* 여러 명(2026-10-22): 눌러서 켜고 끄기 + [확인]. 번호 1이 대표, 최대 인원이면 남은 칩 잠금 */}
                   {(() => {
                     const picked = assignPick?.id === t.id ? assignPick.names : parseAssignees(t.assignee);
@@ -833,11 +841,11 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                         const locked = idx < 0 && full;
                         return <button key={n} type="button" disabled={locked} aria-pressed={idx >= 0}
                           onClick={() => setAssignPick({ id: t.id, names: idx >= 0 ? picked.filter((x) => x !== n) : [...picked, n] })}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-black ${idx >= 0 ? "text-white" : locked ? "border border-slate-200 bg-white text-slate-300" : "border border-slate-300 bg-white text-slate-700"}`} style={idx >= 0 ? { background: colorOf(n) } : undefined}>{idx >= 0 && picked.length > 1 ? `${idx + 1} ` : ""}{n === author ? `나(${n})` : n}</button>;
+                          className={`inline-flex min-h-11 items-center rounded-full px-3 text-xs font-black lg:min-h-9 ${idx >= 0 ? "text-white" : locked ? "border border-slate-200 bg-white text-slate-300" : "border border-slate-300 bg-white text-slate-700"}`} style={idx >= 0 ? { background: colorOf(n) } : undefined}>{idx >= 0 && picked.length > 1 ? `${idx + 1} ` : ""}{n === author ? `나(${n})` : n}</button>;
                       })}
-                      {t.assignee && <button type="button" onClick={() => { onAssign(t, ""); setRowMenu(null); setAssignPick(null); }} className="rounded-full border border-dashed border-slate-400 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500">배정 해제</button>}
-                      <button type="button" onClick={() => { const next = joinAssignees(picked); if (next !== t.assignee) onAssign(t, next); setRowMenu(null); setAssignPick(null); }} className="ml-auto rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-black text-white">확인{picked.length > 1 ? ` (${picked.length}명)` : ""}</button>
-                      {full && <span className="w-full text-[10px] font-bold text-amber-600">최대 {MAX_ASSIGNEES}명</span>}
+                      {t.assignee && <button type="button" onClick={() => { onAssign(t, ""); setRowMenu(null); setAssignPick(null); }} className="inline-flex min-h-11 items-center rounded-full border border-dashed border-slate-400 bg-white px-3 text-xs font-black text-slate-500 lg:min-h-9">배정 해제</button>}
+                      <button type="button" onClick={() => { const next = joinAssignees(picked); if (next !== t.assignee) onAssign(t, next); setRowMenu(null); setAssignPick(null); }} className="ml-auto inline-flex min-h-11 items-center rounded-full bg-emerald-600 px-4 text-xs font-black text-white lg:min-h-9">확인{picked.length > 1 ? ` (${picked.length}명)` : ""}</button>
+                      {full && <span className="w-full text-[11px] font-bold text-amber-600">최대 {MAX_ASSIGNEES}명</span>}
                     </>);
                   })()}
                 </span>
@@ -846,7 +854,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
             </Fragment>
           );
         })}
-        {!ordered.length && <div className="p-10 text-center text-xs font-bold text-slate-400">{date}에 {author}에게 배정된 일정이 없습니다.</div>}
+        {!ordered.length && <StateBox inside kind="empty" message={`${date}에 ${author}님께 배정된 일정이 없습니다.`} />}
       </div>
       {fieldPick && (() => {
         const t = fieldPick.ticket;
@@ -861,8 +869,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   <div className="truncate text-[15px] font-black text-white">{t.vendor}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  {fieldPick.mode === "auto" && <button type="button" onClick={() => setFieldPick({ ...fieldPick, mode: "search" })} className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-white/20">직접 검색</button>}
-                  <button type="button" onClick={() => setFieldPick(null)} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+                  {fieldPick.mode === "auto" && <button type="button" onClick={() => setFieldPick({ ...fieldPick, mode: "search" })} className="inline-flex min-h-11 items-center rounded-full bg-white/10 px-4 text-xs font-black text-white transition hover:bg-white/20 lg:min-h-9">직접 검색</button>}
+                  <button type="button" aria-label="닫기" onClick={() => setFieldPick(null)} className="flex h-11 w-11 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -875,12 +883,12 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                     {fieldPick.forms.map((form, i) => (
                       <div key={i} className="overflow-hidden rounded-xl border border-slate-200">
                         <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${String(form.gubun).includes("AS") ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>{form.gubun}</span>
+                          <span className={`${UI.badge} ${String(form.gubun).includes("AS") ? UI.tone.bad : UI.tone.ok}`}>{form.gubun}</span>
                           <span className="text-[12px] font-black text-slate-800">{form.date}</span>
                           {form.model && <span className="truncate text-[11px] font-bold text-slate-400">{form.model}</span>}
-                          <button type="button" onClick={() => load(form.text)} className="ml-auto shrink-0 rounded-full bg-blue-600 px-3 py-1.5 text-[11px] font-black text-white transition hover:bg-blue-700">불러오기</button>
+                          <button type="button" onClick={() => load(form.text)} className="ml-auto inline-flex min-h-11 shrink-0 items-center rounded-full bg-blue-600 px-4 text-xs font-black text-white transition hover:bg-blue-700 lg:min-h-9">불러오기</button>
                         </div>
-                        {(form.serial || form.asset) && <div className="px-3 pt-1.5 text-[10px] font-bold text-slate-400">{[form.serial && `S/N ${form.serial}`, form.asset && `자산 ${form.asset}`].filter(Boolean).join(" · ")}</div>}
+                        {(form.serial || form.asset) && <div className="px-3 pt-1.5 text-[11px] font-bold text-slate-400">{[form.serial && `S/N ${form.serial}`, form.asset && `자산 ${form.asset}`].filter(Boolean).join(" · ")}</div>}
                         {(form.content || form.handled) && <div className="px-3 py-2 text-[11px] font-semibold leading-4 text-slate-500">{String(form.content || form.handled).slice(0, 90)}</div>}
                       </div>
                     ))}
@@ -915,27 +923,28 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   </div>
                   <div className="mt-1 truncate text-[16px] font-black text-white">{detail.vendor}</div>
                 </div>
-                <button type="button" onClick={() => setDetail(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
+                <button type="button" aria-label="닫기" onClick={() => setDetail(null)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
               </div>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              {/* 상자를 겹겹이 두르지 않고 구분선으로 나눈다(색 있는 안내·메모 상자만 예외) */}
+              <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto px-4 *:py-3">
                 {/* 주소 — 틀렸으면 여기서 바로 고친다. 일정에 저장되고 지도 핀도 새 주소로(2026-10-08) */}
-                <div className="rounded-xl border border-slate-200 p-3">
+                <div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] font-black text-slate-400">주소</span>
-                    {onAddress && addrEdit === null && <button type="button" onClick={() => setAddrEdit(detail.address || "")} className="rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-[11px] font-black text-slate-600 hover:bg-slate-50">수정</button>}
+                    {onAddress && addrEdit === null && <button type="button" onClick={() => setAddrEdit(detail.address || "")} className="inline-flex min-h-11 items-center rounded-full border border-slate-300 bg-white px-4 text-xs font-black text-slate-600 hover:bg-slate-50 lg:min-h-9">수정</button>}
                   </div>
                   {addrEdit === null
                     ? <div className="mt-1 whitespace-pre-wrap break-words text-[13px] font-bold leading-5 text-slate-800">{detail.address || <span className="text-slate-400">주소 없음 — 업체명으로 위치를 찾습니다</span>}</div>
                     : <div className="mt-1.5">
                       <input autoFocus value={addrEdit} onChange={(e) => setAddrEdit(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveAddress(detail, addrEdit); if (e.key === "Escape") setAddrEdit(null); }} placeholder="도로명 주소 (예: 서울 강남구 테헤란로 123)"
                         className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-[13px] font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-                      <div className="mt-1.5 flex gap-1.5">
-                        <button type="button" onClick={() => saveAddress(detail, addrEdit)} className="flex-1 rounded-full bg-blue-600 py-1.5 text-[12px] font-black text-white hover:bg-blue-700">저장</button>
-                        <button type="button" onClick={() => setAddrEdit(null)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[12px] font-black text-slate-600 hover:bg-slate-50">취소</button>
+                      <div className="mt-1.5 flex gap-2">
+                        <button type="button" onClick={() => saveAddress(detail, addrEdit)} className="min-h-11 flex-1 rounded-full bg-blue-600 text-[12px] font-black text-white hover:bg-blue-700">저장</button>
+                        <button type="button" onClick={() => setAddrEdit(null)} className="min-h-11 rounded-full border border-slate-300 bg-white px-4 text-[12px] font-black text-slate-600 hover:bg-slate-50">취소</button>
                       </div>
                     </div>}
                 </div>
-                <div className="rounded-xl border border-slate-200 p-3">
+                <div>
                   {infoRows.filter(([, v]) => v).map(([k, v]) => (
                     <div key={k} className="flex items-start gap-3 border-b border-slate-50 py-1.5 last:border-0">
                       <span className="w-14 shrink-0 pt-0.5 text-[11px] font-black text-slate-400">{k}</span>
@@ -959,7 +968,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 {/* 내 메모 — 이 일정에 붙는 개인 메모. 저장 버튼으로 확실히(모바일은 blur가 불안정), 폰·PC 어디서든 보인다 */}
                 <MemoBox ticketId={detail.id} value={memos.get(detail.id) || ""} onSave={saveMemo} />
                 {f && (
-                  <div className="rounded-xl border border-slate-200 p-3">
+                  <div>
                     <div className="text-[11px] font-black text-slate-400">체크 포인트</div>
                     <div className="mt-1.5 space-y-1 text-[12.5px] font-bold leading-5 text-slate-700">
                       {f.inspection && <div>🔧 점검 {f.inspection.quarter}분기 {f.inspection.done ? "완료" : "대상"}</div>}
@@ -972,13 +981,13 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   </div>
                 )}
                 {meta && (meta.comment || meta.memos.length > 0) && (
-                  <div className="rounded-xl border border-slate-200 p-3">
+                  <div>
                     <div className="text-[11px] font-black text-slate-400">워킨맵 메모</div>
                     {meta.comment && <div className="mt-1 text-[12.5px] font-bold leading-5 text-slate-700">{meta.comment}</div>}
                     {meta.memos.length > 0 && <ul className="mt-1 space-y-0.5 text-[12px] font-semibold leading-5 text-slate-500">{meta.memos.slice(0, 6).map((m, i) => <li key={i}>· {m}</li>)}</ul>}
                   </div>
                 )}
-                <div className="rounded-xl border border-slate-200 p-3">
+                <div>
                   <div className="text-[11px] font-black text-slate-400">최근 점검 · 사용량 분석</div>
                   {detailSnaps === null && <div className="py-3 text-center text-[11px] font-bold text-slate-400">불러오는 중…</div>}
                   {detailSnaps?.length === 0 && <div className="py-3 text-center text-[11px] font-bold text-slate-400">점검 기록 없음</div>}
@@ -1065,16 +1074,16 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   <span>팀</span>
                   {["A", "B", "C", "D", "E"].map((tm) => (
                     <button key={tm} type="button" onClick={() => setManual({ ...manual, team: tm })}
-                      className={`rounded-full px-3 py-1 text-[11px] font-black transition ${manual.team === tm ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{tm}</button>
+                      className={UI.chip(manual.team === tm)}>{tm}</button>
                   ))}
-                  <span className="text-[10px] font-bold text-slate-400">주소로 팀을 알 수 있으면 주소가 우선, 못 읽으면 여기서 고른 팀</span>
+                  <span className="text-[11px] font-bold text-slate-400">주소로 팀을 알 수 있으면 주소가 우선, 못 읽으면 여기서 고른 팀</span>
                 </div>
                 {parsed.length > 0 ? (
                   <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
                     {parsed.map((e, i) => (
                       <div key={i} className="px-3 py-2">
                         <div className="flex min-w-0 items-center gap-1.5">
-                          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">{e.kind || "일정"}</span>
+                          <span className={`${UI.badge} ${UI.tone.off} shrink-0`}>{e.kind || "일정"}</span>
                           <span className="min-w-0 truncate text-[13px] font-black text-slate-900">{e.vendor}</span>
                           {e.title && <span className="shrink-0 text-[11px] font-bold text-slate-400">{e.title}</span>}
                         </div>
@@ -1088,7 +1097,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
               </div>
               <div className="border-t border-slate-100 px-4 py-3">
                 <button type="button" disabled={!parsed.length} onClick={() => { onAddManual(parsed, { date, team: manual.team }); setManual(null); }}
-                  className="w-full rounded-full bg-blue-600 py-2.5 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 disabled:opacity-40">
+                  className={`${UI.btn} w-full`}>
                   {parsed.length ? `${parsed.length}건 ${date} 내 일정에 넣기` : "내 일정에 넣기"}
                 </button>
               </div>
@@ -1111,7 +1120,7 @@ function InlineMemo({ ticketId, value, onSave }: { ticketId: string; value: stri
     <span className="mt-1 flex items-start gap-1.5" onClick={(e) => e.stopPropagation()}>
       <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder="📝 메모 — 잊으면 안 되는 것"
         className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-1 text-[11.5px] font-bold leading-4 outline-none transition placeholder:font-semibold placeholder:text-slate-300 ${draft.trim() ? "border-amber-200 bg-amber-50 text-amber-900" : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 focus:border-amber-300 focus:bg-amber-50"}`} />
-      {dirty && <button type="button" onClick={() => onSave(ticketId, draft)} className="shrink-0 rounded bg-amber-500 px-2 py-1 text-[10.5px] font-black text-white hover:bg-amber-600">저장</button>}
+      {dirty && <button type="button" onClick={() => onSave(ticketId, draft)} className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-amber-500 px-3 text-xs font-black text-white hover:bg-amber-600 lg:min-h-9">저장</button>}
     </span>
   );
 }
@@ -1129,20 +1138,20 @@ function InlineAddress({ value, suggestion, onSave }: { value: string; suggestio
   return (
     <span className="mt-0.5 block" onClick={(e) => e.stopPropagation()}>
       <span className="flex items-start gap-1.5">
-        <span className="shrink-0 pt-1 text-[10px] font-black text-slate-300">📍</span>
+        <span className="shrink-0 pt-1 text-[11px] font-black text-slate-300">📍</span>
         <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (dirty) onSave(draft); } if (e.key === "Escape") setDraft(value); }}
           placeholder="주소 없음 — 여기에 적고 저장 (지도 핀도 이 주소로 옮깁니다)"
           className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-1 text-[11px] font-semibold leading-4 outline-none transition placeholder:font-semibold ${value.trim()
             ? "border-transparent bg-transparent text-slate-500 hover:border-slate-200 focus:border-blue-300 focus:bg-blue-50/40 focus:text-slate-800"
             : "border-dashed border-amber-300 bg-amber-50/50 text-slate-700 placeholder:text-amber-600 focus:border-blue-300 focus:bg-blue-50/40"}`} />
-        {dirty && <button type="button" onClick={() => onSave(draft)} className="shrink-0 rounded bg-blue-600 px-2 py-1 text-[10.5px] font-black text-white hover:bg-blue-700">저장</button>}
+        {dirty && <button type="button" onClick={() => onSave(draft)} className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 lg:min-h-9">저장</button>}
       </span>
       {/* 주소가 비어 있는데 회사가 이미 아는 주소(워킨맵·임대리스트)가 있으면 — 찾으러 가지 말고 한 번에 저장 */}
       {!value.trim() && !draft.trim() && suggestion && (
-        <span className="mt-1 flex flex-wrap items-center gap-1.5 pl-5 text-[10.5px] font-bold text-slate-500">
+        <span className="mt-1 flex flex-wrap items-center gap-1.5 pl-5 text-[11px] font-bold text-slate-500">
           <span className="min-w-0 truncate"><span className="text-emerald-700">{suggestion.from}에 있는 주소</span> · {suggestion.address}</span>
-          <button type="button" onClick={() => onSave(suggestion.address)} className="shrink-0 rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white hover:bg-emerald-700">이 주소로 저장</button>
+          <button type="button" onClick={() => onSave(suggestion.address)} className="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-emerald-600 px-3 text-[11px] font-black text-white hover:bg-emerald-700 lg:min-h-9">이 주소로 저장</button>
         </span>
       )}
     </span>
@@ -1163,11 +1172,11 @@ function MemoBox({ ticketId, value, onSave }: { ticketId: string; value: string;
         className="mt-1.5 w-full resize-y rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[13px] font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10" />
       <div className="mt-1.5 flex items-center gap-2">
         <button type="button" disabled={!dirty} onClick={() => { onSave(ticketId, draft); setSavedAt(Date.now()); }}
-          className="rounded-full bg-amber-500 px-4 py-1.5 text-[12px] font-black text-white transition hover:bg-amber-600 disabled:opacity-40">
+          className="inline-flex min-h-11 items-center rounded-full bg-amber-500 px-4 text-[12px] font-black text-white transition hover:bg-amber-600 disabled:opacity-40">
           {dirty ? "메모 저장" : savedAt ? "저장됨 ✓" : "저장됨"}
         </button>
         {!!value && <button type="button" onClick={() => { setDraft(""); onSave(ticketId, ""); }}
-          className="rounded-full border border-amber-200 bg-white px-3 py-1.5 text-[12px] font-black text-amber-600">지우기</button>}
+          className="inline-flex min-h-11 items-center rounded-full border border-amber-200 bg-white px-4 text-[12px] font-black text-amber-600">지우기</button>}
       </div>
     </div>
   );

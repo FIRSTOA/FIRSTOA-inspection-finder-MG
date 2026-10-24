@@ -19,6 +19,7 @@ import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { maxUpdatedAt, mergePlaces, staleIdsFromStamps, updatedAtMs } from "./placesSync";
 import { spareNeedItems, usageSpareAdvice, type SpareNeed } from "./spareAdvice";
 import { notify } from "./toast";
+import { UI } from "./ui/card";
 import { addressCore, mapQuery } from "./address";
 import { maskRrn } from "./privacy";
 import { restoreMaskedImport } from "./workinPrivacy";
@@ -2604,11 +2605,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
       <div className="min-w-0">
         <div className="flex items-baseline gap-2">
           <span className="text-[14px] font-black text-white">거래처 <span className="tabular-nums">{filtered.length}</span>곳</span>
-          <span className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>{syncState === "loading" ? "저장 중" : syncState === "error" ? "DB 연결 필요" : "저장됨"}</span>
+          <span className={`text-[11px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>{syncState === "loading" ? "저장 중" : syncState === "error" ? "DB 연결 필요" : "저장됨"}</span>
         </div>
-        <div className="truncate text-[10.5px] font-bold text-slate-400">{conditionTitle}</div>
+        <div className="truncate text-[11px] font-bold text-slate-400">{conditionTitle}</div>
       </div>
-      <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`shrink-0 rounded-full px-3 py-1.5 text-[11.5px] font-black transition ${editMode ? "bg-white text-slate-950" : "bg-white/10 text-slate-200"}`}>{editMode ? "편집 종료" : "목록 편집"}</button>
+      <button type="button" onClick={() => { setEditMode((current) => !current); setCheckedIds([]); }} className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-xs font-black transition ${editMode ? "bg-white text-slate-950" : "bg-white/10 text-slate-200"}`}>{editMode ? "편집 종료" : "목록 편집"}</button>
     </div>,
     headerSlot,
   );
@@ -2620,7 +2621,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
           <div className="truncate text-[11px] font-bold text-slate-400">{conditionTitle}</div>
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-black text-white">거래처 <span className="tabular-nums">{filtered.length}</span>곳</span>
-            <span className={`text-[10px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>
+            <span className={`text-[11px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>
               {syncState === "loading" ? "공용 저장 중" : syncState === "error" ? "공용 DB 연결 필요" : "공용 저장됨"}
             </span>
           </div>
@@ -2631,35 +2632,35 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
       </div>
       <div className="border-b border-slate-200 p-3">
         <div className="flex gap-2">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && query.trim() && !filtered.length) void locateAddress(query); }} placeholder="거래처·기기·주소 검색" className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && query.trim() && !filtered.length) void locateAddress(query); }} placeholder="거래처·기기·주소 검색" aria-label="거래처·기기·주소 검색" className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm lg:h-10 font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           <button type="button" disabled={geocoding || !query.trim()} onClick={() => void locateAddress(query)} title="주소를 좌표로 찾아 지도에 표시"
-            className="shrink-0 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">{geocoding ? "…" : "📍주소"}</button>
+            className="inline-flex min-h-11 shrink-0 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 lg:min-h-10">{geocoding ? "…" : "📍주소"}</button>
           {addressPinLabel && <button type="button" onClick={() => { addressClearBridge?.(); setAddressPinLabel(""); }} title="지도의 주소 핀 지우기"
-            className="flex max-w-[10rem] shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 text-[11px] font-black text-blue-700 transition hover:bg-blue-100"><span className="truncate">📍{addressPinLabel}</span><span>✕</span></button>}
-          {misuFailed && <span className="self-center whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
-          <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1, teamFilter, quarterFilter, kindFilter === "ALL" ? "quarter" : kindFilter))} className="shrink-0 rounded-full bg-blue-600 shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700 px-3 py-2 text-sm font-black text-white">+ 추가</button>
+            className="flex max-w-[10rem] shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-black text-blue-700 transition hover:bg-blue-100"><span className="truncate">📍{addressPinLabel}</span><span>✕</span></button>}
+          {misuFailed && <span className="self-center whitespace-nowrap rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-600" title="미수 조회 실패 — 미수 표시가 누락될 수 있습니다. 창을 다시 포커스하면 재시도합니다.">미수 조회 실패</span>}
+          <button type="button" onClick={() => setDraft(blankPlace(Math.max(0, ...places.map((place) => place.number)) + 1, teamFilter, quarterFilter, kindFilter === "ALL" ? "quarter" : kindFilter))} className={`${UI.btn} shrink-0 px-3!`}>+ 추가</button>
         </div>
         {kindFilter === "renewal" && <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <div className="grid grid-cols-3 gap-1">
-            {([['default', '기본순'], ['asc', '종료 빠른순'], ['desc', '종료 나중순']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setRenewalOrder(value)} className={`rounded-full px-2 py-2 text-[11px] font-black ${renewalOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
+            {([['default', '기본순'], ['asc', '종료 빠른순'], ['desc', '종료 나중순']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setRenewalOrder(value)} className={`min-h-11 rounded-full px-2 text-[11px] font-black lg:min-h-9 ${renewalOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`min-w-10 shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-black transition ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
+            {["ALL", "N", "NN", "S", "SS", "V"].map((grade) => <button key={grade} type="button" onClick={() => setRenewalGradeFilter(grade)} className={`inline-flex min-h-11 min-w-10 shrink-0 items-center justify-center rounded-full px-3 text-[11px] font-black transition lg:min-h-9 ${renewalGradeFilter === grade ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{grade === "ALL" ? "전체 등급" : grade}</button>)}
           </div>
         </div>}
         {/* 분기점검의 재계약·미수·초과·불만·등급 필터 칩은 지도의 [조건] 메뉴와 같은 것이라 여기서 뺐다(2026-09-16) — 그만큼 업체 목록이 더 보인다 */}
         {kindFilter === "monthly" && <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
           <div className="grid grid-cols-2 gap-1">
-            {([['default', '기본순'], ['closing', '마감일순 (1→31)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`rounded-full px-2 py-2 text-[11px] font-black ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
+            {([['default', '기본순'], ['closing', '마감일순 (1→31)']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setMonthlyOrder(value)} className={`min-h-11 rounded-full px-2 text-[11px] font-black lg:min-h-9 ${monthlyOrder === value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}>{label}</button>)}
           </div>
         </div>}
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">엑셀 불러오기</button>
-          <button type="button" onClick={exportExcel} className="rounded-full border border-slate-200 bg-white transition hover:bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">현재 목록 내보내기</button>
+          <button type="button" onClick={() => fileInputRef.current?.click()} className={`${UI.btnGhost} text-xs!`}>엑셀 불러오기</button>
+          <button type="button" onClick={exportExcel} className={`${UI.btnGhost} text-xs!`}>현재 목록 내보내기</button>
           <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleExcelImport(file); }} />
         </div>
         {(missingCoords.length > 0 || coordBusy) && (
-          <button type="button" disabled={!!coordBusy} onClick={() => void fillMissingCoords()} className="mt-2 w-full rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-800 transition hover:bg-amber-100 disabled:opacity-60">
+          <button type="button" disabled={!!coordBusy} onClick={() => void fillMissingCoords()} className="mt-2 min-h-11 w-full rounded-full border border-amber-300 bg-amber-50 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-100 disabled:opacity-60">
             {coordBusy || `📍 좌표 없는 ${missingCoords.length}곳 — 주소로 지도에 올리기`}
           </button>
         )}
@@ -2675,7 +2676,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
             {mapLabels.map((item) => (
               <button key={item.code} type="button" disabled={!checkedIds.length} onClick={() => bulkSetLabel(item.code)} title={`${item.code}${labelDesc(item.code) ? ` — ${labelDesc(item.code)}` : item.name ? ` ${item.name}` : ""}`} className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border-2 border-white px-2.5 text-[11px] font-black text-white shadow disabled:opacity-30" style={{ backgroundColor: item.color }}>
                 <span>{item.code.replace("G", "")}</span>
-                {labelDesc(item.code) && <span className="text-[9px] font-bold opacity-90">{labelDesc(item.code)}</span>}
+                {labelDesc(item.code) && <span className="text-[11px] font-bold opacity-90">{labelDesc(item.code)}</span>}
               </button>
             ))}
           </div>
@@ -2731,7 +2732,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2" title={place.name}>
                     <span className="min-w-0 flex-1 truncate text-sm font-black leading-5 text-slate-900">{displayName}</span>
-                    {placeCode && <span className="shrink-0 text-[10.5px] font-bold tabular-nums text-slate-400">{placeCode}</span>}
+                    {placeCode && <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">{placeCode}</span>}
                   </span>
                   <span className="mt-0.5 block truncate text-[11.5px] font-medium text-slate-500">{[place.comment || place.address, placeTail].filter(Boolean).join(" · ")}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
@@ -2746,35 +2747,35 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                     const needGreet = keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30;
                     return (
                       <span className="group/keyman relative mt-1 flex min-w-0 items-center gap-1">
-                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${needGreet ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-black ${needGreet ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
                           {keyman.isPerson ? "🤝 키맨" : "📍 주소"} D+{keyman.days}
                         </span>
-                        {needGreet && <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-black text-white">인사</span>}
+                        {needGreet && <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-black text-white">인사</span>}
                         {/* 설명 카드 — 브라우저 기본 말풍선 대신 직접 그린다(줄바꿈·강조·색을 쓸 수 있다) */}
                         <span className="pointer-events-none absolute left-0 top-full z-40 mt-1 hidden w-[17rem] max-w-[calc(100vw-4rem)] rounded-2xl bg-slate-900/97 p-3 text-left shadow-2xl ring-1 ring-white/10 backdrop-blur group-hover/keyman:block">
                           {/* 알약과 카드를 이어 보이게 하는 꼬리표 — 어느 배지의 설명인지 헷갈리지 않게 */}
                           <span className="absolute -top-1 left-4 h-2 w-2 rotate-45 bg-slate-900/97" />
                           <span className="flex items-center gap-1.5">
-                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${keyman.isPerson ? "bg-amber-400 text-amber-950" : "bg-slate-600 text-white"}`}>
+                            <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-black ${keyman.isPerson ? "bg-amber-400 text-amber-950" : "bg-slate-600 text-white"}`}>
                               {keyman.isPerson ? "키맨 변경" : "주소 변경"}
                             </span>
                             <span className="text-[11px] font-black tabular-nums text-white">{keyman.date}</span>
-                            <span className="text-[10px] font-bold text-slate-400">D+{keyman.days}</span>
+                            <span className="text-[11px] font-bold text-slate-400">D+{keyman.days}</span>
                           </span>
                           {keyman.category && <span className="mt-1.5 block text-[11px] font-bold leading-4 text-slate-300">{keyman.category}</span>}
                           {keyman.before && (
                             <span className="mt-2 block">
-                              <span className="mr-1 text-[9px] font-black tracking-wide text-slate-500">이전</span>
+                              <span className="mr-1 text-[11px] font-black tracking-wide text-slate-400">이전</span>
                               <span className="text-[11px] font-semibold text-slate-400 line-through decoration-slate-600">{keyman.before}</span>
                             </span>
                           )}
                           {keyman.after && (
                             <span className="mt-0.5 block">
-                              <span className="mr-1 text-[9px] font-black tracking-wide text-slate-500">현재</span>
+                              <span className="mr-1 text-[11px] font-black tracking-wide text-slate-400">현재</span>
                               <span className="text-[12px] font-black text-white">{keyman.after}</span>
                             </span>
                           )}
-                          <span className="mt-2 block border-t border-white/10 pt-1.5 text-[10px] font-bold leading-4">
+                          <span className="mt-2 block border-t border-white/10 pt-1.5 text-[11px] font-bold leading-4">
                             {needGreet
                               ? <span className="text-amber-300">🤝 인사 필요 — 오른쪽 🤝 버튼으로 체크</span>
                               : keyman.isPerson
@@ -2788,11 +2789,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                   {((place.kind === "quarter" && renewalMatch) || misu || overage || bulman) && (
                     <span className="mt-1 flex flex-wrap gap-1">
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
-                        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
-                        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
-                      {misu && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
-                      {overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
-                      {bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700" title={bulman.content}>불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
+                        ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
+                        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
+                      {misu && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
+                      {overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-black text-purple-700">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
+                      {bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-black text-red-700" title={bulman.content}>불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
                     </span>
                   )}
                 </span>
@@ -2803,7 +2804,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                   {QUICK_LABELS.map(({ code, name, color }) => { const on = place.label === code; return <button key={code} type="button" disabled={on}
                     title={on ? `지금 ${name}(${code})` : `${name}(${code})으로 바로 표시`} aria-label={`${name}으로 표시`}
                     onClick={() => { if (code === "G12") { openTransfer(place); return; } void askConfirm(`${workinVendorName(place.name) || place.name}\n${name}(${code})으로 표시할까요?`, { okLabel: "표시" }).then((ok) => { if (ok) setPlaceLabel(place.id, code); }); }}
-                    className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[9px] font-black tracking-tight text-white ${on ? "border-slate-900" : "border-white lg:opacity-40 lg:group-hover:opacity-100"}`} style={{ backgroundColor: color }}>{code}</button>; })}
+                    className={`grid h-7 w-7 place-items-center rounded-full border-2 text-[11px] font-black tracking-tighter text-white ${on ? "border-slate-900" : "border-white lg:opacity-40 lg:group-hover:opacity-100"}`} style={{ backgroundColor: color }}>{code}</button>; })}
                   <button type="button" title="이 업체 정보 수정" aria-label="수정"
                     onClick={() => setDraft({ ...place, memos: [...place.memos] })}
                     className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 text-[13px] leading-none text-slate-500 transition hover:bg-slate-50 lg:opacity-40 lg:group-hover:opacity-100">⚙</button>
@@ -2814,7 +2815,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                     // 워킨맵 → FIELD: 업체 검색 팝업(최근 방문 양식 목록)을 이 업체명으로 바로 연다 — 양식을 임의로 만들지 않는다(2026-10-13)
                     <button type="button" title="FIELD 에서 이 업체 최근 양식 불러오기" aria-label="FIELD 로"
                       onClick={() => onOpenField(vendorSearchName(workinVendorName(place.name) || place.name))}
-                      className="grid h-7 w-7 place-items-center rounded-full bg-slate-900 text-[9px] font-black leading-none text-white transition hover:bg-slate-700 lg:opacity-40 lg:group-hover:opacity-100">F</button>
+                      className="grid h-7 w-7 place-items-center rounded-full bg-slate-900 text-[11px] font-black leading-none text-white transition hover:bg-slate-700 lg:opacity-40 lg:group-hover:opacity-100">F</button>
                   )}
                   {keyman && keyman.isPerson && !keyman.greeted && !greetedIds.has(keyman.id) && keyman.days <= 30 && (
                     <button type="button" title={`새 키맨에게 인사 완료로 표시${keyman.after ? ` — ${keyman.after}` : ""}`} aria-label="인사 완료로 표시"
@@ -2830,7 +2831,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                     {place.kind === "quarter" && <div>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-black text-slate-400">최근 점검 비교</span>
-                        <button type="button" onClick={() => setComparePopupId(place.id)} className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">자세히 보기</button>
+                        <button type="button" onClick={() => setComparePopupId(place.id)} className="inline-flex min-h-11 items-center rounded-full border border-blue-200 bg-blue-50 px-3 text-[11px] font-black text-blue-700 lg:min-h-9">자세히 보기</button>
                       </div>
                       {historyLoading ? <div className="mt-1 font-semibold text-slate-400">이 기기 점검 기록 확인 중…</div>
                       : inspectionSnapshots.length ? <div className="mt-1 space-y-1">
@@ -2838,7 +2839,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                         {spareAdviceResult && <div className="flex items-start justify-between gap-2 rounded bg-amber-50 px-2 py-1"><span className="text-[11px] font-black text-amber-700">여분 {spareAdviceResult.adviceLine}</span>{onSelfRequest && <button type="button" onClick={() => {
                           const latestVisit = (inspectionHistoryByPlace.get(place.id) || [])[0];
                           void requestSelfForm(place, latestVisit, inspectionSnapshots[0], spareAdviceResult.needsList, latestVisit?.vendor || place.name);
-                        }} className="shrink-0 rounded-full bg-amber-600 px-2.5 py-1 text-[10px] font-black text-white">자가신청</button>}</div>}
+                        }} className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-amber-600 px-3 text-[11px] font-black text-white lg:min-h-9">자가신청</button>}</div>}
                       </div> : <div className="mt-1 font-semibold text-slate-400">{onDemandHistory !== undefined && lastInspection ? `이 기기 블록이 든 방문을 찾지 못했습니다 (최근 업체 방문 ${lastInspection})` : "연결된 점검 기록이 없습니다."}</div>}
                     </div>}
                     <div>

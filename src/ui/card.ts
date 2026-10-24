@@ -10,6 +10,16 @@ export const UI = {
   desc: "mt-0.5 text-[11px] font-semibold text-slate-400",
   heroHead: "bg-[#1E252F] px-4 py-3 lg:px-5 lg:py-4", // 화면당 1개
   heroBar: "flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5", // 선택: 다크 상태줄
+  // 페이지 머리 패턴(2026-10-24): 라이트 배경, 제목+한 줄 설명은 왼쪽, 액션 단추는 오른쪽. 다크 배너 없음. 카드(UI.card) 맨 위에 둔다.
+  pageHead: "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pb-3 pt-4 lg:px-5",
+  pageTitle: "text-base font-black text-slate-950 lg:text-lg",
+  pageDesc: "mt-0.5 text-[11px] font-semibold leading-4 text-slate-500",
+  pageActions: "flex shrink-0 flex-wrap items-center gap-1.5",
+  // 페이지 머리 아래 탭 줄(밑줄형). 폰은 가로 스크롤 한 줄
+  pageTabs: "flex overflow-x-auto border-b border-slate-100 px-2 lg:px-3",
+  pageTab: (on: boolean) => `relative flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-black transition ${on ? "text-slate-950 after:absolute after:inset-x-2 after:bottom-0 after:h-[3px] after:rounded-full after:bg-blue-600" : "text-slate-400 hover:text-slate-700"}`,
+  // 콘텐츠 카드 안 첫 줄(검색칸 자리): 흰 배경 + 아래 구분선
+  toolbar: "border-b border-slate-100 p-3 lg:px-4",
   body: "p-4 lg:p-5",
   section: "border-t border-slate-100 p-4 lg:p-5", // 카드 안 구분은 카드 아니고 선
   gap: "space-y-4", // 화면 세로 간격 통일

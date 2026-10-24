@@ -10,7 +10,7 @@ import { blogPeriods, countBlog, type BlogRow } from "../src/blogSheet";
 import { teamWorkinProgress, type WorkinPlaceLite } from "../src/workinProgress";
 import {
   bizDays, countOverageVisits, dailyNeedText, fieldKpi, expansionKpi, kpiCount, kpiProgress, kpiRanges, kpiTargetFor, kpiTodayLine, okrKpi,
-  kpiRowStatus, okrWeekResult, recontractOverdue, overageKpi, okrWeekMembers, okrScopeLabel, blogYearTotals, overhaulByPerson, titledNames, toFormRows, unhandledKpis, workinPace, type FormRaw, type KpiFacts, type RosterMember,
+  kpiRowStatus, okrWeekResult, recontractOverdue, overageKpi, okrWeekMembers, okrScopeLabel, blogYearTotals, overhaulByPerson, rosterFromMembers, headcountByTeam, titledNames, toFormRows, unhandledKpis, workinPace, type FormRaw, type KpiFacts, type RosterMember,
 } from "../src/kpi/kpiCompute";
 import { KPI_DEFS, mainKpiIds, parseKpiTargets } from "../src/kpi/kpiDefs";
 
@@ -428,5 +428,50 @@ describe("블로그 올해 누계 — countBlog 1/1~오늘", () => {
     const m = blogYearTotals(rows, TODAY);
     expect(m.get("한왕주")).toBe(2);
     expect(m.get("이권선")).toBe(1);
+  });
+});
+
+describe("명단(cs_members) → KPI 명단 — CSS 팀은 E, 팀 칸 빈 직책자는 직책자 목록에만(2026-10-24 버그)", () => {
+  // 2026-10-24 실측 분포(활성): CS팀 A~D·팀장 + CSS/운영지원파트(CSS 4명 · 팀 칸 빈 파트장 1 · 운영지원) — DB 에 팀 값 "E" 는 없다
+  const m = (name: string, team: string, title = "", active = true) => ({ name, team, title, active });
+  const members = [
+    m("심태현", "A"), m("정웅", "A"), m("이권선", "A"), m("김정민", "A", "부파트장"),
+    m("권태혁", "B"), m("조윤", "B"), m("이호준", "B"),
+    m("박영현", "C"), m("이민구", "C"), m("한왕주", "C"), m("이홍진", "C", "부파트장"),
+    m("김종희", "D"), m("정준영", "D"), m("양승원", "D", "부파트장"),
+    m("신정훈", "팀장", "팀장"), m("박옥주", "팀장", "파트장"),
+    m("엄재현", "CSS"), m("이혁주", "CSS"), m("정지훈", "CSS"), m("안수복", "CSS", "부파트장"),
+    m("이의수", "", "파트장"), m("허영재", "운영지원"), m("김홍태", "운영지원(비정규)"),
+    m("퇴사자", "CSS", "", false),
+  ];
+  const roster = rosterFromMembers(members);
+  const teamOf = (a: string) => roster.find((x) => x.name === a)?.team || (a === "신정훈" || a === "박옥주" ? "팀장" : "미지정");
+
+  it("팀 인원: E(CSS) 4명 — 예전 거름(['A'..'E'].includes(team))은 E 0명이었다", () => {
+    const old = members.filter((x) => x.active && ["A", "B", "C", "D", "E"].includes(x.team));
+    expect(headcountByTeam(old.map((x) => ({ name: x.name, team: x.team, title: x.title }))).E).toBeUndefined();
+    expect(headcountByTeam(roster)).toEqual({ A: 4, B: 3, C: 4, D: 3, E: 4 });
+  });
+  it("직책자 목록에 안수복(CSS 부파트장)·이의수(팀 칸 빈 파트장) 포함, 운영지원·퇴사자·팀장 팀은 명단 밖", () => {
+    const t = titledNames(roster);
+    expect(t.has("안수복")).toBe(true);
+    expect(t.has("이의수")).toBe(true);
+    expect(roster.find((x) => x.name === "이의수")?.team).toBe("");
+    expect(roster.some((x) => ["허영재", "김홍태", "퇴사자"].includes(x.name))).toBe(false);
+  });
+  it("오버홀(K33): 안수복·이의수 기록 제외, E 목표 인원 = 프로 3명", () => {
+    const oh = (author: string, points: number, dept = "") => ({ author, date: "2026-10-20", points, repairPoints: 0, dept });
+    const f: KpiFacts = { roster, overhaul: [oh("엄재현", 1), oh("안수복", 5, "CSS"), oh("이의수", 4, "CSS")] };
+    const c = { today: TODAY, teamOf };
+    expect(kpiCount("K33", f, {}, R.week, c)?.n).toBe(1);
+    expect(kpiCount("K33", f, { team: "E" }, R.week, c)?.n).toBe(1);
+    const rows = kpiProgress("K33", f, { ranges: R, period: "week", settings: parseKpiTargets(""), teamOf });
+    expect(rows.find((r) => r.key === "E")).toMatchObject({ headcount: 3 });
+  });
+  it("다른 KPI(PC 확장성): E 인원 4명·개인 칩에 CSS 4명", () => {
+    const rows = kpiProgress("K7", { roster, expansion: [] }, { ranges: R, period: "week", settings: parseKpiTargets(""), teamOf });
+    expect(rows.find((r) => r.key === "E")).toMatchObject({ headcount: 4 });
+    expect(rows.filter((r) => r.scope === "person" && r.team === "E").map((r) => r.key).sort()).toEqual(["안수복", "엄재현", "이혁주", "정지훈"].sort());
+    expect(rows[0].headcount).toBe(18); // A4+B3+C4+D3+E4 — 이의수(팀 없음)는 인원에 안 든다
   });
 });

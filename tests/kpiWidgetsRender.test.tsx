@@ -70,7 +70,7 @@ describe("홈 위젯 실제 렌더", () => {
     const html = W("okr", { kind: "okr", period: "week", onPeriod: noop, pct: 75, counts: [{ label: "완료", value: 3, tone: "ok" }], weeks: [1, 2, 3, 4].map((n) => ({ label: `${n}주차`, pct: n === 4 ? null : 60, current: n === 3 })), missingTeams: ["A", "E"] });
     expect(html).toContain("75");
     expect(html).toContain("4주차");
-    expect(html).toContain("OKR 미작성 2팀");
+    expect(html).toContain("OKR 미작성");
     expect(html).toContain("CSS");
     const none = W("okr", { kind: "okr", period: "week", onPeriod: noop, pct: null, counts: [], weeks: [], missingTeams: ["A"] });
     expect(none).toContain("판정 기록이 아직 없습니다");

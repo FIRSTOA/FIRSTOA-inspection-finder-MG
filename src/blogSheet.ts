@@ -37,12 +37,45 @@ export function parseBlogCsv(text: string): BlogRow[] {
   return out;
 }
 
-export async function fetchBlogRows(): Promise<BlogRow[]> {
-  const res = await fetch(`https://docs.google.com/spreadsheets/d/${BLOG_SHEET_ID}/export?format=csv&gid=${BLOG_SHEET_GID}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`블로그 시트를 읽지 못했습니다(${res.status})`);
-  const text = await res.text();
-  if (/^\s*</.test(text)) throw new Error("블로그 시트가 비공개로 바뀐 것 같습니다");
-  return parseBlogCsv(text);
+/** gviz 로 받을 열 — 순번 A · 등록일 D · 참여자성함 F · 포인트 K · 부서명 L. 열이 옮겨 가면 머리글 검사(parseBlogCsv)가 막아 안내가 뜬다 */
+export const BLOG_GVIZ_QUERY = "select A,D,F,K,L";
+export const BLOG_CACHE_MS = 15 * 60 * 1000; // 홈 60초 폴링과 무관하게 15분에 한 번만 시트를 받는다
+export const blogGvizUrl = () => `https://docs.google.com/spreadsheets/d/${BLOG_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${BLOG_SHEET_GID}&tq=${encodeURIComponent(BLOG_GVIZ_QUERY)}`;
+/** 캐시가 아직 유효한가 — 받은 시각(ms)이 없거나 시계가 거꾸로 가면 무효 */
+export const blogCacheFresh = (at: number | null, now: number, ttl = BLOG_CACHE_MS) => at !== null && now >= at && now - at < ttl;
+
+const CACHE_KEY = "blogSheetRows.v1";
+let memo: { at: number; rows: BlogRow[] } | null = null;
+let inflight: Promise<BlogRow[]> | null = null;
+
+function readSession(): { at: number; rows: BlogRow[] } | null {
+  try {
+    const raw = typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(CACHE_KEY);
+    const v = raw ? (JSON.parse(raw) as { at: number; rows: BlogRow[] }) : null;
+    return v && Array.isArray(v.rows) && typeof v.at === "number" ? v : null;
+  } catch { return null; }
+}
+
+/** 필요한 5개 열만 받아(약 140KB, 전체 CSV 1.25MB 대비) 15분 캐시 — 같은 순간 여러 곳이 불러도 한 번만 받는다. 실패는 캐시하지 않고 그대로 던진다 */
+export async function fetchBlogRows(force = false): Promise<BlogRow[]> {
+  const now = Date.now();
+  if (!force) {
+    memo ??= readSession();
+    if (memo && blogCacheFresh(memo.at, now)) return memo.rows;
+    if (inflight) return inflight;
+  }
+  const run = (async () => {
+    const res = await fetch(blogGvizUrl(), { cache: "no-store" });
+    if (!res.ok) throw new Error(`블로그 시트를 읽지 못했습니다(${res.status})`);
+    const text = await res.text();
+    if (/^\s*</.test(text)) throw new Error("블로그 시트가 비공개로 바뀐 것 같습니다");
+    const rows = parseBlogCsv(text);
+    memo = { at: Date.now(), rows };
+    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(memo)); } catch { /* 저장 공간 부족·비공개 모드 — 메모리 캐시만 */ }
+    return rows;
+  })();
+  inflight = run;
+  try { return await run; } finally { if (inflight === run) inflight = null; }
 }
 
 export type BlogFilter = { from: string; to: string; person?: string; dept?: string };

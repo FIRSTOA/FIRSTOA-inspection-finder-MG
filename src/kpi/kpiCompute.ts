@@ -166,6 +166,22 @@ export function kpiTone(id: KpiId, value: number | null, rate: number | null, el
 
 /** title = cs_members.title(팀장/파트장/부파트장, 빈값 = 프로) — 오버홀(K33)만 직책자를 뺀다 */
 export type RosterMember = { name: string; team: string; title?: string };
+
+/**
+ * cs_members 활성 행 → KPI 명단. 팀 판정은 작성자 명단(authors.ts bookOf)과 같은 규칙:
+ * 겸직 표기("A·B")는 나눠 보고, "CSS" = E(CSS팀) — DB 에는 팀 값 "E" 가 없고 CSS 인원은 team="CSS" 다(2026-10-24 실측).
+ * A~E 가 아닌 행(팀 칸 빈 파트장 등)은 인원·팀에서 빠지지만, 직책자면 team "" 로 남겨 titledNames(오버홀 직책자 제외)에 잡히게 한다.
+ */
+export function rosterFromMembers(members: ReadonlyArray<{ name: string; team: string; title?: string | null; active: boolean }>): RosterMember[] {
+  const out: RosterMember[] = [];
+  for (const m of members) {
+    if (!m.active) continue;
+    const title = String(m.title || "").trim();
+    const team = String(m.team || "").split(/[·/,]/).map((t) => t.trim()).map((t) => (t === "CSS" ? "E" : t)).find((t) => KPI_TEAMS.includes(t)) || "";
+    if (team || OVERHAUL_EXCLUDED_TITLES.has(title)) out.push({ name: m.name, team, title });
+  }
+  return out;
+}
 export type PraiseRow = { from_author: string; to_name: string; created_at: string };
 export type CustomerPraiseRow = { author: string; created_at: string };
 export type VisitLite = { workDate: string; author: string; vendor: string; visited: boolean };

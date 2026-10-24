@@ -32,6 +32,13 @@ import { DEPT_CAL_LABEL, DEPT_CAL_TEAMS, isDeptCalTeam, splitTeamPick, type Dept
 import { regionLetter } from "./region";
 import { saveVisit } from "./visits";
 import type { ManualScheduleEntry } from "./manualSchedule";
+import { UI } from "./ui/card";
+import StateBox from "./ui/StateBox";
+
+// 어두운 필터 패널 안의 칩 크기(폰 36px — 이 패널은 줄 수를 줄이려고 일부러 얇게 유지, 2026-08-18) · card.ts 에 올릴 후보
+// 폰 카드 안 동작 단추(폰 44px, flex-1 로 한 줄에 못 들어가면 줄바꿈) · card.ts 에 올릴 후보
+const CARD_BTN = "inline-flex min-h-11 min-w-16 flex-1 items-center justify-center rounded-full px-3 text-xs font-black transition";
+const DARK_CHIP ="inline-flex min-h-9 items-center rounded-full px-3 text-xs font-black transition";
 
 type Team = "A" | "B" | "C" | "D" | "E" | "기타"; // 기타 = 팀 시간대 밖(11시 등)의 네이버 수입 일정
 type AsStatus = "접수" | "배정" | "완료" | "익일";
@@ -313,7 +320,7 @@ function AddrNav({ address }: { address: string }) {
   if (!address.trim()) return null;
   const target = mapQuery(address, address.trim()); // 층·건물·메모를 뗀 핵심 주소만 — 통째로 넘기면 지도가 엉뚱한 곳을 찍었다(2026-09-29 윔의원)
   const q = encodeURIComponent(target);
-  const linkClass = "rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-black";
+  const linkClass = "rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-black";
   return (
     <span className="flex shrink-0 gap-1">
       <a href={naverMapLink(target)} {...(isMobileDevice ? {} : { target: "_blank", rel: "noreferrer" })} className={`${linkClass} text-emerald-600`}>N</a>
@@ -790,7 +797,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-slate-50">
       <span className="w-[6.5rem] shrink-0 text-[11px] font-black tabular-nums text-slate-500">{teamTimeLabel(t.team, t.time)}</span>
       <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-400">{guOf(t.address || "")}</span>
-      <span className={`w-14 shrink-0 rounded px-1.5 py-0.5 text-center text-[10px] font-black ${scheduleColor(t.scheduleType, t.status === "완료")}`}>{shortCat(displayTypeOf(t))}</span>
+      <span className={`w-14 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-black ${scheduleColor(t.scheduleType, t.status === "완료")}`}>{shortCat(displayTypeOf(t))}</span>
       <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${t.status === "완료" ? "text-slate-400 line-through" : "text-slate-800"}`}>{displayTitleOf(t)}{t.issue ? ` ｜ ${t.issue}` : ""}{t.address ? ` ｜ ${t.address}` : ""}</span>
     </button>
   );
@@ -799,7 +806,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-slate-50">
       <span className="w-[6.5rem] shrink-0 text-[11px] font-black tabular-nums text-slate-500">{teamTimeLabel(naverTeamOf(ev), ev.time)}</span>
       <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-400">{guOf(ev.location || "")}</span>
-      <span className={`w-14 shrink-0 rounded border px-1.5 py-0.5 text-center text-[10px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span>
+      <span className={`w-14 shrink-0 rounded border px-1.5 py-0.5 text-center text-[11px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span>
       <span className={`min-w-0 flex-1 truncate text-[12.5px] font-bold ${ev.completed ? "text-slate-400 line-through" : "text-slate-800"}`}>{ev.title || "(제목 없음)"}{ev.location ? ` ｜ ${ev.location}` : ""}</span>
     </button>
   );
@@ -1272,7 +1279,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const lineOf = (ticket: AsTicket) => {
       // 납품·철수: 고객사 + 품목(괄호 설명 제거) + 구분만 — "•뉴트리원 노트북 2대 납품"
       if (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") {
-        const info = logisticsTicketInfo(ticket.vendor);
+        const info = logisticsTicketInfo(ticket.vendor, ticket.note || "");
         if (info.vendor) {
           const item = info.item.replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
           return `•${cut(historyCoreName(info.vendor) || info.vendor, 12)} ${cut(item, 14)} ${info.category}`.replace(/\s+/g, " ").trim();
@@ -1533,9 +1540,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             {list.map((phone) => (
               <a key={phone.number} href={`tel:${phone.number.replace(/[^0-9]/g, "")}`} onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-3 py-2.5 text-left text-xs font-black text-slate-800 transition hover:bg-emerald-50">
-                <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">{phone.label}</span>
+                <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[11px] text-emerald-700">{phone.label}</span>
                 <span className="min-w-0 flex-1 truncate">{phone.name || phone.number}</span>
-                {phone.name && <span className="shrink-0 text-[10px] font-bold tabular-nums text-slate-400">{phone.number.slice(-4)}</span>}
+                {phone.name && <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">{phone.number.slice(-4)}</span>}
               </a>
             ))}
           </span>
@@ -1608,13 +1615,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
 
   return (
-    <div className="space-y-5">
+    <div className={UI.gap}>
       {/* 사진 보기 — 화면 맨 바깥 한 곳에만(목록 줄 안에 두면 줄마다 겹치고 목록 갱신 때 그린 게 사라졌다, 2026-10-14) */}
       {photoView && <PhotoViewer urls={photoView.urls} index={photoView.idx} onClose={() => setPhotoView(null)} />}
       {!!syncError && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-700">{syncError}</div>}
 
       {view === "calendar" ? (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className={UI.card}>
           <div className="flex min-h-[720px] flex-col lg:flex-row">
             {/* 필터 — PC는 세로 사이드바, 모바일은 한 줄 툴바(팀·검색·추가) + 업무 칩 */}
             <aside className="border-b border-slate-700 bg-[#1E252F] px-3 py-2.5 lg:w-52 lg:flex-none lg:border-b-0 lg:border-r lg:p-3.5">
@@ -1639,7 +1646,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           {calSearchResults.map((r) => (
                             <button key={r.key} type="button" onClick={() => { setCalSearch(""); if (r.kind === "ticket") setDetailId(r.id); else { const ev = naverEvents.find((x) => x.uid === r.id); if (ev) setNaverDetail({ ...ev }); } }}
                               className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-50">
-                              <span className="w-16 shrink-0 text-[10px] font-black tabular-nums text-slate-400">{r.date.slice(5)}</span>
+                              <span className="w-16 shrink-0 text-[11px] font-black tabular-nums text-slate-400">{r.date.slice(5)}</span>
                               <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-800">{r.title}</span>
                             </button>
                           ))}
@@ -1648,7 +1655,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       )}
                     </div>
                     <div className="order-1 shrink-0 lg:mt-4">
-                      <div className="mb-1.5 hidden text-[10px] font-black uppercase tracking-wider text-slate-500 lg:block">팀 <span className="normal-case text-slate-600">— 내 팀만 보기</span></div>
+                      <div className="mb-1.5 hidden text-[11px] font-black uppercase tracking-wider text-slate-500 lg:block">팀 <span className="normal-case text-slate-600">— 내 팀만 보기</span></div>
                       {(() => {
                         // 단일 선택: 전체 / 특정 팀(+종일은 팀 무관 정보라 함께) / E팀 / 종일만
                         const pickValue = (() => {
@@ -1685,7 +1692,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     </div>
                   </div>
                   {!deptCal && <>
-                  <div className="mb-1.5 hidden text-[10px] font-black uppercase tracking-wider text-slate-500 lg:mt-4 lg:block">업무</div>
+                  <div className="mb-1.5 hidden text-[11px] font-black uppercase tracking-wider text-slate-500 lg:mt-4 lg:block">업무</div>
                   <div className="mt-2 flex flex-wrap gap-1 lg:mt-0 lg:flex-col">
                     <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={pill(allTypesOn)}><span>전체</span></button>
                     {displayFilters.map((f) => (
@@ -1734,7 +1741,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                         <div key={date} id={`cal-day-${date}`}>
                           <div className={`sticky top-0 z-10 flex items-center gap-2 rounded-lg px-3 py-1.5 backdrop-blur ${date === todayYmd ? "bg-blue-100/95 text-blue-700" : "bg-slate-100/95 text-slate-600"}`}>
                             <span className="text-sm font-black">{Number(date.slice(5, 7))}/{Number(date.slice(8, 10))} ({["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00`).getDay()]})</span>
-                            {date === todayYmd && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">오늘</span>}
+                            {date === todayYmd && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">오늘</span>}
                             <span className="text-[11px] font-bold text-slate-400">{list.length + dayNaver.length}건{dayNaver.length ? ` (네이버 ${dayNaver.length})` : ""}</span>
                           </div>
                           <div className={`mt-1 divide-y divide-slate-100 overflow-hidden rounded-lg bg-white ${date === todayYmd ? "border-2 border-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.12)]" : "border border-slate-200"}`}>
@@ -1789,13 +1796,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <div className="space-y-1.5">
                       {visibleTickets.filter((ticket) => ticket.date === mobileSelectedDate).map((ticket) => (
                         <button key={ticket.id} type="button" onClick={() => setDetailId(ticket.id)} className={`[content-visibility:auto] [contain-intrinsic-size:auto_96px] block w-full rounded-lg px-3 py-2.5 text-left ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>
-                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span><span className="shrink-0 text-[10px] font-black">{ticket.team}팀 · {inspectionTypeLabel(ticket)}</span></div>
+                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ticket.time} {ticket.vendor || "새 일정"}</span><span className="shrink-0 text-[11px] font-black">{ticket.team}팀 · {inspectionTypeLabel(ticket)}</span></div>
                           {!!ticket.issue && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ticket.issue}</div>}
                         </button>
                       ))}
                       {shownNaverEvents.filter((ev) => ev.date === mobileSelectedDate).map((ev) => (
                         <button key={ev.uid} type="button" onClick={() => setNaverDetail({ ...ev })} className={`block w-full rounded-lg border px-3 py-2.5 text-left transition ${naverChipStyle(ev)}`}>
-                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span>{naverTeamOf(ev) && <span className="shrink-0 text-[10px] font-black opacity-60">{naverTeamOf(ev)}팀</span>}</div>
+                          <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-black">{ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}</span>{naverTeamOf(ev) && <span className="shrink-0 text-[11px] font-black opacity-60">{naverTeamOf(ev)}팀</span>}</div>
                           {!!ev.location && <div className="mt-1 truncate text-xs font-semibold opacity-75">{ev.location}</div>}
                         </button>
                       ))}
@@ -1822,7 +1829,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                                   {displayTitleOf(ticket)}
                                 </button>
                               ))}
-                              {rows.length > 5 && <button type="button" onClick={(event) => { event.stopPropagation(); setNaverDayDate(date); }} className="px-1 pt-0.5 text-[10px] font-black text-slate-500 underline decoration-dotted hover:text-slate-700">+{rows.length - 5}개 더</button>}
+                              {rows.length > 5 && <button type="button" onClick={(event) => { event.stopPropagation(); setNaverDayDate(date); }} className="px-1 pt-0.5 text-[11px] font-black text-slate-500 underline decoration-dotted hover:text-slate-700">+{rows.length - 5}개 더</button>}
                               {shownNaverEvents.filter((ev) => ev.date === date).slice(0, 3).map((ev) => (
                                 <button key={ev.uid} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/naver-event", ev.uid); event.dataTransfer.effectAllowed = "move"; }}
                                   onClick={(event) => { event.stopPropagation(); setNaverDetail({ ...ev }); }} title={`네이버 캘린더 일정\n${ev.time ? `${ev.time} · ` : ""}${ev.title}${ev.location ? `\n${ev.location}` : ""}`}
@@ -1830,7 +1837,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                                   {ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}
                                 </button>
                               ))}
-                              {shownNaverEvents.filter((ev) => ev.date === date).length > 3 && <button type="button" onClick={(event) => { event.stopPropagation(); setNaverDayDate(date); }} className="px-1 pt-0.5 text-[10px] font-black text-emerald-600 underline decoration-dotted hover:text-emerald-700">+N {shownNaverEvents.filter((ev) => ev.date === date).length - 3}개 더</button>}
+                              {shownNaverEvents.filter((ev) => ev.date === date).length > 3 && <button type="button" onClick={(event) => { event.stopPropagation(); setNaverDayDate(date); }} className="px-1 pt-0.5 text-[11px] font-black text-emerald-600 underline decoration-dotted hover:text-emerald-700">+N {shownNaverEvents.filter((ev) => ev.date === date).length - 3}개 더</button>}
                             </div>
                           </div>
                         );
@@ -1847,12 +1854,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         <section className="space-y-4">
           {/* 필터 패널 — 일정이 많아지면 이 띠가 화면을 잡아먹는다는 피드백(2026-08-18).
               줄 수를 줄이고(3줄) 높이를 낮췄다: ① 팀 ② 일정 구분 + 건수 ③ 상태·유형 한 줄(가로 스크롤). */}
-          <div className="space-y-1.5 rounded-xl bg-[#1E252F] px-3 py-2 shadow-sm">
+          <div className="space-y-2 rounded-xl bg-[#1E252F] px-3 py-2.5">
             {/* ① 팀 — 팝업 없이 한 줄, 좁으면 가로 스크롤 */}
             <div className="flex gap-0.5 overflow-x-auto rounded-full bg-white/[0.07] p-0.5 sm:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, t === "E" ? "CSS" : t] as const), ...DEPT_CAL_TEAMS.map((d) => [d, DEPT_CAL_LABEL[d]] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
                 <button key={value} type="button" onClick={() => pickListTeam(value)}
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-black transition ${(listDept ? listDept === value : team === value) ? "bg-white text-slate-950 shadow-sm" : "text-slate-400"}`}>{label}</button>
+                  className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-[12px] font-black transition ${(listDept ? listDept === value : team === value) ? "bg-white text-slate-950" : "text-slate-400"}`}>{label}</button>
               ))}
             </div>
             {/* ② 일정 구분 + 대상 건수 */}
@@ -1860,19 +1867,19 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               {!listDept && <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-full bg-white/[0.07] p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-none">
                 {([["today", "금일"], ["tomorrow", "익일"], ["scheduled", "예정"], ["overdue", "미처리"]] as [DayFilter, string][]).map(([key, label]) => (
                   <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }}
-                    className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-black transition sm:px-4 ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950" : key === "overdue" && overdueCount ? "text-rose-300 hover:text-white" : "text-slate-400 hover:text-white"}`}>
+                    className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[12.5px] font-black transition sm:px-4 lg:min-h-9 ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950" : key === "overdue" && overdueCount ? "text-rose-300 hover:text-white" : "text-slate-400 hover:text-white"}`}>
                     <span className="sm:hidden">{label}</span><span className="hidden sm:inline">{label}일정</span>
-                    {key === "overdue" && overdueCount > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">{overdueCount}</span>}
+                    {key === "overdue" && overdueCount > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[11px] font-black text-white">{overdueCount}</span>}
                   </button>
                 ))}
                 <button type="button" onClick={() => setMyPlanOpen(true)}
-                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[12.5px] font-black transition sm:px-4 ${myPlanOpen ? "bg-blue-600 text-white" : "text-blue-400 hover:text-blue-300"}`}>내 일정</button>
+                  className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[12.5px] font-black transition sm:px-4 lg:min-h-9 ${myPlanOpen ? "bg-blue-600 text-white" : "text-blue-400 hover:text-blue-300"}`}>내 일정</button>
               </div>}
               {/* 넓은 화면은 팀 칩을 여기 나란히 (모바일은 위 줄) */}
               <div className="ml-auto hidden gap-0.5 rounded-full bg-white/[0.07] p-0.5 sm:flex">
                 {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, teamLabel(t)] as const), ...DEPT_CAL_TEAMS.map((d) => [d, DEPT_CAL_LABEL[d]] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
                   <button key={value} type="button" onClick={() => pickListTeam(value)}
-                    className={`rounded-full px-3 py-1 text-xs font-black transition ${(listDept ? listDept === value : team === value) ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{label}</button>
+                    className={`inline-flex min-h-9 items-center rounded-full px-3 text-xs font-black transition ${(listDept ? listDept === value : team === value) ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{label}</button>
                 ))}
               </div>
             </div>
@@ -1886,12 +1893,12 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                    ["배정", `배정 ${statusCounts.배정}`, "bg-emerald-500 text-white", "bg-white/[0.07] text-emerald-300"],
                    ["완료", `완료 ${statusCounts.완료}`, "bg-blue-500 text-white", "bg-white/[0.07] text-blue-300"]] as const).map(([key, label, onCls, offCls]) => (
                   <button key={key || "all"} type="button" onClick={() => setStatusPick(key as typeof statusPick)}
-                    className={`rounded-full px-2.5 py-1 text-[11.5px] font-black tabular-nums transition ${statusPick === key ? onCls : offCls}`}>{label}</button>
+                    className={`${DARK_CHIP} tabular-nums ${statusPick === key ? onCls : offCls}`}>{label}</button>
                 ))}
               </div>
               <div className="flex flex-wrap items-center gap-1">
                 <button type="button" onClick={() => setListTypesPersist([...LIST_TYPE_OPTIONS])}
-                  className={`rounded-full px-2.5 py-1 text-[11.5px] font-black transition ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-300"}`}>전체</button>
+                  className={`${DARK_CHIP} ${listTypes.length === LIST_TYPE_OPTIONS.length ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-300"}`}>전체</button>
                 {LIST_TYPE_OPTIONS.map((name) => {
                   const full = name === "AS" ? "익일통합as"
                     : name === "AS[완료]" ? (team !== "ALL" && team !== "종일" ? DONE_CAL_LABEL[team] : "as완료")
@@ -1899,7 +1906,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   const short = name === "납품철수교체휴가교육" ? "납품·철수" : name === "AS" ? "익일as" : full;
                   return (
                     <button key={name} type="button" onClick={() => toggleListType(name)}
-                      className={`rounded-full px-2.5 py-1 text-[11.5px] font-black transition ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-500"}`}>
+                      className={`${DARK_CHIP} ${listTypes.includes(name) ? "bg-white text-slate-950" : "bg-white/[0.07] text-slate-500"}`}>
                       <span className="lg:hidden">{short}</span><span className="hidden lg:inline">{full}</span>
                     </button>
                   );
@@ -1907,9 +1914,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {/* 중간보고(12시·14시)·익일스케줄(퇴근 전) 보고 단추는 한 묶음으로 — 폰에서 줄이 접혀도 둘이 같은 줄에 남는다(2026-10-02) */}
                 <span className="ml-auto flex shrink-0 items-center gap-1.5">
                   <button type="button" onClick={() => openMidReport()}
-                    className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">📋 중간보고</button>
+                    className={`${DARK_CHIP} shrink-0 bg-white/[0.07] text-slate-300 hover:bg-white/20 hover:text-white`}>📋 중간보고</button>
                   <button type="button" onClick={() => openMidReport("next")}
-                    className="shrink-0 rounded-full bg-white/[0.07] px-3 py-1 text-[11.5px] font-black text-slate-300 transition hover:bg-white/20 hover:text-white">🌙 익일스케줄</button>
+                    className={`${DARK_CHIP} shrink-0 bg-white/[0.07] text-slate-300 hover:bg-white/20 hover:text-white`}>🌙 익일스케줄</button>
                   <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">
                     {dayFilter === "today" ? targetDate.slice(5).replace("-", "/") : dayFilter === "tomorrow" ? tomorrowYmd.slice(5).replace("-", "/") : dayFilter === "overdue" ? "미처리(지난 날짜·미완료)" : "예정"} · {scheduleRows.length + listNaver.length}건
                   </span>
@@ -1943,7 +1950,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link);
             }}
             onRemove={(t) => { const target = tickets.find((x) => x.id === t.id); if (target) removeTicket(target); }} />}
-          <div className={`space-y-3 md:hidden ${myPlanOpen || listDept ? "!hidden" : ""}`}>
+          <div className={`space-y-3 lg:hidden ${myPlanOpen || listDept ? "!hidden" : ""}`}>
             {/* 한 구조로 통일(2026-08-19) — 예정 일정은 익일로 넘어올 때까지 배정을 거의 하지 않아
                 사실상 '미배정' 한 박스이고, 그 안에서 날짜로 끊는 게 자연스럽다는 판단.
                 위계: 사람(얇은 색 띠) > 날짜(흰 라벨, 스크롤에 붙음). */}
@@ -1961,10 +1968,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               }
               return groups.map((group) => (
                 // 스티키 날짜 띠가 잘리지 않게 박스에 overflow-hidden을 쓰지 않는다
-                <section key={`${group.key}-${group.rows[0].id}`} className={`rounded-xl border shadow-sm ${group.key ? "border-emerald-200" : "border-amber-200"}`}>
+                <section key={`${group.key}-${group.rows[0].id}`} className={`rounded-xl border ${group.key ? "border-emerald-200" : "border-amber-200"}`}>
                   <div className={`flex items-center justify-between rounded-t-xl px-3 py-1 ${group.key ? "bg-emerald-600" : "bg-amber-500"}`}>
                     <span className="text-[12px] font-black text-white">{formatAssignees(group.key) || "미배정"}</span>
-                    <span className="text-[10.5px] font-bold tabular-nums text-white/75">{group.rows.length}건</span>
+                    <span className="text-[11px] font-bold tabular-nums text-white/75">{group.rows.length}건</span>
                   </div>
                   <div className="space-y-2 rounded-b-xl bg-slate-50/60 p-2">
                     {group.rows.map((ticket, gi) => {
@@ -1978,11 +1985,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                                 {Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}
                               </span>
                               <span className={`text-[11px] font-black ${dow === 0 ? "text-rose-600" : dow === 6 ? "text-blue-600" : "text-slate-500"}`}>{DOW[dow]}</span>
-                              <span className="text-[10.5px] font-bold tabular-nums text-slate-400">{group.rows.filter((r) => r.date === ticket.date).length}건</span>
+                              <span className="text-[11px] font-bold tabular-nums text-slate-400">{group.rows.filter((r) => r.date === ticket.date).length}건</span>
                               <span className="h-px flex-1 bg-slate-200" />
                             </div>
                           )}
-                                        <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
+                                        <article onClick={() => setDetailId(ticket.id)} className={`cursor-pointer rounded-lg border p-2.5 active:bg-blue-50/50 ${ticket.status === "완료" ? "border-blue-300 bg-blue-50/70" : !ticket.assignee ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-black">
                   <span className="rounded bg-slate-900 px-1.5 py-0.5 text-white">{ticket.team}</span>
                   {/* PC 표와 같은 구분 칩 — 모바일에서도 익일as(연두)/납품(로즈)/점검(호박)이 한눈에 갈리게 */}
@@ -1997,14 +2004,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <FitTitle text={displayTitleOf(ticket)} base={14} className={`mt-1.5 font-black ${ticket.status === "완료" ? "text-blue-700" : "text-slate-950"}`} />
                 {ticket.issue && <div className="mt-0.5 truncate text-xs font-semibold text-slate-500">{ticket.issue}</div>}
                 <div className="mt-0.5 truncate text-[11px] font-semibold text-slate-400">{[ticket.model, shortAddress(ticket.address) && `📍 ${shortAddress(ticket.address)}`].filter(Boolean).join(" · ")}</div>
-                <div className="mt-2 flex gap-1.5" onClick={(event) => event.stopPropagation()}>
+                <div className="mt-2 flex flex-wrap gap-1.5" onClick={(event) => event.stopPropagation()}>
                   <CallButton ticket={ticket} compact />
-                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="flex-1 rounded-full bg-slate-900 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-800">FIELD</button>}
-                  {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="flex-1 rounded-full bg-slate-700 px-2 py-1.5 text-[11px] font-black text-white transition hover:bg-slate-600">FIELD</button>}
-                  <button type="button" onClick={() => setAssignId(ticket.id)} className="flex-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-black text-emerald-700">배정</button>
-                  <button type="button" onClick={() => openDone(ticket)} className={`flex-1 rounded-full border px-2 py-1.5 text-[11px] font-black ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
-                  <button type="button" onClick={() => openDefer(ticket)} className="flex-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1.5 text-[11px] font-black text-purple-700">익일</button>
-                  <button type="button" onClick={() => removeTicket(ticket)} className="flex-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-black text-rose-600">삭제</button>
+                  {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className={`${CARD_BTN} bg-slate-900 text-white hover:bg-slate-800`}>FIELD</button>}
+                  {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className={`${CARD_BTN} bg-slate-700 text-white hover:bg-slate-600`}>FIELD</button>}
+                  <button type="button" onClick={() => setAssignId(ticket.id)} className={`${CARD_BTN} border border-emerald-200 bg-emerald-50 text-emerald-700`}>배정</button>
+                  <button type="button" onClick={() => openDone(ticket)} className={`${CARD_BTN} border ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
+                  <button type="button" onClick={() => openDefer(ticket)} className={`${CARD_BTN} border border-purple-200 bg-purple-50 text-purple-700`}>익일</button>
+                  <button type="button" onClick={() => removeTicket(ticket)} className={`${CARD_BTN} border border-rose-200 bg-white text-rose-600`}>삭제</button>
                 </div>
               </article>
                         </div>
@@ -2015,14 +2022,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               ));
             })()}
             {!!listNaver.length && (
-              <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
                 {listNaver.map((ev) => compactNaverRow(ev))}
               </div>
             )}
-            {!scheduleRows.length && !listNaver.length && <div className="rounded-lg border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
+            {!scheduleRows.length && !listNaver.length && <StateBox kind="empty" message="등록된 일정이 없습니다." />}
           </div>
 
-          <div className={`hidden space-y-4 ${myPlanOpen || listDept ? "" : "md:block"}`}>
+          <div className={`hidden space-y-4 ${myPlanOpen || listDept ? "" : "lg:block"}`}>
             {(() => {
               // 배정자별 박스 — 미배정(로즈)과 배정자(에메랄드)를 확실히 구분. 네이버 종일·연차 일정도 미배정 박스에 한 몸으로 흡수
               const doneRows = scheduleRows.filter((t) => t.status === "완료");
@@ -2048,7 +2055,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 return (
                   <tr key={`nv-${ev.uid}`} onClick={() => setNaverDetail({ ...ev })} className={`h-12 cursor-pointer border-b last:border-0 ${done ? "border-blue-100 bg-blue-50/60 hover:bg-blue-50" : "border-slate-100 hover:bg-blue-50/40"}`}>
                     <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{evTeam === "종일" || evTeam === "기타" ? evTeam : `${evTeam}팀`}</td>
-                    <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span></td>
+                    <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded border px-1.5 py-0.5 text-[11px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span></td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ev.location || "") || "-"}</td>
                     {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ev.date.slice(5, 7))}/{Number(ev.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ev.date)})</span></td>}
                     <td className="px-3 py-1.5"><div className={`max-w-[560px] truncate text-sm font-black ${done ? "text-slate-400 line-through" : "text-slate-900"}`} title={ev.title}>{ev.title || "(제목 없음)"}</div></td>
@@ -2065,11 +2072,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               const ticketListRow = (ticket: AsTicket) => (
                 <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className={`h-12 cursor-pointer border-b last:border-0 hover:bg-blue-50/40 ${ticket.status === "완료" ? "border-blue-100 bg-blue-50/70" : "border-slate-100"}`}>
                   <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{ticket.team === "기타" ? "기타" : `${ticket.team}팀`}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>{shortCat(displayTypeOf(ticket))}</span></td>
+                  <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-black ${scheduleColor(ticket.scheduleType, ticket.status === "완료")}`}>{shortCat(displayTypeOf(ticket))}</span></td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
                   {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))} <span className="text-[11px] text-slate-400">({dowOf(ticket.date)})</span></td>}
                   <td className="px-3 py-1.5">
-                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><FitTitle text={displayTitleOf(ticket)} base={14} className="max-w-[560px] flex-1" />{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} /></div>
+                    <div className="flex items-center gap-2 text-sm font-black text-slate-900"><FitTitle text={displayTitleOf(ticket)} base={14} className="max-w-[560px] flex-1" />{ticket.repeatMonthly && <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-black text-blue-600">🔁</span>}{ticket.status === "완료" && <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-black text-white">✓ 완료</span>}<VendorAlertChip flags={vendorFlags.get(historyQueryOf(ticket))} onOpen={() => openTicketHistory(ticket)} /></div>
                   </td>
                   <td className="px-3 py-1.5"><div className="max-w-[240px] truncate text-xs font-semibold text-slate-600" title={ticket.issue || ""}>{ticket.issue || "-"}</div></td>
                   <td className="whitespace-nowrap px-3 py-1.5"><div className="max-w-[200px] truncate text-xs font-semibold text-slate-600" title={[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ")}>{[ticket.model, ticket.serial, ticket.asset && `자산 ${ticket.asset}`].filter(Boolean).join(" · ") || "-"}</div></td>
@@ -2099,11 +2106,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 ), x.node] : [x.node]
               ));
               return groups.map(({ key, rows, naver }) => key === "__done__" ? (
-                <details key="__done__" className="overflow-hidden rounded-xl border-2 border-blue-300 bg-white shadow-sm">
+                <details key="__done__" className="overflow-hidden rounded-xl border border-blue-300 bg-white">
                   <summary className="flex cursor-pointer items-center gap-2 bg-blue-50/70 px-4 py-2 transition hover:bg-blue-50">
                     <span className="text-sm font-black text-blue-800">✓ {team !== "ALL" && team !== "종일" ? DONE_CAL_LABEL[team] : "완료 (as완료 캘린더)"}</span>
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-black text-blue-700">{rows.length + naver.length}건</span>
-                    <span className="text-[10px] font-bold text-slate-400">— 눌러서 펼치기</span>
+                    <span className="text-[11px] font-bold text-slate-400">— 눌러서 펼치기</span>
                   </summary>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[1050px] text-left">
@@ -2112,7 +2119,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           ...rows.map((ticket) => ({ date: ticket.date, cat: CAT_ORDER[displayTypeOf(ticket)] ?? 9, gu: guOf(ticket.address || "") || "￿", title: displayTitleOf(ticket), node: (
                           <tr key={ticket.id} onClick={() => setDetailId(ticket.id)} className="h-11 cursor-pointer border-b border-blue-100 bg-blue-50/60 last:border-0 hover:bg-blue-50">
                             <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{ticket.team === "기타" ? "기타" : `${ticket.team}팀`}</td>
-                            <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${scheduleColor(ticket.scheduleType, true)}`}>{ticket.scheduleType === "매월점검" ? inspectionTypeLabel(ticket) : shortCat(displayTypeOf(ticket))}</span></td>
+                            <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-black ${scheduleColor(ticket.scheduleType, true)}`}>{ticket.scheduleType === "매월점검" ? inspectionTypeLabel(ticket) : shortCat(displayTypeOf(ticket))}</span></td>
                             <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ticket.address || "") || "-"}</td>
                             {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ticket.date.slice(5, 7))}/{Number(ticket.date.slice(8, 10))}</td>}
                             <td className="w-[54%] px-3 py-1.5 text-sm font-black text-slate-500 line-through"><div className="max-w-[420px] truncate" title={displayTitleOf(ticket)}>{displayTitleOf(ticket)}</div></td>
@@ -2126,7 +2133,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                             return { date: ev.date, cat: CAT_ORDER[naverCategoryOf(ev)] ?? 9, gu: guOf(ev.location || "") || "￿", title: ev.title || "", node: (
                             <tr key={`nvd-${ev.uid}`} onClick={() => setNaverDetail({ ...ev })} className="h-11 cursor-pointer border-b border-blue-100 bg-blue-50/60 last:border-0 hover:bg-blue-50">
                               <td className="whitespace-nowrap px-3 py-1.5 text-sm font-black">{evTeam === "종일" || evTeam === "기타" ? evTeam : `${evTeam}팀`}</td>
-                              <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span></td>
+                              <td className="whitespace-nowrap px-3 py-1.5"><span className={`inline-block rounded border px-1.5 py-0.5 text-[11px] font-black ${naverChipStyle(ev)}`}>{shortCat(naverCategoryOf(ev))}</span></td>
                               <td className="whitespace-nowrap px-3 py-1.5 text-xs font-bold text-slate-500">{guOf(ev.location || "") || "-"}</td>
                               {dayFilter === "scheduled" && <td className="whitespace-nowrap px-3 py-1.5 text-sm font-bold">{Number(ev.date.slice(5, 7))}/{Number(ev.date.slice(8, 10))}</td>}
                               <td className="w-[54%] px-3 py-1.5 text-sm font-black text-slate-500 line-through"><div className="max-w-[420px] truncate" title={ev.title}>{ev.title || "(제목 없음)"}</div></td>
@@ -2142,7 +2149,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   </div>
                 </details>
               ) : (
-                <section key={key || "__none__"} className={`overflow-hidden rounded-xl border-2 bg-white shadow-sm ${key ? "border-emerald-300" : "border-rose-400"}`}>
+                <section key={key || "__none__"} className={`overflow-hidden rounded-xl border bg-white ${key ? "border-emerald-300" : "border-rose-300"}`}>
                   <div className={`flex items-center gap-2 px-4 py-2 ${key ? "bg-emerald-50/60" : "bg-rose-50"}`}>
                     <span className={`text-sm font-black ${key ? "text-emerald-900" : "text-rose-800"}`}>{formatAssignees(key) || "미배정 — 배정 필요"}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-black ${key ? "bg-white text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{rows.length + naver.length}건</span>
@@ -2195,8 +2202,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-black text-white">{ticket.team}팀</span>
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${ticket.status === "완료" ? "bg-blue-500 text-white" : ticket.status === "배정" ? "bg-emerald-500/90 text-white" : "bg-white/15 text-slate-200"}`}>{ticket.status}</span>
                     <span className="text-[11px] font-bold text-slate-400">{ticket.date} {ticket.time}</span>
-                    {ticket.repeatMonthly && <span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-black text-blue-200">🔁 매월</span>}
-                    {ticket.naverUid && <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-black text-emerald-300">네이버 ✓</span>}
+                    {ticket.repeatMonthly && <span className="rounded-full bg-white/15 px-2 py-1 text-[11px] font-black text-blue-200">🔁 매월</span>}
+                    {ticket.naverUid && <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-[11px] font-black text-emerald-300">네이버 ✓</span>}
                   </div>
                   <button type="button" onClick={() => setDetailId("")} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg font-black text-slate-400 transition hover:bg-white/10 hover:text-white">×</button>
                 </div>
@@ -2274,7 +2281,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 )}
                 {detailLoading && <div className="py-2 text-center text-xs font-bold text-slate-400">접수 원본 불러오는 중…</div>}
                 {view === "as" && !!(reception?.photos?.length) && <div>
-                  <div className="text-[10px] font-black text-slate-400">증상 사진</div>
+                  <div className="text-[11px] font-black text-slate-400">증상 사진</div>
                   <div className="mt-1.5 flex flex-wrap gap-2">{reception.photos.map((url, pi) => <button key={url} type="button" title="누르면 크게 — 확대·회전·선명하게" onClick={() => setPhotoView({ urls: reception.photos || [], idx: pi })}><img loading="lazy" src={url} alt="증상 사진" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" /></button>)}</div>
                 </div>}
                 {view === "as" && !!(ticket.issue || "").trim() && <label className="block text-xs font-bold text-slate-500">접수 내용 <span className="font-semibold text-slate-400">— 입력창을 벗어나면 저장</span>
@@ -2637,11 +2644,11 @@ function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClo
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setMode("visit")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "visit" ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
               <span className="block text-sm font-black text-slate-900">🚗 방문 처리</span>
-              <span className="block text-[10px] font-bold text-slate-500">방문해서 처리한 건 — 방문 거래처 1·AS 1건으로 집계</span>
+              <span className="block text-[11px] font-bold text-slate-500">방문해서 처리한 건 — 방문 거래처 1·AS 1건으로 집계</span>
             </button>
             <button type="button" onClick={() => setMode("phone")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "phone" ? "border-amber-500 bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
               <span className="block text-sm font-black text-slate-900">📞 전화·원격 처리</span>
-              <span className="block text-[10px] font-bold text-slate-500">전화·원격으로 처리한 건 — 기록만 남고 집계에는 안 들어감</span>
+              <span className="block text-[11px] font-bold text-slate-500">전화·원격으로 처리한 건 — 기록만 남고 집계에는 안 들어감</span>
             </button>
           </div>
         )}

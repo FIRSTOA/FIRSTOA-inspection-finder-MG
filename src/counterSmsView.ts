@@ -10,7 +10,7 @@ export type ViewLogEntry = {
 };
 export type ViewBatch = { title: string; created_at: string; log?: ViewLogEntry[] | null };
 export type ViewTarget = {
-  id: string; vendor: string; team: string;
+  id: string; vendor: string; team: string; vendor_names?: string[];
   sent_at: string | null; done_at?: string | null; added_at?: string | null; added_by?: string | null;
 };
 
@@ -126,4 +126,27 @@ export function sortTargets<T extends ViewTarget>(rows: T[], by: "stage" | "adde
   if (by === "stage") return copy.sort((a, b) => stageOf(a) - stageOf(b));
   const at = (t: T) => t.added_at || batch?.created_at || "";
   return copy.sort((a, b) => (at(a) === at(b) ? stageOf(a) - stageOf(b) : at(a) < at(b) ? 1 : -1));
+}
+
+/**
+ * "관리부 목록 밖" 열린 곳(2단계, docs/tasks/counter-sms-simplify.md Q4) — 가장 최근에 목록을 맞춘 log 항목(missing 칸이 있는 것,
+ * 수동 추가 항목엔 칸이 없어 건너뜀)의 업체명과 카드 업체명을 contactVendorKey 로 맞춘다. 완료된 카드는 "열린 곳"이 아니라 뺀다.
+ * 숫자·저장은 건드리지 않는 표시용 판정이다.
+ */
+export function offListTargetIds(batch: ViewBatch | null, targets: ViewTarget[]): Set<string> {
+  const log = batch?.log || [];
+  let missing: string[] | null = null;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i];
+    if (e.mode !== "remove" && Array.isArray(e.missing)) { missing = e.missing; break; }
+  }
+  const out = new Set<string>();
+  if (!missing || !missing.length) return out;
+  const keys = new Set(missing.map(contactVendorKey));
+  for (const t of targets) {
+    if (t.done_at) continue;
+    const names = [t.vendor, ...(t.vendor_names || [])];
+    if (names.some((n) => keys.has(contactVendorKey(n)))) out.add(t.id);
+  }
+  return out;
 }

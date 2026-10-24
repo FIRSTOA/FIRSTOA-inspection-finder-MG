@@ -125,6 +125,8 @@ export type KpiUnhandledTotalView = { kind: "unhandledTotal"; total: number; par
 export type KpiOkrScope = { team: "ALL" | "A" | "B" | "C" | "D"; member?: string; members: string[]; onScope: (s: { team: "ALL" | "A" | "B" | "C" | "D"; member?: string }) => void };
 export type KpiOkrView = { kind: "okr"; period: "week" | "month"; onPeriod: (p: "week" | "month") => void; pct: number | null; counts: Array<{ label: string; value: number; tone: string }>; weeks: Array<{ label: string; pct: number | null; current: boolean }>; missingTeams: string[];
   scope?: KpiOkrScope;
+  /** 파트별 미니 바(A~D 이번 기간 달성률). 모델 연결 전에는 비어 있어 그 구역을 그리지 않는다 — 다음 단계 */
+  teams?: Array<{ team: string; pct: number | null }>;
   /** 머리 범위 글자(없으면 scope 로 만든다) — kpiCompute.okrScopeLabel 과 같은 글 */
   scopeLabel?: string };
 
@@ -346,7 +348,7 @@ function Sparkline({ points, theme, height = 44, label }: { points: KpiSeriesPoi
   );
 }
 
-function Ring({ pct, tone, theme, size = 76 }: { pct: number | null; tone: KpiTone; theme: KpiTheme; size?: number }) {
+function Ring({ pct, tone, theme, size = 76, textClass = "text-[18px]" }: { pct: number | null; tone: KpiTone; theme: KpiTheme; size?: number; textClass?: string }) {
   const t = THEMES[theme];
   const r = 30, c = 2 * Math.PI * r;
   const p = pct === null ? 0 : clamp(pct);
@@ -356,7 +358,7 @@ function Ring({ pct, tone, theme, size = 76 }: { pct: number | null; tone: KpiTo
         <circle cx="38" cy="38" r={r} fill="none" strokeWidth="8" className={t.ringTrack} />
         <circle cx="38" cy="38" r={r} fill="none" strokeWidth="8" strokeLinecap="round" className={`${TONE_STROKE[tone]} transition-[stroke-dashoffset] duration-700 motion-reduce:transition-none`} strokeDasharray={c} strokeDashoffset={c * (1 - p / 100)} />
       </svg>
-      <span className={`absolute inset-0 grid place-items-center font-mono text-[18px] font-black tabular-nums ${t.text}`}>{pct === null ? "—" : `${pct}%`}</span>
+      <span className={`absolute inset-0 grid place-items-center font-mono ${textClass} font-black tabular-nums ${t.text}`}>{pct === null ? "—" : `${pct}%`}</span>
     </div>
   );
 }
@@ -665,7 +667,10 @@ function TeamCell({ c, theme }: { c?: KpiTableRow["cells"][number]; theme: KpiTh
   const pct = cellPct(c);
   return (
     <span className="flex min-w-0 flex-col gap-1" title={`${teamName(c.scope)} ${fmt(c.value)} / ${fmt(c.target)} · ${pct}%`}>
-      <span className={`font-mono text-[11.5px] font-black tabular-nums ${STATUS_TEXT[theme][c.status]}`}>{fmt(c.value)}<span className={t.muted}>/{fmt(c.target)}</span></span>
+      <span className="flex items-baseline gap-1">
+        <span className={`font-mono text-[11.5px] font-black tabular-nums ${STATUS_TEXT[theme][c.status]}`}>{fmt(c.value)}<span className={t.muted}>/{fmt(c.target)}</span></span>
+        <span className={`font-mono text-[11px] font-black tabular-nums ${t.sub}`}>{pct}%</span>
+      </span>
       <Bar pct={pct} barClass={STATUS_BAR[c.status]} theme={theme} h="h-1" />
     </span>
   );
@@ -891,72 +896,104 @@ function okrScopeText(sc: KpiOkrScope | undefined, period: "week" | "month"): st
   if (!sc || sc.team === "ALL") return sc?.member ? `${sc.member} · ${when}` : `CS 4파트(A~D) · ${when}`;
   return sc.member ? `${sc.member}(${sc.team}) · ${when}` : `${sc.team}파트 · ${when}`;
 }
-function OkrBody({ v, theme, disabled }: { v: KpiOkrView; theme: KpiTheme; disabled?: boolean }) {
+function OkrBody({ v, size, theme, disabled }: { v: KpiOkrView; size?: KpiSize; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
   const tones = TONE_TEXT[theme];
   const unitWord = v.period === "week" ? "주" : "달";
   const ringTone: KpiTone = v.pct === null ? "idle" : v.pct >= 80 ? "ok" : v.pct >= 50 ? "warn" : "bad";
   const sc = v.scope;
   const label = v.scopeLabel || okrScopeText(sc, v.period);
+  const wide = isWide(size);
+  const segWrap = `inline-flex items-center gap-0.5 rounded-full p-0.5 ${theme === "deck" ? "bg-white/[0.07]" : "bg-slate-100"}`;
+  const segBtn = (on: boolean) => `inline-flex min-h-11 items-center justify-center rounded-full px-3 text-[12px] font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} ${on ? (theme === "deck" ? "bg-white text-slate-950" : "bg-slate-900 text-white") : `${t.sub} ${t.hover}`}`;
+  const weekBar = (cur: boolean) => (cur ? "bg-sky-400" : theme === "deck" ? "bg-slate-500" : "bg-slate-300");
+  const teamRows = v.teams ?? [];
   return (
-    <div>
-      <p className={`mb-1.5 text-[12px] font-black ${t.text}`} aria-live="polite">{label}</p>
-      <div className="mb-2 flex gap-1" role="group" aria-label="OKR 기간">
-        <button type="button" aria-pressed={v.period === "week"} disabled={disabled} onClick={() => v.onPeriod("week")} className={chipClass(v.period === "week", theme)}>이번 주</button>
-        <button type="button" aria-pressed={v.period === "month"} disabled={disabled} onClick={() => v.onPeriod("month")} className={chipClass(v.period === "month", theme)}>이번 달</button>
-      </div>
-      {sc && (
-        <div className="mb-2 flex flex-wrap items-center gap-1">
-          <div className="flex flex-wrap gap-1" role="group" aria-label="OKR 범위(파트)">
-            {OKR_SCOPE_TEAMS.map((tm) => (
-              <button key={tm} type="button" aria-pressed={sc.team === tm && !sc.member} disabled={disabled} onClick={() => sc.onScope({ team: tm })} className={chipClass(sc.team === tm && !sc.member, theme)}>{tm === "ALL" ? "전체" : tm}</button>
-            ))}
-          </div>
-          <PortalSelect
-            value={sc.member || ""}
-            onChange={(m) => sc.onScope({ team: sc.team, member: m || undefined })}
-            options={[{ value: "", label: "개인 선택 안 함" }, ...sc.members.map((m) => ({ value: m, label: m }))]}
-            tone={theme === "deck" ? "dark" : "light"}
-            placeholder="개인"
-            width={160}
-            disabled={disabled || sc.members.length === 0}
-            className="min-h-11"
-          />
+    <div className="space-y-3">
+      {/* 머리 한 줄: 범위 글자 + [주|월] + [전체 A B C D] + 개인 ▾ */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <p className={`min-w-0 flex-1 basis-40 truncate text-[12.5px] font-black ${t.text}`} title={label} aria-live="polite">{label}</p>
+        <div className={segWrap} role="group" aria-label="OKR 기간">
+          <button type="button" aria-pressed={v.period === "week"} disabled={disabled} onClick={() => v.onPeriod("week")} className={segBtn(v.period === "week")}>주</button>
+          <button type="button" aria-pressed={v.period === "month"} disabled={disabled} onClick={() => v.onPeriod("month")} className={segBtn(v.period === "month")}>월</button>
         </div>
-      )}
-      <div className="flex items-center gap-3">
-        <Ring pct={v.pct} tone={ringTone} theme={theme} />
-        <div className="min-w-0 flex-1 space-y-1.5">
-          {v.pct === null && <div className={`text-[11.5px] font-black ${t.muted}`}>이번 {unitWord} 판정 기록이 아직 없습니다</div>}
-          {v.counts.length > 0 && (
-            <ul className="flex flex-wrap gap-1">
-              {v.counts.map((c) => (
-                <li key={c.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-black ${t.chip}`}>
-                  <span aria-hidden className={`size-1.5 rounded-full ${TONE_DOT[toneOf(c.tone)]}`} />{c.label}<span className="font-mono tabular-nums">{fmt(c.value)}</span>
+        {sc && (
+          <>
+            <div className={segWrap} role="group" aria-label="OKR 범위(파트)">
+              {OKR_SCOPE_TEAMS.map((tm) => (
+                <button key={tm} type="button" aria-pressed={sc.team === tm && !sc.member} disabled={disabled} onClick={() => sc.onScope({ team: tm })} className={`${segBtn(sc.team === tm && !sc.member)} min-w-9 px-2.5`}>{tm === "ALL" ? "전체" : tm}</button>
+              ))}
+            </div>
+            <PortalSelect
+              value={sc.member || ""}
+              onChange={(m) => sc.onScope({ team: sc.team, member: m || undefined })}
+              options={[{ value: "", label: "개인 선택 안 함" }, ...sc.members.map((m) => ({ value: m, label: m }))]}
+              tone={theme === "deck" ? "dark" : "light"}
+              placeholder="개인"
+              width={160}
+              disabled={disabled || sc.members.length === 0}
+              className="min-h-11 w-19 rounded-full! px-2.5! text-[12px]!"
+            />
+          </>
+        )}
+      </div>
+
+      {/* 본문: 왼쪽 큰 링 · 오른쪽 주별 추세 + 파트별 미니 바(1x1 은 링 + 주별 추세만) */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3">
+        <div className="flex flex-col items-center gap-1">
+          <Ring pct={v.pct} tone={ringTone} theme={theme} size={wide ? 124 : 96} textClass={wide ? "text-[30px]" : "text-[22px]"} />
+          {v.pct === null && <span className={`max-w-28 text-center text-[11px] font-black leading-4 ${t.muted}`}>이번 {unitWord} 판정 기록이 아직 없습니다</span>}
+        </div>
+        <div className="min-w-0 space-y-3">
+          {v.weeks.length > 0 ? (
+            <ul className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${v.weeks.length}, minmax(0, 1fr))` }} aria-label={v.period === "week" ? "이번 달 주별 달성률" : "월별 달성률"}>
+              {v.weeks.map((w) => (
+                <li key={w.label} className="flex min-w-0 flex-col items-center gap-1" title={`${w.label} ${w.pct === null ? "기록 없음" : `${w.pct}%`}`}>
+                  <span className={`font-mono text-[11px] font-black tabular-nums ${w.current ? t.text : t.sub}`}>{w.pct === null ? "—" : `${w.pct}`}</span>
+                  <span className={`relative flex ${wide ? "h-20" : "h-14"} w-full max-w-9 items-end overflow-hidden rounded-md ${t.track} ${w.current ? "ring-1 ring-sky-400" : ""}`}>
+                    {w.pct === null
+                      ? <span aria-hidden className={`absolute inset-x-0 bottom-0 border-t border-dashed ${t.divider}`} />
+                      : <span className={`w-full rounded-md ${weekBar(w.current)}`} style={{ height: `${Math.max(6, clamp(w.pct))}%` }} />}
+                  </span>
+                  <span className={`text-[11px] font-black ${w.current ? t.text : t.muted}`}>{w.label}{w.current && <span className="sr-only"> (현재)</span>}</span>
                 </li>
               ))}
+            </ul>
+          ) : <p className={`text-[11.5px] font-bold ${t.muted}`}>—</p>}
+          {wide && teamRows.length > 0 && (
+            <ul className={`space-y-1.5 border-t pt-2.5 ${t.divider}`} aria-label={`파트별 ${v.period === "week" ? "이번 주" : "이번 달"} 달성률`}>
+              {teamRows.map((r) => {
+                const on = sc ? sc.team === r.team && !sc.member : false;
+                const tn: KpiTone = r.pct === null ? "idle" : r.pct >= 80 ? "ok" : r.pct >= 50 ? "warn" : "bad";
+                return (
+                  <li key={r.team} className={`flex items-center gap-2 ${on ? "" : "opacity-80"}`} title={`${teamName(r.team)}파트 ${r.pct === null ? "기록 없음" : `${r.pct}%`}`}>
+                    <span className={`w-6 shrink-0 text-[12px] font-black ${on ? t.text : t.sub}`}>{teamName(r.team)}</span>
+                    <span className="flex-1"><Bar pct={r.pct} barClass={TONE_BAR[tn]} theme={theme} h={on ? "h-3" : "h-2"} /></span>
+                    <span className={`w-10 shrink-0 text-right font-mono text-[11px] font-black tabular-nums ${on ? t.text : t.sub}`}>{r.pct === null ? "—" : `${r.pct}%`}</span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
       </div>
-      {v.weeks.length > 0 && (
-        <ul className="mt-3 grid grid-cols-4 gap-2" aria-label="주별 달성률">
-          {v.weeks.map((w) => (
-            <li key={w.label} className="flex flex-col items-center gap-1" title={`${w.label} ${w.pct === null ? "기록 없음" : `${w.pct}%`}`}>
-              <span className={`font-mono text-[10.5px] font-black tabular-nums ${w.current ? t.text : t.sub}`}>{w.pct === null ? "—" : `${w.pct}%`}</span>
-              <span className={`relative flex h-12 w-full items-end overflow-hidden rounded-md ${t.track} ${w.current ? "ring-1 ring-sky-400" : ""}`}>
-                {w.pct === null
-                  ? <span aria-hidden className={`absolute inset-x-0 bottom-0 border-t border-dashed ${t.divider}`} />
-                  : <span className={`w-full rounded-md ${w.current ? "bg-sky-400" : "bg-slate-500"}`} style={{ height: `${Math.max(4, clamp(w.pct))}%` }} />}
-              </span>
-              <span className={`text-[10.5px] font-black ${w.current ? t.text : t.muted}`}>{w.label}{w.current && <span className="sr-only"> (이번 주)</span>}</span>
+
+      {/* 판정 수: 색 점 한 줄 */}
+      {wide && v.counts.length > 0 && (
+        <ul className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-black ${t.sub}`} aria-label="판정 수">
+          {v.counts.map((c, i) => (
+            <li key={c.label} className="inline-flex items-center gap-1.5">
+              {i > 0 && <span aria-hidden className={`-ml-1.5 mr-1.5 ${t.muted}`}>·</span>}
+              <span aria-hidden className={`size-2 rounded-full ${TONE_DOT[toneOf(c.tone)]}`} />{c.label} <span className={`font-mono tabular-nums ${t.text}`}>{fmt(c.value)}</span>
             </li>
           ))}
         </ul>
       )}
+
       {v.missingTeams.length > 0 && (
-        <p className={`mt-2 flex items-start gap-1 text-[11.5px] font-black leading-4 ${tones.warn}`}>
-          <AlertTriangle size={13} aria-hidden className="mt-px shrink-0" />이번 {unitWord === "주" ? "주" : "달"} OKR 미작성 {v.missingTeams.length}팀 · {v.missingTeams.map(teamName).join(", ")}
+        <p className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] font-black leading-4 ${tones.bad}`}>
+          <span className="inline-flex items-center gap-1"><AlertTriangle size={13} aria-hidden />OKR 미작성</span>
+          {v.missingTeams.map((m) => <span key={m} className="inline-flex items-center gap-1"><span aria-hidden className="size-2 rounded-full bg-rose-500" />{teamName(m)}</span>)}
         </p>
       )}
     </div>
@@ -1071,7 +1108,7 @@ export function KpiWidget(props: KpiWidgetProps) {
       : v.kind === "quarterGoal" ? <QuarterGoalBody v={v} theme={theme} disabled={disabled} />
       : v.kind === "kpiTable" ? <KpiTableBody v={v} theme={theme} disabled={disabled} />
       : v.kind === "unhandledTotal" ? <UnhandledTotalBody v={v} theme={theme} />
-      : v.kind === "okr" ? <OkrBody v={v} theme={theme} disabled={disabled} />
+      : v.kind === "okr" ? <OkrBody v={v} size={size} theme={theme} disabled={disabled} />
       : v.kind === "todayStrip" ? <TodayStripBody v={v} theme={theme} disabled={disabled} />
       : <ListBody v={v} size={size} theme={theme} onOpen={onOpen} disabled={disabled} />;
   }

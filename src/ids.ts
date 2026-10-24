@@ -202,18 +202,38 @@ export function fieldTicketVendor(raw: string): { vendor: string; gubun: string 
 // 물류(납품·철수·교체) 네이버 제목 파서 — "머리말-구분/발주처/영업구분/고객사/품목/비고" 슬래시 열차에서
 // 고객사와 품목을 꺼낸다. 규칙: 수량·모델이 든 세그먼트(품목) 바로 앞이 고객사다.
 //   "네오정보 직송-판매납품/네오정보/개인영업/디스페이스코리아/안드로이드전자칠판 65형(…)/확인서서명필수" → 디스페이스코리아
-export function logisticsTicketInfo(raw: string): { vendor: string; item: string; category: string } {
+/**
+ * 물류 일정 본문(as_tickets.note)의 "상호(명) :" 줄 — 일정 제목보다 정확하다. "(순 20890)" 같은 순번 괄호·끝 콜론은 뗀다. 없으면 "".
+ *   "7. 상호(사업자등록증 유/무) : 유디임팩트-새싹 영등포캠퍼스 (순 21944)" → "유디임팩트-새싹 영등포캠퍼스"
+ */
+export function noteCompanyName(note: string): string {
+  const m = String(note || "").replace(/_x000d_|\r/g, "").match(/상호(?:명)?[^:：\n]{0,20}[:：][ \t]*([^\n]+)/);
+  return (m?.[1] || "").replace(/\(\s*순\s*[:：]?\s*[\d,\s]+\)/g, " ").replace(/[:：]\s*$/, "").replace(/\s+/g, " ").trim();
+}
+
+/** 네이버 캘린더 물류 일정 제목은 80자에서 잘려 저장된다(2026-10-24 as_tickets 실측: 80자 107건) */
+export const TICKET_TITLE_CUT = 80;
+
+/**
+ * note(일정 본문)를 함께 주면 "상호명 :" 줄을 거래처명으로 먼저 쓴다(2026-10-24).
+ * 제목에서 고객사 칸(품목 칸 바로 앞)을 못 찾았는데 제목이 잘린 길이면 거래처명을 비운다 — 예전엔 제목 전체가 거래처명으로 들어가
+ * (디지털자산 거래소 10/23 납품: "⭐오후 4시반 이후 … -납품(일반)/퍼스트/운영") 업체 검색·이력에 안 걸렸다. 비면 사용자가 직접 적는다.
+ */
+export function logisticsTicketInfo(raw: string, note = ""): { vendor: string; item: string; category: string } {
   const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
   const category = /철수/.test(flat) ? "철수" : /교체/.test(flat) ? "교체" : "납품";
+  const fromNote = noteCompanyName(note);
   const segments = flat.split("/").map((seg) => seg.trim()).filter(Boolean);
   const PRODUCT_RX = /\d+\s*(대|개|형|세트|셋트|EA)\b|\d+(대|개|형)|리퍼|본체|노트북|데스크탑|모니터|소모품|전자칠판/i;
   for (let i = 1; i < segments.length; i += 1) {
     if (PRODUCT_RX.test(segments[i])) {
       const vendor = segments[i - 1];
       // 앞 세그먼트가 영업구분(운영팀·개인영업 등) 같은 짧은 내부 용어면 그 앞을 본다? — 실데이터상 품목 앞은 항상 고객사
-      if (vendor && vendor.length >= 2) return { vendor, item: segments[i], category };
+      if (vendor && vendor.length >= 2) return { vendor: fromNote || vendor, item: segments[i], category };
     }
   }
+  if (fromNote) return { vendor: fromNote, item: "", category };
+  if (flat.length >= TICKET_TITLE_CUT && segments.length >= 2) return { vendor: "", item: "", category };
   return { vendor: fieldTicketVendor(flat).vendor, item: "", category };
 }
 
