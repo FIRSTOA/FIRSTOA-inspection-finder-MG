@@ -21,7 +21,8 @@ r"""
 사용법 (노트북 D6110 에서만 — 데스크톱에서 돌리지 않는다)
   python tools\kakao-pc\export_rooms.py --probe --room "방이름"     기본. Ctrl+S 뒤 뜨는 창만 기록하고 Esc (저장 안 함)
   python tools\kakao-pc\export_rooms.py --export --rooms "방이름"   그 방 하나만 실제 저장(첫 시험)
-  python tools\kakao-pc\export_rooms.py --export                    room_map 의 방 중 창이 열린 방 전부
+  python tools\kakao-pc\export_rooms.py --export                    Supabase kakao_collect_rooms(enabled·export=true) 방 중 창이 열린 방 전부
+                                                                     (표가 없거나 비면 room_map 의 점검·AS·물류·미수·불만·재계약 방 — 마감·부품·자가 제외)
   python tools\kakao-pc\export_rooms.py --list                      대상 방과 창 열림 여부만(키 안 누름)
   python tools\kakao-pc\export_rooms.py --selftest                  순수 함수 점검(카톡 안 건드림)
   옵션: --dir "<수신함 폴더>" (기본: 환경 변수 FIRSTOA_KAKAO_EXPORT_DIR > 구글 드라이브\카톡 자동적재 수신함)
@@ -43,6 +44,8 @@ PROBE_WAIT = 1.5   # 초 — Ctrl+S 뒤 창을 기다리는 시간(probe)
 EXPORT_WAIT = 3.0  # 초 — 실제 저장 때는 조금 넉넉히
 ROOM_GAP = 3.0     # 방 사이 텀
 MAX_FAILS = 3      # 실패 3번이면 그날은 중단
+# 수집 표가 없을 때(404)·비었을 때 room_map 폴백으로 거르는 업무 종류 — 마감·부품·자가(토너)·칭찬 등은 수집 대상이 아니다(2026-10-24 설계)
+DEFAULT_CATEGORIES = ("점검", "AS", "물류", "미수", "불만", "재계약")
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 try:  # 작업 스케줄러 콘솔은 cp949
@@ -84,6 +87,26 @@ def pick_rooms(rows: list, categories: list | None = None) -> list:
     return out
 
 
+def pick_collect_rooms(rows: list, categories: list | None = None) -> list:
+    """kakao_collect_rooms 행들 → 방 이름 목록. enabled·export 가 둘 다 true 인 방만(null 이면 안 함),
+    categories 를 주면 kinds(배열)와 하나라도 겹치는 방만. 중복 제거·표 순서 유지"""
+    want = {c.strip() for c in (categories or []) if c and c.strip()}
+    seen, out = set(), []
+    for r in rows or []:
+        r = r or {}
+        room = str(r.get("room") or "").strip()
+        if not room or room in seen or r.get("enabled") is not True or r.get("export") is not True:
+            continue
+        kinds = r.get("kinds") or []
+        if isinstance(kinds, str):  # 혹시 '{점검,AS}' 문자열로 오면
+            kinds = [k.strip() for k in kinds.strip("{}").split(",")]
+        if want and not (want & {str(k).strip() for k in kinds}):
+            continue
+        seen.add(room)
+        out.append(room)
+    return out
+
+
 def is_save_dialog(cls: str, title: str, extra_titles: tuple = ()) -> bool:
     """윈도 표준 저장 창인가 — 클래스 #32770 + 제목에 저장 창 이름이 들어 있어야"""
     if cls != DIALOG_CLASS:
@@ -106,6 +129,22 @@ def selftest() -> int:
     assert pick_rooms(rows, ["점검"]) == ["점검C방"]
     assert pick_rooms(rows, ["재계약"]) == ["강북A/초과"]
     assert pick_rooms(None) == []
+    assert pick_rooms(rows, list(DEFAULT_CATEGORIES)) == ["점검C방", "AS C방", "강북A/초과"]  # 마감 행은 빈 이름이라 어차피 빠짐
+    assert pick_rooms([{"category": "마감", "room": "마감방"}, {"category": "부품", "room": "부품방"}, {"category": "점검", "room": "점검방"}],
+                      list(DEFAULT_CATEGORIES)) == ["점검방"]
+    crow = [{"room": "A 점검방", "kinds": ["점검"], "enabled": True, "export": True},
+            {"room": "E 겸용방", "kinds": ["점검", "AS"], "enabled": True, "export": True},
+            {"room": "완료방(납품,철수,교체)", "kinds": ["물류"], "enabled": True, "export": True},
+            {"room": "꺼진방", "kinds": ["AS"], "enabled": False, "export": True},
+            {"room": "매크로제외방", "kinds": ["AS"], "enabled": True, "export": False},
+            {"room": "A 점검방", "kinds": ["점검"], "enabled": True, "export": True},
+            {"room": "", "kinds": ["AS"], "enabled": True, "export": True},
+            {"room": "null방", "kinds": ["AS"], "enabled": None, "export": True}]
+    assert pick_collect_rooms(crow) == ["A 점검방", "E 겸용방", "완료방(납품,철수,교체)"]
+    assert pick_collect_rooms(crow, ["AS"]) == ["E 겸용방"]
+    assert pick_collect_rooms(crow, ["물류"]) == ["완료방(납품,철수,교체)"]
+    assert pick_collect_rooms(crow, ["재계약"]) == []
+    assert pick_collect_rooms(None) == []
     assert is_save_dialog("#32770", "다른 이름으로 저장")
     assert is_save_dialog("#32770", "Save As")
     assert not is_save_dialog("EVA_Window_Dblclk", "다른 이름으로 저장")
@@ -137,11 +176,37 @@ def inbox_dir(arg: str | None) -> str:
     return cand if cand and os.path.isdir(cand) else ""
 
 
-def load_rooms(categories: list | None) -> list:
-    from outbox_relay import rest_call  # 같은 anon REST 도우미
+FALLBACK_NOTE = ""  # room_map 폴백이 일어났으면 그 이유 — 실행 마지막 줄에 한 번 더 적는다(worker 상태 tail 4줄에 실리게)
 
+
+def load_rooms(categories: list | None, from_room_map: bool = False) -> list:
+    """대상 방 — 기본은 kakao_collect_rooms(export=true 방). 표가 없거나(404) 비면 room_map 폴백(점검·AS·물류·미수·불만·재계약만).
+    표에 행이 있는데 export=true 가 하나도 없으면 폴백하지 않는다(관리 탭에서 일부러 다 끈 것)"""
+    import urllib.error
+
+    global FALLBACK_NOTE
+    from outbox_relay import rest_call  # 같은 anon REST 도우미
+    from poster_send import log
+
+    if not from_room_map:
+        try:
+            rows = rest_call("/kakao_collect_rooms?select=room,kinds,enabled,export&order=room.asc") or []
+            if rows:
+                picked = pick_collect_rooms(rows, categories)
+                if not picked:
+                    n_exp = sum(1 for r in rows if (r or {}).get("enabled") is True and (r or {}).get("export") is True)
+                    log(f"    [내보내기] 표에 행 {len(rows)}개, export=true {n_exp}개{' (--category 적용 뒤 0)' if categories else ''} — 저장 안 함")
+                return picked
+            FALLBACK_NOTE = "표가 비었거나 권한 없음(RLS) — room_map 으로 대신"  # 200+빈 배열은 빈 표와 RLS 차단을 구분할 수 없다(count 도 보이는 행만 셈)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            FALLBACK_NOTE = "표가 없음(404) — room_map 으로 대신"
+        if from_room_map is False:
+            log(f"    [내보내기] kakao_collect_rooms {FALLBACK_NOTE}")
+        FALLBACK_NOTE = FALLBACK_NOTE and "[내보내기] 폴백: kakao_collect_rooms " + FALLBACK_NOTE
     rows = rest_call("/room_map?select=category,region,room&order=category.asc,region.asc") or []
-    return pick_rooms(rows, categories)
+    return pick_rooms(rows, categories or list(DEFAULT_CATEGORIES))
 
 
 # ── 윈도 도우미 ──────────────────────────────────────────────────
@@ -520,8 +585,9 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="대상 방·창 열림 여부만")
     ap.add_argument("--selftest", action="store_true", help="순수 함수 점검(카톡 안 건드림)")
     ap.add_argument("--room", help="probe 할 방 이름")
-    ap.add_argument("--rooms", help="저장할 방 이름들(쉼표·줄바꿈 구분) — 없으면 room_map 전체")
-    ap.add_argument("--category", help="room_map 업무 종류만(쉼표 구분, 예: 점검,AS)")
+    ap.add_argument("--rooms", help="저장할 방 이름들(쉼표·줄바꿈 구분) — 없으면 kakao_collect_rooms(export=true) 전체")
+    ap.add_argument("--category", help="업무 종류만(쉼표 구분, 예: 점검,AS) — kakao_collect_rooms 는 kinds 와 겹치는 방, room_map 은 category 일치")
+    ap.add_argument("--from-room-map", action="store_true", help="비상용: 수집 표를 건너뛰고 옛 방식(room_map)으로 방 목록")
     ap.add_argument("--dir", help="수신함 폴더(기본: FIRSTOA_KAKAO_EXPORT_DIR > 구글 드라이브\\카톡 자동적재 수신함)")
     args = ap.parse_args()
 
@@ -540,9 +606,9 @@ def main() -> int:
         rooms = pick_rooms([{"room": x} for x in re.split(r"[,\n]", args.rooms)])
     else:
         try:
-            rooms = load_rooms(args.category.split(",") if args.category else None)
+            rooms = load_rooms(args.category.split(",") if args.category else None, args.from_room_map)
         except Exception as e:
-            log(f"[내보내기] ✗ room_map 읽기 실패: {e}")
+            log(f"[내보내기] ✗ 방 목록 읽기 실패: {e}")
             return 2
     folder = inbox_dir(args.dir)
     if args.list:
@@ -553,7 +619,10 @@ def main() -> int:
     if not rooms:
         log("[내보내기] 대상 방이 없음")
         return 0
-    return export(rooms, folder)
+    code = export(rooms, folder)
+    if FALLBACK_NOTE:
+        log(FALLBACK_NOTE)  # 마지막 줄 — worker 가 stdout 끝 4줄을 상태에 적는다
+    return code
 
 
 if __name__ == "__main__":

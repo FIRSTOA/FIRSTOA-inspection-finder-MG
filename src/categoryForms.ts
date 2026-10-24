@@ -4,6 +4,7 @@
  */
 import { GRADE_OPTIONS, REGION_OPTIONS } from "./formOptions";
 import { formatYmdKo } from "./recontractSchedule";
+import { DATE_TEXT_COLUMNS, normalizeDateKeep, type DateNormOptions } from "./dateNorm";
 
 export type FieldType = "text" | "textarea" | "select" | "date"; // date: 값은 YYYY-MM-DD(글자값도 허용 — [미정·글로 쓰기])
 export type FieldFill = "author" | "company" | "region" | "keyman" | "grade";
@@ -126,4 +127,21 @@ export function emptyCatForm(schemaKey: string): Record<string, string> {
   const o: Record<string, string> = {};
   if (s) for (const sec of s.sections) for (const f of sec.fields) o[f.key] = "";
   return o;
+}
+
+/** 이 양식의 날짜 칸인가(글자 칸이라도 이름이 날짜 칸이면 — 계약종료일·방문일·입력일·약속일·다음확인일, src/dateNorm.ts) */
+export function isCatDateKey(schemaKey: string, key: string): boolean {
+  const s = CATEGORY_SCHEMAS[schemaKey];
+  if (!s || !DATE_TEXT_COLUMNS.has(key)) return false;
+  return s.sections.some((sec) => sec.fields.some((f) => f.key === key && (f.type === "text" || f.type === "date") && !f.fill));
+}
+
+/**
+ * 저장 직전 날짜 칸 정규화(2026-10-24): "26-11-15"·"26년10월22일"·"6월 19일"(baseYear) → "YYYY-MM-DD".
+ * 못 읽는 글("미정"·"차주 중")은 그대로 둔다. 다른 칸은 손대지 않는다. 새 객체를 돌려준다.
+ */
+export function normalizeCatForm(schemaKey: string, form: Record<string, string>, opts: DateNormOptions = {}): Record<string, string> {
+  const out = { ...form };
+  for (const k of Object.keys(out)) if (out[k] && isCatDateKey(schemaKey, k)) out[k] = normalizeDateKeep(out[k], opts);
+  return out;
 }

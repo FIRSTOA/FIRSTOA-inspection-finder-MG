@@ -59,15 +59,15 @@ const kstStartIso = (ymd: string, backDays = 0) => {
 };
 
 /**
- * 양식 표(물류·재계약·불만·초과조정) 한 표의 기간 안 행(오발송 삭제 제외) — 세는 규칙은 formCount.ts countForms 한 곳(2026-10-24).
- * 물류는 작성일(date) 칸으로 자른다. 재계약·불만·초과조정의 날짜 칸은 글자('26-07-13'·'6월 19일'·UTC 시각)가 섞여 서버에서 못 자른다
+ * 양식 표(물류·재계약·불만·초과조정·담당자 변경) 한 표의 기간 안 행(오발송 삭제 제외) — 세는 규칙은 formCount.ts countForms 한 곳(2026-10-24).
+ * 물류(작성일)·담당자 변경(change_date)은 date 칸이라 서버에서 자른다(FORM_SOURCES serverDate). 재계약·불만·초과조정의 날짜 칸은 글자('26-07-13'·'6월 19일'·UTC 시각)가 섞여 서버에서 못 자른다
  *   → created_at 으로 넉넉히(14일 앞까지) 받고 KST 날짜(looseYmd → 없으면 created_at)는 countForms 가 거른다.
  *   (불만 시트 미러 행은 밤마다 created_at 이 새로 찍혀 넓게 들어오지만 날짜 칸으로 다시 거르므로 숫자는 같다)
  */
 export async function loadFormRaw(table: FormTable, from?: string, to?: string): Promise<FormRaw[]> {
   const src = FORM_SOURCES[table];
   const parts = [`select=${src.columns.map(enc).join(",")}`, "_hidden=not.is.true"];
-  if (table === "logistics_records") {
+  if (src.serverDate) {
     if (from) parts.push(`${encodeURIComponent(src.dateField)}=gte.${from}`);
     if (to) parts.push(`${encodeURIComponent(src.dateField)}=lte.${to}`);
   } else if (from) {
@@ -96,7 +96,7 @@ export async function loadFormRows(from?: string, to?: string): Promise<FormSet>
   return out;
 }
 
-/** 팀 현황·순위표 입구: 활동 기록 + 확장성·점검·AS·양식(물류·재계약·불만·초과조정·미수)은 표 원본으로 교체 — 활동 기록은 담당자 변경·교체양식만 센다 */
+/** 팀 현황·순위표 입구: 활동 기록 + 확장성·점검·AS·양식(물류·재계약·불만·초과조정·미수·담당자 변경)은 표 원본으로 교체 — 활동 기록으로 세는 건 교체양식뿐(원본 표 없음) */
 export async function loadWorkEvents(start: string, end: string): Promise<ActivityEvent[]> {
   const [events, expansion, field, forms] = await Promise.all([getActivityEvents(start, end), loadExpansionRows(start, end), loadFieldRows(start, end), loadFormRows(start, end)]);
   return mergeFormsIntoEvents(mergeFieldIntoEvents(mergeExpansionIntoEvents(events, expansion), field), withFieldLogistics(forms, field));

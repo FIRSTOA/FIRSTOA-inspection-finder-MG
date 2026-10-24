@@ -1,6 +1,6 @@
 /**
  * 필드 탭별 검색(1단계, 2026-10-22) — 탭 맨 위 검색칸에 업체명·자산·시리얼을 치면 "그 탭 업무"의 FIELD 기록만 한 줄 타임라인으로.
- * 설계: docs/tasks/tab-search-kakao-history.md 3-1·4절. 카톡 원문(2단계)은 아직 없다 — 화면에 자리만.
+ * 설계: docs/tasks/tab-search-kakao-history.md 3-1·4절. 2단계(2026-10-24): 결과 칸의 [카톡 대화] 탭 = 엣지 kakao-search(맨 아래 "카톡 대화" 절).
  *
  * - 업체 찾기·키 묶음·표 수집은 통합 검색 360(src/entity360.ts)을 그대로 쓴다: gather(e, { only }) 로 그 탭 표만.
  * - SOURCES 에 없는 표(misu_visits)는 SOURCES 를 고치지 않고 여기 EXTRA_SOURCES 로 덧붙여 같은 조건 조립 함수로 모은다.
@@ -13,7 +13,7 @@ import {
   buildExactQuery, buildLooseQuery, firstOf, gather, inList, isOtherVendor, matchesEntity, MISU_VISITS_SOURCE, rawTextOf, sameVendorKey, SOURCES, str, toEvent,
   type Entity, type Row, type SourceDef, type SourceResult,
 } from "./entity360";
-import { selectRows } from "./supabase";
+import { invokeEdgeFunction, selectRows } from "./supabase";
 import { maskRrn } from "./privacy";
 import { logisticsTicketInfo, vendorMatchKey } from "./ids";
 import { normalizeLogisticsKind } from "./operations";
@@ -37,6 +37,7 @@ export type TabSpec = {
   chips?: TabChip[];      // 점검·AS 처럼 안에서 거르는 칩([전체]는 화면이 붙인다)
   summary: SummaryKind[];
   note?: string;          // 거르는 기준 안내(청정기·교체)
+  kakaoKinds?: string[];  // 카톡 대화 탭이 볼 방 종류(kakao_collect_rooms.kinds). 없으면 수집 대상 방이 없는 탭
 };
 
 // 청정기 판정 — src/api.ts AIR_RX(청정기 거래처검색)와 같은 기준. api.ts 는 무거워 끌어오지 않고 같은 식을 둔다
@@ -54,19 +55,19 @@ const LOGI_TABLES = ["logistics_records", "as_tickets", "activity_events", "leas
 export const TAB_SPECS: Record<TabKey, TabSpec> = {
   inspection: {
     key: "inspection", label: "점검·AS", question: "이 업체 점검·AS 이력 — 업체명·자산·시리얼",
-    tables: ["jeomgeom", "visit_logs", "as_records"], chips: INSPECTION_CHIPS,
+    tables: ["jeomgeom", "visit_logs", "as_records"], chips: INSPECTION_CHIPS, kakaoKinds: ["점검", "AS"],
     summary: [{ label: "점검", tables: ["jeomgeom", "visit_logs"] }, { label: "AS", tables: ["as_records"] }],
   },
   air: {
     key: "air", label: "청정기", question: "이 업체 청정기 점검·AS — 업체명·자산·시리얼",
-    tables: ["jeomgeom", "as_records"],
+    tables: ["jeomgeom", "as_records"], kakaoKinds: ["점검", "AS"],
     summary: [{ label: "청정기 점검", tables: ["jeomgeom"] }, { label: "청정기 AS", tables: ["as_records"] }],
     note: "모델명·원문에 청정기 브랜드(블루스카이·샤오미)가 있는 기록만",
   },
   logistics: {
     key: "logistics", label: "물류", question: "이 업체 납품·철수·교체 — 업체명·자산·시리얼",
     // 2026-10-24: 물류 양식 기록만 보면 "일정으로 처리한 납품"이 빠진다 — 물류 일정(완료)·활동(물류)도 같이, 같은 날·같은 종류는 한 줄(dedupeLogistics)
-    tables: ["logistics_records", "activity_events", "lease_status", "vendor_info"], logiTickets: true,
+    tables: ["logistics_records", "activity_events", "lease_status", "vendor_info"], logiTickets: true, kakaoKinds: ["물류"],
     summary: [
       { label: "납품", tables: LOGI_TABLES, match: /납품|설치|신규/ },
       { label: "철수", tables: LOGI_TABLES, match: /철수|회수|해지/ },
@@ -87,26 +88,26 @@ export const TAB_SPECS: Record<TabKey, TabSpec> = {
   },
   bulman: {
     key: "bulman", label: "불만", question: "이 업체 불만 이력 — 업체명",
-    tables: ["bulman"], summary: [{ label: "불만", tables: ["bulman"] }],
+    tables: ["bulman"], summary: [{ label: "불만", tables: ["bulman"] }], kakaoKinds: ["불만"],
   },
   misu: {
     key: "misu", label: "미수", question: "이 업체 미수 이력 — 업체명",
-    tables: ["misu"], extra: ["misu_visits"],
+    tables: ["misu"], extra: ["misu_visits"], kakaoKinds: ["미수"],
     summary: [{ label: "미수 방문", tables: ["misu_visits"] }, { label: "미수 기록", tables: ["misu"] }],
   },
   overage: {
     key: "overage", label: "초과조정", question: "이 업체 초과료·조정 — 업체명·자산",
-    tables: ["overage_adjust", "overage"],
+    tables: ["overage_adjust", "overage"], kakaoKinds: ["재계약", "초과조정"], // 초과조정 글은 재계약 방(…/초과사용 계약종료체크)에 있다
     summary: [{ label: "조정 제안", tables: ["overage_adjust"] }, { label: "초과료", tables: ["overage"] }],
   },
   recontract: {
     key: "recontract", label: "재계약", question: "이 업체 재계약 이력 — 업체명",
     // churn_defense(해지방어)는 칸 이름을 아직 몰라 SOURCES 에 없다(entity360 주석) — 데이터가 생기면 추가
-    tables: ["recontract"], summary: [{ label: "재계약", tables: ["recontract"] }],
+    tables: ["recontract"], summary: [{ label: "재계약", tables: ["recontract"] }], kakaoKinds: ["재계약"],
   },
   replacement: {
     key: "replacement", label: "교체", question: "이 업체 기기 교체 이력 — 업체명·자산·시리얼",
-    tables: ["lease_status", "logistics_records"], summary: [{ label: "교체", tables: ["lease_status", "logistics_records"] }],
+    tables: ["lease_status", "logistics_records"], summary: [{ label: "교체", tables: ["lease_status", "logistics_records"] }], kakaoKinds: ["물류"],
     note: "구분·분류에 '교체'가 있는 납품·물류 기록만",
   },
   // 칭찬 탭 = 고객 칭찬 접수(PraiseForm → field_sheet_sync_jobs category=praise). 직원끼리 칭찬(praise_posts)은 업체 칸이 없어 업체 검색 대상이 아니다
@@ -449,4 +450,60 @@ export async function runTabSearch(spec: TabSpec, e: Entity): Promise<TabResult[
 /** 표 수집 요청 수 상한(업체 찾기·키 묶음 제외) — SOURCES 표는 정확·원문·느슨·앞글자 최대 4, 덧붙인 표는 정확·느슨·앞글자 3, 물류 일정은 일정 1 + 이어 찾기 2 */
 export function maxRequestsOf(spec: TabSpec): number {
   return spec.tables.length * 4 + (spec.extra || []).length * 3 + (spec.logiTickets ? 3 : 0);
+}
+
+// ── 카톡 대화(2단계, 2026-10-24) ─────────────────────────────────
+// 원문은 kakao_messages(anon 권한 0) — 엣지 kakao-search 로만 읽는다. 스위치 KAKAO_SEARCH_ENABLED 가 꺼져 있으면 enabled:false.
+// 설계: docs/tasks/tab-search-kakao-history.md 3-2·7절 R1, docs/tasks/kakao-collect-expand.md 3-5.
+export type KakaoHit = { id: number; room: string; sent_at: string; seq: number; author: string; text: string; kind_guess: string | null; is_bot: boolean };
+export type KakaoSearchResult = { ok: boolean; enabled: boolean; rows: KakaoHit[]; limit: number; truncated: boolean; error?: string };
+export type KakaoSearchOpts = { from?: string; to?: string; limit?: number; who?: string };
+
+export const KAKAO_LIMIT = 100;
+
+/** kakao-search 요청 몸통. 그 탭에 수집 방 종류가 없거나 검색어가 2자 미만이면 null(부르지 않는다) */
+export function buildKakaoRequest(spec: TabSpec, q: string, opts: KakaoSearchOpts = {}): Record<string, unknown> | null {
+  const query = String(q || "").trim();
+  if (!spec.kakaoKinds?.length) return null;
+  if (query.replace(/[^0-9A-Za-z가-힣]/g, "").length < 2) return null;
+  const body: Record<string, unknown> = { q: query.slice(0, 60), kinds: spec.kakaoKinds, limit: Math.min(200, opts.limit || KAKAO_LIMIT) };
+  if (opts.from) body.from = opts.from;
+  if (opts.to) body.to = opts.to;
+  if (opts.who) body.who = opts.who;
+  return body;
+}
+
+/** 카톡 대화 찾기 — 실패는 throw(화면이 안내). 탭에 방이 없으면 빈 결과 */
+export async function searchKakao(spec: TabSpec, q: string, opts: KakaoSearchOpts = {}): Promise<KakaoSearchResult> {
+  const body = buildKakaoRequest(spec, q, opts);
+  if (!body) return { ok: true, enabled: true, rows: [], limit: 0, truncated: false };
+  const res = await invokeEdgeFunction<KakaoSearchResult>("kakao-search", body, 15_000);
+  if (!res || res.ok === false) throw new Error(res?.error || "카톡 대화를 못 불러왔습니다");
+  return { ...res, rows: (res.rows || []).map((r) => ({ ...r, text: maskRrn(r.text), author: maskRrn(r.author) })) };
+}
+
+/** 저장 시각(UTC 로 올 수 있음) → KST "2026-10-23 14:31" */
+export function kakaoTimeLabel(sentAt: string): string {
+  const t = Date.parse(sentAt);
+  if (!Number.isFinite(t)) return String(sentAt || "").slice(0, 16).replace("T", " ");
+  return new Date(t + 9 * 3_600_000).toISOString().slice(0, 16).replace("T", " ");
+}
+
+/** 본문 하이라이트 조각 — 검색 낱말(대소문자 무시)이 든 곳을 hit:true 로. 낱말이 없으면 통째 한 조각 */
+export function highlightParts(text: string, q: string): Array<{ t: string; hit: boolean }> {
+  const src = String(text || "");
+  const terms = String(q || "").trim().split(/\s+/).filter((w) => w.length >= 1).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!terms.length || !src) return [{ t: src, hit: false }];
+  const rx = new RegExp(`(${terms.join("|")})`, "gi");
+  const out: Array<{ t: string; hit: boolean }> = [];
+  let last = 0;
+  for (const m of src.matchAll(rx)) {
+    const i = m.index ?? 0;
+    if (!m[0]) continue;
+    if (i > last) out.push({ t: src.slice(last, i), hit: false });
+    out.push({ t: m[0], hit: true });
+    last = i + m[0].length;
+  }
+  if (last < src.length) out.push({ t: src.slice(last), hit: false });
+  return out.length ? out : [{ t: src, hit: false }];
 }

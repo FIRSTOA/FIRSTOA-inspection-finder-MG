@@ -18,7 +18,7 @@
 | 카톡 PC 발송 중계 | 1분마다 | 봇이 **2분 넘게** 못 가져간 `outbox` 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`). 보낸 행은 삭제, `room_activity` 에 `pc_send` 기록 |
 | 야간 발송 금지 | **22:00~08:00 KST** | 중계는 보내지 않고 들고 있다가 08:00 이후 첫 1분에 보냄(한 번에 3방 상한) |
 | 월요 키맨 포스터 | **월요일 10시대** (`POSTER_HOUR = 10`) | `poster_send.py --weekly` — 사진으로 보냄. 서버 안전망 cron 은 10:30 |
-| 카톡 대화 내용 저장 | **스위치 켤 때만**(`FIRSTOA_KAKAO_EXPORT=1`, 기본 꺼짐) 매일 **06:30~08:00 KST** 첫 바퀴 1회 | `tools/kakao-pc/export_rooms.py --export` — `room_map` 방 중 **창이 열려 있는 방만** Ctrl+S → 저장 창에 `<방이름>_YYYYMMDD.txt` 경로 붙여넣기 → 구글 드라이브 `카톡 자동적재 수신함`. 뒤는 Apps Script `Drive.gs` 가 적재(아래 절) |
+| 카톡 대화 내용 저장 | **스위치 켤 때만**(`FIRSTOA_KAKAO_EXPORT=1`, 기본 꺼짐) 매일 **05:30~06:50 KST** 첫 바퀴 1회(Apps Script 수집 트리거 07시보다 먼저 파일이 도착해야 하루 늦게 적재되지 않는다) | `tools/kakao-pc/export_rooms.py --export` — Supabase `kakao_collect_rooms` 의 `enabled`·`export`=true 방 중(표가 없거나 비면 `room_map` 의 점검·AS·물류·미수·불만·재계약 방만 — 마감·부품·자가 제외) **창이 열려 있는 방만** Ctrl+S → 저장 창에 `<방이름>_YYYYMMDD.txt` 경로 붙여넣기 → 구글 드라이브 `카톡 자동적재 수신함`. 뒤는 Apps Script `Drive.gs` 가 적재(아래 절) |
 | 일감 | 들어올 때 | `worker_jobs` 의 `status=queued` 행: `ping` `backup` `relay` `poster` `kakao_photo` (음성·OCR 은 자리만) |
 
 > 파일 불일치: `tools/worker/README.md` 표에는 "월 08시"로 적혀 있지만 코드(`worker.py` POSTER_HOUR)는 10시다(2026-10-21 변경). 코드가 사실. `tools/kakao-pc/README.md` 의 `C:\firstoa\` 경로·"월요일 08:00 작업 등록"도 옛 설치 방식이다(지금은 실행기가 부른다).
@@ -83,8 +83,8 @@ python ..\kakao-pc\poster_send.py --check      # 열린 방 창과 이번 주 �
 4. 켜기: `setx FIRSTOA_KAKAO_EXPORT 1` → `Stop-ScheduledTask -TaskName 'FIRSTOA Worker' ; Start-ScheduledTask -TaskName 'FIRSTOA Worker'` → 로그 첫 줄에 `카톡 저장 켬`.
 5. 끄기: `setx FIRSTOA_KAKAO_EXPORT 0` 후 작업 재시작.
 
-기타: `--list`(대상 방·창 열림 여부만, 키 안 누름), `--category 점검,AS`(업무 종류만), `--dir "<폴더>"` 또는 `FIRSTOA_KAKAO_EXPORT_DIR`(기본 = 구글 드라이브\카톡 자동적재 수신함. 폴더가 없으면 **만들지 않고** 멈춘다 — 로컬에서 새로 만들면 Drive.gs 가 보는 폴더와 다른 폴더가 된다). 로그는 `poster_log.txt` 의 `[내보내기]` 줄, 결과는 `state.json` 의 `kakao_export_last`.
-주의: PC 카톡 저장은 **그 PC 에 남은 대화만** 나온다. 봇 계정은 10/21 재로그인이라 그 전 대화는 없을 수 있다. Drive.gs 는 시트의 방 매핑(getRoomMap)으로 고르므로 거기 없는 방 파일은 `확인필요` 로 간다.
+기타: `--list`(대상 방·창 열림 여부만, 키 안 누름), `--category 점검,AS`(업무 종류만 — 수집 표는 kinds 와 겹치는 방), `--from-room-map`(비상용: 수집 표를 건너뛰고 옛 room_map 방식), `--dir "<폴더>"` 또는 `FIRSTOA_KAKAO_EXPORT_DIR`(기본 = 구글 드라이브\카톡 자동적재 수신함. 폴더가 없으면 **만들지 않고** 멈춘다 — 로컬에서 새로 만들면 Drive.gs 가 보는 폴더와 다른 폴더가 된다). 로그는 `poster_log.txt` 의 `[내보내기]` 줄, 결과는 `state.json` 의 `kakao_export_last`.
+주의: PC 카톡 저장은 **그 PC 에 남은 대화만** 나온다. 봇 계정은 10/21 재로그인이라 그 전 대화는 없을 수 있다. Drive.gs 는 방 매핑(getRoomMap)으로 고르므로 거기 없는 방 파일은 `확인필요` 로 간다.
 
 ## 카톡 PC 자동화 금지 규칙 (실측 사고 기반, 코드 고칠 때 필수)
 `.claude/agents/kakao-pc-rules.md` 가 원문. 요약:
@@ -98,4 +98,5 @@ python ..\kakao-pc\poster_send.py --check      # 열린 방 창과 이번 주 �
 ## 설계 메모
 - anon 키만 쓴다. service_role 키는 노트북에 두지 않는다.
 - 일감 잡기는 `status=queued` 조건부 갱신이라 실행기가 둘이어도 한쪽만 가져간다(그래도 실행기는 1대만 돌린다).
+- `backup` 일감 payload: `{"tables":"표1,표2","out":"archive-20261024"}` — `out` 이 폴더 이름만이면 백업 루트(구글 드라이브\FIRSTOA-백업) 아래 그 이름 폴더, 절대경로면 그대로. 날짜(YYYY-MM-DD)가 아닌 이름은 14회차 정리에서 안 지워진다. `out` 을 비우면 그날 02:30 백업 폴더에 덮어쓴다(2026-10-24a).
 - 백업 파일에는 고객 정보가 있다 — git 에 올리지 말 것(`logs/`·`state.json` 도 .gitignore).

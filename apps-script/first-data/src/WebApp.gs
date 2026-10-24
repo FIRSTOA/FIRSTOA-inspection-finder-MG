@@ -11,6 +11,17 @@ function doGet(e) {
   if (action0 === 'pull') return webappPullKakao_(e);
   if (action0 === 'ack') return webappAck_(e);   // 봇이 전송 성공한 id 통보 → 큐에서 삭제
 
+  // 쓰기 동작(행 삭제·트리거·수집 실행)과 contactpeek(아무 시트나 읽힘)은 관리 토큰이 있어야 한다.
+  // 토큰은 스크립트 속성 FIELD_ADMIN_TOKEN — 속성이 없으면 전부 거부(잠긴 쪽으로 실패). 설계 3-7.
+  // GAS 웹앱은 HTTP 상태를 못 바꾼다 → 본문 {ok:false, status:403} 으로 알린다.
+  if (actionNeedsToken_(action0)) {
+    let expected = '';
+    try { expected = PropertiesService.getScriptProperties().getProperty('FIELD_ADMIN_TOKEN') || ''; } catch (te) { expected = ''; }
+    if (!checkAdminToken_(expected, e.parameter.token)) {
+      return gasJsonOut_(e, { ok: false, status: 403, error: 'forbidden: 관리 토큰이 없거나 틀립니다 (' + action0 + ')' });
+    }
+  }
+
   let result;
   try {
     const action = action0;
@@ -21,6 +32,8 @@ function doGet(e) {
     else if (action === 'inspforms') result = getInspectionFormsByVendor(q);
     else if (action === 'ping') result = { ok: true, time: new Date().toISOString(), indexInfo: getIndexMeta() };
     else if (action === 'adminstatus') result = { ok: true, queue: kakaoQueueStatus(), drive: getDriveInboxInfo() };  // CS 웹앱 관리 탭용
+    else if (action === 'collectstatus') result = getCollectStatus_();   // 관리 탭 [카톡 수집] 카드: 방별 마지막 적재·확인필요
+    else if (action === 'collectrooms') result = getCollectRoomMap_();   // 수집 경로(Supabase 표 또는 시트 대체) — 진단용 읽기
     else if (action === 'kakaoclear') result = kakaoClearFinished_();  // 끝난 수집 작업 정리 (CS 웹앱 관리 탭)
     else if (action === 'ingestnow') result = ingestFromDriveFolder();  // 드라이브 수집 즉시 실행 (CS 웹앱 관리 탭)
     else if (action === 'retryheld') result = retryHeldFiles();          // 확인필요 파일을 수집함으로 되돌림
@@ -73,8 +86,13 @@ function doGet(e) {
     result = { error: err.toString() };
   }
 
+  return gasJsonOut_(e, result);
+}
+
+/** doGet 응답: callback 파라미터가 있으면 JSONP, 없으면 JSON */
+function gasJsonOut_(e, result) {
   const json = JSON.stringify(result);
-  const callback = e.parameter.callback;
+  const callback = e && e.parameter && e.parameter.callback;
   if (callback) {
     return ContentService.createTextOutput(callback + '(' + json + ')')
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
@@ -244,6 +262,96 @@ function getRoomMap() {
     const rows = data.filter(function (r) { return String(r[0] || '').trim(); })
       .map(function (r) { return { roomName: String(r[0]).trim(), category: String(r[1]).trim(), team: String(r[2]).trim() }; });
     return { ok: true, rows: rows };
+  } catch (err) { return { ok: false, error: err.toString() }; }
+}
+
+// ── 카톡 수집 경로: Supabase kakao_collect_rooms (방 1개 = 처리 종류 여러 개). 설계 3-1 ──
+// getRoomMap()(시트)은 그대로 둔다 — WebappSave.gs 의 발송 방 고르기(roomIndex_)가 그것을 쓰므로
+// 수집 쪽만 새 표로 바꾸고 발송 경로는 건드리지 않는다.
+const COLLECT_ROOMS_CACHE_KEY = 'kakao_collect_rooms_v1';
+const COLLECT_ROOMS_CACHE_SEC = 300;
+
+/** kakao_collect_rooms 전체 읽기(anon, 5분 캐시). 결과 {ok, rows:[route]} 또는 {ok:false, error}. */
+function fetchCollectRoomsFromSupabase_() {
+  const cache = CacheService.getScriptCache();
+  let body = cache.get(COLLECT_ROOMS_CACHE_KEY);
+  if (body == null) {
+    try {
+      const res = UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/kakao_collect_rooms?select=room,kinds,region,enabled,export,structured,keep_raw,sort_order&order=sort_order.asc.nullslast,room.asc', {
+        headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON }, muteHttpExceptions: true
+      });
+      const code = res.getResponseCode();
+      if (code !== 200) return { ok: false, error: 'kakao_collect_rooms 조회 ' + code + ': ' + String(res.getContentText()).slice(0, 120) };
+      body = res.getContentText();
+      try { cache.put(COLLECT_ROOMS_CACHE_KEY, body, COLLECT_ROOMS_CACHE_SEC); } catch (e) {}   // 실패한 응답은 캐시하지 않는다
+    } catch (err) { return { ok: false, error: 'kakao_collect_rooms 조회 실패: ' + err }; }
+  }
+  let list;
+  try { list = JSON.parse(body || '[]'); } catch (e) { return { ok: false, error: 'kakao_collect_rooms 응답 해석 실패' }; }
+  const rows = [];
+  for (let i = 0; i < (list || []).length; i++) {
+    const r = collectRouteFromTableRow_(list[i]);
+    if (r) rows.push(r);
+  }
+  return { ok: true, rows: rows };
+}
+
+/**
+ * 수집 경로 목록. Supabase 표가 있으면 그것, 없거나(404)·비었거나·조회 실패면 _room_map 시트로 대신한다.
+ * 결과 {ok, rows:[{roomName, kinds, team, category, enabled, export, structured, keepRaw, source}], source, supabaseError?}
+ */
+function getCollectRoomMap_() {
+  const sb = fetchCollectRoomsFromSupabase_();
+  if (sb.ok && sb.rows.length) return { ok: true, rows: sb.rows, source: 'supabase' };
+  const reason = sb.ok ? '표가 비어 있음' : sb.error;
+  Logger.log('[수집 매핑] Supabase 대신 _room_map 시트 사용: ' + reason);
+  const sh = getRoomMap();
+  if (!sh || !sh.ok) return { ok: false, rows: [], source: 'none', error: (sh && sh.error) || '시트 매핑 읽기 실패', supabaseError: reason };
+  const rows = [];
+  sh.rows.forEach(function (r) {
+    const route = collectRouteFromSheetRow_(r.roomName, r.category, r.team);
+    if (route) rows.push(route);
+  });
+  return { ok: true, rows: rows, source: 'sheet', supabaseError: reason };
+}
+
+/**
+ * 관리 탭 [카톡 수집] 카드용 요약 (읽기 전용 GET collectstatus).
+ * {ok, source, rooms:[{room, kinds, region, enabled, export, structured, keep_raw, last_import_at, last_raw_at, held}],
+ *  held_total, held_names, unregistered, last_run}  — 시각은 ISO(UTC) 글, 없으면 null.
+ * last_import_at = 수집 로그에서 그 방의 마지막 구조 적재(새 메시지 없음 포함), last_raw_at = 마지막 원문 전송 성공(GAS 기준).
+ */
+function getCollectStatus_() {
+  try {
+    const map = getCollectRoomMap_();
+    const logRows = [];
+    const ss = SpreadsheetApp.openById(MASTER_SS_ID);
+    const sh = ss.getSheetByName(UPLOAD_LOG_TAB);
+    if (sh && sh.getLastRow() >= 2) {
+      const last = sh.getLastRow();
+      const start = Math.max(2, last - 1999);   // 최근 2,000줄(하루 20방 × 종류 × 24회를 넉넉히 덮음)
+      const data = sh.getRange(start, 1, last - start + 1, 8).getValues();
+      for (let i = 0; i < data.length; i++) {
+        const t = data[i][0];
+        const ts = t instanceof Date ? t.getTime() : new Date(String(t)).getTime();
+        if (isNaN(ts)) continue;
+        logRows.push({ ts: ts, cat: String(data[i][1]), room: String(data[i][3]), status: String(data[i][7]) });
+      }
+    }
+    let heldFiles = [];
+    const props = PropertiesService.getScriptProperties();
+    const inboxId = props.getProperty(DRIVE_INBOX_PROP);
+    if (inboxId) { try { heldFiles = listHeldFileNames_(DriveApp.getFolderById(inboxId)); } catch (e) { heldFiles = []; } }
+    let lastRun = null;
+    try { lastRun = JSON.parse(props.getProperty(KAKAO_LAST_INGEST_PROP) || 'null'); } catch (e) { lastRun = null; }
+
+    const s = summarizeCollectStatus_(map.rows || [], logRows, heldFiles, lastRun);
+    const iso = function (ms) { return ms == null ? null : new Date(ms).toISOString(); };
+    s.rooms.forEach(function (r) { r.last_import_at = iso(r.last_import_at); r.last_raw_at = iso(r.last_raw_at); });
+    s.ok = true;
+    s.source = map.source;
+    if (map.supabaseError) s.supabaseError = map.supabaseError;
+    return s;
   } catch (err) { return { ok: false, error: err.toString() }; }
 }
 

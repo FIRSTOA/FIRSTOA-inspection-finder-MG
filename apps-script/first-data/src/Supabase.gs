@@ -18,7 +18,9 @@ var SUPABASE_TABLE = {
   '점검': 'jeomgeom', 'AS': 'as_records', '재계약': 'recontract',
   '초과업체조정': 'overage_adjust',
   '해지방어': 'churn_defense', '경영지원': 'mgmt_support',
-  '불만': 'bulman'   // 신양식 /불만접수 전환: 카톡 증분 적재(미러 제거). 시트 불만은 현재 미사용.
+  '불만': 'bulman',  // 신양식 /불만접수 전환: 카톡 증분 적재(미러 제거). 시트 불만은 현재 미사용.
+  '물류': 'logistics_records'   // 2026-10-24 카톡 물류 양식(Logistics.gs 전용 — 마스터 탭 없음, CONFIG 에도 없음)
+  // , '미수': 'misu'   // 미수 즉시 적재(설계 Q10 승인 대기). 켜기 전 밤 미러(syncNonLeaseOnly 00시대 트리거)와 겹치지 않게 수집 시간대 확인 — docs/manual/ops/08 참고
 };
 
 // 카테고리 → Supabase 테이블 (시트소스 전체교체 미러: delete-all + insert)

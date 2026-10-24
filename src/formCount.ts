@@ -13,6 +13,9 @@
  *   불만      bulman(웹앱·시트 미러·카톡 가져오기 — 모두 센다)
  *   초과조정  overage_adjust
  *   미수      misu_visits(보완 기록은 원 기록과 합쳐 1건 — misuVisit.effectiveMisuVisits)
+ *   담당자 변경 contact_changes(FIELD 양식 + 키맨체크 시트 행 — 2026-10-24 3단계, 활동 기록은 [보내기] 성공분만이라 10월 31 vs 원본 66)
+ *             팀 규칙만 다르다: CS(A~E) 작성자만 팀 칸에 넣고(지역 칸 → 작성자 팀), CS 밖 작성자(전략영업·경영지원·IT 등)는 팀 '미지정' = "전체"에만
+ *   (교체양식은 원본 표가 없다 — 복사 전용 양식이라 [복사] 때 남는 activity_events 가 유일한 기록, 그대로 활동 기록으로 센다)
  *
  * 규칙(workCount 와 같음 — 이 함수 하나를 홈 KPI·팀 현황·순위표·조회 탭이 같이 쓴다)
  *   · 오발송 삭제(_hidden) 행 제외 · 팀장(명단 팀 '팀장') 기록 제외
@@ -24,15 +27,21 @@ import { kstDayOf, regionTeam, vendorKeyOf, type FieldRow } from "./workCount";
 import { normalizeLogisticsKind, type ActivityEvent, type LogisticsKind } from "./operations";
 import { effectiveMisuVisits, type MisuVisit } from "./misuVisit";
 
-export type FormKind = "logistics" | "recontract" | "complaint" | "overage" | "misu";
-export const FORM_KINDS: FormKind[] = ["logistics", "recontract", "complaint", "overage", "misu"];
+export type FormKind = "logistics" | "recontract" | "complaint" | "overage" | "misu" | "contact_change";
+export const FORM_KINDS: FormKind[] = ["logistics", "recontract", "complaint", "overage", "misu", "contact_change"];
 /** 업체 수로 세는 종류(재계약·불만 — 2~3차 방문이 이어져도 업체 1곳의 진행) */
 export const VENDOR_UNIT_KINDS: ReadonlySet<FormKind> = new Set<FormKind>(["recontract", "complaint"]);
 export const FORM_LABELS: Record<FormKind, { label: string; unit: string }> = {
   logistics: { label: "물류", unit: "건" }, recontract: { label: "재계약", unit: "곳" }, complaint: { label: "불만", unit: "곳" },
-  overage: { label: "초과조정", unit: "건" }, misu: { label: "미수 방문", unit: "건" },
+  overage: { label: "초과조정", unit: "건" }, misu: { label: "미수 방문", unit: "건" }, contact_change: { label: "담당자 변경", unit: "건" },
 };
 export const FORM_BASIS_TEXT = "양식 원본 표 · 같은 날 같은 사람 같은 업체 1건 · 재계약·불만은 업체 수 · 오발송 삭제·팀장 기록 제외 · 팀 = 지역 칸(없으면 작성자 팀)";
+export const CONTACT_BASIS_TEXT = "담당자·주소 변경 표(FIELD 양식 + 키맨체크 시트) · 같은 날 같은 사람 같은 업체 1건 · 오발송 삭제·팀장 기록 제외 · 팀 = CS(A~E) 작성자만 지역 칸(없으면 작성자 팀), CS 밖 작성자는 팀 미지정(전체에만)";
+
+/** CS 팀(A~E) — 담당자 변경은 이 팀 작성자만 팀 칸에 들어간다(operations.OPERATIONS_TEAMS 와 같은 목록) */
+const CS_TEAMS: ReadonlySet<string> = new Set(["A", "B", "C", "D", "E"]);
+/** 팀에 넣지 않는 작성자의 팀 값 — "전체"에는 들고, A~E 팀 칸에는 안 들어간다 */
+export const NO_TEAM = "미지정";
 
 /* ───────────── 행 정리(양식 표 공통) ───────────── */
 
@@ -128,22 +137,68 @@ export function latestByVendor(rows: FormRow[]): FormRow[] {
 
 /* ───────────── 표별 읽는 칸·변환 ───────────── */
 
-export type FormTable = "logistics_records" | "recontract" | "bulman" | "overage_adjust";
-export const FORM_SOURCES: Record<FormTable, { kind: FormKind; dateField: string; columns: string[]; vendorFields: string[] }> = {
-  logistics_records: { kind: "logistics", dateField: "작성일", columns: ["id", "_hidden", "created_at", "작성일", "작성자", "구분", "거래처명", "_업체명", "_출처", "수량"], vendorFields: ["_업체명", "거래처명"] },
+export type FormTable = "logistics_records" | "recontract" | "bulman" | "overage_adjust" | "contact_changes";
+/** serverDate = 날짜 칸이 date 형식이라 서버에서 기간으로 자를 수 있다(나머지는 글자가 섞여 created_at 으로 넓게 받고 countForms 가 거른다) */
+export const FORM_SOURCES: Record<FormTable, { kind: FormKind; dateField: string; columns: string[]; vendorFields: string[]; authorField?: string; serverDate?: boolean }> = {
+  logistics_records: { kind: "logistics", dateField: "작성일", serverDate: true, columns: ["id", "_hidden", "created_at", "작성일", "작성자", "구분", "거래처명", "_업체명", "_출처", "수량"], vendorFields: ["_업체명", "거래처명"] },
   recontract: { kind: "recontract", dateField: "날짜", columns: ["id", "_hidden", "created_at", "날짜", "작성자", "지역", "_출처", "업체명", "_업체명", "갱신상태", "최종상태", "다음확인일"], vendorFields: ["_업체명", "업체명"] },
   bulman: { kind: "complaint", dateField: "날짜", columns: ["id", "_hidden", "created_at", "날짜", "작성자", "지역", "_출처", "업체명", "_업체명", "최종상태", "접수/처리"], vendorFields: ["_업체명", "업체명"] },
   overage_adjust: { kind: "overage", dateField: "방문일", columns: ["id", "_hidden", "created_at", "방문일", "작성자", "지역", "_출처", "업체명", "_업체명", "고객반응", "진행상태"], vendorFields: ["_업체명", "업체명"] },
+  // 변경일(change_date)은 date 형식·빈 칸 0(2026-10-24 실측 1,481행) — 칸 이름이 영문(author·company·region)
+  contact_changes: { kind: "contact_change", dateField: "change_date", serverDate: true, columns: ["id", "_hidden", "created_at", "change_date", "author", "company", "region"], vendorFields: ["company"], authorField: "author" },
 };
-export const FORM_TABLE_BY_KIND: Partial<Record<FormKind, FormTable>> = { logistics: "logistics_records", recontract: "recontract", complaint: "bulman", overage: "overage_adjust" };
+export const FORM_TABLE_BY_KIND: Partial<Record<FormKind, FormTable>> = { logistics: "logistics_records", recontract: "recontract", complaint: "bulman", overage: "overage_adjust", contact_change: "contact_changes" };
 export const isFormTable = (table: string): table is FormTable => table in FORM_SOURCES;
 
 const firstNumber = (v: unknown) => Math.max(0, Number(String(v ?? "").match(/\d+/)?.[0] || 0));
 
-/** 표 행 → 집계 행. 물류는 구분(물류 칸/기타 칸 판정)·수량을 같이 */
+/**
+ * 담당자 변경 팀 — CS(A~E) 작성자만 지역 칸(없으면 작성자 팀), 그 밖(전략영업·경영지원·IT·명단 밖)은 NO_TEAM.
+ * 팀장은 manager 로 따로 빠진다(toFormRows). 결정 대기(CS 밖 작성자 포함 여부)를 "전체에만 포함"으로 둔 기본값(2026-10-24).
+ */
+export function csOnlyTeam(author: string, region: unknown, teamOf: (author: string) => string): string {
+  const authorTeam = teamOf(author);
+  if (authorTeam === "팀장") return "팀장";
+  if (!CS_TEAMS.has(authorTeam)) return NO_TEAM;
+  return regionTeam(region) || authorTeam;
+}
+
+/**
+ * 조회 탭 담당자·주소 변경 목록의 팀 필터 — csOnlyTeam 과 같은 판정을 PostgREST 조건으로(2026-10-24, "목록 행 수 ≠ 카드 수" 막기).
+ * workCount.regionTeam(공백 지우고 앞의 수도권|지역 하나 떼고, CSS·지방 = E, 첫 글자 A~E 뒤에 영문자가 없으면 그 팀)을 Postgres 정규식(imatch, 대소문자 무시)으로 옮겼다.
+ *   팀 T = CS 작성자 & (지역 칸이 T) | T팀 작성자 & 지역 칸에 팀이 없음(빈 칸·'강원도'·'BD' 등)
+ * 다른 점: 전각 글자('Ｄ', 실측 1행)는 regionTeam 이 NFKC 로 D 로 읽고 Postgres 는 못 읽는다 → 작성자 팀으로 들어간다.
+ * 백슬래시를 쓰지 않으려고 [[:space:]] 를 쓴다(PostgREST 따옴표 값 안의 백슬래시 이스케이프 회피).
+ */
+const WS = "[[:space:]]*";
+const teamAlt = (t: string) => `${t}${WS}([^A-Za-z[:space:]]|$)`;
+const E_ALT = `C${WS}S${WS}S|지${WS}방`;
+export type ContactTeamSpec = { csNames: string[]; teamNames: string[]; teamRegex: string; anyRegex: string };
+export function contactTeamSpec(team: string, book: Partial<Record<string, string[]>>): ContactTeamSpec {
+  const csNames = [...new Set([...CS_TEAMS].flatMap((t) => book[t] || []))];
+  const head = `^${WS}(수도권|지역)?${WS}`;
+  return {
+    csNames, teamNames: [...(book[team] || [])],
+    teamRegex: `${head}(${teamAlt(team)}${team === "E" ? `|${E_ALT}` : ""})`,
+    anyRegex: `${head}([A-E]${WS}([^A-Za-z[:space:]]|$)|${E_ALT})`,
+  };
+}
+/** contactTeamSpec → 'or=(…)' 한 조각(인코딩 포함). 이름 목록이 비면 아무 행도 안 걸리게 "__없음__" */
+export function contactTeamQuery(team: string, book: Partial<Record<string, string[]>>): string {
+  const spec = contactTeamSpec(team, book);
+  const names = (list: string[]) => (list.length ? list : ["__없음__"]).map((n) => `"${n.replace(/"/g, "")}"`).join(",");
+  const conds = [
+    `and(author.in.(${names(spec.csNames)}),region.imatch."${spec.teamRegex}")`,
+    `and(author.in.(${names(spec.teamNames)}),or(region.is.null,region.not.imatch."${spec.anyRegex}"))`,
+  ];
+  return `or=(${conds.map((c) => encodeURIComponent(c)).join(",")})`;
+}
+
+/** 표 행 → 집계 행. 물류는 구분(물류 칸/기타 칸 판정)·수량을 같이, 담당자 변경은 CS 작성자만 팀 */
 export function toFormTableRows(table: FormTable, raws: FormRaw[], teamOf: (author: string) => string): FormRow[] {
   const src = FORM_SOURCES[table];
-  const rows = toFormRows(raws, src.dateField, teamOf, { vendorFields: src.vendorFields, table });
+  const rows = toFormRows(raws, src.dateField, teamOf, { vendorFields: src.vendorFields, authorField: src.authorField, table });
+  if (table === "contact_changes") return rows.map((r) => ({ ...r, team: csOnlyTeam(r.author, r.raw.region, teamOf) }));
   if (table !== "logistics_records") return rows;
   return rows.map((r) => ({ ...r, logistics: normalizeLogisticsKind(String(r.raw["구분"] ?? "")), qty: firstNumber(r.raw["수량"]) }));
 }
@@ -253,7 +308,7 @@ export function withFieldLogistics(forms: FormSet, field: FieldRow[]): FormSet {
 
 /**
  * 활동 기록에서 양식 종류를 표 원본으로 갈아 끼운다 — 센 행 하나 = 활동 1개(metadata.counted → countableEvents 재묶음을 건너뛴다).
- * 담당자 변경·교체양식·마감 카운터는 활동 기록 그대로(전용 원본 없음/이번 범위 밖).
+ * 교체양식(원본 표 없음)·마감 카운터(업무 아님, 타임라인용)는 활동 기록 그대로.
  */
 export function mergeFormsIntoEvents(events: ActivityEvent[], forms: FormSet): ActivityEvent[] {
   const replaced = new Set(FORM_KINDS.filter((k) => forms[k]));
@@ -269,6 +324,14 @@ export function mergeFormsIntoEvents(events: ActivityEvent[], forms: FormSet): A
     }
   }
   return [...events.filter((e) => !replaced.has(e.category as FormKind)), ...fromTables];
+}
+
+/**
+ * 팀 현황 "업무" 합계·인원별 전체(건)에 들어가는 활동인가 — 마감 카운터(counter)는 카운터 사진 전송 기록(통합검색 타임라인용)이라 업무가 아니다.
+ * 예전엔 팀 현황 '전체 업무' 필터가 모든 종류를 통과시켜 counter 가 업무 합계·거래처·기기·인원에 섞였다(업무 구성 칸에는 counter 칸이 없어 합이 안 맞음).
+ */
+export function isWorkEvent(e: Pick<ActivityEvent, "category">): boolean {
+  return e.category !== "counter";
 }
 
 /** 이미 범위·팀·사람으로 거른 활동 목록에서 한 종류 세기(팀 현황 칸·순위표 칸) — countForms 와 같은 단위 */

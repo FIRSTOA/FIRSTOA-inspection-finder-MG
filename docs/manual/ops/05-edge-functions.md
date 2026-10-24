@@ -24,6 +24,8 @@
 | geocode | 6 | 앱 | 주소 → 좌표(카카오 → OSM) | KAKAO_REST_KEY |
 | place-search | 9 | 앱(맛동여지도) | 장소 자동 채우기 | KAKAO_REST_KEY, OPENAI |
 | entity-ask / data-ask | 6 / 12 | 앱 통합검색 | 업체 질문 / 전체 데이터 질문(AI). 사용량은 `ai_usage` 에 기록 | OPENAI |
+| kakao-ingest | 새(2026-10-24, 배포 대기) | GAS `KakaoRaw.gs`(드라이브 수신함 처리 뒤) | 카톡 내보내기 TXT 조각(≤500KB) → `kakao_messages`(가림·분류 추정·hash 중복 무시) + `kakao_import_log`. 헤더 `x-ingest-token` 검사 | FIELD_INGEST_TOKEN |
+| kakao-search | 새(2026-10-24, 배포 대기) | 앱 탭 검색 [카톡 대화] | `kakao_messages` 읽기 대행(anon 권한 0 인 표). 스위치 `KAKAO_SEARCH_ENABLED` 꺼지면 빈 결과 | — |
 | report-polish, golden-card-transform, growth-note-transform, guide-tag, playbook-draft, okr-assist, quarter-result-quantify | 2~14 | 앱 | 각종 AI 문장 다듬기·태깅·초안 | OPENAI |
 
 Vercel 서버리스(`api/`, 엣지 함수 아님): `naver-connect.js`·`naver-callback.js`(네이버 OAuth 연결), `naver-add.js`, `naver-calendars.js`, `calendar-ics.js`(ICS 구독, `CALENDAR_ICS_TOKEN`). Vercel 배포와 함께 나간다.
@@ -51,3 +53,31 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 - **쓰기 엣지 함수가 anon 키로 누구나 호출 가능**한 상태는 2026-10-10 감사에서 "결정 대기"로 남아 있다(메모 근거, 확인 필요).
 - 카톡을 만드는 함수(공유·포스터)는 KST 10시 전 보류 가드를 지킨다.
 - naver-calendar-sync 가 수입하는 일정의 업체명(`as_tickets.vendor`)은 2026-10-24부터 제목에서 뽑은 **고객사만**(`_shared/ticket-title.ts` 의 `importedTicketVendor`, 웹앱 `src/ids.ts` 와 같은 파서), 전체 제목은 `calendarTitle`(200자) — 제목 파서를 고치면 이 함수도 다시 배포한다. 그 전에 들어온 일정은 vendor 에 제목 앞 80자가 남아 있다.
+
+## 카톡 원문 보관 — kakao-ingest · kakao-search (2026-10-24)
+설계: docs/tasks/kakao-collect-expand.md 3-5, docs/tasks/tab-search-kakao-history.md 3-2. 표: supabase/kakao-messages-20261024.sql(kakao_messages·kakao_import_log), supabase/kakao-collect-rooms-20261024.sql(수집 방). 공용 파서: `_shared/kakao-parse.ts`(테스트 tests/kakaoParse.test.ts).
+
+**흐름**: 노트북 매크로 → 드라이브 수신함 → GAS `ingestFromDriveFolder`(Drive.gs) → `kakaoRawForward_`(KakaoRaw.gs) → 엣지 kakao-ingest → `kakao_messages`. 앱 탭 검색 [카톡 대화] → 엣지 kakao-search → `kakao_messages`.
+
+**kakao-ingest**
+- 요청: `{ room, text, file_name?, chunk_index?, chunk_count?, source? }` → `{ ok, read, inserted, skipped, masked, from_at, to_at, import_id }`. `{ mode: "last", room }` → `{ last_to_at }`(GAS 증분 기준).
+- 인증: 헤더 `x-ingest-token` = 시크릿 `FIELD_INGEST_TOKEN`. 시크릿이 비면 503 으로 모두 거부. Authorization 은 anon 키(기본 JWT 검사 그대로 — `--no-verify-jwt` 쓰지 않음).
+- 방이 `kakao_collect_rooms`(enabled·keep_raw)에 없으면 403 + 적재 기록 status=error. 글 0건이면 422.
+- 가림(넣기 전): 주민번호(privacy.ts 규칙)·카드번호 전부·계좌(끝 4자리만)·휴대폰 가운데 4자리. DB 트리거가 한 번 더 가린다.
+- 중복 키 `hash` = SHA-256(방 | KST 날짜 시:분 | 작성자 | 가린 본문 앞 500자 | #같은 분 같은 글 n번째). 같은 파일을 다시 보내도 새 글 0.
+- `is_bot` = 작성자가 app_config `KAKAO_BOT_NICKS`(쉼표 목록, 기본 "Ai법인폰")에 있음.
+
+**kakao-search**
+- 요청: `{ q, kinds?, room?, from?, to?, limit?(≤200, 기본 100), include_bot? }` → `{ ok, enabled, rows[{ id, room, sent_at, seq, author, text, kind_guess, is_bot }], limit, truncated }`.
+- 제한: 스위치 `KAKAO_SEARCH_ENABLED`='true' 일 때만, 검색어 정규화 2자 이상(최대 3낱말 AND), IP 당 분당 30회, 봇 글 기본 제외. 검색 기록은 엣지 로그 한 줄(`kakao-search {...}`) — 표(kakao_search_log)는 아직 없음.
+- `text_key`(DB 생성 열, pg_trgm) 부분 일치 — 띄어쓰기·기호 차이 무시.
+
+**처음 켜는 순서**(순서가 틀리면 GAS 전송만 잠깐 실패한다)
+1. SQL 2장 실행(kakao-collect-rooms → kakao-messages, /sql-handoff).
+2. 긴 임의 문자열을 하나 만들어 Supabase 시크릿 `FIELD_INGEST_TOKEN` 과 GAS 스크립트 속성 `FIELD_INGEST_TOKEN` 에 **같은 값**으로 넣는다(코드·문서에 값을 적지 않는다).
+3. 배포: `npx supabase functions deploy kakao-ingest --project-ref kkdiihazgzesbqxjytqv --use-api` / 같은 명령으로 `kakao-search`.
+4. GAS 새 버전 배포(KakaoRaw.gs 포함). 편집기에서 `testPushRawMessages`(파일 ID·방 이름 넣고)로 한 방 시험 → `kakao_import_log` 에 status ok 1행.
+5. 직원 고지 뒤 app_config `KAKAO_SEARCH_ENABLED` = `true`.
+
+**문제가 생기면**: `kakao_import_log` 의 status=error·error 열(방 목록에 없음·글 0건·넣기 실패)을 먼저 본다. 401 = 토큰 불일치, 503 = 시크릿 없음, 413 = 조각이 500KB 초과(GAS 조각 450KB 설정 확인).
+- `_shared/kakao-parse.ts` 를 고치면 두 함수 모두 다시 배포. 가림 규칙을 바꾸면 그 규칙에 걸리는 글은 다음 적재 때 새 글로 한 번 더 들어간다(hash 가 가린 글 기준).

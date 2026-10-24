@@ -1,6 +1,6 @@
 -- ============================================================================
 -- cron 실행 로그 보존 줄이기 + 옛 백업 표 정리 준비 — 2026-10-24 · 데이터실 표다빈
--- SQL Editor 에서 1~2 블록을 통째로 1회 실행(2번 블록의 보관 폴더 경로를 먼저 채울 것). 두 번 실행해도 안전. 3 블록(DROP)은 기본 주석 — 노트북 백업 확인 뒤 따로.
+-- SQL Editor 에서 1~2 블록을 통째로 1회 실행(채울 것 없음). 두 번 실행해도 안전. 3 블록(DROP)은 기본 주석 — 노트북 백업 확인 뒤 따로.
 -- 설계: docs/tasks/db-hardening-2026-10-24.md (D). 이 파일 다음에 hardening-vacuum-cron-log-20261024.sql(한 줄, 따로 실행).
 --
 -- 왜: docs/tasks/risk-audit-2026-10-24.md 요약 7·부록 A10·E6. DB 877MB 중
@@ -25,11 +25,11 @@ select cron.alter_job(jobid, command := $c$delete from cron.job_run_details wher
 delete from cron.job_run_details where end_time < now() - interval '7 days';
 
 -- 2) 옛 백업 표 3개를 노트북 **별도 보관 폴더**로 내려받는 일감 — 실행기가 1분 안에 집는다 ---------------------
---    실행 전에 아래 out_dir 의 <보관 폴더 절대경로> 를 노트북의 실제 경로로 바꾼다. jsonb_build_object 가 JSON 이스케이프를 하므로 역슬래시는 한 번.
---      예: "D:\FIELD-archive"  또는  "G:\내 드라이브\FIRSTOA-백업\archive-20261024" (실행기 백업 루트 아래 날짜 아닌 이름 폴더)
+--    out_dir 는 기본값 'archive-20261024' 그대로 — 실행기(worker.py 2026-10-24 이후)가 평소 백업 루트(구글 드라이브\FIRSTOA-백업) 아래
+--      그 이름 폴더로 푼다(노트북 경로를 몰라도 됨). 절대경로를 적어도 된다(역슬래시 한 번). 옛 실행기면 tools\workerrchive-20261024 에 생긴다.
 --    **out 을 비우면** 실행기 기본 백업 루트의 오늘 날짜 폴더에 쓰고 그날 02:30 백업의 manifest.json 을 덮어쓴다. 또 그 폴더는
 --      14일 뒤 자동 삭제(KEEP=14)된다 → 반드시 별도 폴더로. 날짜(YYYY-MM-DD) 이름이 아닌 폴더는 매일 정리 대상이 아니다
---      (tools/worker/backup_tables.py prune). 경로를 안 바꾸면 아래 가드가 일감을 넣지 않고 멈춘다.
+--      (tools/worker/backup_tables.py prune). 비우면 아래 가드가 일감을 넣지 않고 멈춘다.
 --    결과: worker_jobs.result 에 "백업 완료 … 표 3개 · 83,335행 · 실패 0개". 파일은 <보관 폴더>\<오늘 날짜>\ 아래.
 --    주의(추정): 사본 표들은 인덱스가 없다(팀장 사전 조회). 실행기는 anon 으로 order=id.asc&offset=… 1,000행씩 읽으므로
 --      페이지마다 전체 정렬 → anon statement_timeout 에 걸려 "실패 1개 이상"이 될 수 있다. 그래도 3번 블록 가드가 DROP 을 막는다.
@@ -37,7 +37,7 @@ delete from cron.job_run_details where end_time < now() - interval '7 days';
 --    _backup_region_20260826 은 id 가 표 안에서 겹칠 수 있어(열 t·id·지역) offset 페이지가 행을 빠뜨리거나 겹칠 수 있다 — 행 수를 확인.
 do $$
 declare
-  out_dir text := '<보관 폴더 절대경로>';   -- ← 여기만 바꾼다(작은따옴표 안, 역슬래시 한 번: D:\FIELD-archive)
+  out_dir text := 'archive-20261024';   -- 그대로 두면 됨(백업 루트 아래 이 이름 폴더). 다른 곳에 두려면 절대경로(역슬래시 한 번)
 begin
   if out_dir like '<%' or btrim(out_dir) = '' then
     raise exception '보관 폴더 경로를 넣지 않았습니다 — out_dir 를 노트북의 실제 절대경로로 바꾼 뒤 다시 실행';

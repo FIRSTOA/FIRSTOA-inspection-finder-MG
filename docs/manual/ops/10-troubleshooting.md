@@ -92,3 +92,14 @@ where d.status <> 'succeeded' order by d.start_time desc limit 20;
 
 ## 13. 화면에 주민번호가 보인다 / 시리얼이 `******` 로 가려졌다
 - 가림 규칙은 한 파일 `supabase/functions/_shared/privacy.ts`(앱은 `src/privacy.ts` 로 다시 내보냄, 테스트 tests/privacy*.test.ts). 새 화면이 원본 행을 그대로 그리면 `maskRrn`(글)·`maskRrnValue(값, 칸이름)`·`maskDeep(행)` 을 거치게 하고, AI 답이면 entity-ask·data-ask 를 다시 배포했는지 본다. 하이픈 없는 13자리는 기기 시리얼과 구별이 안 돼 "거래처 코드/주민번호" 칸·이름표가 있을 때만 가린다. DB 원본(임대리스트 시트)은 고치지 않는다 — 정리는 시트 담당 부서에.
+
+### 13-2. 카톡 원문(kakao_messages)의 가림 — 2겹 (2026-10-24)
+카톡 원문은 저장 **전에** 가린다(보여 줄 때만 가리는 위 13 과 다름 — 원문 표에는 가린 글만 있다).
+1. **엣지(1겹째)** `supabase/functions/_shared/kakao-parse.ts` `maskKakaoText` — kakao-ingest 가 넣기 전, kakao-search 가 내보내기 전 한 번 더. 테스트 tests/kakaoParse.test.ts.
+   - 주민번호: privacy.ts `maskRrn` 그대로(하이픈형은 항상, 붙은 13자리는 "주민·생년월일" 이름표 뒤만 → `900101-1******`).
+   - 카드번호: 4-4-4-4 묶음은 **전부** `****-****-****-****`. 붙은 16자리는 "카드" 이름표가 앞에 있거나 룬(Luhn) 검사를 통과할 때만 전부 가림(시리얼 오가림 방지).
+   - 계좌: "계좌(번호)" 이름표 뒤 숫자 — 끝 4자리만 남김.
+   - 휴대폰: 가운데 4자리만 → `010-****-5678`.
+2. **DB 트리거(2겹째)** `kakao_messages_mask`(insert·text update 전) — 이름표·모양 기반 같은 규칙(카드는 끝 4자리 남김, 계좌는 끝 3자리 남김). 엣지가 이미 가렸으면 바꿀 것이 없다. 엣지를 거치지 않은 넣기(나중의 봇 실시간 등)를 막는 이중 방어. 더 가리면 masked +1.
+- **중복 키 hash = 가린 뒤 본문으로 계산한 SHA-256**(방 | KST 날짜 시:분 | 작성자 | 본문 앞 500자 | #같은 분 같은 글 n번째). 가리기 전 글로 해시하면 가린 숫자를 대입해 되찾을 수 있어서다. 그래서 **가림 규칙을 바꾸면 그 규칙에 걸리는 글은 다음 적재 때 새 글로 한 번 더 들어간다** — 규칙을 바꾸면 그 기간 중복을 지우는 SQL 을 같이 준비한다. 엣지 규칙과 트리거 규칙은 함께 고치고, kakao-ingest·kakao-search 를 둘 다 다시 배포한다.
+- 원문에 번호가 보인다는 신고: kakao_messages 의 그 행 `masked` 값과 text 를 SQL Editor 로 확인 → 규칙에 빠진 모양이면 위 두 곳에 추가.

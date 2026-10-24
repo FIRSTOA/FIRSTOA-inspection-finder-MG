@@ -62,7 +62,7 @@
 ### 3-5. 원문 보존 — tab-search 3-2 를 그대로 쓰고 5곳 보완
 tab-search-kakao-history.md 3-2(kakao_messages·kakao_import_log·trgm·dedup·3년 보관·백업 제외), 3-3(찾을 때 업체 매칭), 7절 R1(kakao-search 제한 5가지)을 그대로 쓴다. 보완:
 1. `room_kind text` → **`kinds text[]`**(겸용 방). 넣을 때 kakao_collect_rooms 에서 복사한다.
-2. **넣기는 엣지 kakao-ingest(service role)만** — anon 권한은 0(INSERT 도 없음). 원안의 "anon insert-only + on_conflict 실측" 문제가 사라진다. GAS 는 헤더 `x-ingest-token`(Supabase 시크릿 KAKAO_INGEST_TOKEN 과 GAS 스크립트 속성에 같은 값)으로 부른다.
+2. **넣기는 엣지 kakao-ingest(service role)만** — anon 권한은 0(INSERT 도 없음). 원안의 "anon insert-only + on_conflict 실측" 문제가 사라진다. GAS 는 헤더 `x-ingest-token`(Supabase 시크릿 FIELD_INGEST_TOKEN 과 GAS 스크립트 속성에 같은 값)으로 부른다.
 3. **`guess text`(분류 추정)** — 넣을 때 정규식만 쓴다: form:점검·form:AS·form:물류·form:불만접수·form:계약갱신·form:미수방문·form:초과조정·share(봇 공유)·media(사진 자리)·chat. 관리 카드 숫자와 물류 자유 글 비율 측정(Q8)에 쓴다. AI 없음.
 4. **시:분 파서** `_shared/kakao-parse.ts`(Kakao.gs 3형식 + `[오후 3:24]` 12시간제 → 24시간, `오전 12:xx` = 00시). dedup = md5(방 + KST `yyyy-mm-dd HH:mm` + 작성자 + 본문 앞 500자 정규화 + `#n`(같은 분·같은 글의 n번째)) — "네" 연타가 한 줄로 합쳐지지 않게.
 5. **증분 전송**: GAS 가 kakao_import_log 에서 그 방의 마지막 `to_at` 하루 전 날짜 띠부터만 잘라 500KB 조각(날짜 띠 경계)으로 보낸다 → 매일 전체 저장 파일(수 MB)을 통째로 보내지 않고, 엣지 CPU 한도 안에 든다. 첫 회만 전체.

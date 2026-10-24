@@ -11,7 +11,7 @@ import {
 import { kstDate, weekRange } from "./visits";
 import { countableEvents, distinctVendors, EXPANSION_BASIS_TEXT, FIELD_BASIS_TEXT } from "./workCount";
 import { loadWorkEvents } from "./expansionSource";
-import { countFormEvents, FORM_BASIS_TEXT, VENDOR_UNIT_KINDS, type FormKind } from "./formCount";
+import { CONTACT_BASIS_TEXT, countFormEvents, FORM_BASIS_TEXT, isWorkEvent, VENDOR_UNIT_KINDS, type FormKind } from "./formCount";
 import BlogCommentCard from "./BlogCommentCard";
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
@@ -89,7 +89,8 @@ function isLogisticsEtc(event: ActivityEvent) {
 }
 
 function matchesFilter(event: ActivityEvent, filter: FilterKey) {
-  if (filter === "all") return true;
+  // 전체 업무 = 업무 구성 칸들의 합집합 — 마감 카운터(counter, 타임라인용 기록)는 빠진다(2026-10-24 3단계, 예전엔 업무 합계에 섞였다)
+  if (filter === "all") return isWorkEvent(event);
   if (filter === "logistics_main") return event.category === "logistics" && !isLogisticsEtc(event);
   if (filter === "logistics_etc") return isLogisticsEtc(event);
   if (filter === "expansion") return event.category === "expansion_it" || event.category === "expansion_copier";
@@ -228,7 +229,7 @@ export default function OperationsDashboard({ author: _author }: Props) {
             <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-[11px] font-semibold text-slate-500">
               <span className="min-w-0">팀 운영량과 기록 누락을 확인합니다. <span className="font-black text-blue-600">계산 기준 보기</span></span>
             </summary>
-            <p className="pb-2 text-[11px] font-semibold leading-5 text-slate-400">팀장 기록·오발송 취소분은 빼고, 같은 거래처 재전송은 1건으로 셉니다(확장성은 같은 날, 그 밖은 10분 안). 건수 = 업무 기록 수, 거래처 = 서로 다른 거래처 수(같은 곳 여러 번은 1곳).<br />확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT} — 조회 탭과 같은 숫자.<br />점검·AS 기준: 점검·AS 표(FIELD 전송·카톡 가져오기 포함), {FIELD_BASIS_TEXT} — 홈·순위표·조회 탭과 같은 숫자.<br />물류·재계약·불만·초과조정·미수 기준: {FORM_BASIS_TEXT} — 홈·순위표·조회 탭과 같은 숫자(물류 = 물류 양식 + 점검·AS 양식의 세팅, 기타 = 여분·마감). 담당자 변경·교체양식만 활동 기록.</p>
+            <p className="pb-2 text-[11px] font-semibold leading-5 text-slate-400">팀장 기록·오발송 취소분은 빼고, 같은 거래처 재전송은 1건으로 셉니다(확장성은 같은 날, 그 밖은 10분 안). 건수 = 업무 기록 수, 거래처 = 서로 다른 거래처 수(같은 곳 여러 번은 1곳).<br />확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT} — 조회 탭과 같은 숫자.<br />점검·AS 기준: 점검·AS 표(FIELD 전송·카톡 가져오기 포함), {FIELD_BASIS_TEXT} — 홈·순위표·조회 탭과 같은 숫자.<br />물류·재계약·불만·초과조정·미수 기준: {FORM_BASIS_TEXT} — 홈·순위표·조회 탭과 같은 숫자(물류 = 물류 양식 + 점검·AS 양식의 세팅, 기타 = 여분·마감).<br />담당자 변경 기준: {CONTACT_BASIS_TEXT}.<br />교체양식만 활동 기록([복사] 기록 — 원본 표가 없는 복사 전용 양식). 마감 카운터 사진 전송은 업무 합계에 넣지 않습니다.</p>
           </details>
           <div className={`${UI.seg} lg:w-72`}>
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (

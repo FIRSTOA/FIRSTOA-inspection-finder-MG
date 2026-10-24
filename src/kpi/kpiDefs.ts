@@ -29,6 +29,8 @@ export type KpiSource =
   | "roster" | "field" | "expansion" | "events" | "workin" | "overage" | "recontract" | "bulman" | "misu"
   /** 물류 양식 표(logistics_records, 2026-10-24 — K24 가 활동 기록 대신) */
   | "logistics"
+  /** 담당자·주소 변경 표(contact_changes, 키맨체크 시트 행 포함 — 2026-10-24 3단계, K27 이 활동 기록 대신) */
+  | "contact"
   | "unhandled" | "receptionWeek" | "keyman" | "okr" | "blog" | "praise" | "customerPraise" | "visits" | "office"
   /** IT 학습 기록 표(2026-10-24, supabase/it-learning-logs-20261024.sql) — 표가 없으면 "준비 중" */
   | "itQuiz" | "itPractice"
@@ -199,12 +201,14 @@ export const KPI_DEFS: KpiDef[] = [
   },
   {
     id: "K27", name: "담당자 변경", unit: "건", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
-    basis: EVENT_BASIS, source: "loadWorkEvents + countableEvents(contact_change)", loads: ["events"], status: "ready",
+    basis: "담당자·주소 변경 표(FIELD 양식 + 키맨체크 시트) · 같은 날 같은 사람 같은 업체 1건 · 오발송 삭제·팀장 제외 · 팀 = CS(A~E) 작성자만 지역 칸(없으면 작성자 팀), CS 밖 작성자는 팀 미지정(전체에만)",
+    source: "formCount.countForms(contact_change) — 팀 현황·순위표·조회 탭 공통(2026-10-24 3단계, 활동 기록 대신)", loads: ["contact"], status: "ready",
     targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 담당자·주소 변경" }, today: true,
   },
   {
     id: "K28", name: "교체양식", unit: "건", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
-    basis: EVENT_BASIS, source: "loadWorkEvents + countableEvents(replacement)", loads: ["events"], status: "ready",
+    // 교체양식은 복사 전용(전송 없음)이라 원본 표가 없다 — [복사] 때 남는 활동 기록이 유일한 원본(2026-10-24 확인)
+    basis: EVENT_BASIS, source: "loadWorkEvents + countableEvents(replacement) — 원본 표 없음([복사] 활동 기록이 원본)", loads: ["events"], status: "ready",
     targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 교체양식" }, today: true,
   },
   // ── C. 응대 속도 ──

@@ -13,8 +13,8 @@ import {
 } from "./visits";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
-import { loadExpansionRows, loadFieldRows } from "./expansionSource";
-import { EMPTY_LEDGER, myLedgerCounts, type WorkLedger } from "./myWorkCount";
+import { loadExpansionRows, loadFieldRows, loadFormRows } from "./expansionSource";
+import { EMPTY_LEDGER, myFormCounts, myLedgerCounts, type WorkLedger } from "./myWorkCount";
 
 const KINDS = Object.keys(WORK_LABELS) as WorkKind[];
 const OFFICE_KINDS = Object.keys(OFFICE_LABELS) as OfficeKind[];
@@ -22,10 +22,12 @@ const icons: Record<WorkKind, string> = { inspection: "✅", as: "🔧", deliver
 const tones: Record<WorkKind, string> = { inspection: "bg-blue-50 text-blue-700", as: "bg-rose-50 text-rose-700", delivery: "bg-violet-50 text-violet-700", etc: "bg-slate-100 text-slate-600", pc: "bg-cyan-50 text-cyan-700", misu: "bg-amber-50 text-amber-700", bulman: "bg-pink-50 text-pink-700", recontract: "bg-emerald-50 text-emerald-700", overage: "bg-yellow-50 text-yellow-700" };
 
 // 점검·AS·확장성(pc) 숫자는 표 원본(myLedgerCounts = 순위표·팀 현황·홈·조회와 같은 함수)으로 덮는다(2026-10-23).
+// 2026-10-24 3단계: 납품/반출/교체/셋팅(물류 칸)·기타(여분,마감)·미수·불만·재계약·초과조정도 양식 원본 표(myFormCounts = 순위표 사람 값과 같은 함수),
+//   담당자 변경은 방문 장부에 칸이 없어 머리줄에만(원본 표 숫자). 못 읽은 종류는 방문 장부 숫자 그대로.
 // 방문 수·기기 대수·시간·영업 칸은 방문 장부(visit_logs) 그대로.
 // 표 원본을 못 읽으면 ledger=null — 방문 장부 숫자를 그대로 두고 화면에 안내만 띄운다(방문 기록 화면까지 막지 않는다).
 type LedgerScope = { ledger: WorkLedger | null; author: string };
-const UNIT: Partial<Record<WorkKind, string>> = { inspection: "대" };
+const UNIT: Partial<Record<WorkKind, string>> = { inspection: "대", recontract: "곳", bulman: "곳" }; // 재계약·불만 = 업체 수(순위표와 같은 단위)
 const unitOf = (k: WorkKind) => UNIT[k] || "건";
 function summarize(rows: VisitRow[], scope: LedgerScope, from: string, to: string) {
   const sum = summarizeVisits(rows);
@@ -34,6 +36,11 @@ function summarize(rows: VisitRow[], scope: LedgerScope, from: string, to: strin
   sum.count.inspection = fromLedger.inspection;
   sum.count.as = fromLedger.as;
   sum.count.pc = fromLedger.expansion;
+  const forms = myFormCounts(scope.ledger, scope.author, from, to);
+  const put = (k: WorkKind, v: number | null) => { if (v !== null) sum.count[k] = v; };
+  put("delivery", forms.logistics); put("etc", forms.logisticsEtc); put("misu", forms.misu); put("bulman", forms.complaint);
+  put("recontract", forms.recontract); put("overage", forms.overage);
+  sum.contactChange = forms.contact_change;
   return sum;
 }
 function summarizeVisits(rows: VisitRow[]) {
@@ -55,7 +62,7 @@ function summarizeVisits(rows: VisitRow[]) {
     if (r.salesCopier) { if (high) sales.ssvCopier++; else sales.nsCopier++; }
     if (r.contractEnded) { if (high) sales.ssvEnd++; else sales.nsEnd++; }
   }
-  return { count, minutes, sales, visits: visitMachines.size, machines: [...visitMachines.values()].reduce((a, b) => a + b, 0), fieldMinutes: Object.values(minutes).reduce((a, b) => a + b, 0) };
+  return { count, minutes, sales, contactChange: null as number | null, visits: visitMachines.size, machines: [...visitMachines.values()].reduce((a, b) => a + b, 0), fieldMinutes: Object.values(minutes).reduce((a, b) => a + b, 0) };
 }
 
 const officeMinutes = (logs: OfficeLog[]) => logs.reduce((total, log) => total + OFFICE_KINDS.reduce((n, k) => n + Number(log.values[k]?.minutes || 0), 0), 0);
@@ -299,8 +306,8 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
       getVisits(subject, range.start, range.end),
       getOfficeLogs(subject, range.start, range.end),
       period === "week" ? getWeeklyNote(subject, editWeek.start) : Promise.resolve({ ...EMPTY_WEEKLY_NOTE }),
-      Promise.all([loadFieldRows(range.start, range.end), loadExpansionRows(range.start, range.end)])
-        .then(([field, expansion]) => ({ ledger: { field, expansion } as WorkLedger, error: "" }))
+      Promise.all([loadFieldRows(range.start, range.end), loadExpansionRows(range.start, range.end), loadFormRows(range.start, range.end)])
+        .then(([field, expansion, forms]) => ({ ledger: { field, expansion, forms } as WorkLedger, error: "" }))
         .catch((e) => ({ ledger: null, error: (e as Error).message })),
     ])
       .then(([visits, offices, weekly, led]) => { if (!alive) return; if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current); setRows(visits); setOfficeLogs(offices); setLedger(led.ledger); setLedgerError(led.error); setNote(weekly); setAutoSaveStatus("idle"); setOffice(offices.find((o) => o.workDate === selectedDay) || { workDate: selectedDay, author, returnTime: "", values: emptyOfficeValues() }); })
@@ -390,7 +397,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] font-semibold text-slate-400">
               {periodRangeText && <span className="tabular-nums text-slate-300">{periodRangeText}</span>}
               <span>{subject}{readOnly ? " · 읽기 전용" : ""}</span>
-              {!loading && <span className="tabular-nums">방문 <b className="text-slate-200">{sum.visits}</b>회 · 점검 <b className="text-slate-200">{sum.count.inspection}</b>대 · AS <b className="text-slate-200">{sum.count.as}</b>건 · 외근 <b className="text-slate-200">{hm(sum.fieldMinutes)}</b></span>}
+              {!loading && <span className="tabular-nums">방문 <b className="text-slate-200">{sum.visits}</b>회 · 점검 <b className="text-slate-200">{sum.count.inspection}</b>대 · AS <b className="text-slate-200">{sum.count.as}</b>건{sum.contactChange !== null && <> · 담당자 변경 <b className="text-slate-200">{sum.contactChange}</b>건</>} · 외근 <b className="text-slate-200">{hm(sum.fieldMinutes)}</b></span>}
             </div>
           </div>
           <div className="flex w-full flex-col gap-2 lg:w-auto lg:shrink-0 lg:items-end">
@@ -428,7 +435,7 @@ export default function WorkDashboard({ author, focusDate }: { author: string; f
     </section>
 
     {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-bold text-slate-400">현황을 불러오는 중…</div>}
-    {ledgerError && !error && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">점검·AS·확장성 원본 표를 불러오지 못해 방문 장부 숫자로 보여줍니다(순위표와 다를 수 있음) — {ledgerError}</div>}
+    {ledgerError && !error && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">점검·AS·확장성·양식(물류·미수·불만·재계약·초과조정·담당자 변경) 원본 표를 불러오지 못해 방문 장부 숫자로 보여줍니다(순위표와 다를 수 있음) — {ledgerError}</div>}
     {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}<br /><span className="text-xs">업데이트된 supabase/visits.sql을 다시 실행했는지 확인해 주세요.</span></div>}
     {saved && <div className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">✓ {saved}</div>}
 

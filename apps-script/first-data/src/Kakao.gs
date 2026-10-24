@@ -69,14 +69,51 @@ function ingestKakaoTxt(roomType, txtContent, teamLabel) {
 }
 
 // 사진/이모티콘/시스템 안내 등 추출 가치 없는 메시지 제거 (토큰·시간 절감)
+// 봇 계정(FIELD 가 보낸 양식을 방에 올리는 계정) 글도 뺀다 — 앱이 이미 표에 넣은 글이라 AI 로 다시 뽑으면 두 번 들어간다.
 const KAKAO_NOISE = /^(사진( ?\d+장)?|동영상|이모티콘|음성메시지|보이스톡.*|페이스톡.*|삭제된 메시지입니다\.?|채팅방 관리자가.*)$/;
 function filterKakaoMessages_(messages) {
   return messages.filter(function (m) {
     const t = String(m.text || '').trim();
     if (t.length < 2) return false;
     if (KAKAO_NOISE.test(t)) return false;
+    if (isBotAuthor_(m.author)) return false;
     return true;
   });
+}
+
+// ── 봇 대화명 (app_config KAKAO_BOT_NICKS, 쉼표 목록, 기본 "Ai법인폰") ──
+// 판정 규칙은 CollectRules.gs(parseBotNicks_·isBotAuthorIn_). 여기서는 값을 읽어 10분 캐시만 한다.
+const BOT_NICKS_CACHE_KEY = 'kakao_bot_nicks_v1';
+var botNicksMemo_ = null;   // 한 실행 안에서는 한 번만 읽는다(메시지 수천 개마다 캐시를 부르지 않게)
+
+/** 봇 대화명 목록. app_config 를 못 읽으면 기본값("Ai법인폰")으로 — 수집 자체는 멈추지 않는다. */
+function getBotNicks_() {
+  if (botNicksMemo_) return botNicksMemo_;
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get(BOT_NICKS_CACHE_KEY);
+  if (hit != null) { botNicksMemo_ = parseBotNicks_(hit); return botNicksMemo_; }
+  let value = '';
+  try {
+    const res = UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/app_config?select=value&key=eq.KAKAO_BOT_NICKS&limit=1', {
+      headers: { apikey: SUPABASE_ANON, Authorization: 'Bearer ' + SUPABASE_ANON }, muteHttpExceptions: true
+    });
+    if (res.getResponseCode() === 200) {
+      const rows = JSON.parse(res.getContentText() || '[]');
+      value = rows && rows.length ? String(rows[0].value || '') : '';
+      try { cache.put(BOT_NICKS_CACHE_KEY, value, 600); } catch (e) {}
+    } else {
+      Logger.log('[봇 대화명] app_config 조회 ' + res.getResponseCode() + ' — 기본값 사용');
+    }
+  } catch (e) {
+    Logger.log('[봇 대화명] app_config 조회 실패 — 기본값 사용: ' + e);
+  }
+  botNicksMemo_ = parseBotNicks_(value);
+  return botNicksMemo_;
+}
+
+/** 작성자가 봇 계정인가 (부록 B 계약 — 물류 파서·원문 전송도 같은 판정을 쓴다) */
+function isBotAuthor_(author) {
+  return isBotAuthorIn_(author, getBotNicks_());
 }
 
 // 카테고리별 사전 필터. 재계약방은 초과료/분기마감 보고서를 AI 전에 제거(재계약 신호 있으면 유지).
@@ -132,6 +169,9 @@ function appendKakaoRecords_(cat, roomType, teamLabel, records) {
     existing[key] = true;
     // 지역은 A~E 한 글자로만 저장 — "수도권D"·"경기 화성시"·"강서b"·라벨 오삼킴("키맨/접수자: …")이 그대로 들어갔던 것
     if (obj['지역'] != null) obj['지역'] = regionLetter_(obj['지역'], teamLabel);
+    // 날짜 표기 통일도 같은 이유로 키 계산 뒤에 한다. 대상 칸 목록은 DateNorm.gs 한 곳(KAKAO_DATE_COLS_).
+    // 기준일 = 그 글의 카톡 날짜(rec.date) — "6월 19일"처럼 연도 없는 표기의 연도를 정한다.
+    if (typeof normalizeKakaoDates_ === 'function') normalizeKakaoDates_(cat, obj, rec.date || '');
 
     const outRow = CONFIG[cat].displayCols.map(c => (obj[c] == null ? '' : obj[c]));
     outRow.push(vendor, srcLabel, rec.raw || '', new Date(), key);
@@ -787,6 +827,7 @@ function captureOverageAdjust_(content, regionFallback) {
       var m = messages[i];
       var text = m.text || '';
       if (!isOverageAdjustForm_(text)) continue;
+      if (isBotAuthor_(m.author)) continue;   // FIELD 가 보낸 초과조정 글(봇 공유)은 앱이 이미 넣었다
       var vendor = extractBulletField_(text, '업체명');
       if (!vendor || vendor.length < 2) continue;
       var obj = {
@@ -805,7 +846,7 @@ function captureOverageAdjust_(content, regionFallback) {
         '진행상태': extractBulletSection_(text, '진행상태'),
         '원문': text
       };
-      recs.push({ vendor: vendor, obj: obj, raw: text });
+      recs.push({ vendor: vendor, obj: obj, raw: text, date: m.date || '' });
     }
     if (recs.length) return appendKakaoRecords_('초과업체조정', '초과업체조정', regionFallback || '', recs);
     return { added: 0, skipped: 0 };
@@ -938,7 +979,11 @@ function extractKakaoWithAI_(cat, messages, hint) {
   for (let i = 0; i < messages.length; i += KAKAO_AI_BATCH) {
     const chunk = messages.slice(i, i + KAKAO_AI_BATCH);
     const recs = callOpenAIExtract_(apiKey, cat, chunk, hint);
-    for (const r of recs) out.push(r);
+    // AI 결과는 어느 메시지에서 나왔는지 모른다 → 묶음의 가장 늦은 글 날짜를 날짜 정규화 기준일로 붙인다(연도 추정용)
+    let chunkDate = '';
+    // 임시 시트(_kakao_tmp)에서 온 날짜는 Date 객체일 수 있다 → safeDate 로 yyyy-MM-dd
+    for (const m of chunk) { const d = safeDate(m.date); if (d > chunkDate) chunkDate = d; }
+    for (const r of recs) { if (!r.date) r.date = chunkDate; out.push(r); }
   }
   return out;
 }

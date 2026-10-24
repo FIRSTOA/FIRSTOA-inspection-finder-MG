@@ -88,8 +88,13 @@ const RECON_RAW: FormRaw[] = [
   { id: 2, created_at: "2026-10-21T02:00:00Z", "날짜": "2026-10-21", "작성자": "이민구", "지역": "C", "_출처": "웹앱:재계약", "_업체명": "델타" }, // 같은 업체(표기 변형) → 1곳
 ];
 const BULMAN_RAW: FormRaw[] = [{ id: 1, created_at: "2026-10-21T02:00:00Z", "날짜": "2026-10-21", "작성자": "박영현", "지역": "C", "_출처": "웹앱:불만", "_업체명": "아이더디자인" }];
+// 담당자 변경 원본 표(2026-10-24 3단계 — K27 은 활동 기록 대신 contact_changes). 위 활동 a7·a8 과 같은 기록
+const CONTACT_RAW: FormRaw[] = [
+  { id: "c1", created_at: "2026-10-21T02:00:00Z", change_date: "2026-10-21", author: "박영현", company: "A사", region: "C" },
+  { id: "c2", created_at: "2026-10-22T02:00:00Z", change_date: "2026-10-22", author: "박옥주", company: "B사", region: "B" }, // 팀장
+];
 const FACTS: KpiFacts = {
-  roster: ROSTER, field: FIELD, expansion: EXP, events: EVENTS,
+  roster: ROSTER, field: FIELD, expansion: EXP, events: EVENTS, contact: toFormTableRows("contact_changes", CONTACT_RAW, teamOf),
   logistics: toFormTableRows("logistics_records", LOGI_RAW, teamOf), recontract: toFormTableRows("recontract", RECON_RAW, teamOf), bulman: toFormTableRows("bulman", BULMAN_RAW, teamOf),
 };
 
@@ -160,6 +165,8 @@ describe("양식 표(물류·재계약·불만) + 활동 기록(담당자 변경
     expect(kpiCount("K25", FACTS, { team: "C" }, wk, ctx)?.n).toBe(1);
     expect(kpiCount("K26", FACTS, {}, wk, ctx)?.n).toBe(1);
     expect(kpiCount("K27", FACTS, {}, wk, ctx)?.n).toBe(1);
+    expect(kpiCount("K27", FACTS, { team: "C" }, wk, ctx)?.n).toBe(1);
+    expect(kpiCount("K27", { ...FACTS, contact: undefined }, {}, wk, ctx)).toBeNull(); // 활동 기록이 있어도 원본 표 없이는 못 셈
     expect(kpiCount("K28", FACTS, { author: "이권선" }, wk, ctx)?.n).toBe(1);
   });
 });

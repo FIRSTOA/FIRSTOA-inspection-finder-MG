@@ -14,6 +14,7 @@ import { searchVendorMaster } from "./deptReceptionApi";
 import { prepareImageForUpload } from "./imageUpload";
 import { normRegion } from "./region";
 import { kstDate } from "./visits";
+import { kstYear, normalizeDateKeep } from "./dateNorm";
 import { buildMisuKakaoText, validateMisuVisit, type MisuPhoto, type MisuVisit, type MisuVisitDraft } from "./misuVisit";
 
 const enc = encodeURIComponent;
@@ -179,7 +180,7 @@ export function buildMisuVisitRow(d: MisuVisitDraft, extra: { missing: string[];
     rep_phone: d.no_contact ? "" : s(d.rep_phone), rep_phone_status: d.no_contact ? "" : s(d.rep_phone_status),
     no_contact: !!d.no_contact, open_status: d.open_status || "",
     evid_mail: s(d.evid_mail), evid_sign: s(d.evid_sign), evid_neighbor: s(d.evid_neighbor), closed_estimate: s(d.closed_estimate),
-    dun_methods: (d.dun_methods || []).map(s).filter(Boolean), dun_reply: s(d.dun_reply), promise_date: s(d.promise_date),
+    dun_methods: (d.dun_methods || []).map(s).filter(Boolean), dun_reply: s(d.dun_reply), promise_date: normalizeDateKeep(s(d.promise_date), { baseYear: kstYear(d.visited_at || new Date()) }), // "26-11-15"·"6월 19일" → YYYY-MM-DD(못 읽는 글은 그대로, src/dateNorm.ts)
     return_requested: !!d.return_requested,
     return_to: d.return_requested ? s(d.return_to) : "", return_reply: d.return_requested ? s(d.return_reply) : "", return_method: d.return_requested ? s(d.return_method) : "",
     photos, photo_skips: skips, album_id: extra.albumId,
@@ -231,7 +232,8 @@ export async function saveMisuVisit(d: MisuVisitDraft, opts: { kakaoAlreadySent?
   base.albumId = albumId;
   if (albumError) base.albumError = albumError;
 
-  const filled: MisuVisitDraft = { ...d, missing: v.missing, room: room.room, album_id: albumId };
+  // 약속일은 카톡 글과 저장값이 같도록 여기서 먼저 정규화(buildMisuVisitRow 도 한 번 더 — 같은 결과)
+  const filled: MisuVisitDraft = { ...d, missing: v.missing, room: room.room, album_id: albumId, promise_date: normalizeDateKeep(s(d.promise_date), { baseYear: kstYear(d.visited_at || new Date()) }) };
   const text = buildMisuKakaoText(filled, { albumUrl: albumLink(albumId, opts.origin) });
   base.text = text;
 

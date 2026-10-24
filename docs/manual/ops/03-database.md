@@ -70,6 +70,19 @@
 ### 2-5. 카톡 배달 기록 표 (2026-10-24, SQL 실행 대기)
 파일 `supabase/kakao-delivery-log-20261024.sql`(두 번 실행해도 안전, 되돌리기 주석). 발송 대기열 `outbox`(id·room·text·created_at)는 봇/노트북이 보낸 뒤 행을 **지우는** 구조라, `outbox` 에 AFTER DELETE 트리거 `outbox_delivery_record` → `record_kakao_delivery()`(security definer, 오류는 삼켜 발송 ack 를 막지 않음)를 붙여 `kakao_delivery_log(id, sent_at, queued_at, sender bot|pc, room, kind, vendor, outbox_id unique)` 에 1행씩 남긴다. sender 는 요청 헤더 User-Agent 로 판정(노트북 python-urllib → pc, 그 외 HTTP → bot, 헤더 없는 SQL/cron 삭제는 기록 안 함, 12시간 지난 🤖 심박 폐기 제외). **본문은 저장하지 않고** kind("구분:" 첫 값 또는 room_map.category)·vendor("업체(명):" 첫 줄, 주민번호·전화번호 제거, 80자)만. 권한: anon/authenticated select 만, RLS 켬, 쓰기는 트리거만. 기존 트리거 `outbox_delivery_log`(room_activity)와 봇·노트북 코드는 그대로. 실행 뒤 확인: 봇이 1건 보낸 뒤 `select sender,count(*) from kakao_delivery_log group by 1` — 0행이면 request.headers 가 안 넘어오는 것(데이터실). 홈 전송 현황(LiveSendBoard)은 이 표가 있으면 "봇 n건 · 노트북 n건"+노트북 배달 목록, 없으면 방 수만. 보존 90일 cron 은 파일 아래 주석 제안(미실행).
 
+### 2-6. 카톡 수집 방·원문·적재 기록 표 3개 (2026-10-24, SQL 실행 대기)
+파일: `supabase/kakao-collect-rooms-20261024.sql` → `supabase/kakao-messages-20261024.sql` 순서(재실행 안전, 되돌리기 주석). 설계 docs/tasks/kakao-collect-expand.md 3-1·3-5. 넣기·읽기 엣지는 05 장 "카톡 원문 보관".
+
+| 표 | 용도 | anon/authenticated 권한 |
+|---|---|---|
+| `kakao_collect_rooms` | 카톡 수집 대상 방(방 1개 = 1행, room pk). `kinds text[]`(겸용 방은 `{점검,AS}`)·region·enabled·export(노트북 매크로 저장 대상)·structured(GAS 표 적재)·keep_raw(원문 보관). 발송용 `room_map` 과 **별개**. 읽는 곳: GAS getRoomMap·export_rooms.py·엣지 kakao-ingest | **select** 만(관리 탭 편집용 insert·update 는 SQL 파일 아래 주석의 선택지 — 미실행, 쓰기는 엣지 경유 권장) |
+| `kakao_messages` | 업무방 카톡 원문 1글 = 1행(room·kinds·region·sent_at·seq·author·**가린 뒤** text·text_key(trgm)·is_bot·kind_guess·masked·hash unique·source·source_file·import_id). 넣기 = 엣지 kakao-ingest, 읽기 = 엣지 kakao-search 만(service role) | **0** (select 도 없음 — 공개 번들의 anon 키로 원문을 긁지 못하게) |
+| `kakao_import_log` | 적재 조각 1개 = 1행(room·source·file_name·chunk_index/count·from_at·to_at·read_count·inserted·duplicated·masked·status ok/partial/error·error). **본문 없음**. GAS 증분 기준 = 방별 성공 조각의 max(to_at) | **select** 만 |
+
+- 보존·삭제(제안, **미실행**): 원문 3년·적재 기록 90일. `kakao-messages-20261024.sql` 아래 주석의 `cron.schedule('kakao-messages-purge', '40 18 * * *', …)`(매일 03:40 KST)를 사용자 결정(Q6 보관 기간) 뒤에 따로 1회 실행한다. 적재 기록을 지워도 원문은 남는다(import_id 만 null).
+- **백업 제외**: `kakao_messages` 는 노트북 02:30 백업(`tools/worker/backup_tables.py` 의 TABLES)에 **넣지 않는다** — 노트북 드라이브에 평문 원문이 jsonl 로 남는다. Supabase 자체 백업만. `kakao_collect_rooms`·`kakao_import_log` 는 넣어도 된다(방 이름·숫자뿐).
+- 가림(2겹)은 10 장 13-2.
+
 ## 3. 백업
 - 노트북 실행기가 매일 02:30 KST 에 약 60표를 jsonl.gz 로 `내 드라이브\FIRSTOA-백업\<날짜>\` 에 남긴다(14회차 보관, `tools/worker/backup_tables.py`). 10-21 회차: 표 62개·210,972행·실패 0(AGENTS.md).
 - 새 표를 만들면 백업 대상 목록(`tools/worker/backup_tables.py`)에 추가할지 판단한다.
@@ -165,3 +178,31 @@ const r = await rpc<Result>("함수이름", { p_arg: 1 });
 - 새 표 컬럼은 영문 snake_case. 기존 한글 컬럼은 바꾸지 않는다(새 표·뷰·override 표로 해결).
 - 시간은 `timestamptz`, 날짜 표시는 Asia/Seoul. 코드의 "오늘"은 `kstDate()`(UTC 로 자르던 사고 있음).
 - 중복 방지는 unique 제약(`_dupKey`, 고정 id).
+
+## 10. 날짜 칸 정규화 규칙 (2026-10-24, 앱 `src/dateNorm.ts` · GAS `DateNorm.gs` 공통)
+미수·재계약·불만·초과조정 표의 날짜 칸에 여러 꼴이 섞여 있다(앱 입력분 포함). 앱과 GAS 가 **이 표 하나**를 따른다 — 규칙을 바꾸면 두 파일과 이 표를 같이 고친다.
+
+결과는 언제나 `YYYY-MM-DD` 또는 "못 읽음"(앱 `null`). 위에서부터 먼저 맞는 규칙 하나만 쓴다.
+
+| # | 들어온 글자 | 결과 | 비고 |
+|---|---|---|---|
+| 1 | `2026-09-30T16:00:00.000Z` (UTC 시각 글자, 시트 미러) | `2026-10-01` | KST(+9시간) 날짜 |
+| 2 | `2026-11-15` · `2026.10.2` · `2024. 5. 23` · `2026/10/21` · `2026,11,30` | `2026-11-15` 등 | 4자리 연도, 구분 `- . / ,`, 구분 앞뒤 공백 허용 |
+| 3 | `26-11-15` · `26,11,30` · `26.11.15` · `26/11/15` | `2026-11-15` | 2자리 연도 = 20YY |
+| 4 | `2026년 3월 5일` · `26년10월22일` | `2026-03-05` | '일' 글자 생략 허용, 2자리 연도 = 20YY |
+| 5 | `Thu Aug 24 2023 00:00:00 GMT+0900 (…)` (시트 Date 글자) | `2023-08-24` | 적힌 날짜 그대로(시간대 계산 안 함) |
+| 6 | `6월 19일` (연도 없음) | 기준 해가 있으면 `2026-06-19`, 없으면 못 읽음 | 기준 해: 앱 저장 = 작성 시점 KST 해(미수 약속일은 방문일의 KST 해), 조회 표시·집계 = 없음 |
+
+공통
+- 맨 앞에서부터 읽는다. 날짜 뒤 꼬리(`2026-10-29(목)`, ` 14:00`)는 허용. 숫자 바로 뒤에 숫자가 더 붙으면 못 읽음(`2026-10-291`).
+- 달력에 없는 날(`2026-02-30`, `13월`), 연도 1990~2100 밖, 빈 칸 → 못 읽음.
+- **못 읽으면 원래 글자를 그대로 둔다**(저장·표시 모두). "미정"·"차주 중"·"월말" 같은 글을 지우지 않는다.
+- 연도 없는 `M/D`·`M.D`, 8자리 `20261022` 는 읽지 않는다(오판 위험 — 필요하면 이 표에 먼저 추가).
+
+적용 칸: `날짜`·`입력일`·`방문일`·`계약종료일`·`다음확인일`·`약속일`(앱 `DATE_TEXT_COLUMNS`), 미수 방문 `misu_visits.promise_date`. `제안일자`는 "제안일/제안자"를 한 칸에 적는 칸이라 제외.
+
+적용 지점(앱)
+- 재계약·불만·초과조정 양식(`src/CategoryForm.tsx`): 날짜 칸을 떠날 때(blur) 정규화 → 카톡 글·저장값 모두 정규화된 값.
+- 미수 방문(`src/misuVisitApi.ts`): 저장 직전 `promise_date` 정규화(카톡 글도 같은 값).
+- 조회 탭(`src/DataLookup.tsx`): 날짜 칸 **표시만** 정규화. 원본 행·CSV·기록 수정 칸은 원래 글자.
+- 옛 데이터 일괄 UPDATE 는 하지 않았다(결정 대기).

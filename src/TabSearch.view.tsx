@@ -1,10 +1,12 @@
 // 필드 탭 검색 — 표시 틀만(조회·상태 없음). 값과 핸들러는 TabSearchBar.tsx 가 넘긴다.
 // 설계: docs/tasks/tab-search-kakao-history.md 4절. 폰(390px) 우선: 접힌 상태는 검색칸 한 줄, 결과는 그 아래 흰 카드로 펼침.
-// 줄 색: FIELD 기록 = 흰 바탕. 카톡 원문(2단계) = 회색 바탕 — 지금은 자리 안내만.
-import { useState } from "react";
+// 줄 색: FIELD 기록 = 흰 바탕. 카톡 원문 = 회색 바탕.
+// 2단계(2026-10-24): 결과 칸 위 [FIELD 기록][카톡 대화] 탭. 카톡 대화 칸(KakaoPane)은 자기 검색어·조회 상태를 직접 가진다
+// (TabSearchBar 를 고치지 않고 붙이려고 — 조회는 tabSearch.searchKakao 하나, 엣지 kakao-search).
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, ChevronDown, Loader2, MessageSquareText, RotateCcw, Search, X } from "lucide-react";
 import type { Candidate } from "./entity360";
-import { relatedLines, type Coverage, type TabLine, type TabSpec } from "./tabSearch";
+import { highlightParts, kakaoTimeLabel, relatedLines, searchKakao, type Coverage, type KakaoHit, type KakaoSearchResult, type TabLine, type TabSpec } from "./tabSearch";
 
 export type TabSearchViewProps = {
   spec: TabSpec;
@@ -85,9 +87,95 @@ function LineRow({ line, all }: { line: TabLine; all: TabLine[] }) {
   );
 }
 
+type KakaoState = { q: string; n: number; result: KakaoSearchResult | null; error: string };
+
+/** 카톡 대화 한 줄 — 회색 바탕. 누르면 본문 전체 */
+function KakaoRow({ hit, q }: { hit: KakaoHit; q: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="border-b border-slate-200 bg-slate-100 last:border-b-0">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="block w-full px-3 py-2 text-left hover:bg-slate-200/60">
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+          <span className="shrink-0 font-bold tabular-nums text-slate-700">{kakaoTimeLabel(hit.sent_at)}</span>
+          <span className="min-w-0 truncate rounded-full bg-white px-1.5 py-px text-[10px] font-bold text-slate-600">{hit.room}</span>
+          <span className="ml-auto shrink-0 font-bold text-slate-600">{hit.author}</span>
+        </div>
+        <div className={`mt-0.5 whitespace-pre-wrap break-words text-[12px] leading-5 text-slate-800 ${open ? "" : "line-clamp-3"}`}>
+          {highlightParts(hit.text, q).map((part, i) => part.hit
+            ? <mark key={i} className="rounded bg-yellow-200 px-0.5 text-slate-900">{part.t}</mark>
+            : <span key={i}>{part.t}</span>)}
+        </div>
+      </button>
+    </li>
+  );
+}
+
+/** [카톡 대화] 칸 — 고른 업체 이름으로 바로 찾고, 낱말을 바꿔 다시 찾을 수 있다 */
+function KakaoPane({ spec, initialQuery }: { spec: TabSpec; initialQuery: string }) {
+  const [input, setInput] = useState(initialQuery);
+  // n = [찾기] 누른 횟수 — 같은 낱말로 다시 눌러도 새로 조회한다
+  const [asked, setAsked] = useState({ q: initialQuery.trim(), n: 0 });
+  const [state, setState] = useState<KakaoState>({ q: "", n: -1, result: null, error: "" });
+  const req = useRef(0);
+  const hasRooms = !!spec.kakaoKinds?.length;
+  const tooShort = asked.q.replace(/[^0-9A-Za-z가-힣]/g, "").length < 2;
+
+  useEffect(() => {
+    if (!hasRooms || tooShort) return;
+    const id = ++req.current;
+    const { q, n } = asked;
+    searchKakao(spec, q).then(
+      (result) => { if (id === req.current) setState({ q, n, result, error: "" }); },
+      (err) => { if (id === req.current) setState({ q, n, result: null, error: ((err as Error)?.message || String(err)).slice(0, 80) }); },
+    );
+  }, [spec, asked, hasRooms, tooShort]);
+
+  const current = state.q === asked.q && state.n === asked.n;
+  const loading = hasRooms && !tooShort && !current;
+  const res = current ? state.result : null;
+  const error = current ? state.error : "";
+
+  if (!hasRooms) {
+    return <div className="px-3 py-4 text-xs leading-5 text-slate-500">이 탭({spec.label})의 카톡방은 원문 수집 대상이 아닙니다 — FIELD 기록만 보세요.</div>;
+  }
+  const rooms = spec.kakaoKinds!.join("·");
+  return (
+    <>
+      <form onSubmit={(ev) => { ev.preventDefault(); setAsked((a) => ({ q: input.trim(), n: a.n + 1 })); }} className="sticky top-0 z-[1] flex items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2">
+        <input
+          type="search" value={input} onChange={(ev) => setInput(ev.target.value)} placeholder="업체명·키워드(띄어 쓰면 모두 든 글)"
+          aria-label="카톡 대화 검색어" className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 px-2 text-[13px] focus:border-slate-400 focus:outline-none"
+        />
+        <button type="submit" disabled={loading} className="flex h-8 shrink-0 items-center gap-1 rounded-lg bg-slate-900 px-2.5 text-[11px] font-bold text-white disabled:opacity-60">
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}찾기
+        </button>
+      </form>
+      <div className="border-b border-slate-100 px-3 py-1 text-[10px] text-slate-400">{rooms} 방 · 최신순 · 주민·카드·계좌 번호와 휴대폰 가운데 4자리는 가려 보입니다</div>
+      {tooShort && <div className="px-3 py-4 text-xs text-slate-400">검색어를 2자 이상 넣고 [찾기]를 누르세요.</div>}
+      {loading && <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" />카톡 대화를 찾는 중…</div>}
+      {error && (
+        <div className="flex items-start gap-2 px-3 py-4 text-xs text-red-700"><AlertCircle size={14} className="mt-0.5 shrink-0" /><span>카톡 대화를 못 불러왔습니다. [찾기]를 다시 눌러 주세요. ({error})</span></div>
+      )}
+      {res && !res.enabled && (
+        <div className="px-3 py-4 text-xs leading-5 text-slate-500"><b className="text-slate-700">카톡 원문 검색이 꺼져 있습니다.</b> 직원 고지 뒤 관리자가 켭니다(app_config KAKAO_SEARCH_ENABLED).</div>
+      )}
+      {res && res.enabled && res.rows.length === 0 && (
+        <div className="px-3 py-4 text-xs leading-5 text-slate-500"><b className="text-slate-700">카톡 대화 없음</b> — “{asked.q}”가 든 글을 {rooms} 방 원문에서 못 찾았습니다(수집된 기간만 찾습니다).</div>
+      )}
+      {res && res.enabled && res.rows.length > 0 && (
+        <>
+          <ul>{res.rows.map((h) => <KakaoRow key={h.id} hit={h} q={asked.q} />)}</ul>
+          {res.truncated && <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">최근 {res.limit}줄만 보입니다 — 낱말을 더 넣어 좁히세요.</div>}
+        </>
+      )}
+    </>
+  );
+}
+
 export default function TabSearchView(p: TabSearchViewProps) {
   const showCandidates = !p.picked && p.query.trim().length >= 2 && p.candState !== "idle";
   const showResult = !!p.picked;
+  const [pane, setPane] = useState<"field" | "kakao">("field");
 
   return (
     <div className="mt-2">
@@ -127,6 +215,15 @@ export default function TabSearchView(p: TabSearchViewProps) {
       {/* 결과 */}
       {showResult && (
         <div className="mt-1.5 max-h-[65vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div role="tablist" aria-label="검색 결과 종류" className="flex gap-1 border-b border-slate-200 bg-slate-50 px-2 pt-1.5">
+            {([["field", "FIELD 기록"], ["kakao", "카톡 대화"]] as const).map(([k, label]) => (
+              <button key={k} type="button" role="tab" aria-selected={pane === k} onClick={() => setPane(k)}
+                className={`-mb-px flex items-center gap-1 rounded-t-lg px-3 py-1.5 text-[12px] font-bold ${pane === k ? "border border-b-white border-slate-200 bg-white text-slate-900" : "text-slate-500"}`}>
+                {k === "kakao" && <MessageSquareText size={12} />}{label}
+              </button>
+            ))}
+          </div>
+          {pane === "kakao" ? <KakaoPane key={`${p.spec.key}|${p.picked!.name}`} spec={p.spec} initialQuery={p.picked!.name} /> : (<>
           <div className="sticky top-0 z-[1] border-b border-slate-200 bg-white px-3 py-2">
             <div className="flex items-center gap-2">
               <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-900">{p.picked!.name} <span className="font-normal text-slate-400">· {p.spec.label}</span></span>
@@ -155,6 +252,7 @@ export default function TabSearchView(p: TabSearchViewProps) {
           )}
 
           {p.runState === "done" && <DoneList key={p.resultKey} {...p} />}
+          </>)}
         </div>
       )}
     </div>
@@ -197,10 +295,11 @@ function DoneList(p: TabSearchViewProps) {
         </div>
       )}
       {!!p.coverage?.rawSkipped.length && <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">원문 속 기번 검색이 오래 걸려 건너뜀: {p.coverage.rawSkipped.join(" · ")}</div>}
-      {/* 2단계 자리 — 카톡 원문 줄은 회색 바탕으로 여기 섞인다 */}
-      <div className="flex items-center gap-1.5 border-t border-dashed border-slate-200 bg-slate-100 px-3 py-2 text-[11px] text-slate-500">
-        <MessageSquareText size={12} className="shrink-0" />카톡방 원문 — 아직 연결 전(FIELD 기록만 보입니다)
-      </div>
+      {p.spec.kakaoKinds?.length ? (
+        <div className="flex items-center gap-1.5 border-t border-dashed border-slate-200 bg-slate-100 px-3 py-2 text-[11px] text-slate-500">
+          <MessageSquareText size={12} className="shrink-0" />카톡방 원문은 위 [카톡 대화] 탭에서 봅니다
+        </div>
+      ) : null}
     </>
   );
 }

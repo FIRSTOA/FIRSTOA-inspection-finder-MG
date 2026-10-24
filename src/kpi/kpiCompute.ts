@@ -3,7 +3,7 @@
  *
  * 원칙: 새로 세지 않는다. 조회 탭·주간현황판·순위표·홈 판이 이미 쓰는 함수를 그대로 부른다.
  *   점검·AS = workCount.countField · 확장성 = workCount.countExpansion · 물류·재계약·불만·초과조정·미수 = formCount.countForms(양식 원본 표, 2026-10-24)
- *   담당자 변경·교체 = countableEvents(팀 현황 규칙 — 활동 기록에만 남는 종류)
+ *   담당자 변경 = formCount.countForms(contact_change, 2026-10-24 3단계) · 교체양식 = countableEvents(원본 표가 없는 복사 전용 양식 — 활동 기록이 원본)
  *   미처리 = homeUnhandled.mergeUnhandled/countUnhandledTabs · OKR = okr.achievementRate/judgmentCounts · 블로그 = blogSheet.countBlog
  *   미수 = misuVisit.effectiveMisuVisits → formCount · 접수 처리율 = deptReception.weekCompletionRate · 분기 진행 = workinProgress(홈·워킨맵 식)
  *   영업일 = planDate.isBusinessDay(주말·한국 공휴일) + 설정 holidays
@@ -204,7 +204,7 @@ export type KpiFacts = Partial<{
   roster: RosterMember[];
   field: FieldRow[];
   expansion: ExpansionRow[];
-  /** loadWorkEvents 결과에 팀장 제외 + countableEvents 를 건 것(팀 현황과 같은 입구) — 이제 담당자 변경(K27)·교체양식(K28)만 센다 */
+  /** loadWorkEvents 결과에 팀장 제외 + countableEvents 를 건 것(팀 현황과 같은 입구) — 이제 교체양식(K28)만 센다 */
   events: ActivityEvent[];
   workin: WorkinPlaceLite[];
   overage: FormRow[];
@@ -213,6 +213,8 @@ export type KpiFacts = Partial<{
   misu: MisuVisit[];
   /** 물류 양식 표(logistics_records) — K24 원본(2026-10-24, 활동 기록 대신). 점검·AS 양식의 여분·마감·세팅은 field 의 구분 칸에서 */
   logistics: FormRow[];
+  /** 담당자·주소 변경 표(contact_changes) — K27 원본(2026-10-24 3단계). 팀 = CS 작성자만(formCount.csOnlyTeam) */
+  contact: FormRow[];
   unhandled: UnhandledRow[];
   receptionWeek: ReceptionWeekRow[];
   keyman: KeymanRow[];
@@ -312,7 +314,7 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
     case "K24": return f.logistics && f.field ? { n: countForms("logistics", [...f.logistics, ...fieldLogisticsRows(f.field)], r.from, r.to, { part: "main", team: s.team, author: s.author }) } : null;
     case "K25": return f.recontract ? { n: countForms("recontract", f.recontract, r.from, r.to, { team: s.team, author: s.author }) } : null;
     case "K26": return f.bulman ? { n: countForms("complaint", f.bulman, r.from, r.to, { team: s.team, author: s.author }) } : null;
-    case "K27": return ev((e) => e.category === "contact_change");
+    case "K27": return f.contact ? { n: countForms("contact_change", f.contact, r.from, r.to, { team: s.team, author: s.author }) } : null;
     case "K28": return ev((e) => e.category === "replacement");
     case "K2": {
       if (!f.workin || s.author) return null;

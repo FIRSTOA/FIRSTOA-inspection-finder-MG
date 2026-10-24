@@ -1,6 +1,6 @@
 /**
  * 홈 KPI 현황판 — 로더(설계안 4-6). 기존 로더를 그대로 부르고, 원본 하나는 한 번만 읽는다.
- *  · 점검·AS = expansionSource.loadFieldRows, 확장성 = loadExpansionRows, 양식(물류·불만·초과조정) = loadFormRaw, 활동 기록 = operations.getActivityEvents(담당자 변경·교체만)
+ *  · 점검·AS = expansionSource.loadFieldRows, 확장성 = loadExpansionRows, 양식(물류·불만·초과조정·담당자 변경) = loadFormRaw, 활동 기록 = operations.getActivityEvents(교체양식만)
  *    → 팀 현황·순위표 입구(loadWorkEvents)와 같은 합성(mergeFieldIntoEvents(mergeExpansionIntoEvents(…)))을 이미 읽은 행으로 만든다(중복 조회 없음)
  *  · 기간은 한 번에: 분기 시작(또는 8주 전) ~ 분기 말 — 금일·주·월·분기 위젯은 메모리에서 거른다
  *  · 숨긴 위젯의 원본은 읽지 않는다(sources 인자)
@@ -148,6 +148,8 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     // 양식 표(초과조정·불만·물류)는 팀 현황·순위표와 같은 로더·같은 변환(expansionSource.loadFormRaw → formCount.toFormTableRows, 2026-10-24)
     run("overage", () => loadFormRaw("overage_adjust", from, to), (v) => { facts.overage = toFormTableRows("overage_adjust", v, teamForAuthor); }),
     run("logistics", () => loadFormRaw("logistics_records", from, to), (v) => { facts.logistics = toFormTableRows("logistics_records", v, teamForAuthor); }),
+    // 담당자 변경(K27) = contact_changes 원본(키맨체크 시트 행 포함, 2026-10-24 3단계) — 팀 현황·순위표와 같은 로더·변환
+    run("contact", () => loadFormRaw("contact_changes", from, to), (v) => { facts.contact = toFormTableRows("contact_changes", v, teamForAuthor); }),
     // 재계약 확인 지남은 업체별 마지막 기록이 필요해 기간 없이 전량
     run("recontract", () => selectAllRowsFast<FormRaw>("recontract", `${cols(RECONTRACT_COLUMNS)}&_hidden=not.is.true&order=id.asc`), (v) => { facts.recontract = toFormRows(v, "날짜", teamForAuthor); }),
     run("bulman", () => loadFormRaw("bulman", from, to), (v) => { facts.bulman = toFormTableRows("bulman", v, teamForAuthor); }),

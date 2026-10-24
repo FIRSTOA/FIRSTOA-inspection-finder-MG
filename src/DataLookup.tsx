@@ -7,7 +7,7 @@ import { countRows, selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction 
 import { setActivityEventsCancelledByKey, setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor, teamForAuthor } from "./operations";
 import { EXPANSION_BASIS_TEXT, EXPANSION_SOURCES, countExpansion, countField, expansionTally, FIELD_BASIS_TEXT, FIELD_SOURCES, fieldTally, kstDayOf, kstTextRange, toExpansionRows, toFieldRows, UTC_TEXT_DATE_TABLES, type ExpansionRaw, type ExpansionTable, type FieldRaw, type FieldTable } from "./workCount";
 import { loadExpansionRaw, loadFieldRaw, loadFormRaw } from "./expansionSource";
-import { FORM_BASIS_TEXT, FORM_LABELS, FORM_SOURCES, formTally, isFormTable, toFormTableRows, type FormRaw } from "./formCount";
+import { CONTACT_BASIS_TEXT, contactTeamQuery, FORM_BASIS_TEXT, FORM_LABELS, FORM_SOURCES, formTally, isFormTable, toFormTableRows, type FormRaw } from "./formCount";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
@@ -18,6 +18,7 @@ import { okrWeeksInMonth } from "./okr";
 import { calendarRange } from "./periodRange";
 import { maskDeep } from "./privacy";
 import { editFieldState, lookupCsv, lookupText } from "./lookupCells";
+import { displayDateCell } from "./dateNorm";
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
 
@@ -53,6 +54,9 @@ const text = lookupText;
 /** 1,234 형태로 보이는 값이면 숫자로 취급해 오른쪽 정렬·등폭이 자연스럽게 */
 function shortValue(value: string, key: string) {
   if (!value) return "-";
+  // 날짜 칸(계약종료일·방문일·날짜 등): "26-11-15"·"26년10월22일"·UTC 시각 글자 → YYYY-MM-DD 로 보여 준다. 원본 행·CSV·수정 칸은 그대로(src/dateNorm.ts)
+  const day = displayDateCell(value, key);
+  if (day !== value) return day;
   if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return value.slice(0, 16).replace("T", " ");
   if (key === "photos" || value.startsWith("[")) return value === "[]" ? "-" : value;
   return value;
@@ -156,7 +160,10 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       parts.push(`or=(${category.searchFields.map((field) => `"${field}".ilike.*${needle}*`).join(",")})`);
     }
     if (member && category.searchFields.includes("작성자")) parts.push(`${encodeURIComponent("작성자")}=ilike.*${encodeURIComponent(member)}*`);
-    if (team !== "전체" && (category.teamField || category.teamSourceParen)) {
+    if (team !== "전체" && category.table === "contact_changes") {
+      // 담당자 변경은 건수 카드(formCount csOnlyTeam)와 같은 팀 판정 — CS 밖 작성자는 어느 팀에도 안 든다(2026-10-24 3단계)
+      parts.push(contactTeamQuery(team, currentBook()));
+    } else if (team !== "전체" && (category.teamField || category.teamSourceParen)) {
       // 팀 컬럼('수도권C'·'C'·'C,D')과 출처 라벨의 괄호("카톡:재계약(A)")를 함께 본다 —
       // 시트 동기화분은 지역 칸이 빈 경우가 많아(재계약은 100%) 컬럼만으로는 다 빠진다.
       const conds: string[] = [];
@@ -361,7 +368,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     : isFieldTable(category.table)
       ? `기준: ${FIELD_SOURCES[category.table].label} 표, ${FIELD_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.`
       : isFormTable(category.table)
-        ? `기준: ${category.label} 표, ${FORM_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.${category.table === "logistics_records" ? " 팀 현황 물류·기타 칸에는 점검·AS 양식의 세팅·여분·마감도 더해집니다." : ""}`
+        ? `기준: ${category.label} 표, ${category.table === "contact_changes" ? CONTACT_BASIS_TEXT : FORM_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.${category.table === "logistics_records" ? " 팀 현황 물류·기타 칸에는 점검·AS 양식의 세팅·여분·마감도 더해집니다." : ""}`
         : "";
   const basisNote = isExpansionTable(category.table)
     ? (expansionCount && expansionCount.rows !== expansionCount.count

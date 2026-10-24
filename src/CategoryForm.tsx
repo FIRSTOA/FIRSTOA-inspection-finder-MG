@@ -2,11 +2,12 @@
  *  - [점검/AS 불러오기]: 작성자·업체명·지역·키맨 가져옴(키맨 다중→드롭다운).
  *  - 작성자는 author 상태 사용. 나머지는 form 상태.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FocusEvent } from "react";
 import { createPortal } from "react-dom";
 import { useAuthorBook } from "./authors";
 import { authorLocked } from "./sso";
-import { CATEGORY_SCHEMAS, type FieldDef } from "./categoryForms";
+import { CATEGORY_SCHEMAS, isCatDateKey, type FieldDef } from "./categoryForms";
+import { kstYear, normalizeDateKeep } from "./dateNorm";
 import DatePickSheet from "./DatePickSheet";
 import RecontractScheduleSheet from "./RecontractScheduleSheet";
 import { onCategorySent } from "./categorySentEvent";
@@ -124,7 +125,7 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
           <span className="text-xs font-medium text-slate-500">{f.label}</span>
           {asText ? (
             <div className="mt-0.5 flex gap-2">
-              <input value={v} onChange={(e) => set(f.key, e.target.value)} placeholder="예: 차주 중" autoFocus
+              <input value={v} onChange={(e) => set(f.key, e.target.value)} onBlur={(e) => { const n = normalizeDateKeep(e.target.value, { baseYear: kstYear() }); if (n !== e.target.value) set(f.key, n); }} placeholder="예: 차주 중" autoFocus
                 className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
               <button type="button" onClick={() => { setTextKeys({ ...textKeys, [f.key]: false }); setPicking(f.key); }}
                 className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-700">달력</button>
@@ -157,6 +158,11 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
             className="mt-0.5 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
         ) : (
           <input value={form[f.key] || ""} onChange={(e) => set(f.key, e.target.value)}
+            {...(isCatDateKey(schemaKey, f.key) ? {
+              // 날짜 칸(계약종료일·방문일 등): 칸을 떠날 때 "26-11-15"·"26년10월22일"·"6월 19일" → YYYY-MM-DD(못 읽는 글은 그대로) — src/dateNorm.ts
+              placeholder: "예: 2026-11-15",
+              onBlur: (e: FocusEvent<HTMLInputElement>) => { const v = e.target.value; const n = normalizeDateKeep(v, { baseYear: kstYear() }); if (n !== v) set(f.key, n); },
+            } : {})}
             className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400" />
         )}
       </label>

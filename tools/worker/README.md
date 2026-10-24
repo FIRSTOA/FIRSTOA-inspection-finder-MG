@@ -9,7 +9,7 @@
 | 전체 표 백업 | 매일 02:30 KST | `backup_tables.py` — 60여 표를 `구글 드라이브\FIRSTOA-백업\<날짜>\` 에 jsonl.gz, 14회차 보관 |
 | 카톡 PC 발송 중계 | 1분마다 | 봇이 2분 넘게 못 가져간 outbox 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`) |
 | 월요 키맨 포스터 | 월 10시(2026-10-21 08→10, 서버 안전망 cron 10:30) | `tools/kakao-pc/poster_send.py --weekly` |
-| 카톡 대화 내용 저장(기본 꺼짐) | `FIRSTOA_KAKAO_EXPORT=1` 일 때만 매일 06:30~08:00 1회 | `tools/kakao-pc/export_rooms.py --export` — 열린 방 창만 Ctrl+S 로 저장 → 드라이브 `카톡 자동적재 수신함`. 켜기 전 `--probe` 필수(docs/manual/ops/06-laptop-worker.md) |
+| 카톡 대화 내용 저장(기본 꺼짐) | `FIRSTOA_KAKAO_EXPORT=1` 일 때만 매일 05:30~06:50 1회 | `tools/kakao-pc/export_rooms.py --export` — 방 목록은 Supabase `kakao_collect_rooms`(enabled·export=true, 표가 없거나 비면 room_map 의 점검·AS·물류·미수·불만·재계약), 열린 방 창만 Ctrl+S 로 저장 → 드라이브 `카톡 자동적재 수신함`. 켜기 전 `--probe` 필수(docs/manual/ops/06-laptop-worker.md) |
 | 일감 처리 | 들어올 때 | `worker_jobs` 의 queued 행을 잡아 실행 — `ping` `backup` `relay` `poster` (음성·OCR 은 자리만) |
 
 ## 처음부터 (아무것도 안 깔린 새 노트북) — 한 줄
@@ -61,5 +61,8 @@ Stop-ScheduledTask / Start-ScheduledTask -TaskName 'FIRSTOA Worker'
 ## 설계 메모
 - anon 키만 쓴다(웹앱과 같은 신뢰 모델). service_role 키는 이 폴더에 두지 않는다.
 - 일감 잡기는 `status=queued` 조건부 갱신이라 실행기가 둘이어도 한쪽만 가져간다.
+- `backup` 일감 payload: `{"tables":"표1,표2","out":"archive-20261024"}` — `out` 이 폴더 이름만이면 백업 루트(구글 드라이브\FIRSTOA-백업) 아래 그 이름 폴더, 절대경로면 그대로. 날짜(YYYY-MM-DD)가 아닌 이름은 14회차 정리에서 안 지워진다. `out` 을 비우면 그날 02:30 백업 폴더에 덮어쓴다(2026-10-24a).
 - 백업은 2026-10-10 마감 목록 실수 삭제 뒤 "매일·노트북·넓은 범위"로 바꾼 것. 데스크톱 WSL 주간 백업(8/18 한 번 성공 뒤 실패)은 이것으로 대체한다.
 - 백업 파일에는 고객 정보가 있다. git 에 올리지 말 것(`logs/`·`state.json` 도 .gitignore).
+
+창을 05:30~06:50 으로 당긴 이유: Apps Script 수집 트리거가 07시 이후(1시간마다)로 도는데, 옛 창(06:30~08:00)은 07시를 넘겨 저장된 파일이 그날 적재를 놓치고 하루 늦게 들어갔다. 06:50 안에 끝나야 07시 첫 수집에 실린다(8분 상한 + 시작 지연 고려).
