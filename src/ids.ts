@@ -137,9 +137,6 @@ export function parseInspectionBlocks(raw: string): InspBlock[] {
   return out.filter((block) => block.model || block.asset || block.serial);
 }
 
-// 일정리스트→FIELD 변환용: 네이버 미러 제목("이민구 셋팅요청 S D450 30S업체명…분기마감 종료일 …")에서
-// 업체명부(슬래시·공백 보존)와 구분을 꺼낸다 — 접수원본 변환(A양식)과 같은 모양이 되도록.
-const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$|^(as|a\/s)$/i;
 // FIELD 미양식 변환기의 업체명 추출 — App.tsx에서 이사(2026-09-02, 테스트 가능하게).
 // 임대리스트 등급 접두("12#V주식회사 디쉐어…")는 마감 꼬리가 없어도 접두 뒤가 업체명이다.
 // 이 규칙이 없으면 아래 일반 규칙(…회사 꼬리)이 왼쪽부터 훑다 등급 글자를 이름에 붙인다
@@ -174,68 +171,10 @@ export function extractCompanyForTemplate(text: string): string {
   return fallback ? fallback[1].trim().replace(/-\s*$/, "") : "";
 }
 
-export function fieldTicketVendor(raw: string): { vendor: string; gubun: string } {
-  const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
-  const tokens = flat.split(" ");
-  const gubun = tokens.some((token) => /^(이전)?(셋팅|세팅)(요청)?$/.test(token)) ? "세팅"
-    : tokens.some((token) => /^여분요청$/.test(token)) ? "여분"
-    : "A/S";
-  // 업체명 시작점 1순위: "30S업체명" 등급 접두 토큰 (임대리스트 표기)
-  const graded = flat.match(/\d{1,4}#?(?:SS|NN|S|N|V)([가-힣㈜(].*)$/);
-  let vendor = graded ? graded[1] : "";
-  if (!vendor) {
-    // 접두 정리: 직원 이름·행위어·단독 등급·영숫자(모델) 토큰을 걷어낸 나머지
-    let start = 0;
-    while (start < tokens.length) {
-      const token = tokens[start];
-      // 직원 이름 접두는 뒤에 행위어·구분 기호("-")·A/S가 올 때 벗긴다 — "이호준 - a/s NN …"이 통째로 업체명이 되던 실사고
-      const nameThenMarker = /^[가-힣]{2,4}$/.test(token) && start === 0 && tokens.length > 2 && (FIELD_TITLE_ACTION.test(tokens[1] || "") || /^[-–—:]$/.test(tokens[1] || ""));
-      if (FIELD_TITLE_ACTION.test(token) || /^[-–—:]$/.test(token) || /^(SS|NN|S|N|V)$/.test(token) || /^[A-Za-z0-9./-]+$/.test(token) || nameThenMarker) { start += 1; continue; }
-      break;
-    }
-    vendor = tokens.slice(start).join(" ");
-  }
-  vendor = vendor.replace(/(매월마감|분기마감|매주마감|월말마감|매년마감|단순마감|마감|매년|종료일).*$/, "").replace(/[\s\-·,]+$/, "").trim();
-  return { vendor: vendor || flat, gubun };
-}
-
-// 물류(납품·철수·교체) 네이버 제목 파서 — "머리말-구분/발주처/영업구분/고객사/품목/비고" 슬래시 열차에서
-// 고객사와 품목을 꺼낸다. 규칙: 수량·모델이 든 세그먼트(품목) 바로 앞이 고객사다.
-//   "네오정보 직송-판매납품/네오정보/개인영업/디스페이스코리아/안드로이드전자칠판 65형(…)/확인서서명필수" → 디스페이스코리아
-/**
- * 물류 일정 본문(as_tickets.note)의 "상호(명) :" 줄 — 일정 제목보다 정확하다. "(순 20890)" 같은 순번 괄호·끝 콜론은 뗀다. 없으면 "".
- *   "7. 상호(사업자등록증 유/무) : 유디임팩트-새싹 영등포캠퍼스 (순 21944)" → "유디임팩트-새싹 영등포캠퍼스"
- */
-export function noteCompanyName(note: string): string {
-  const m = String(note || "").replace(/_x000d_|\r/g, "").match(/상호(?:명)?[^:：\n]{0,20}[:：][ \t]*([^\n]+)/);
-  return (m?.[1] || "").replace(/\(\s*순\s*[:：]?\s*[\d,\s]+\)/g, " ").replace(/[:：]\s*$/, "").replace(/\s+/g, " ").trim();
-}
-
-/** 네이버 캘린더 물류 일정 제목은 80자에서 잘려 저장된다(2026-10-24 as_tickets 실측: 80자 107건) */
-export const TICKET_TITLE_CUT = 80;
-
-/**
- * note(일정 본문)를 함께 주면 "상호명 :" 줄을 거래처명으로 먼저 쓴다(2026-10-24).
- * 제목에서 고객사 칸(품목 칸 바로 앞)을 못 찾았는데 제목이 잘린 길이면 거래처명을 비운다 — 예전엔 제목 전체가 거래처명으로 들어가
- * (디지털자산 거래소 10/23 납품: "⭐오후 4시반 이후 … -납품(일반)/퍼스트/운영") 업체 검색·이력에 안 걸렸다. 비면 사용자가 직접 적는다.
- */
-export function logisticsTicketInfo(raw: string, note = ""): { vendor: string; item: string; category: string } {
-  const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
-  const category = /철수/.test(flat) ? "철수" : /교체/.test(flat) ? "교체" : "납품";
-  const fromNote = noteCompanyName(note);
-  const segments = flat.split("/").map((seg) => seg.trim()).filter(Boolean);
-  const PRODUCT_RX = /\d+\s*(대|개|형|세트|셋트|EA)\b|\d+(대|개|형)|리퍼|본체|노트북|데스크탑|모니터|소모품|전자칠판/i;
-  for (let i = 1; i < segments.length; i += 1) {
-    if (PRODUCT_RX.test(segments[i])) {
-      const vendor = segments[i - 1];
-      // 앞 세그먼트가 영업구분(운영팀·개인영업 등) 같은 짧은 내부 용어면 그 앞을 본다? — 실데이터상 품목 앞은 항상 고객사
-      if (vendor && vendor.length >= 2) return { vendor: fromNote || vendor, item: segments[i], category };
-    }
-  }
-  if (fromNote) return { vendor: fromNote, item: "", category };
-  if (flat.length >= TICKET_TITLE_CUT && segments.length >= 2) return { vendor: "", item: "", category };
-  return { vendor: fieldTicketVendor(flat).vendor, item: "", category };
-}
+// 2026-10-24: 제목 파서(fieldTicketVendor·noteCompanyName·logisticsTicketInfo 등) 본문은 supabase/functions/_shared/ticket-title.ts —
+// 엣지 함수 naver-calendar-sync 가 수입 일정 업체명을 같은 규칙으로 뽑는다. 여기선 다시 내보낸다.
+import { fieldTicketVendor } from "../supabase/functions/_shared/ticket-title.ts";
+export { fieldTicketVendor, importedTicketVendor, logisticsTicketInfo, noteCompanyName, TICKET_TITLE_CUT } from "../supabase/functions/_shared/ticket-title.ts";
 
 /**
  * "계약갱신제안 / SS급 / 한국농어민신문 / 조은유 차장" 꼴(네이버 수기 제목의 슬래시 열차)에서 업체 칸을 고른다 —

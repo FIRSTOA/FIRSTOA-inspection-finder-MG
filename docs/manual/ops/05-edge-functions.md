@@ -50,3 +50,4 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 - 엣지 함수는 `SUPABASE_SERVICE_ROLE_KEY` 로 DB 를 쓰므로 RLS 를 우회한다. 입력 검증은 함수 안에서 한다.
 - **쓰기 엣지 함수가 anon 키로 누구나 호출 가능**한 상태는 2026-10-10 감사에서 "결정 대기"로 남아 있다(메모 근거, 확인 필요).
 - 카톡을 만드는 함수(공유·포스터)는 KST 10시 전 보류 가드를 지킨다.
+- naver-calendar-sync 가 수입하는 일정의 업체명(`as_tickets.vendor`)은 2026-10-24부터 제목에서 뽑은 **고객사만**(`_shared/ticket-title.ts` 의 `importedTicketVendor`, 웹앱 `src/ids.ts` 와 같은 파서), 전체 제목은 `calendarTitle`(200자) — 제목 파서를 고치면 이 함수도 다시 배포한다. 그 전에 들어온 일정은 vendor 에 제목 앞 80자가 남아 있다.

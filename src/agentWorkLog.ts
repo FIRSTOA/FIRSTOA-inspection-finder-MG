@@ -4,6 +4,48 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-24",
+    "hash": "350ec580b4",
+    "agent": "feature-planner",
+    "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "350ec580b4",
+    "agent": "ui-designer",
+    "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "350ec580b4",
+    "agent": "developer",
+    "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "350ec580b4",
+    "agent": "debugger",
+    "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "350ec580b4",
+    "agent": "qa-checker",
+    "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "350ec580b4",
+    "agent": "field-deploy-check",
+    "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "350ec580b4",
+    "agent": "ops-monitor",
+    "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
+  },
+  {
+    "date": "2026-10-24",
     "hash": "745c7aacab",
     "agent": "feature-planner",
     "summary": "홈 2차 개편(첫 진입 캐시·미처리 통일·달성표 보강·목표 양식) + UI 정돈 1차 + 타부서 미니 업무공간 + 카운터 문자 단순화 + 자동 일정 버그"

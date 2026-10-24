@@ -10,6 +10,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { askConfirm } from "./confirmModal";
+import { useScreenActive } from "./screenActive";
+import { createGapGate, FOCUS_MIN_GAP_MS, gatedHandler } from "./pollGate";
 import { MessageSquare, RotateCcw, Save, Settings2, Upload, X } from "lucide-react";
 import { deleteRows, getConfig, insertRow, invokeEdgeFunction, selectRows, updateRows, upsertRow } from "./supabase";
 import { teamForAuthor } from "./operations";
@@ -94,8 +96,13 @@ export default function CounterSms({ author }: { author: string }) {
   const [batchTargets, setBatchTargets] = useState<TargetRow[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   // 문자앱에 갔다 돌아오거나 다른 기기에서 표시한 뒤 이 화면으로 오면 최신 표시를 다시 읽는다
+  // 이 화면이 숨어 있으면(KeepAlive) 쉰다 + 15초 안 중복 차단(2026-10-24 숨은 화면 조회)
+  const screenActive = useScreenActive();
+  const screenActiveRef = useRef(screenActive);
+  useEffect(() => { screenActiveRef.current = screenActive; }, [screenActive]);
+  const [showGate] = useState(() => createGapGate(FOCUS_MIN_GAP_MS));
   useEffect(() => {
-    const onShow = () => { if (document.visibilityState === "visible" && team) void loadBatch(team); };
+    const onShow = gatedHandler(() => screenActiveRef.current && !!team, showGate, () => loadBatch(team));
     document.addEventListener("visibilitychange", onShow);
     return () => document.removeEventListener("visibilitychange", onShow);
   }, [team]); // eslint-disable-line react-hooks/exhaustive-deps -- loadBatch는 팀만 보고 서버를 읽는다

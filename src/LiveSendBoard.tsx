@@ -11,6 +11,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Laptop, RefreshCw } from "lucide-react";
 import { selectRows } from "./supabase";
+import { useScreenActive } from "./screenActive";
+import { canPoll, createGapGate, FOCUS_MIN_GAP_MS } from "./pollGate";
 import { kstDate } from "./visits";
 import { isDeliveryTableMissing, kstDayStartIso, kstHm, summarizeDeliveries, type DeliveryRow, type DeliverySummary } from "./kakaoDelivery";
 import { buildRoomRows, CATEGORY_LABEL, relMin, SOURCE_LABEL, STATUS_LABEL, summarizeRooms, type ActRow, type OutRow, type RoomMapRow, type RoomRow, type RoomStatus } from "./roomDelivery";
@@ -64,11 +66,15 @@ export default function LiveSendBoard() {
   const [showAll, setShowAll] = useState(false);
   const busy = useRef(false);
   const refresh = async () => { if (busy.current) return; busy.current = true; try { setSnap(await load()); } finally { busy.current = false; } };
+  // 홈이 숨어 있으면(KeepAlive) 타이머 자체를 걷는다 — 숨은 동안 요청 0. 다시 보이면 15초 간격 지났을 때만 바로 1회(2026-10-24)
+  const active = useScreenActive();
+  const [gate] = useState(() => createGapGate(FOCUS_MIN_GAP_MS));
   useEffect(() => {
-    void refresh();
-    const t = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 15_000);
+    if (!active) return;
+    if (gate.tryPass()) void refresh();
+    const t = window.setInterval(() => { if (canPoll(true)) { gate.mark(); void refresh(); } }, 15_000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps -- refresh 는 서버만 읽는다(매 렌더 새 함수라 넣으면 타이머가 매번 다시 걸림)
 
   const rows = snap?.rows || [];
   const delivery = snap?.delivery;

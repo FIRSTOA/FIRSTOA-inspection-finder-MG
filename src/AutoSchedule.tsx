@@ -26,6 +26,8 @@ import { usageSpareAdvice } from "./spareAdvice";
 import CandidateMap, { type CandidatePoint } from "./CandidateMap";
 import PortalSelect from "./PortalSelect";
 import { hasAssignee } from "./assignees";
+import { countLabel } from "./loadState";
+import StateBox from "./ui/StateBox";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
 type Place = {
@@ -58,6 +60,7 @@ export default function AutoSchedule({ author }: { author: string }) {
   const setTeam = (t: string) => setTeamPick({ author, team: t });
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [ticketsError, setTicketsError] = useState(""); // 일정 조회 실패 — "일정이 없습니다(0건)"와 구분(2026-10-24)
   const [onlyMine, setOnlyMine] = useState(true);
   const [anchorId, setAnchorId] = useState("");
   const [anchorQuery, setAnchorQuery] = useState("");
@@ -97,7 +100,16 @@ export default function AutoSchedule({ author }: { author: string }) {
     // 담당이 여러 명("김A,이B")일 수 있어 서버는 넓게(ilike) 받고 화면에서 정확히 거른다 — "이수"와 "이수진"이 섞이지 않게(2026-10-22)
     const mine = onlyMine && !!author;
     const mineFilter = mine ? `&assignee=ilike.*${encodeURIComponent(author)}*` : "";
-    const rows = await selectRows<Ticket & { assignee?: string }>("as_tickets", `select=id,date,time,team,vendor,address,scheduleType,assignee&date=eq.${date}&team=eq.${team}${mineFilter}&order=time.asc`).catch(() => [] as Array<Ticket & { assignee?: string }>);
+    let rows: Array<Ticket & { assignee?: string }>;
+    try {
+      rows = await selectRows<Ticket & { assignee?: string }>("as_tickets", `select=id,date,time,team,vendor,address,scheduleType,assignee&date=eq.${date}&team=eq.${team}${mineFilter}&order=time.asc`);
+    } catch (e) {
+      setTickets([]);
+      setAnchorId("");
+      setTicketsError(`일정을 불러오지 못했습니다 — 다시 시도해 주세요 (${(e as Error).message})`);
+      return;
+    }
+    setTicketsError("");
     const list: Ticket[] = mine ? rows.filter((r) => hasAssignee(r.assignee, author)) : rows;
     setTickets(list);
     setAnchorId(list.length ? list[list.length - 1].id : "");
@@ -162,9 +174,10 @@ export default function AutoSchedule({ author }: { author: string }) {
         return { row: hit, reason };
       }
     } catch { /* 아래 폴백 */ }
+    // 실패는 삼키지 않는다 — 부른 쪽(suggest)이 "기준 업체 고정 실패"를 안내한다(2026-10-24)
     const rows = await selectRows<{ id: number; name: string; label: string; comment: string; address: string; address_detail: string; latitude: number | null; longitude: number | null; team: string }>(
       "workin_map_places", `select=id,name,label,comment,address,address_detail,latitude,longitude,team&id=eq.${placeId}&limit=1`,
-    ).catch(() => []);
+    );
     const w = rows[0];
     if (!w) return null;
     const grade = (w.name.match(/^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z]|$)/)?.[1] || "").toUpperCase();
@@ -203,14 +216,17 @@ export default function AutoSchedule({ author }: { author: string }) {
         p_min_days: kind === "quarter" ? minDays : 0, p_limit: 60, // 등급별 상한(가까운 60곳씩) — 전체 120 캡은 SS·V가 S를 밀어냈다
       }));
       let merged: Place[] = list || [];
+      let pinNote = "";
       setAnchorPin(null);
       // 검색한 기준 업체가 조건에 걸려 목록에서 빠졌으면 맨 위에 고정하고 사유를 단다 — "내가 원하는 업체도 추가" 요구(2026-08-25)
       if (anchorGeo?.placeId != null && !merged.some((r) => r.id === anchorGeo.placeId)) {
-        const pinned = await pinnedAnchorRow(anchorGeo.placeId, anchorGeo.lat, anchorGeo.lng);
-        if (pinned) { merged = [pinned.row, ...merged]; setAnchorPin({ id: pinned.row.id, reason: pinned.reason }); }
+        try {
+          const pinned = await pinnedAnchorRow(anchorGeo.placeId, anchorGeo.lat, anchorGeo.lng);
+          if (pinned) { merged = [pinned.row, ...merged]; setAnchorPin({ id: pinned.row.id, reason: pinned.reason }); }
+        } catch (e) { pinNote = ` · 기준 업체를 맨 위에 고정하지 못했습니다(조회 실패: ${(e as Error).message})`; }
       }
       setRows(merged); // 선택 스케줄은 검색을 다시 해도 남긴다(2026-09-26)
-      setNotice(`${merged.length}곳 — ${anchorGeo ? `${anchorGeo.name.slice(0, 14)} 기준 가까운 순` : "거리 기준 없음(경과일 순)"}`);
+      setNotice(`${merged.length}곳 — ${anchorGeo ? `${anchorGeo.name.slice(0, 14)} 기준 가까운 순` : "거리 기준 없음(경과일 순)"}${pinNote}`);
       void getVendorFlagsBatch(merged.map((r) => r.vendor || r.place_name)).then(setFlags).catch(() => undefined);
     } catch (e) {
       setNotice(`추천 실패: ${(e as Error).message}`);
@@ -393,7 +409,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         <section className="min-w-0 space-y-3">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-sm font-black text-slate-900">① 필수 스케줄 <span className="text-slate-400">{tickets.length}건</span>
+              <div className="flex items-center gap-1.5 text-sm font-black text-slate-900">① 필수 스케줄 <span className="text-slate-400">{countLabel(tickets.length, !!ticketsError)}</span>
                 <button type="button" onClick={() => setOnlyMine((v) => !v)} className={`rounded-full px-2 py-0.5 text-[10px] font-black transition ${onlyMine ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{onlyMine ? "내 배정" : "전체"}</button>
               </div>
               <button type="button" onClick={() => void loadTickets()} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-black text-slate-500"><RefreshCw size={12} />새로고침</button>
@@ -409,7 +425,8 @@ export default function AutoSchedule({ author }: { author: string }) {
                   </span>
                 </label>
               ))}
-              {!tickets.length && <div className="rounded-lg border border-dashed border-slate-200 py-5 text-center text-xs font-bold text-slate-400">이 날짜의 {team}팀 일정이 없습니다.</div>}
+              {ticketsError && <StateBox kind="error" inside message={ticketsError} onRetry={() => void loadTickets()} />}
+              {!tickets.length && !ticketsError && <div className="rounded-lg border border-dashed border-slate-200 py-5 text-center text-xs font-bold text-slate-400">이 날짜의 {team}팀 일정이 없습니다.</div>}
             </div>
             <label className="mt-2 block text-[11px] font-black text-slate-500">직접 지정 (업체명 또는 주소)
               <input value={anchorQuery} onChange={(e) => { setAnchorQuery(e.target.value); setAnchorId(""); }} placeholder="업체명 또는 주소 (예: 강남구 삼성로100길 8)"

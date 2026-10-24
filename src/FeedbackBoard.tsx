@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bug, CheckCircle2, ChevronDown, ExternalLink, Lightbulb, Lock, MessageSquarePlus, Rocket, Send, ThumbsUp, Trash2, Undo2, Wrench, XCircle } from "lucide-react";
 import { askConfirm } from "./confirmModal";
 import { insertRow, selectRows, updateRows } from "./supabase";
+import { useScreenActive } from "./screenActive";
+import { canPoll, createGapGate, FOCUS_MIN_GAP_MS } from "./pollGate";
 
 // 홈 피드백 보드 (2026-09-12) — 직원이 불편·버그·개선점을 자유롭게 적고, 개발자가 답글과
 // 구체 개발 지시(프롬프트)를 달아 체크 → "개발 시작"하면 status=confirmed(개발 대기)로 넘어간다.
@@ -75,11 +77,15 @@ export default function FeedbackBoard({ author }: { author: string }) {
     } catch (e) { setError(`보드를 못 불러왔습니다: ${(e as Error).message}`); }
     finally { loadingRef.current = false; }
   };
+  // 홈이 숨어 있으면(KeepAlive) 타이머를 걷는다 — 숨은 동안 요청 0. 다시 보이면 15초 간격 지났을 때만 바로 1회(2026-10-24)
+  const active = useScreenActive();
+  const [gate] = useState(() => createGapGate(FOCUS_MIN_GAP_MS));
   useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 60_000);
+    if (!active) return;
+    if (gate.tryPass()) void load();
+    const timer = window.setInterval(() => { if (canPoll(true)) { gate.mark(); void load(); } }, 60_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps -- load 는 서버만 읽는다
 
   const submit = async () => {
     const text = content.trim();

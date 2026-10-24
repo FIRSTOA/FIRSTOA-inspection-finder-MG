@@ -12,6 +12,8 @@
  * 액션: {action:"probe", calId?} / {action:"sync", force?} / {action:"reset_state"}.
  */
 
+import { importedTicketVendor } from "../_shared/ticket-title.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -357,7 +359,7 @@ Deno.serve(async (req) => {
             method: "POST", headers: { ...restHeaders, Prefer: "resolution=merge-duplicates,return=minimal" },
             body: JSON.stringify([{
               id: ticketId, team, date: ev.date, time: ev.time,
-              vendor: ev.title.slice(0, 80), calendarTitle: ev.title.slice(0, 200),
+              vendor: importedTicketVendor(ev.title, ev.description, kind === "delivery"), calendarTitle: ev.title.slice(0, 200), // 업체명 칸은 고객사만(제목 앞 80자 통째 저장이 물류 거래처 오염 원인 — 2026-10-24), 전체 제목은 calendarTitle
               contact: "", address: ev.location.slice(0, 200), department: "",
               model: "", serial: "", asset: "", grade: "", keyman: "",
               issue: "", note: ev.description.slice(0, 4000),

@@ -195,3 +195,11 @@ describe("(6) 결과 줄 상세 — 같은 업체 같은 종류 최근 5건·주
     expect(top.vendor).toBe("주식회사 무암");
   });
 });
+
+describe("물류 일정 종류 — 업체명 칸이 고객사만일 때(2026-10-24 오후 네이버 동기화 변경)", () => {
+  it("calendarTitle 의 '철수(일반)' 로 종류를 읽는다", async () => {
+    const { ticketLogiKind } = await import("../src/tabSearch");
+    expect(ticketLogiKind({ vendor: "㈜파트라", calendarTitle: "박영현 - 강남/㈜파트라/C2060(마블4)/1대-철수(일반)/퍼스트/운영", note: "" })).toBe("철수");
+    expect(ticketLogiKind({ vendor: "㈜파트라", note: "" })).toBe("물류");
+  });
+});

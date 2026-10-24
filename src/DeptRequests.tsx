@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useScreenActive } from "./screenActive";
+import { createGapGate, FOCUS_MIN_GAP_MS, gatedHandler } from "./pollGate";
 import { askConfirm } from "./confirmModal";
 import { kstDate } from "./visits";
 import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
@@ -84,11 +86,16 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // 창 복귀 — 이 화면이 보일 때만 + 15초 안 중복 차단(2026-10-24 숨은 화면 조회)
+  const screenActive = useScreenActive();
+  const screenActiveRef = useRef(screenActive);
+  useEffect(() => { screenActiveRef.current = screenActive; }, [screenActive]);
+  const [focusGate] = useState(() => createGapGate(FOCUS_MIN_GAP_MS));
   useEffect(() => {
-    const onFocus = () => { void load(); };
+    const onFocus = gatedHandler(() => screenActiveRef.current, focusGate, load);
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [load]);
+  }, [load, focusGate]);
 
   const isMine = useMemo(() => makeIsForMe(author, members, book), [author, members, book]);
 

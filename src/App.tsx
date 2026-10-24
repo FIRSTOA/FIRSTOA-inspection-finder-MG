@@ -4729,7 +4729,7 @@ export default function App() {
   // 납품·철수·교체 일정 → FIELD 물류탭으로: 구분은 제목 키워드로, 거래처·품목은 티켓에서 미리 채운다
   const openLogisticsTicketInField = (t: { id: string; receptionId?: string; vendor?: string; issue?: string; model?: string; note?: string }) => {
     // 물류 제목("…/발주처/…/고객사/품목/비고")에서 고객사·품목·구분을 꺼낸다 — 디스페이스코리아처럼 딱 업체명만
-    const parsed = logisticsTicketInfo(`${t.vendor || ""} ${t.issue || ""}`, t.note || "");
+    const parsed = logisticsTicketInfo(`${(t as { calendarTitle?: string }).calendarTitle || t.vendor || ""} ${t.issue || ""}`, t.note || "");
     setScreen("field");
     clearPhotos([mode, "logistics"]); // 새 물류 양식 — 이전 사진 제거
     handleModeChange("logistics");
@@ -4841,7 +4841,7 @@ export default function App() {
 
   const finishTicket = async (ticket: { id: string; receptionId: string; sentText?: string }, patch: Record<string, unknown>, receptionStatus: string, deferReason = "") => {
     try {
-      const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`).catch(() => []);
+      const rows = await selectRows<Record<string, unknown>>("as_tickets", `id=eq.${encodeURIComponent(ticket.id)}&select=*&limit=1`).catch((e: Error) => { throw new Error(`일정 메모를 못 읽어 멈췄어요(메모 덮어쓰기 방지) — 저장 안 함, 다시 시도해 주세요. (${e.message})`); });
       // 익일 사유 블록 — 일정리스트의 연기 처리와 같은 양식으로 팀 AS방·네이버·일정 메모에 남긴다.
       // 네이버에서 수입한 일정은 기종·기번이 컬럼이 아니라 제목·메모에만 있어 "-"만 나갔다 → 원문에서 뽑아 채운다.
       // 배정자는 넣지 않는다 — 미루는 시점엔 내일 누가 갈지 정해지지 않는다.

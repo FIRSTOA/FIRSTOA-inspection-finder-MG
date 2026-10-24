@@ -11,6 +11,7 @@ import {
 import { kstDate } from "./visits";
 import { normRegion } from "./region";
 import { createAlbum, deleteRows, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, uploadPhoto } from "./supabase";
+import { readOrStop } from "./ticketGuard";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { sheetVendorName } from "./vendorName";
 import { prepareImageForUpload, type PreparedImage } from "./imageUpload";
@@ -1214,13 +1215,13 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     // IT 접수 일정은 source "it" — 일정리스트에서 IT 배지 + 완료 시 IT 캘린더 제자리 체크. CS 이관 복제는 "cs-transfer"(2026-09-17)
     const source = opts.csTransfer ? "cs-transfer" : row.type === "IT" ? "it" : "";
     // 같은 접수로 이미 만든 일정이 있으면 중복 생성하지 않는다 (티켓 2개 → 상태 뒤집힘 사고 방지) — CS 이관은 IT 일정과 별건이라 이관분만 본다
-    const existing = await selectRows<{ id: string }>("as_tickets", `select=id&receptionId=eq.${row.id}${opts.csTransfer ? "&source=eq.cs-transfer" : ""}&limit=1`).catch(() => []);
+    const existing = await readOrStop(selectRows<{ id: string }>("as_tickets", `select=id&receptionId=eq.${row.id}${opts.csTransfer ? "&source=eq.cs-transfer" : ""}&limit=1`), "이미 만든 일정");
     if (existing.length) {
       if (!confirmDup) return true; // 자동 등록: 이미 있으니 그대로 성공 처리
       if (!await askConfirm("이 접수로 등록된 일정이 이미 있습니다. 하나 더 추가할까요? (재방문 등)")) return false;
     }
     if (confirmDup && !existing.length) {
-      const dup = await selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`).catch(() => []);
+      const dup = await readOrStop(selectRows<{ id: string }>("as_tickets", `select=id&date=eq.${today}&vendor=eq.${encodeURIComponent(vendor)}&limit=1`), "오늘 같은 업체 일정");
       if (dup.length && !await askConfirm(`오늘 ${vendor} 일정이 이미 있습니다. 그래도 추가할까요?`)) return false;
     }
     const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;

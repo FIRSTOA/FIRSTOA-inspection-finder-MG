@@ -10,6 +10,8 @@ import { Armchair, FileImage, Laptop, Monitor, Package, Plus, Printer, Search, S
 import { insertRow, insertRowReturning, invokeEdgeFunction, selectRows, updateRows, uploadPublicFile, upsertRow } from "./supabase";
 import { historyCoreName, vendorMatchKey } from "./ids";
 import { notify } from "./toast";
+import { failureMessage, reportViewState, tryLoad, type LoadFailure } from "./loadState";
+import StateBox from "./ui/StateBox";
 
 type PeriodKind = "month" | "quarter" | "half" | "year";
 type Recipient = { id: number; vendor: string; name: string; phone: string; memo: string; active: boolean };
@@ -108,6 +110,9 @@ export default function CustomerReport({ author }: { author: string }) {
   const [searching, setSearching] = useState(false);
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
+  // 조회 실패 — 실패를 0건으로 만들지 않는다. 이 값이 있으면 리포트 본문을 그리지 않고 보내기·저장을 막는다(2026-10-24)
+  const [buildError, setBuildError] = useState<{ vendor: string; message: string } | null>(null);
+  const [suggestNote, setSuggestNote] = useState(""); // 연락처 후보 일부 조회 실패 안내
   const [saving, setSaving] = useState(false);
   // ── 2단계: 수신자 관리(키맨 추천+직접 추가) + 반검수 발송(확인 팝업) + 발송 로그 ──
   const [recipients, setRecipients] = useState<Recipient[]>([]);
@@ -149,6 +154,8 @@ export default function CustomerReport({ author }: { author: string }) {
   const build = async (vendorName: string) => {
     setLoading(true);
     setReport(null);
+    setBuildError(null);
+    setSuggestNote("");
     // 업체 전환 시 이전 업체의 수신자·로그가 잔류하면 오발송 사고 — 먼저 비우고 새로 싣는다
     setRecipients([]);
     setSuggests([]);
@@ -158,10 +165,14 @@ export default function CustomerReport({ author }: { author: string }) {
       // "주식회사 푸드나무"로 ilike하면 "푸드나무"로 적힌 점검 기록을 놓친다 — 핵심 토큰으로 넓게 잡고 키 대조로 거른다
       const core = encodeURIComponent(historyCoreName(vendorName) || vendorName.slice(0, 12));
       const nameCol = encodeURIComponent("_업체명");
+      // 조회가 하나라도 실패하면 리포트를 만들지 않는다 — "AS 0건·점검 0건" 리포트가 고객에게 나가는 것을 막는다
+      const failures: LoadFailure[] = [];
+      const fail = () => { setBuildError({ vendor: vendorName, message: failureMessage(failures, "리포트 자료") }); setHits([]); };
       // ① 기기 현황 (임대중)
-      const deviceRows = await selectRows<Record<string, string>>(
+      const deviceRows = await tryLoad("기기 현황", selectRows<Record<string, string>>(
         "vendor_info", `select=${encodeURIComponent("품목,제조사,모델명,기종,자산번호,임대여부,_업체명")}&${nameCol}=eq.${encodeURIComponent(vendorName)}&_hidden=not.is.true&limit=500`,
-      );
+      ), failures);
+      if (!deviceRows) { fail(); return; }
       const active = deviceRows.filter((r) => r["임대여부"] === "임대중");
       const catMap = new Map<string, number>();
       for (const r of active) {
@@ -174,19 +185,24 @@ export default function CustomerReport({ author }: { author: string }) {
         .map((r) => ({ cat: normalizeCat(String(r["품목"] || "")), maker: guessMaker(String(r["모델명"] || r["기종"] || "")) || String(r["제조사"] || "").trim(), model: String(r["모델명"] || r["기종"] || "").trim(), asset: String(r["자산번호"] || "").trim() }))
         .sort((a, b) => (/복합기|프린터|플로터/.test(b.cat) ? 1 : 0) - (/복합기|프린터|플로터/.test(a.cat) ? 1 : 0));
       // ② 기간 내 접수 (AS·원격·IT)
-      const receptions = (await selectRows<Record<string, unknown>>(
+      const receptionRows = await tryLoad("AS·원격·IT 접수", selectRows<Record<string, unknown>>(
         "service_receptions", `select=id,receipt_date,type,vendor,model,serial,asset_no,symptom,status&vendor=ilike.*${core}*&type=in.(${encodeURIComponent('"복합기 AS","원격이관","IT"')})&deleted=not.is.true&receipt_date=gte.${range.start}&receipt_date=lte.${range.end}&limit=200`,
-      ).catch(() => [])).filter((r) => vendorMatchKey(String(r.vendor || "")) === key);
+      ), failures);
+      if (!receptionRows) { fail(); return; }
+      const receptions = receptionRows.filter((r) => vendorMatchKey(String(r.vendor || "")) === key);
       // 처리내용: 접수에 연결된 일정의 note(FIELD 전송 양식)에서
       const ids = receptions.map((r) => String(r.id));
-      const notes = ids.length ? await selectRows<{ receptionId: string; note: string }>(
+      const notes = ids.length ? await tryLoad("처리내용(일정)", selectRows<{ receptionId: string; note: string }>(
         "as_tickets", `select=receptionId,note&receptionId=in.(${ids.map((i) => `"${i}"`).join(",")})&limit=200`,
-      ).catch(() => [] as Array<{ receptionId: string; note: string }>) : [];
+      ), failures) : [];
+      if (!notes) { fail(); return; }
       const noteOf = new Map(notes.map((n) => [n.receptionId, n.note] as const));
       // ③ 기간 내 점검 방문
-      const inspections = (await selectRows<Record<string, unknown>>(
+      const inspectionRows = await tryLoad("점검 기록", selectRows<Record<string, unknown>>(
         "jeomgeom", `select=${encodeURIComponent("작성일,_업체명,지역,모델명,자산기번,처리내용,_기번목록")}&${nameCol}=ilike.*${core}*&_hidden=not.is.true&${encodeURIComponent("작성일")}=gte.${range.start}&${encodeURIComponent("작성일")}=lte.${range.end}&limit=200`,
-      ).catch(() => [])).filter((r) => vendorMatchKey(String(r["_업체명"] || "")) === key);
+      ), failures);
+      if (!inspectionRows) { fail(); return; }
+      const inspections = inspectionRows.filter((r) => vendorMatchKey(String(r["_업체명"] || "")) === key);
 
       const rows: ServiceRow[] = [
         ...receptions.map((r) => ({
@@ -226,9 +242,11 @@ export default function CustomerReport({ author }: { author: string }) {
         })(),
       ].sort((a, b) => a.date.localeCompare(b.date));
 
-      const lastAll = (await selectRows<Record<string, unknown>>(
+      const lastRows = await tryLoad("최근 점검일", selectRows<Record<string, unknown>>(
         "jeomgeom", `select=${encodeURIComponent("작성일,_업체명")}&${nameCol}=ilike.*${core}*&_hidden=not.is.true&order=${encodeURIComponent("작성일")}.desc&limit=20`,
-      ).catch(() => [])).filter((r) => vendorMatchKey(String(r["_업체명"] || "")) === key);
+      ), failures);
+      if (!lastRows) { fail(); return; }
+      const lastAll = lastRows.filter((r) => vendorMatchKey(String(r["_업체명"] || "")) === key);
 
       setReport({
         vendor: vendorName,
@@ -247,9 +265,11 @@ export default function CustomerReport({ author }: { author: string }) {
       setHits([]);
       void loadSendData(vendorName);
     } catch (e) {
+      setBuildError({ vendor: vendorName, message: `리포트를 만들지 못했습니다 — 다시 시도해 주세요 (${(e as Error).message})` });
       notify(`리포트 생성 실패: ${(e as Error).message}`, "error");
     } finally { setLoading(false); }
   };
+  const view = reportViewState({ hasReport: !!report, loading, error: buildError?.message || "" });
 
   // ── 장 나누기: 1장에 요약+내역 10행까지, 넘치면 2장(최대 24행), 그 이상은 "외 n건" ──
   const PAGE1_ROWS = 10;
@@ -292,7 +312,8 @@ export default function CustomerReport({ author }: { author: string }) {
     try {
       const [recips, sent] = await Promise.all([
         selectRows<{ vendor: string }>("report_recipients", "select=vendor&active=is.true&limit=3000"),
-        selectRows<{ vendor: string }>("report_send_log", `select=vendor&period=eq.${encodeURIComponent(range.label)}&status=eq.sent&limit=3000`).catch(() => [] as Array<{ vendor: string }>),
+        // 발송 이력 실패를 "안 보냄"으로 보면 같은 업체에 두 번 나간다 — 실패면 큐를 열지 않는다(2026-10-24)
+        selectRows<{ vendor: string }>("report_send_log", `select=vendor&period=eq.${encodeURIComponent(range.label)}&status=eq.sent&limit=3000`),
       ]);
       const sentSet = new Set(sent.map((row) => row.vendor));
       const vendors = Array.from(new Set(recips.map((row) => row.vendor.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ko"));
@@ -337,15 +358,19 @@ export default function CustomerReport({ author }: { author: string }) {
       const coreEnc = encodeURIComponent(core.slice(0, 24));
       const keymanCols = `${encodeURIComponent("키맨성함+직함")},${encodeURIComponent("키맨전화번호")}`;
       // 키맨 후보 1순위는 임대리스트 키맨(AA열 — 22,243행 보유) — 워킨맵·접수·미수는 폴백
+      // 후보(키맨 등)는 보조 자료 — 일부 실패해도 수신자 관리는 되게 두되, 무엇이 빠졌는지 창에 적는다(2026-10-24)
+      const candFailures: LoadFailure[] = [];
+      const cand = async (label: string, p: Promise<Record<string, unknown>[]>) => (await tryLoad(label, p, candFailures)) ?? [];
       const [recips, logRows, leaseKeymen, keymen, places, receps, misuRows] = await Promise.all([
         selectRows<Recipient>("report_recipients", `select=*&vendor=eq.${encodeURIComponent(core)}&active=is.true&order=id.asc`),
         selectRows<SendLogRow>("report_send_log", `select=id,recipient_name,phone,status,period,created_at&vendor=eq.${encodeURIComponent(core)}&order=id.desc&limit=6`),
-        selectRows<Record<string, unknown>>("vendor_info", `select=${encodeURIComponent("키맨")}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&limit=60`).catch(() => []),
-        selectRows<Record<string, unknown>>("mfp_expansion", `select=${keymanCols}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&limit=20`).catch(() => []),
-        selectRows<Record<string, unknown>>("workin_map_places", `select=name,phone&name=ilike.*${coreEnc}*&visible=not.is.false&limit=20`).catch(() => []),
-        selectRows<Record<string, unknown>>("service_receptions", `select=receiver_phone,author&vendor=ilike.*${coreEnc}*&deleted=not.is.true&order=id.desc&limit=20`).catch(() => []),
-        selectRows<Record<string, unknown>>("misu", `select=${encodeURIComponent("업체담당자")},${encodeURIComponent("휴대폰번호")}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&order=id.desc&limit=10`).catch(() => []),
+        cand("임대리스트 키맨", selectRows<Record<string, unknown>>("vendor_info", `select=${encodeURIComponent("키맨")}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&limit=60`)),
+        cand("키맨 DB", selectRows<Record<string, unknown>>("mfp_expansion", `select=${keymanCols}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&limit=20`)),
+        cand("워킨맵", selectRows<Record<string, unknown>>("workin_map_places", `select=name,phone&name=ilike.*${coreEnc}*&visible=not.is.false&limit=20`)),
+        cand("접수 회신번호", selectRows<Record<string, unknown>>("service_receptions", `select=receiver_phone,author&vendor=ilike.*${coreEnc}*&deleted=not.is.true&order=id.desc&limit=20`)),
+        cand("미수 기록", selectRows<Record<string, unknown>>("misu", `select=${encodeURIComponent("업체담당자")},${encodeURIComponent("휴대폰번호")}&${encodeURIComponent("_업체명")}=ilike.*${coreEnc}*&_hidden=not.is.true&order=id.desc&limit=10`)),
       ]);
+      setSuggestNote(candFailures.length ? `연락처 후보 일부를 불러오지 못했습니다(${candFailures.map((f) => f.label).join(", ")}) — 업체를 다시 고르면 재시도합니다.` : "");
       setRecipients(recips);
       setLogs(logRows);
       const have = new Set(recips.map((r) => r.phone.replace(/[^\d]/g, "")));
@@ -405,7 +430,7 @@ export default function CustomerReport({ author }: { author: string }) {
   const sendTargets = recipients.filter((r) => validPhone(r.phone));
 
   const sendReports = async () => {
-    if (!report || sending) return;
+    if (!report || sending || buildError) return; // 조회 실패 상태에서는 보내지 않는다
     setSending(true);
     try {
       // 1) 보이는 리포트를 장별로 캡처해 **한 장의 세로 이미지**로 합친다 — 링크 1개, 폰에서 여백 없이 이어 보인다
@@ -460,7 +485,7 @@ export default function CustomerReport({ author }: { author: string }) {
   };
 
   const savePng = async () => {
-    if (!report) return;
+    if (!report || buildError) return;
     setSaving(true);
     try {
       const { default: html2canvas } = await import("html2canvas-pro");
@@ -567,13 +592,17 @@ export default function CustomerReport({ author }: { author: string }) {
 
       {loading && <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm font-bold text-slate-400">리포트를 만드는 중…</div>}
 
-      {report && !loading && (
+      {view.kind === "error" && buildError && (
+        <StateBox kind="error" message={`${buildError.vendor} — ${buildError.message}`} hint="실패한 조회를 0건으로 채우지 않습니다. 보내기·저장은 다시 불러온 뒤에 할 수 있습니다." onRetry={() => void build(buildError.vendor)} />
+      )}
+
+      {report && view.kind === "ready" && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => void savePng()} disabled={saving} className="flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-40"><FileImage size={15} />{saving ? "저장 중…" : "PNG 저장 (장별)"}</button>
-            <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"><Printer size={15} />인쇄 / PDF</button>
+            <button type="button" onClick={() => void savePng()} disabled={saving || !view.canSend} className="flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-40"><FileImage size={15} />{saving ? "저장 중…" : "PNG 저장 (장별)"}</button>
+            <button type="button" onClick={() => window.print()} disabled={!view.canSend} className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"><Printer size={15} />인쇄 / PDF</button>
             <button type="button" onClick={() => setRecipOpen(true)} className="flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"><Users size={15} />수신자 관리 <span className="rounded-full bg-slate-100 px-1.5 text-xs">{recipients.length}</span></button>
-            <button type="button" onClick={() => { if (!sendTargets.length) { notify("수신자를 먼저 추가해 주세요.", "error"); setRecipOpen(true); return; } setSendOpen(true); }} className="flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700"><Send size={15} />문자 발송</button>
+            <button type="button" disabled={!view.canSend} onClick={() => { if (!view.canSend) return; if (!sendTargets.length) { notify("수신자를 먼저 추가해 주세요.", "error"); setRecipOpen(true); return; } setSendOpen(true); }} className="flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40"><Send size={15} />문자 발송</button>
             {logs.length > 0 && <span className="text-[11px] font-bold text-slate-400">최근 발송 {logs[0].created_at.slice(5, 10)} · {logs[0].recipient_name || logs[0].phone} {logs[0].status === "sent" ? "성공" : "실패"}{logs.length > 1 ? ` 외 ${logs.length - 1}건` : ""}</span>}
           </div>
 
@@ -593,6 +622,7 @@ export default function CustomerReport({ author }: { author: string }) {
                     </div>
                   ))}
                 </div> : <div className="rounded-lg border border-dashed border-slate-300 px-3 py-5 text-center text-xs font-semibold text-slate-400">아직 수신자가 없습니다 — 아래에서 추가해 주세요.</div>}
+                {suggestNote && <div role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">{suggestNote}</div>}
                 {suggests.length > 0 && <div>
                   <div className="mb-1.5 text-[11px] font-black text-slate-400">기존 기록에서 찾은 연락처</div>
                   <div className="space-y-1.5">
@@ -639,7 +669,7 @@ export default function CustomerReport({ author }: { author: string }) {
               </div>
               <div className="flex gap-2 border-t border-slate-100 p-3">
                 <button type="button" disabled={sending} onClick={() => setSendOpen(false)} className="flex-1 rounded-full border border-slate-300 py-2.5 text-sm font-black text-slate-600 hover:bg-slate-50 disabled:opacity-40">취소</button>
-                <button type="button" disabled={sending} onClick={() => void sendReports()} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-40">{sending ? "발송 중…" : `${sendTargets.length}명에게 발송`}</button>
+                <button type="button" disabled={sending || !view.canSend} onClick={() => void sendReports()} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-40">{sending ? "발송 중…" : `${sendTargets.length}명에게 발송`}</button>
               </div>
             </div>
           </div>}
@@ -825,7 +855,7 @@ export default function CustomerReport({ author }: { author: string }) {
         </>
       )}
 
-      {!report && !loading && (
+      {view.kind === "idle" && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
           <div className="text-sm font-black text-slate-500">기간을 고르고 업체를 검색하면 리포트가 만들어집니다</div>
           <div className="mt-1 text-xs font-semibold text-slate-400">접수가 없는 업체도 "안정 운영 + 정기 점검" 리포트가 나갑니다 — 전 업체 대상</div>

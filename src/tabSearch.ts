@@ -165,9 +165,10 @@ export function ticketLogiKind(row: Row): string {
   const first = str(row, "note").split("\n")[0] || "";
   const head = first.match(/^\s*(판매납품|납품|철수|교체|이전|세팅|셋팅)/)?.[1];
   if (head) return normalizeLogisticsKind(head);
-  const inTitle = str(row, "vendor").match(/(납품|철수|교체)\(/)?.[1];
+  const title = str(row, "calendarTitle") || str(row, "vendor"); // 2026-10-24 오후: 업체명 칸은 고객사만 남으므로 종류는 전체 제목에서
+  const inTitle = title.match(/(납품|철수|교체)\(/)?.[1];
   if (inTitle) return inTitle;
-  const k = normalizeLogisticsKind(`${str(row, "vendor")} ${first}`);
+  const k = normalizeLogisticsKind(`${title} ${first}`);
   return k === "기타" ? "물류" : k;
 }
 const TICKET_TYPES = `scheduleType=in.(${LOGISTICS_SCHEDULE_TYPES.map((t) => encodeURIComponent(`"${t}"`)).join(",")})`;

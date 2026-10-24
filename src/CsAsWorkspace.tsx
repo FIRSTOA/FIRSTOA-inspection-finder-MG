@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PhotoViewer from "./PhotoViewer";
 import { useScreenActive } from "./screenActive";
+import { canPoll, createGapGate, FOCUS_MIN_GAP_MS, gatedHandler, NAVER_PULL_GAP_MS } from "./pollGate";
 import { Search } from "lucide-react";
 import { askConfirm } from "./confirmModal";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, upsertRows } from "./supabase";
@@ -82,6 +83,9 @@ const displayFilters = ["익일통합as", "AS[완료]", "납품철수교체휴�
 type DisplayFilter = typeof displayFilters[number];
 // 점검 캘린더 유형("매월점검"으로 저장)의 실제 의미 — 워킨맵·자동일정의 분기점검은 "분기점검"으로(2026-10-01: 내 일정에 "매월"로 보여 헷갈렸다).
 // 저장 유형은 그대로 둔다(FIELD 전송 시 자동 완료 등이 이 유형으로 찾는다). 매월 반복 건만 "매월점검".
+// 네이버 일정 당기기 간격 — 캘린더·일정리스트 두 화면이 같은 모듈을 쓰므로 모듈 하나로 묶는다(focus 한 번에 2번 나가던 것, 2026-10-24)
+const naverPullGate = createGapGate(NAVER_PULL_GAP_MS);
+
 function inspectionTypeLabel(t: { scheduleType: string; issue?: string; source?: string; repeatMonthly?: boolean }): string {
   if (t.scheduleType !== "매월점검") return t.scheduleType;
   if (t.repeatMonthly) return "매월점검";
@@ -351,7 +355,8 @@ function receptionRawOf(ticket: AsTicket): string {
 function buildFieldAsText(ticket: AsTicket, author: string) {
   // 접수 보고양식을 FIELD에 복붙했을 때(formatPrinterReport)와 완전히 같은 형식.
   // 네이버 미러 일정은 제목 전체가 vendor에 실려 온다 — 업체명부만 남기고 구분(셋팅요청→세팅)도 제목에서 읽는다
-  const cleaned = fieldTicketVendor(ticket.vendor);
+  // 2026-10-24부터 네이버 수입 일정의 vendor 는 고객사만 — 구분(셋팅요청→세팅)은 전체 제목(calendarTitle)에서 읽는다
+  const cleaned = { ...fieldTicketVendor(ticket.vendor), gubun: fieldTicketVendor((ticket.calendarTitle || "").trim() || ticket.vendor).gubun };
   return [
     `작성자:${author || ticket.assignee || ""}`,
     `구분:${cleaned.gubun}`,
@@ -400,11 +405,11 @@ export function CsCalendar() {
   return <CsAsWorkspace view="calendar" />;
 }
 
-export function AsReception({ author, onUseField, onSelfRequest, onLoadForm, onLogistics }: { author: string; onUseField: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onSelfRequest?: (text: string) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLogistics?: (t: { id: string; receptionId?: string; vendor?: string; issue?: string; model?: string; note?: string }) => void }) {
+export function AsReception({ author, onUseField, onSelfRequest, onLoadForm, onLogistics }: { author: string; onUseField: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onSelfRequest?: (text: string) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLogistics?: (t: { id: string; receptionId?: string; vendor?: string; calendarTitle?: string; issue?: string; model?: string; note?: string }) => void }) {
   return <CsAsWorkspace view="as" author={author} onUseField={onUseField} onSelfRequest={onSelfRequest} onLoadForm={onLoadForm} onLogistics={onLogistics} />;
 }
 
-function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadForm, onLogistics }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onSelfRequest?: (text: string) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLogistics?: (t: { id: string; receptionId?: string; vendor?: string; issue?: string; model?: string; note?: string }) => void }) {
+function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadForm, onLogistics }: { view: "calendar" | "as"; author?: string; onUseField?: (fieldText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onSelfRequest?: (text: string) => void; onLoadForm?: (rawText: string, ticket?: { id: string; receptionId?: string; vendor?: string }) => void; onLogistics?: (t: { id: string; receptionId?: string; vendor?: string; calendarTitle?: string; issue?: string; model?: string; note?: string }) => void }) {
   const todayYmd = getTodayYmd();
   const tomorrowYmd = getTomorrowYmd();
   const [, setDateTick] = useState(0);
@@ -444,13 +449,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   }, []);
   // 화면 유지(keep-alive) 중 숨어 있으면 주기 조회를 쉰다(2026-10-11)
   const screenActive = useScreenActive(); const screenActiveRef = useRef(true); useEffect(() => { screenActiveRef.current = screenActive; }, [screenActive]);
+  const [ticketFocusGate] = useState(() => createGapGate(FOCUS_MIN_GAP_MS));
   useEffect(() => {
     void migrateLocalOnce().then(refreshTickets);
-    const onFocus = () => { void refreshTickets(); };
+    // 창 복귀 — 이 화면이 보일 때만 + 15초 안 중복 차단(2026-10-24 숨은 화면 조회)
+    const onFocus = gatedHandler(() => screenActiveRef.current, ticketFocusGate, refreshTickets);
     window.addEventListener("focus", onFocus);
     const timer = window.setInterval(() => { if (document.visibilityState === "visible" && screenActiveRef.current) void refreshTickets(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
     return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
-  }, [refreshTickets]);
+  }, [refreshTickets, ticketFocusGate]);
 
   const [vendorFlags, setVendorFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
   const [histVendor, setHistVendor] = useState(""); // ⚠ 칩 클릭 → 통합이력 팝업
@@ -587,10 +594,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 동기화 결과가 화면에 바로 따라오도록 — 45초마다 재조회 + 창 복귀 시 네이버를 즉시 당겨온다
   useEffect(() => {
     const bump = () => setNaverReloadTick((t) => t + 1);
-    let lastPull = 0;
+    // 숨은 화면은 당기지 않는다 + focus 몰림 15초 차단 + 엣지 호출은 5분에 1번(cron 이 매분 당김) — 2026-10-24 하루 ~4,300회 → 줄임
+    const focusGate = createGapGate(FOCUS_MIN_GAP_MS);
     const pullNow = () => {
-      if (Date.now() - lastPull < 60_000) { bump(); return; } // 과호출 방지
-      lastPull = Date.now();
+      if (!canPoll(screenActiveRef.current) || !focusGate.tryPass()) return;
+      if (!naverPullGate.tryPass()) { bump(); return; } // 과호출 방지 — 표만 다시 읽는다
       void invokeEdgeFunction("naver-calendar-sync", { action: "sync" }).catch(() => undefined).finally(() => window.setTimeout(bump, 1500));
     };
     const timer = window.setInterval(() => { if (document.visibilityState === "visible" && screenActiveRef.current) bump(); }, 45_000);
@@ -1279,7 +1287,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     const lineOf = (ticket: AsTicket) => {
       // 납품·철수: 고객사 + 품목(괄호 설명 제거) + 구분만 — "•뉴트리원 노트북 2대 납품"
       if (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") {
-        const info = logisticsTicketInfo(ticket.vendor, ticket.note || "");
+        const info = logisticsTicketInfo((ticket.calendarTitle || "").trim() || ticket.vendor, ticket.note || ""); // 품목은 전체 제목에만 있다(vendor 는 고객사만, 2026-10-24)
         if (info.vendor) {
           const item = info.item.replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
           return `•${cut(historyCoreName(info.vendor) || info.vendor, 12)} ${cut(item, 14)} ${info.category}`.replace(/\s+/g, " ").trim();
@@ -1942,7 +1950,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               if (!ticket) return;
               // 납품·철수·교체는 물류 필드로 (일정리스트의 물류 [FIELD]와 같은 경로)
               if (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") {
-                onLogistics?.({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note });
+                onLogistics?.({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, calendarTitle: ticket.calendarTitle, issue: ticket.issue, model: ticket.model, note: ticket.note });
                 return;
               }
               const raw = receptionRawOf(ticket);
@@ -2007,7 +2015,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <div className="mt-2 flex flex-wrap gap-1.5" onClick={(event) => event.stopPropagation()}>
                   <CallButton ticket={ticket} compact />
                   {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className={`${CARD_BTN} bg-slate-900 text-white hover:bg-slate-800`}>FIELD</button>}
-                  {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className={`${CARD_BTN} bg-slate-700 text-white hover:bg-slate-600`}>FIELD</button>}
+                  {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, calendarTitle: ticket.calendarTitle, issue: ticket.issue, model: ticket.model, note: ticket.note })} className={`${CARD_BTN} bg-slate-700 text-white hover:bg-slate-600`}>FIELD</button>}
                   <button type="button" onClick={() => setAssignId(ticket.id)} className={`${CARD_BTN} border border-emerald-200 bg-emerald-50 text-emerald-700`}>배정</button>
                   <button type="button" onClick={() => openDone(ticket)} className={`${CARD_BTN} border ${ticket.status === "완료" ? "border-slate-300 bg-white text-slate-600" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
                   <button type="button" onClick={() => openDefer(ticket)} className={`${CARD_BTN} border border-purple-200 bg-purple-50 text-purple-700`}>익일</button>
@@ -2084,7 +2092,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                     <div className="flex flex-nowrap justify-end gap-1.5">
                       <CallButton ticket={ticket} />
                       {(ticket.scheduleType === "AS" || ticket.scheduleType === "익일AS") && <button type="button" onClick={() => { const raw = receptionRawOf(ticket); const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor }; if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link); }} className="shrink-0 rounded-full bg-slate-900 transition hover:bg-slate-800 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
-                      {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="shrink-0 rounded-full bg-slate-700 transition hover:bg-slate-600 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
+                      {(ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && <button type="button" onClick={() => onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, calendarTitle: ticket.calendarTitle, issue: ticket.issue, model: ticket.model, note: ticket.note })} className="shrink-0 rounded-full bg-slate-700 transition hover:bg-slate-600 px-3 py-1.5 text-xs font-black text-white">FIELD</button>}
                       <button type="button" onClick={() => setAssignId(ticket.id)} className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">배정</button>
                       <button type="button" onClick={() => openDone(ticket)} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-black ${ticket.status === "완료" ? "border-slate-200 bg-white text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700"}`}>{ticket.status === "완료" ? "취소" : "완료"}</button>
                       <button type="button" onClick={() => openDefer(ticket)} className="shrink-0 rounded-full border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-black text-purple-700">익일</button>
@@ -2308,7 +2316,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 )}
                 {/* 납품·철수·교체도 상세보기에서 바로 FIELD 물류 양식으로 — 목록의 [FIELD]와 같은 경로(2026-09-16 요청). 휴가·연차는 제외 */}
                 {view === "as" && (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") && !/휴가|연차/.test(ticket.vendor) && onLogistics && (
-                  <button type="button" onClick={() => { setDetailId(""); onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, issue: ticket.issue, model: ticket.model, note: ticket.note }); }} className="w-full whitespace-nowrap rounded-lg bg-slate-700 py-2.5 text-xs font-black text-white transition hover:bg-slate-600">FIELD — 물류 양식으로 (구분·거래처·품목 미리 채움)</button>
+                  <button type="button" onClick={() => { setDetailId(""); onLogistics({ id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor, calendarTitle: ticket.calendarTitle, issue: ticket.issue, model: ticket.model, note: ticket.note }); }} className="w-full whitespace-nowrap rounded-lg bg-slate-700 py-2.5 text-xs font-black text-white transition hover:bg-slate-600">FIELD — 물류 양식으로 (구분·거래처·품목 미리 채움)</button>
                 )}
                 <button type="button" onClick={() => { setDetailId(""); openDone(ticket); }} className={`w-full whitespace-nowrap rounded-lg py-2.5 text-xs font-black transition ${ticket.status === "완료" ? "border border-slate-300 bg-white text-slate-600" : "bg-emerald-600 text-white shadow-[0_3px_10px_rgba(5,150,105,0.3)] hover:bg-emerald-700"}`}>{ticket.status === "완료" ? "완료 취소" : "✓ 완료"}</button>
               </div>
