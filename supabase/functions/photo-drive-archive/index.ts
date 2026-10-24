@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
 
     if (action !== "archive") throw new Error(`알 수 없는 action: ${action}`);
     const limit = Math.min(Math.max(Number(body.limit) || 40, 1), 200);
-    const res = await fetch(`${GAS_URL}?action=photoarchive&limit=${limit}&days=${days}`, { redirect: "follow" });
+    // photoarchive 는 GAS 관리 토큰 필요(2026-10-24, 설계 kakao-collect-expand 3-7). 시크릿이 없으면 GAS 가 {ok:false,status:403} 본문을 준다 → 그대로 결과로 남김
+    const res = await fetch(`${GAS_URL}?action=photoarchive&limit=${limit}&days=${days}&token=${encodeURIComponent(Deno.env.get("FIELD_ADMIN_TOKEN") ?? "")}`, { redirect: "follow" });
     const text = await res.text();
     let data: unknown;
     try { data = JSON.parse(text); } catch { throw new Error(`GAS 응답 파싱 실패(${res.status}): ${text.slice(0, 160)}`); }

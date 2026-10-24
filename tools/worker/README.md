@@ -61,7 +61,7 @@ Stop-ScheduledTask / Start-ScheduledTask -TaskName 'FIRSTOA Worker'
 ## 설계 메모
 - anon 키만 쓴다(웹앱과 같은 신뢰 모델). service_role 키는 이 폴더에 두지 않는다.
 - 일감 잡기는 `status=queued` 조건부 갱신이라 실행기가 둘이어도 한쪽만 가져간다.
-- `backup` 일감 payload: `{"tables":"표1,표2","out":"archive-20261024"}` — `out` 이 폴더 이름만이면 백업 루트(구글 드라이브\FIRSTOA-백업) 아래 그 이름 폴더, 절대경로면 그대로. 날짜(YYYY-MM-DD)가 아닌 이름은 14회차 정리에서 안 지워진다. `out` 을 비우면 그날 02:30 백업 폴더에 덮어쓴다(2026-10-24a).
+- `backup` 일감 payload: `{"tables":"표1,표2","out":"archive-20261024"}` — `out` 이 폴더 이름만이면 백업 루트(구글 드라이브\FIRSTOA-백업) 아래 그 이름 폴더, 절대경로면 그대로. 날짜(YYYY-MM-DD)가 아닌 이름은 14회차 정리에서 안 지워진다. `out` 을 비우면 그날 02:30 백업 폴더에 덮어쓴다(2026-10-24a). anon 으로 읽으므로 RLS 정책이 없거나 grant 가 없는 표(옛 _backup_* 등)는 0행·실패로 끝난다 — 그런 표는 대시보드 CSV 로.
 - 백업은 2026-10-10 마감 목록 실수 삭제 뒤 "매일·노트북·넓은 범위"로 바꾼 것. 데스크톱 WSL 주간 백업(8/18 한 번 성공 뒤 실패)은 이것으로 대체한다.
 - 백업 파일에는 고객 정보가 있다. git 에 올리지 말 것(`logs/`·`state.json` 도 .gitignore).
 

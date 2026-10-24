@@ -196,7 +196,7 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
   <a class="sub" href="#s-switch">전송·연동 스위치</a>
   <a class="sub" href="#s-naver">네이버 캘린더 설정</a>
   <a class="sub" href="#s-rooms">카톡방 매핑(보내는 방향)</a>
-  <a class="sub" href="#s-collect">카톡 수집 상태 · 수집 방 매핑</a>
+  <a class="sub" href="#s-collect">카톡 수집</a>
   <a class="sub" href="#s-jobs">시트 기입 최근 작업</a>
   <a class="sub" href="#s-codes">거래처 코드 미매칭 확정</a>
   <a href="#push">6. 알림</a>
@@ -434,7 +434,7 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
 
 <section id="system">
   <h2>5. 전송·연동 — 회사 전체 전송을 다루는 곳</h2>
-  <p class="lead">위에서 아래로 여섯 묶음입니다: <b>전송·연동 스위치</b> → <b>카톡방 매핑</b> → <b>카톡 수집 상태 (First-DATA)</b> → <b>카톡 수집 방 매핑</b> → <b>시트 기입 최근 작업</b> → <b>거래처 코드 미매칭 확정</b>. 테스트 모드가 켜져 있으면 맨 위에 노란 띠 <b>"테스트 모드가 켜져 있습니다 — 전송·기입이 실제 방/탭으로 가지 않습니다."</b>가 먼저 보입니다.</p>
+  <p class="lead">위에서 아래로 다섯 묶음입니다: <b>전송·연동 스위치</b> → <b>카톡방 매핑</b> → <b>카톡 수집</b> → <b>시트 기입 최근 작업</b> → <b>거래처 코드 미매칭 확정</b>. 테스트 모드가 켜져 있으면 맨 위에 노란 띠 <b>"테스트 모드가 켜져 있습니다 — 전송·기입이 실제 방/탭으로 가지 않습니다."</b>가 먼저 보입니다.</p>
 
   <h3 id="s-switch">전송·연동 스위치</h3>
   <div class="shot ui">
@@ -505,39 +505,33 @@ table.tbl th{font-size:12px;color:var(--muted);letter-spacing:.04em;background:v
   </ol>
   <div class="box tip"><b>방을 고르는 순서</b>FIELD 전송 시 그 업무 종류에서 작성자 팀(A~D)의 줄을 먼저, 없으면 <b>* 공통</b> 줄을 씁니다. 그러니 공통은 안전망으로 하나 두는 것이 좋습니다.</div>
 
-  <h3 id="s-collect">카톡 수집 상태 (First-DATA) · 카톡 수집 방 매핑 — 받는 방향</h3>
-  <p>"드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다." 카톡방 대화를 내보낸 txt를 드라이브 폴더에 올리면 GAS가 읽어 DB에 넣는 길입니다.</p>
+  <h3 id="s-collect">카톡 수집 — 방별로 언제까지 들어왔나 (2026-10-24)</h3>
+  <p>노트북 매크로가 업무 카톡방 대화를 드라이브에 저장하면 GAS가 FIELD 표(점검·AS·물류·불만·미수·재계약)로, 서버가 원문 보관으로 넣습니다. 이 카드 한 장에서 방마다 마지막으로 들어온 날과 확인필요 파일을 봅니다. (옛 "카톡 수집 상태 (First-DATA)"·"카톡 수집 방 매핑" 두 칸이 이 카드로 바뀌었습니다.)</p>
   <div class="shot ui">
     <span class="cap">화면 재현</span>
     <div class="card" style="margin-top:0">
-      <div class="chead"><span>카톡 수집 상태 (First-DATA)<br><small>드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다.</small></span></div>
-      <div class="crow" style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#F1F5F9;padding:0">
-        <div style="background:#fff;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:12px">드라이브 수집함 (카톡 TXT 자동 적재)</b><span class="lp blue" style="font-size:10px">지금 수집 실행</span></div><div style="background:#F8FAFC;border-radius:8px;padding:4px 8px;font-size:11px;margin-top:6px">파일 3 · 처리 3 · 신규 41 · 확인필요 2 · 실패 0</div><div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap"><span class="tag g">트리거 동작 중</span><span class="tag a">대기 파일 3개</span><span class="tag s">주기 10분</span><span class="lp ghost" style="font-size:10px">폴더 열기</span></div></div>
-        <div style="background:#fff;padding:10px 12px"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:12px">일괄 수집 작업 큐</b><span class="lp ghost" style="font-size:10px">끝난 작업 정리</span></div><div style="margin-top:6px;font-size:11px;display:grid;gap:3px"><div><span class="tag g">done</span> 점검 · A팀</div><div><span class="tag a">running</span> AS · CD팀</div><div><span class="tag r">error</span> 미수 · B팀 <span style="color:#F43F5E">시트 권한 없음</span></div></div></div>
-      </div>
+      <div class="chead"><span>카톡 수집<br><small>노트북 매크로가 저장한 카톡 대화를 GAS 가 FIELD 표로, 엣지가 원문 보관으로 넣습니다.</small></span></div>
+      <div class="crow"><b style="font-size:12px">마지막 적재 10/25 07:12 · 확인필요 2 · 오늘 들어온 방 14/20</b></div>
+      <div class="crow" style="flex-wrap:wrap;gap:4px"><span class="lp blue" style="font-size:10px">지금 수집 실행</span><span class="lp ghost" style="font-size:10px">다시 넣기 (확인필요 2)</span><span class="lp ghost" style="font-size:10px">끝난 작업 정리 (1)</span><span class="tag g">트리거 동작 중</span><span class="tag s">대기 파일 0</span></div>
+      <div class="crow"><span style="color:#10B981">●</span><span class="grow"><b>강북A 점검방</b> <span class="tag s">점검</span><br><small>구조 적재 10/25 07:12 · 원문 최근 글 10/24 18:40</small></span><span class="tag g">정상</span></div>
+      <div class="crow"><span style="color:#F59E0B">●</span><span class="grow"><b>충청외E 극지방 as</b> <span class="tag s">점검</span> <span class="tag s">AS</span><br><small>구조 적재 10/22 07:10 · 원문 최근 글 10/21 17:02</small></span><span class="tag a">지연</span></div>
+      <div class="crow"><span style="color:#CBD5E1">●</span><span class="grow"><b>부품요청</b> <span class="tag s">부품</span><br><small>구조 적재 - · 원문 최근 글 -</small></span><span class="tag s">수집 안 함</span></div>
     </div>
   </div>
   <table class="tbl"><thead><tr><th>부분</th><th>뜻 · 누르면</th></tr></thead><tbody>
-    <tr><td><b>[지금 수집 실행]</b></td><td>트리거를 기다리지 않고 수집함의 txt를 지금 처리합니다. 누르면 "수집 중… (몇 분 걸릴 수 있음)". 끝나면 회색 상자에 <b>"파일 N · 처리 N · 신규 N · 확인필요 N · 실패 N"</b>(실패하면 "실행 실패: …").</td></tr>
-    <tr><td><span class="tag g">트리거 동작 중</span> / <span class="tag r">트리거 없음</span></td><td>자동 수집 시간 트리거가 살아 있는지. "없음"이면 자동 수집이 멈춘 상태 — First-DATA Apps Script 확인.</td></tr>
-    <tr><td><span class="tag a">대기 파일 N개</span></td><td>아직 안 읽은 txt 수(0이면 회색). 상태줄 "수집 대기"와 같은 숫자.</td></tr>
-    <tr><td>주기 · [폴더 열기]</td><td>트리거 주기 표시 · 드라이브 수집 폴더를 새 창으로.</td></tr>
-    <tr><td>빨간 상자</td><td>"수집함이 꺼져 있습니다 — 카톡 대화가 DB로 들어오지 않는 상태입니다."</td></tr>
-    <tr><td><b>일괄 수집 작업 큐</b></td><td>최근 작업 5개: 상태 배지(<span class="tag g">done</span> / <span class="tag r">error</span> / 그 외 노랑) · "방 종류 · 팀" · 오류 앞부분. 없으면 "대기 중인 수집 작업이 없습니다."</td></tr>
-    <tr><td><b>[끝난 작업 정리]</b></td><td>작업이 있을 때만 보임. 끝난 작업을 큐에서 치우고 상태를 다시 읽습니다("정리 중…").</td></tr>
-    <tr><td>"GAS 상태 조회 실패: …"</td><td>First-DATA가 응답하지 않음. 잠시 후 새로고침.</td></tr>
+    <tr><td><b>머리 한 줄</b></td><td>마지막 적재 시각 · 확인필요 파일 수 · 오늘 들어온 방/수집 대상 방(회색 방 제외).</td></tr>
+    <tr><td><b>[지금 수집 실행]</b></td><td>트리거를 기다리지 않고 수신함의 txt를 지금 처리합니다. 몇 분 걸릴 수 있습니다. 끝나면 "파일 N · 처리 N · 신규 N · 확인필요 N · 실패 N". "응답 시간 초과"가 떠도 뒤에서는 계속 돌 수 있으니 잠시 뒤 ↻.</td></tr>
+    <tr><td><b>[다시 넣기]</b></td><td>확인필요 폴더의 파일을 수신함으로 되돌립니다. 다음 수집 때 다시 처리됩니다.</td></tr>
+    <tr><td><b>[끝난 작업 정리]</b></td><td>일괄 수집 작업 큐에서 끝난 작업을 지웁니다.</td></tr>
+    <tr><td>"GAS 가 거부했습니다(관리 토큰)"</td><td>세 단추는 서버 함수(gas-admin)를 거쳐 관리 토큰을 붙여 실행됩니다. 이 글이 뜨면 토큰 설정 문제 — 운영 담당에게. 1분에 5번까지.</td></tr>
+    <tr><td><span class="tag g">정상</span> <span class="tag a">지연</span> <span class="tag r">멈춤</span> <span class="tag s">수집 안 함</span></td><td>정상 = 오늘·어제(금→월처럼 사이 영업일 1일 이하) · 지연 = 영업일 2~3일 · 멈춤 = 4일 이상 또는 기록 없음 · 수집 안 함 = 꺼진 방·매크로 저장 대상 아님. 주말·공휴일은 세지 않습니다.</td></tr>
+    <tr><td>방 줄을 누르면</td><td>지역·켜짐·매크로 저장·표 적재·원문 보관 여부와 원문 적재 기록 최근 5줄(최근 14일).</td></tr>
+    <tr><td><b>확인필요</b></td><td>표에 없는 방 이름과 확인필요 폴더의 파일(최대 10). [이 이름으로 추가] → 아래 방 추가 칸에 이름이 채워집니다.</td></tr>
+    <tr><td><b>방 추가(SQL)</b></td><td>방 추가·수정은 아직 화면에서 저장되지 않습니다(표 쓰기 권한 결정 대기). 방 이름·처리 칩·지역을 고르면 SQL 한 줄이 생깁니다 → [SQL 복사] → Supabase SQL Editor 에서 실행(운영 담당).</td></tr>
+    <tr><td>노란 띠 "SQL 실행 대기"</td><td>수집 방 표나 원문 적재 기록 표가 아직 없음. 띠에 적힌 SQL 파일을 실행하면 사라집니다.</td></tr>
+    <tr><td>빨간 띠 "… 조회 실패"</td><td>그 칸만 못 읽음(나머지는 보임). 잠시 후 ↻.</td></tr>
   </tbody></table>
-  <div class="card">
-    <div class="chead"><span>카톡 수집 방 매핑 <small>받는 방향</small><br><small>드라이브에 올린 대화 txt가 어느 분류로 들어갈지 정합니다. 방이름은 txt 첫 줄의 "○○ 님과 카카오톡 대화"와 정확히 일치해야 합니다. (위 카톡방 매핑은 "보내는 방향"으로 별개)</small></span></div>
-    <div class="crow" style="align-items:flex-end"><span class="grow"><span style="font-size:10px;color:#64748B;font-weight:900">방이름 (정확히)</span><br><span class="inp2" style="display:block">예: 강북A 미수 보증금미입금 보고방</span></span><span><span style="font-size:10px;color:#64748B;font-weight:900">분류</span><br><span class="lp ghost">점검 ▾</span></span><span><span style="font-size:10px;color:#64748B;font-weight:900">팀</span><br><span class="inp2" style="display:inline-block;width:70px;min-width:0">A / AB / CD</span></span><span class="lp blue" style="padding:8px 14px">저장</span></div>
-    <div class="crow"><span class="tag s">미수</span><span class="tag s">A</span><span class="grow">강북A 미수 보증금미입금 보고방</span><span style="color:#CBD5E1">🗑</span></div>
-  </div>
-  <ol class="steps">
-    <li><b>방이름 (정확히)</b> — 내보낸 txt 첫 줄 "○○ 님과 카카오톡 대화"의 ○○와 똑같이.</li>
-    <li><b>분류</b> — 점검 · AS · 미수 · 불만 · 재계약. <b>팀</b> — A / AB / CD처럼 글자로.</li>
-    <li><b>[저장]</b> → 목록에 "분류 · 팀 · 방이름" 줄이 추가됩니다. 🗑 → ""방이름" 수집 매핑을 삭제할까요?" 확인 후 삭제. 저장 실패는 빨간 띠 "GAS 상태 조회 실패: …" 또는 "저장 실패".</li>
-  </ol>
-  <div class="box warn"><b>두 매핑을 헷갈리지 마세요</b>위 <b>카톡방 매핑</b>은 웹앱이 <b>보내는</b> 방, 이 <b>카톡 수집 방 매핑</b>은 txt를 <b>받아 읽을 때</b> 분류하는 표입니다. 방 이름이 같아도 따로 등록해야 합니다.</div>
+  <div class="box warn"><b>보내는 방과 받는 방은 따로</b>위 <b>카톡방 매핑</b>은 웹앱이 <b>보내는</b> 방, 이 카드의 수집 방 표는 대화를 <b>받아 읽을 때</b> 쓰는 표입니다. 방 이름이 같아도 따로 등록해야 합니다.</div>
 
   <h3 id="s-jobs">시트 기입 최근 작업</h3>
   <p>"FIELD·접수에서 구글시트로 보낸 요청의 결과입니다. 실패가 쌓이면 Apps Script 배포를 확인하세요." 최근 20건.</p>

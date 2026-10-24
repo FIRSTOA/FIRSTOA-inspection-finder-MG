@@ -17,7 +17,8 @@
 | counter-inbox-ingest | 3 | cron 2분, 봇·앱 | 봇이 넣은 마감방 목록(`counter_sms_inbox`) → 팀 카운터 목록 반영 + 웹푸시 | — |
 | counter-ocr | 3 | 앱(스위치 FIELD_OCR) | 카운터·토너 사진 읽기 | OPENAI |
 | push-send | 2 | cron 파수꾼·다른 함수 | 웹푸시 발송(`push_subscriptions`) | VAPID_* |
-| photo-drive-archive | 5 | cron 매시 25분 | 오래된 사진을 드라이브로 옮기고 Storage 비움 | (확인 필요) |
+| photo-drive-archive | 5 | cron 매시 25분 | 오래된 사진을 드라이브로 옮기고 Storage 비움. GAS `photoarchive` 에 관리 토큰을 붙여 부름(2026-10-24, 재배포 필요) | FIELD_ADMIN_TOKEN |
+| gas-admin | 새(2026-10-24, 배포 대기) | 앱 관리 탭 [카톡 수집] | GAS 관리 동작 중계: ingestnow·retryheld·kakaoclear 만. 토큰을 붙여 GAS 를 부름 | FIELD_ADMIN_TOKEN |
 | photo-archive-organize | 10 | 앱 | 사진 앨범 정리 | (확인 필요) |
 | record-edit | 1 | 앱 조회 탭 | 기록 수정·숨김 대행(anon 은 원장 표 update 권한 없음) | service role |
 | report-view | 2 | 고객(문자 링크) | 고객용 리포트 공개 페이지. **verify_jwt = false**(유일) | — |
@@ -81,3 +82,23 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 
 **문제가 생기면**: `kakao_import_log` 의 status=error·error 열(방 목록에 없음·글 0건·넣기 실패)을 먼저 본다. 401 = 토큰 불일치, 503 = 시크릿 없음, 413 = 조각이 500KB 초과(GAS 조각 450KB 설정 확인).
 - `_shared/kakao-parse.ts` 를 고치면 두 함수 모두 다시 배포. 가림 규칙을 바꾸면 그 규칙에 걸리는 글은 다음 적재 때 새 글로 한 번 더 들어간다(hash 가 가린 글 기준).
+
+## GAS 관리 동작 중계 — gas-admin (2026-10-24)
+설계: docs/tasks/kakao-collect-expand.md 3-7. 소스 `supabase/functions/gas-admin/index.ts`, 규칙 `_shared/gas-admin.ts`(테스트 tests/kakaoCollectAdmin.test.ts).
+
+**왜**: first-data GAS 웹앱의 쓰기 동작(행 삭제·트리거·수집 실행 등 13개 + contactpeek)이 2026-10-24부터 관리 토큰(GAS 스크립트 속성 `FIELD_ADMIN_TOKEN`)을 요구한다. 토큰은 앱 번들에 넣을 수 없으므로 앱은 이 함수를 부르고, 이 함수가 시크릿의 토큰을 붙여 GAS 를 부른다.
+
+- 요청 `POST { action }` — `ingestnow`(드라이브 수집 즉시 실행) · `retryheld`(확인필요 파일 되돌리기) · `kakaoclear`(끝난 작업 정리) **만**. 그 밖은 400. 위험한 동작(celltrim·dedupe·seenreset·cursorreset·rebuildindex 등)은 일부러 열지 않는다 — GAS 편집기에서 직접.
+- 응답: GAS JSON 그대로(토큰 글자는 `***` 로 가림). GAS 가 토큰을 거부하면 HTTP 200 + 본문 `{ok:false, status:403}` 이 그대로 간다 → 앱은 "GAS 가 거부했습니다(관리 토큰)" 표시.
+- 상태 코드: 503 = 시크릿 `FIELD_ADMIN_TOKEN` 없음(잠긴 쪽으로 실패) · 400 = 허용 안 된 동작 · 429 = IP 당 분당 5회 초과(인스턴스 안, 대략적) · 502 = GAS 응답이 JSON 아님 · 504 = GAS 140초 무응답(ingestnow 는 GAS 쪽에서 계속 돌 수 있음).
+- 엣지 로그 한 줄: `gas-admin {"action","ip","gasStatus","ok"}`(토큰 없음).
+- 한계: anon 키로 누구나 부를 수 있다(SSO 서버 검증 없음). 공개 번들에 박힌 GAS 주소로 행 삭제를 부르던 구멍을 닫는 것이 목적이고, 남은 세 동작은 데이터를 지우지 않는다.
+
+**처음 켜는 순서**(설계 6절 R5 — 틀리면 관리 탭 [지금 수집]이 잠깐 거부될 뿐)
+1. 긴 임의 문자열 하나를 GAS 스크립트 속성 `FIELD_ADMIN_TOKEN` 에 넣는다(값은 코드·문서에 적지 않는다).
+2. GAS 새 버전 배포(같은 배포 ID).
+3. Supabase 시크릿 `FIELD_ADMIN_TOKEN` 에 **같은 값**(대시보드 → Edge Functions → Secrets).
+4. 배포: `npx supabase functions deploy gas-admin --project-ref kkdiihazgzesbqxjytqv --use-api` 그리고 `photo-drive-archive` 도 같은 명령으로 재배포(토큰을 붙이게 바뀜 — 안 하면 매시 사진 이관이 GAS 403 으로 실패).
+5. 앱 배포 → 관리 탭 [카톡 수집] → [끝난 작업 정리] 같은 가벼운 단추로 확인.
+
+**문제가 생기면**: "GAS 가 거부했습니다(관리 토큰)" = 두 곳 값이 다르거나 GAS 를 새 버전으로 배포하지 않음. 503 = Supabase 시크릿 없음. photo-drive-archive cron 결과에 `forbidden` = 같은 원인.

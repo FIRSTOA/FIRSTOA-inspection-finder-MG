@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { AlertTriangle, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { deleteRows, insertRow, invokeEdgeFunction, selectRows, updateRows } from "./supabase";
-import { GAS_GET_URL } from "./api";
 import { notify } from "./toast";
 import PortalSelect from "./PortalSelect";
 import VendorCodeAdmin from "./VendorCodeAdmin";
@@ -12,6 +11,7 @@ import { parseKpiTargets } from "./kpi/kpiDefs";
 import { OVERHAUL_SHEET_DEFAULT_TAB, OVERHAUL_SHEET_TAB_KEY } from "./overhaulSheet";
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
+import KakaoCollectAdmin from "./KakaoCollectAdmin";
 
 // 카드 머리(제목+설명이 세로로 쌓이는 형태) — UI.head 는 가로 flex 라 여기만 로컬. card.ts 에 올릴 후보(headBlock)
 const HEAD_BLOCK = "border-b border-slate-100 bg-slate-50 px-4 py-3 lg:px-5";
@@ -25,12 +25,6 @@ const HEAD_BLOCK = "border-b border-slate-100 bg-slate-50 px-4 py-3 lg:px-5";
 type ConfigRow = { key: string; value: string };
 type RoomRow = { category: string; region: string; room: string };
 type SheetJob = { id: string; category?: string; sheet_status?: string; created_at?: string; last_error?: string; attempts?: number; sheet_row?: number | null };
-// First-DATA GAS(action=adminstatus)가 주는 큐·수집함 상태 — 옛 웹 콘솔에서 이식
-type GasStatus = {
-  ok?: boolean;
-  queue?: { jobs?: Array<{ roomType?: string; teamLabel?: string; status?: string; lastError?: string }>; active?: boolean };
-  drive?: { enabled?: boolean; hasTrigger?: boolean; pending?: number; folderUrl?: string; interval?: string };
-};
 
 const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boolean }> = [
   { key: "FIELD_KAKAO_SEND_ENABLED", label: "카톡 전송", desc: "끄면 FIELD 전송이 큐에만 쌓이고 방으로 나가지 않습니다." },
@@ -71,11 +65,6 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<RoomRow>({ category: "점검", region: "A", room: "" });
-  const [gas, setGas] = useState<GasStatus | null>(null);
-  const [gasError, setGasError] = useState("");
-  const [ingestResult, setIngestResult] = useState("");
-  const [collectRooms, setCollectRooms] = useState<Array<{ roomName: string; category: string; team: string }> | null>(null);
-  const [collectDraft, setCollectDraft] = useState({ room: "", category: "점검", team: "A" });
   // 시트 진단 (2026-09-02 접수 증식 사고 후) — 시트를 직접 열지 않고도 행을 찾고, 잡의 지문을 확인한다
   const [peekCat, setPeekCat] = useState("reception_remote");
   const [peekWord, setPeekWord] = useState("");
@@ -100,24 +89,6 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
     }
   };
   useEffect(() => { void load(); }, []);
-  const loadGas = () => fetch(`${GAS_GET_URL}?action=adminstatus`).then((res) => res.json()).then(setGas).catch((e) => setGasError((e as Error).message));
-  const loadCollectRooms = () => fetch(`${GAS_GET_URL}?action=roommap`).then((res) => res.json())
-    .then((data) => setCollectRooms(data.rows || [])).catch((e) => setGasError((e as Error).message));
-  // GAS 조회는 [카톡 수집] 칩을 열 때만 한다(다른 칩에서는 불필요한 호출 방지)
-  useEffect(() => { if (view === "collect") { void loadGas(); void loadCollectRooms(); } }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const runIngestNow = () => {
-    setBusy("ingestnow");
-    setIngestResult("");
-    fetch(`${GAS_GET_URL}?action=ingestnow`).then((res) => res.json())
-      .then((r) => {
-        setIngestResult(r.ok ? `파일 ${r.files} · 처리 ${r.done} · 신규 ${r.added} · 확인필요 ${r.held} · 실패 ${r.failed}` : String(r.error || "실패"));
-        void loadGas();
-      })
-      .catch((e) => setIngestResult(`실행 실패: ${(e as Error).message}`))
-      .finally(() => setBusy(""));
-  };
-
   const valueOf = (key: string) => config.find((row) => row.key === key)?.value || "";
   const isOn = (key: string) => /^(true|1|on|y)$/i.test(valueOf(key));
 
@@ -388,128 +359,8 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
       </>
       )}
 
-      {view === "collect" && (
-      <>
-      {/* First-DATA GAS 상태 — 옛 웹 콘솔에서 이식한 항목 */}
-      <section className={UI.card}>
-        <div className={HEAD_BLOCK}>
-          <h3 className={UI.title}>카톡 수집 상태 (First-DATA)</h3>
-          <p className={UI.desc}>드라이브 수집함과 일괄 수집 작업 큐 — 옛 First-DATA 콘솔에 있던 항목입니다.</p>
-        </div>
-        {gasError && <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">GAS 상태 조회 실패: {gasError}</div>}
-        {!gas && !gasError && <StateBox inside kind="loading" message="First-DATA에서 상태를 불러오는 중입니다…" />}
-        {gas && (
-          <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
-            <div className="bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs font-black text-slate-700">드라이브 수집함 (카톡 TXT 자동 적재)</div>
-                <button type="button" disabled={busy === "ingestnow"} onClick={runIngestNow}
-                  className={`${UI.btn} text-xs!`}>
-                  {busy === "ingestnow" ? "수집 중… (몇 분 걸릴 수 있음)" : "지금 수집 실행"}
-                </button>
-              </div>
-              {ingestResult && <div className="mt-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-600">{ingestResult}</div>}
-              {gas.drive?.enabled ? (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                  <span className={`rounded-full px-2.5 py-1 ${gas.drive.hasTrigger ? UI.tone.ok : UI.tone.bad}`}>트리거 {gas.drive.hasTrigger ? "동작 중" : "없음"}</span>
-                  <span className={`rounded-full px-2.5 py-1 tabular-nums ${(gas.drive.pending || 0) > 0 ? UI.tone.warn : UI.tone.off}`}>대기 파일 {gas.drive.pending ?? 0}개</span>
-                  {gas.drive.interval && <span className={`rounded-full px-2.5 py-1 ${UI.tone.off}`}>주기 {gas.drive.interval}</span>}
-                  {gas.drive.folderUrl && <a href={gas.drive.folderUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center rounded-full border border-slate-300 bg-white px-3 text-slate-600 transition hover:bg-slate-50 lg:min-h-9">폴더 열기</a>}
-                </div>
-              ) : (
-                <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">수집함이 꺼져 있습니다 — 카톡 대화가 DB로 들어오지 않는 상태입니다.</div>
-              )}
-            </div>
-            <div className="bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs font-black text-slate-700">일괄 수집 작업 큐</div>
-                {(gas.queue?.jobs?.length || 0) > 0 && (
-                  <button type="button" disabled={busy === "kakaoclear"}
-                    onClick={() => {
-                      setBusy("kakaoclear");
-                      fetch(`${GAS_GET_URL}?action=kakaoclear`).then((res) => res.json())
-                        .then(() => fetch(`${GAS_GET_URL}?action=adminstatus`).then((res) => res.json()).then(setGas))
-                        .catch((e) => setGasError((e as Error).message))
-                        .finally(() => setBusy(""));
-                    }}
-                    className={`${UI.btnGhost} text-xs!`}>
-                    {busy === "kakaoclear" ? "정리 중…" : "끝난 작업 정리"}
-                  </button>
-                )}
-              </div>
-              {gas.queue?.jobs?.length ? (
-                <div className="mt-2 space-y-1">
-                  {gas.queue.jobs.slice(0, 5).map((job, index) => (
-                    <div key={index} className="flex items-center gap-2 text-[11px] font-bold">
-                      <span className={`rounded-full px-2 py-0.5 ${job.status === "done" ? UI.tone.ok : job.status === "error" ? UI.tone.bad : UI.tone.warn}`}>{job.status || "-"}</span>
-                      <span className="truncate text-slate-600">{[job.roomType, job.teamLabel].filter(Boolean).join(" · ") || "-"}</span>
-                      {job.lastError && <span className="truncate text-rose-500" title={job.lastError}>{job.lastError.slice(0, 40)}</span>}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-2 text-[11px] font-bold text-slate-400">대기 중인 수집 작업이 없습니다.</div>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* 카톡 수집 방 매핑 (받는 방향) — 옛 콘솔의 _room_map 시트를 웹앱에서 관리 */}
-      <section className={UI.card}>
-        <div className={HEAD_BLOCK}>
-          <h3 className={UI.title}>카톡 수집 방 매핑 <span className="text-[11px] font-bold text-slate-400">받는 방향</span></h3>
-          <p className={UI.desc}>드라이브에 올린 대화 txt가 어느 분류로 들어갈지 정합니다. 방이름은 txt 첫 줄의 "○○ 님과 카카오톡 대화"와 정확히 일치해야 합니다. (위 카톡방 매핑은 "보내는 방향"으로 별개)</p>
-        </div>
-        <div className="flex flex-wrap items-end gap-2 border-b border-slate-100 p-4">
-          <label className="min-w-0 flex-1 text-[11px] font-black text-slate-500">방이름 (정확히)
-            <input value={collectDraft.room} onChange={(e) => setCollectDraft({ ...collectDraft, room: e.target.value })}
-              placeholder="예: 강북A 미수 보증금미입금 보고방" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          </label>
-          <label className="text-[11px] font-black text-slate-500">분류
-            <span className="mt-1 block"><PortalSelect width={120} value={collectDraft.category} onChange={(next) => setCollectDraft({ ...collectDraft, category: next })}
-              options={["점검", "AS", "미수", "불만", "재계약"].map((value) => ({ value, label: value }))} /></span>
-          </label>
-          <label className="text-[11px] font-black text-slate-500">팀
-            <input value={collectDraft.team} onChange={(e) => setCollectDraft({ ...collectDraft, team: e.target.value })}
-              placeholder="A / AB / CD" className="mt-1 w-20 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-          </label>
-          <button type="button" disabled={!collectDraft.room.trim() || busy === "collect-add"}
-            onClick={() => {
-              setBusy("collect-add");
-              fetch(`${GAS_GET_URL}?action=roommapset&room=${encodeURIComponent(collectDraft.room.trim())}&category=${encodeURIComponent(collectDraft.category)}&team=${encodeURIComponent(collectDraft.team.trim())}`)
-                .then((res) => res.json())
-                .then((r) => { if (r.ok) { setCollectDraft({ ...collectDraft, room: "" }); void loadCollectRooms(); } else setGasError(String(r.error || "저장 실패")); })
-                .catch((e) => setGasError((e as Error).message))
-                .finally(() => setBusy(""));
-            }}
-            className={UI.btn}>저장</button>
-        </div>
-        <div className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
-          {collectRooms === null && <StateBox inside kind="loading" />}
-          {collectRooms?.length === 0 && <StateBox inside kind="empty" message="등록된 수집 방 매핑이 없습니다." />}
-          {collectRooms?.map((row) => (
-            <div key={row.roomName} className="flex items-center gap-2 px-4 py-2.5">
-              <span className="w-16 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[11px] font-black text-slate-500">{row.category}</span>
-              <span className="w-10 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-center text-[11px] font-black text-slate-500">{row.team || "-"}</span>
-              <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-slate-800" title={row.roomName}>{row.roomName}</span>
-              <button type="button" aria-label={`${row.roomName} 수집 매핑 삭제`} disabled={busy === `collect-del-${row.roomName}`}
-                onClick={async () => {
-                  if (!await askConfirm(`"${row.roomName}" 수집 매핑을 삭제할까요?`)) return;
-                  setBusy(`collect-del-${row.roomName}`);
-                  fetch(`${GAS_GET_URL}?action=roommapdel&room=${encodeURIComponent(row.roomName)}`)
-                    .then((res) => res.json())
-                    .then(() => void loadCollectRooms())
-                    .catch((e) => setGasError((e as Error).message))
-                    .finally(() => setBusy(""));
-                }}
-                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-40 lg:min-h-9 lg:min-w-9"><Trash2 size={15} /></button>
-            </div>
-          ))}
-        </div>
-      </section>
-      </>
-      )}
+      {/* 카톡 수집 — 방별 상태·확인필요·지금 수집(gas-admin 엣지 경유). 2026-10-24 KakaoCollectAdmin 으로 이전 */}
+      {view === "collect" && <KakaoCollectAdmin />}
 
       {/* 시트 동기화 최근 상태 */}
       {view === "sheet" && (
