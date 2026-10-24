@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { importedTicketVendor, logisticsTicketInfo as sharedLogistics } from "../supabase/functions/_shared/ticket-title";
+import { importedTicketVendor, logisticsTicketInfo as sharedLogistics, noteCompanyName } from "../supabase/functions/_shared/ticket-title";
 import { fieldTicketVendor, logisticsTicketInfo } from "../src/ids";
 import { readOrStop } from "../src/ticketGuard";
 
@@ -38,6 +38,27 @@ describe("네이버 수입 일정 업체명 — 고객사만", () => {
   it("물류는 본문 '상호 :' 줄이 있으면 그것", () => {
     const title = "⭐오후 4시반 이후 방문 요망, 엘리베이터 사용 신청 필요, 전일 연락 필수-납품(일반)/퍼스트/운영팀/신규/디지털자산거래소/X3220/확인서서명필수";
     expect(importedTicketVendor(title, "7. 상호(사업자등록증 유/무) : 디지털자산 거래소 (순 21944)", true)).toBe("디지털자산 거래소");
+  });
+  // 2026-10-24 정리 SQL 재계산 때 남은 꼬리(681건 중 순번 17·등급 11·주소 2·유상A/S 2) — 실제 본문 줄
+  it("상호 줄 순번 표기는 모양과 상관없이 뗀다", () => {
+    expect(noteCompanyName("7. 상호(사업자등록증 유/무) : 케이지엔지니어링종합건축사사무소파주현장( 15229 )")).toBe("케이지엔지니어링종합건축사사무소파주현장");
+    expect(noteCompanyName("1. 상호명 : 주식회사 보평이엔씨 (21862)")).toBe("주식회사 보평이엔씨");
+    expect(noteCompanyName("7. 상호 : 디쉐어-김포사우점 ( 22563,22564 )")).toBe("디쉐어-김포사우점");
+    expect(noteCompanyName("7. 상호 : 주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.) / 순: 4336")).toBe("주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.)");
+    expect(noteCompanyName("7. 상호 : (주)딥스톤인베스트먼트 (사유: 사용안함/사업정리 및 폐업)")).toBe("(주)딥스톤인베스트먼트");
+    expect(noteCompanyName("1. 상호명 : 본점(2)")).toBe("본점(2)"); // 층·호수 같은 짧은 숫자 괄호는 남긴다
+  });
+  it("상호 줄 앞의 임대리스트 등급 접두(28V·12N)는 뗀다", () => {
+    expect(noteCompanyName("4. 상호 : 28V(주) 드림엔지니어링울산하이드로젠현장")).toBe("(주) 드림엔지니어링울산하이드로젠현장");
+    expect(noteCompanyName("7. 상호(사업자등록증 유/무) : 12N서원인테리어")).toBe("서원인테리어");
+  });
+  it("상호 칸에 주소를 적었으면 버리고 제목 고객사를 쓴다", () => {
+    const note = "7. 상호(사업자등록증 유/무) :경기 김포시 사우중로 77 6층 에이닷 영어학원 ( 22563,22564 )";
+    expect(noteCompanyName(note)).toBe("");
+    expect(importedTicketVendor("교체(일반)/퍼스트/운영팀/기기고장/디쉐어-김포사우점/X7500LX, X3220NR->X7500LX(리퍼) 2대/확인서서명필수", note, true)).toBe("디쉐어-김포사우점");
+  });
+  it("'유상A/S' 행위어는 업체명에서 걷어낸다", () => {
+    expect(importedTicketVendor("유상A/S\t \t\t북마을\t종료일\t\t 지역\t\t접수일\t10. 20")).toBe("북마을");
   });
   it("AS 제목은 FIELD 변환과 같은 업체명부(등급 접두 뒤, 마감 꼬리 앞)", () => {
     expect(importedTicketVendor("여분요청\t N\tSL-X3220NR\t7N건아토건(주)-분기마감\t종료일\t27. 5. 7\t 지역\t수도권B")).toBe("건아토건(주)");

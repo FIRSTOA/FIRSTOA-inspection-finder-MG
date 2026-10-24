@@ -6,7 +6,8 @@
 
 // 일정리스트→FIELD 변환용: 네이버 미러 제목("이민구 셋팅요청 S D450 30S업체명…분기마감 종료일 …")에서
 // 업체명부(슬래시·공백 보존)와 구분을 꺼낸다 — 접수원본 변환(A양식)과 같은 모양이 되도록.
-const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$|^(as|a\/s)$/i;
+// "유상A/S" — 유상 수리 접수 제목("유상A/S\t \t\t북마을")이 업체명에 행위어째 남던 것(2026-10-24 실측 2건)
+const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$|^(유상)?(as|a\/s)$/i;
 
 export function fieldTicketVendor(raw: string): { vendor: string; gubun: string } {
   const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
@@ -37,12 +38,22 @@ export function fieldTicketVendor(raw: string): { vendor: string; gubun: string 
 // 고객사와 품목을 꺼낸다. 규칙: 수량·모델이 든 세그먼트(품목) 바로 앞이 고객사다.
 //   "네오정보 직송-판매납품/네오정보/개인영업/디스페이스코리아/안드로이드전자칠판 65형(…)/확인서서명필수" → 디스페이스코리아
 /**
- * 물류 일정 본문(as_tickets.note)의 "상호(명) :" 줄 — 일정 제목보다 정확하다. "(순 20890)" 같은 순번 괄호·끝 콜론은 뗀다. 없으면 "".
+ * 물류 일정 본문(as_tickets.note)의 "상호(명) :" 줄 — 일정 제목보다 정확하다. 없으면 "".
  *   "7. 상호(사업자등록증 유/무) : 유디임팩트-새싹 영등포캠퍼스 (순 21944)" → "유디임팩트-새싹 영등포캠퍼스"
+ * 떼는 것(2026-10-24 naver 681건 재계산 실측): 순번 표기 "(순 n)"·"( n )"·"(n)"·"( n,n )"·"/ 순: n", "(사유: …)" 꼬리,
+ * 임대리스트 등급 접두("28V(주) …"·"12N서원인테리어"), 끝 콜론. 상호 칸에 주소를 적은 줄("경기 김포시 사우중로 77 …")은 버린다 → 제목 고객사로.
  */
+const NOTE_ADDRESS_RX = /\S(?:시|군|구)\s+\S*(?:로|길)\s*\d/;
 export function noteCompanyName(note: string): string {
   const m = String(note || "").replace(/_x000d_|\r/g, "").match(/상호(?:명)?[^:：\n]{0,20}[:：][ \t]*([^\n]+)/);
-  return (m?.[1] || "").replace(/\(\s*순\s*[:：]?\s*[\d,\s]+\)/g, " ").replace(/[:：]\s*$/, "").replace(/\s+/g, " ").trim();
+  const name = (m?.[1] || "")
+    .replace(/\(\s*순\s*[:：]?\s*[\d,\s]+\)/g, " ")
+    .replace(/\(\s*\d{3,}(?:\s*,\s*\d{3,})*\s*\)/g, " ") // 순번만 든 괄호 — 3자리 이상만(층·호수 "(2)"는 남긴다)
+    .replace(/[\s/]*순\s*[:：]?\s*\d[\d,\s]*$/, "")
+    .replace(/\(\s*사유\s*[:：][^)]*\)?\s*$/, "")
+    .replace(/^\d{1,4}#?(?:SS|NN|S|N|V)(?=[가-힣㈜(])/, "")
+    .replace(/[:：]\s*$/, "").replace(/\s+/g, " ").trim();
+  return NOTE_ADDRESS_RX.test(name) ? "" : name;
 }
 
 /** 네이버 캘린더 물류 일정 제목은 80자에서 잘려 저장된다(2026-10-24 as_tickets 실측: 80자 107건) */

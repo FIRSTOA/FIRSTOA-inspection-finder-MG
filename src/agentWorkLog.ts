@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-24",
+    "hash": "5fda9f5c7e",
+    "agent": "developer",
+    "summary": "위험 감사 즉시 5건 — 일정 업체명 80자 근본(네이버 동기화 파서 공용화) + 메모 덮어씀·중복 방지 중단 + 숨은 폴링 차단 + 고객 리포트 실패 표시"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "5fda9f5c7e",
+    "agent": "debugger",
+    "summary": "위험 감사 즉시 5건 — 일정 업체명 80자 근본(네이버 동기화 파서 공용화) + 메모 덮어씀·중복 방지 중단 + 숨은 폴링 차단 + 고객 리포트 실패 표시"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "5fda9f5c7e",
+    "agent": "qa-checker",
+    "summary": "위험 감사 즉시 5건 — 일정 업체명 80자 근본(네이버 동기화 파서 공용화) + 메모 덮어씀·중복 방지 중단 + 숨은 폴링 차단 + 고객 리포트 실패 표시"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "5fda9f5c7e",
+    "agent": "field-deploy-check",
+    "summary": "위험 감사 즉시 5건 — 일정 업체명 80자 근본(네이버 동기화 파서 공용화) + 메모 덮어씀·중복 방지 중단 + 숨은 폴링 차단 + 고객 리포트 실패 표시"
+  },
+  {
+    "date": "2026-10-24",
     "hash": "350ec580b4",
     "agent": "feature-planner",
     "summary": "탭 검색 누락 원인 제거 + 오버홀 시트·CSS 명단 + OKR 위젯·관리 탭 칩 + UI 정돈 2차 + 조회 용량 축소 + 필드 양식 분리(App.tsx 7,584→6,234) + 개선 조사 3건"
