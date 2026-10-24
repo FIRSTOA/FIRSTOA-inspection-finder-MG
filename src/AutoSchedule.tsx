@@ -1,4 +1,6 @@
-import { teamLabel } from "./authors";
+import { teamLabel, useAuthorBook } from "./authors";
+import { AUTO_SCHEDULE_TEAMS, defaultAutoScheduleTeam } from "./autoScheduleTeam";
+import { loadPicksFrom, pickTeam, picksAfterRegister, picksFor, picksForAuthor, picksKey, type OwnedPicks } from "./autoSchedulePicks";
 /**
  * 자동 일정 짜기 (1차 시안)
  * CS팀 실무 순서 그대로: ① 그날 필수 스케줄을 놓고 → ② 마지막 일정(앵커) 좌표에서
@@ -37,20 +39,23 @@ type Place = {
   device_count: number; devices: string | null;
 };
 
-const TEAMS = ["A", "B", "C", "D", "E"] as const;
+const TEAMS = AUTO_SCHEDULE_TEAMS;
 
 // 선택 스케줄 — 후보에서 체크한 곳(place)과 직접 추가한 곳(manual). 등록 전까지 이 브라우저에 날짜별로 남는다(2026-09-26: 다른 탭 갔다 오면 사라져 다시 골라야 했다).
 type SavedPick =
   | { kind: "place"; date: string; team: string; key: string; rep: string; place: Place; memo: string }
   | { kind: "manual"; date: string; team: string; id: string; vendor: string; address: string; memo: string };
-const picksKey = (author: string) => `cs_autoplan_picks_${author}`;
-function loadPicks(author: string): SavedPick[] {
-  try { const raw = JSON.parse(localStorage.getItem(picksKey(author)) || "[]"); return Array.isArray(raw) ? raw as SavedPick[] : []; } catch { return []; }
-}
+const loadPicks = (author: string): SavedPick[] => loadPicksFrom<SavedPick>(typeof localStorage === "undefined" ? null : localStorage, author);
 const GRADES = ["N", "NN", "S", "SS", "V"] as const;
 
 export default function AutoSchedule({ author }: { author: string }) {
-  const [team, setTeam] = useState("C");
+  // 기본 팀 = 작성자의 명단 팀(2026-10-24: "C" 고정이라 C팀 아닌 직원은 빈 필수 스케줄·C팀 후보·C팀 등록이 됐다).
+  // 팀 칩을 직접 누르면 그 값, 작성자가 바뀌면 다시 작성자 팀으로.
+  const { book } = useAuthorBook();
+  const authorTeam = defaultAutoScheduleTeam(author, book);
+  const [teamPick, setTeamPick] = useState<{ author: string; team: string } | null>(null);
+  const team = teamPick && teamPick.author === author ? teamPick.team : authorTeam;
+  const setTeam = (t: string) => setTeamPick({ author, team: t });
   const [date, setDate] = useState(defaultPlanDate()); // 오후 4시 이후엔 다음 영업일이 기본 (내일 일정 짜는 시간)
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [onlyMine, setOnlyMine] = useState(true);
@@ -74,9 +79,15 @@ export default function AutoSchedule({ author }: { author: string }) {
     if (!r.code) { setHistVendor(fallback); return; }
     void vendorNameByCode(r.code).then((name) => setHistVendor(name || fallback)).catch(() => setHistVendor(fallback));
   };
-  const [saved, setSaved] = useState<SavedPick[]>(() => loadPicks(author));
-  useEffect(() => { try { localStorage.setItem(picksKey(author), JSON.stringify(saved)); } catch { /* 무시 */ } }, [saved, author]);
-  const todayPicks = useMemo(() => saved.filter((x) => x.date === date), [saved, date]);
+  // 목록은 주인(owner)과 함께 든다 — 작성자가 바뀌면 새 작성자 키에서 다시 읽고, 저장은 owner 키로만(2026-10-24)
+  const [ownedRaw, setOwned] = useState<OwnedPicks<SavedPick>>(() => ({ owner: author, picks: loadPicks(author) }));
+  const owned = picksForAuthor(ownedRaw, author, loadPicks);
+  if (owned !== ownedRaw) setOwned(owned); // 렌더 중 조정(React 권장 패턴) — 이번 렌더부터 새 작성자 목록
+  const saved = owned.picks;
+  const setSaved = (update: (cur: SavedPick[]) => SavedPick[]) => setOwned((s) => ({ owner: s.owner, picks: update(s.picks) }));
+  useEffect(() => { try { localStorage.setItem(picksKey(ownedRaw.owner), JSON.stringify(ownedRaw.picks)); } catch { /* 저장 실패해도 화면 목록은 유지 */ } }, [ownedRaw]);
+  // 그 날짜·지금 팀에서 고른 것만 — 팀 칩을 바꿔도 이미 고른 건 원래 팀에 남는다(2026-10-24)
+  const todayPicks = useMemo(() => picksFor(saved, date, team), [saved, date, team]);
   const picked = useMemo(() => new Set(todayPicks.flatMap((x) => (x.kind === "place" ? [x.place.id] : []))), [todayPicks]);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
@@ -262,13 +273,15 @@ export default function AutoSchedule({ author }: { author: string }) {
   useEffect(() => { setCandLimit(12); }, [kind, team, rows.length]);
   const register = async () => {
     setRegisterConfirm(false);
+    const regTeam = team; // 등록 도중 칩을 바꿔도 이 팀 목록만 비운다
     const placePicks = todayPicks.filter((x): x is Extract<SavedPick, { kind: "place" }> => x.kind === "place");
     const manualPicks = todayPicks.filter((x): x is Extract<SavedPick, { kind: "manual" }> => x.kind === "manual");
-    const chosenGroups: Array<Group & { memo: string }> = [];
+    const chosenGroups: Array<Group & { memo: string; team: string }> = [];
     for (const pick of placePicks) {
-      const g = chosenGroups.find((x) => x.key === pick.key);
+      const pt = pickTeam(pick, regTeam); // 고를 때의 팀으로 저장(2026-10-24)
+      const g = chosenGroups.find((x) => x.key === pick.key && x.team === pt);
       if (g) { g.members.push(pick.place); if (pick.memo.trim()) g.memo = `${g.memo}${g.memo ? "\n" : ""}${pick.memo.trim()}`; }
-      else chosenGroups.push({ key: pick.key, rep: pick.rep, members: [pick.place], memo: pick.memo.trim() });
+      else chosenGroups.push({ key: pick.key, rep: pick.rep, members: [pick.place], memo: pick.memo.trim(), team: pt });
     }
     if (!chosenGroups.length && !manualPicks.length) return;
     setLoading(true);
@@ -296,7 +309,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         await upsertRow("as_tickets", {
           id: ticketId,
-          team, date, time: "", vendor: vendorName, contact: "", address: first.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
+          team: group.team, date, time: "", vendor: vendorName, contact: "", address: first.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
           model: eq.model, serial: eq.serial, asset: "", grade: first.grade, keyman: "",
           issue: `${kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${lastDate || "기록 없음"}${minDaysSince < 9999 ? ` · ${minDaysSince}일 경과` : ""})`}${multi ? ` · 기기 ${group.members.length}대` : ""}`,
           note: machineNote, assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
@@ -308,12 +321,12 @@ export default function AutoSchedule({ author }: { author: string }) {
       for (const m of manualPicks) {
         const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         await upsertRow("as_tickets", {
-          id: ticketId, team, date, time: "", vendor: m.vendor, contact: "", address: m.address, department: "", model: "", serial: "", asset: "", grade: "", keyman: "",
+          id: ticketId, team: pickTeam(m, regTeam), date, time: "", vendor: m.vendor, contact: "", address: m.address, department: "", model: "", serial: "", asset: "", grade: "", keyman: "",
           issue: "직접 추가 · 자동일정", note: "", assignee: author, status: "배정", scheduleType: "매월점검", receptionId: "", calendarTitle: `방문 ${m.vendor}`, source: "manual",
         }, "id");
         await saveMemo(ticketId, m.memo);
       }
-      setSaved((cur) => cur.filter((x) => x.date !== date));
+      setSaved((cur) => picksAfterRegister(cur, date, regTeam)); // 다른 팀에서 고른 건 남긴다
       setNotice(`${chosenGroups.length - skipped.length + manualPicks.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${skipped.length ? ` · 이미 이달 점검 일정에 있어 건너뜀 ${skipped.length}곳: ${skipped.join(", ")}` : ""}`);
       void loadTickets();
     } catch (e) {

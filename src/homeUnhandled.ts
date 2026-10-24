@@ -1,9 +1,12 @@
 /**
- * 홈 "미처리 일정" 칸의 순수 로직 — 접수(6종) 미처리 + 일정(as_tickets) 미처리를 한 목록으로 (2026-10-19).
+ * 홈 "미처리" 칸의 순수 로직 — 접수(6종) 미처리 + 일정(as_tickets) 미처리를 한 목록으로 (2026-10-19).
  * 중복 규칙: AS 일정 중 receptionId 가 열린 접수에 이미 있으면 접수 행으로만 센다. 물류 일정은 전부 넣는다.
+ * 2026-10-24: 홈의 모든 미처리 숫자(머리 합계·팀 탭·종류 칸·물류·가장 오래된 건)는 이 파일의 mergeUnhandled 결과 한 벌에서만 센다.
+ *  · 물류 = overdueLogic.isLogisticsSchedule(현황판 물류 칸과 같은 정의). 익일AS 는 AS일정.
+ *  · 팀이 없는 일정(일정 팀 "기타" 등)은 "기타" 탭 — 탭 합 = 전체.
  */
 import { isStaleRemote, normalizeRegion } from "./deptReception";
-import { overdueKind } from "./overdueLogic";
+import { isLogisticsSchedule } from "./overdueLogic";
 import type { SheetOpenRow } from "./receptionSheetOpen";
 
 export type UnhandledKind = "복합기 AS" | "원격이관" | "IT" | "경영지원" | "운영지원" | "영업팀" | "AS일정" | "물류";
@@ -92,7 +95,7 @@ export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInpu
     });
   }
   for (const t of tickets) {
-    const logistics = overdueKind(t.scheduleType) === "물류";
+    const logistics = isLogisticsSchedule(t.scheduleType);
     const rid = String(t.receptionId || "");
     if (!logistics && rid && openIds.has(rid)) continue; // 접수 행과 중복
     const date = String(t.date || "").slice(0, 10);
@@ -110,12 +113,14 @@ export function filterUnhandled(rows: UnhandledRow[], team: UnhandledTeam | null
   return rows.filter((r) => (team === null || r.team === team) && (kind === null || r.kind === kind));
 }
 
-export type UnhandledTab = "전체" | "A" | "B" | "C" | "D" | "E" | "경영" | "운영" | "영업";
-export const UNHANDLED_TABS: UnhandledTab[] = ["전체", "A", "B", "C", "D", "E", "경영", "운영", "영업"];
+export type UnhandledTab = "전체" | "A" | "B" | "C" | "D" | "E" | "경영" | "운영" | "영업" | "기타";
+/** 기타 = 팀 없는 행(일정 팀 "기타"·빈 칸, 지역 모르는 IT 접수) — 없으면 화면이 탭을 숨긴다 */
+export const UNHANDLED_TABS: UnhandledTab[] = ["전체", "A", "B", "C", "D", "E", "경영", "운영", "영업", "기타"];
 
-/** 탭 → 팀 필터 (전체는 null) */
+/** 탭 → 팀 필터 (전체는 null, 기타는 팀 "") */
 export function tabFilter(tab: UnhandledTab): [UnhandledTeam | null, UnhandledKind | null] {
   if (tab === "전체") return [null, null];
+  if (tab === "기타") return ["", null];
   return [tab, null];
 }
 
@@ -135,6 +140,26 @@ export function countUnhandledTabs(rows: UnhandledRow[]): Record<UnhandledTab, n
   const out = Object.fromEntries(UNHANDLED_TABS.map((t) => [t, 0])) as Record<UnhandledTab, number>;
   for (const t of UNHANDLED_TABS) out[t] = rowsForTab(rows, t).length;
   return out;
+}
+
+/** 종류 칸 순서(홈 미처리 칸) — 이 8칸의 합 = 전체 */
+export const UNHANDLED_KINDS: UnhandledKind[] = ["복합기 AS", "원격이관", "IT", "경영지원", "운영지원", "영업팀", "AS일정", "물류"];
+export const UNHANDLED_KIND_LABEL: Record<UnhandledKind, string> = {
+  "복합기 AS": "복합기 AS", 원격이관: "원격", IT: "IT", 경영지원: "경영", 운영지원: "운영", 영업팀: "영업", AS일정: "AS 일정", 물류: "물류",
+};
+
+/** 종류별 건수(UNHANDLED_KINDS 전부, 없으면 0) */
+export function countUnhandledKinds(rows: UnhandledRow[]): Record<UnhandledKind, number> {
+  const out = Object.fromEntries(UNHANDLED_KINDS.map((k) => [k, 0])) as Record<UnhandledKind, number>;
+  for (const r of rows) out[r.kind] += 1;
+  return out;
+}
+
+/** 가장 오래된 건(날짜 있는 행 중 가장 이른 것). 목록이 날짜순이라 첫 날짜 있는 행 */
+export function oldestUnhandled(rows: UnhandledRow[]): UnhandledRow | null {
+  let best: UnhandledRow | null = null;
+  for (const r of rows) if (r.date && (!best || r.date < best.date)) best = r;
+  return best;
 }
 
 /** 행 배지 글자 */

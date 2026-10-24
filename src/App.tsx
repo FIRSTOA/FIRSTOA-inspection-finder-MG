@@ -4310,6 +4310,7 @@ export default function App() {
 
   // 웹푸시: 켜둔 기기라면 구독을 살리고 작성자 이름 연동을 최신화 (알림 대상 매칭의 기준)
   useEffect(() => { void syncPush(author); }, [author]);
+  useEffect(() => { const t = window.setTimeout(() => { const w = window as Window & { requestIdleCallback?: (cb: () => void) => number }; if (w.requestIdleCallback) w.requestIdleCallback(() => { void import("./Home"); }); else void import("./Home"); }, 3000); return () => window.clearTimeout(t); }, []); // 홈 화면 코드 미리 받기(로그인 뒤 쉬는 시간, 2026-10-24 속도)
 
   // 내장 자가테스트는 화면 패널 대신 개발 콘솔로만 출력한다(평소엔 숨김).
   useEffect(() => {

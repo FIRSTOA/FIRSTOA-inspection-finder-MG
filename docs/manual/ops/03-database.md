@@ -67,6 +67,9 @@
 - 실행: /sql-handoff 절차(04장). 확인 쿼리·anon 시험·되돌리기(`drop table`, 기록이 쌓였으면 먼저 내보내기)는 SQL 파일 맨 아래 주석.
 - 백업 목록(`tools/worker/backup_tables.py`)에 넣을지는 표가 만들어진 뒤 판단.
 
+### 2-5. 카톡 배달 기록 표 (2026-10-24, SQL 실행 대기)
+파일 `supabase/kakao-delivery-log-20261024.sql`(두 번 실행해도 안전, 되돌리기 주석). 발송 대기열 `outbox`(id·room·text·created_at)는 봇/노트북이 보낸 뒤 행을 **지우는** 구조라, `outbox` 에 AFTER DELETE 트리거 `outbox_delivery_record` → `record_kakao_delivery()`(security definer, 오류는 삼켜 발송 ack 를 막지 않음)를 붙여 `kakao_delivery_log(id, sent_at, queued_at, sender bot|pc, room, kind, vendor, outbox_id unique)` 에 1행씩 남긴다. sender 는 요청 헤더 User-Agent 로 판정(노트북 python-urllib → pc, 그 외 HTTP → bot, 헤더 없는 SQL/cron 삭제는 기록 안 함, 12시간 지난 🤖 심박 폐기 제외). **본문은 저장하지 않고** kind("구분:" 첫 값 또는 room_map.category)·vendor("업체(명):" 첫 줄, 주민번호·전화번호 제거, 80자)만. 권한: anon/authenticated select 만, RLS 켬, 쓰기는 트리거만. 기존 트리거 `outbox_delivery_log`(room_activity)와 봇·노트북 코드는 그대로. 실행 뒤 확인: 봇이 1건 보낸 뒤 `select sender,count(*) from kakao_delivery_log group by 1` — 0행이면 request.headers 가 안 넘어오는 것(데이터실). 홈 전송 현황(LiveSendBoard)은 이 표가 있으면 "봇 n건 · 노트북 n건"+노트북 배달 목록, 없으면 방 수만. 보존 90일 cron 은 파일 아래 주석 제안(미실행).
+
 ## 3. 백업
 - 노트북 실행기가 매일 02:30 KST 에 약 60표를 jsonl.gz 로 `내 드라이브\FIRSTOA-백업\<날짜>\` 에 남긴다(14회차 보관, `tools/worker/backup_tables.py`). 10-21 회차: 표 62개·210,972행·실패 0(AGENTS.md).
 - 새 표를 만들면 백업 대상 목록(`tools/worker/backup_tables.py`)에 추가할지 판단한다.
@@ -130,6 +133,7 @@ where n.nspname = 'public' and c.relkind = 'r' order by 1;
 | reception-dept-types.sql + reception-dept-types-rename.sql | 실행됨 (type CHECK 에 '영업팀', `DEPT_RECEPTION_ENABLED` 키) |
 | okr-quarter.sql | 실행됨 (`okr_*_bak_20261020` 표). **재실행 금지** — 앱에서 고친 OKR 을 덮는다 |
 | okr-month-tidy-20261021.sql | (확인 필요) |
+| kakao-delivery-log-20261024.sql | **미실행(실행 대기)** — `kakao_delivery_log` 없음·`outbox` 트리거 1개 추가(2026-10-24 권한나 통과) |
 | it-learning-logs-20261024.sql | **미실행(실행 대기)** — `it_quiz_attempts`·`it_practice_logs` 없음(2026-10-24 확인) |
 | misu-visits.sql | 실행됨 (`misu_visits` 표) |
 | mirror-hidden-ledger-20261022.sql | 실행됨 (`mirror_hidden` 표 + 트리거 8개) |

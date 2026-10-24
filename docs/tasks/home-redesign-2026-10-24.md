@@ -57,3 +57,8 @@
 
 ## 건드리지 말 것
 - src/App.tsx, src/api.ts, src/workCount.ts, src/expansionSource.ts, HomeUnhandledPanel.tsx(이번엔 그대로), supabase/functions/*.
+
+## 팀장 예외 (2026-10-24 오후, 2차 개편 때 허용)
+- HomeUnhandledPanel.tsx·homeUnhandled.ts·receptionBoardData.ts: 사용자 "미처리 숫자를 맞추고 박스 하나로 합쳐라" 지시에 따라 팀장이 수정 허용(오류진). 물류 판정은 overdueLogic.isLogisticsSchedule 한 곳으로.
+- App.tsx: 홈 청크 프리로드 `void import("./Home")` 1줄 허용(첫 진입 속도, CLAUDE.md 1~3줄 규칙 안).
+- 위젯은 4개(today·table·unhandledPanel·K19), K2·receptionPanel 위젯 삭제, IMPACT 삭제, 이동 단추 전부 끔(SHOW_OPEN_LINKS=false), 머리 띠 주차 삭제 — 사용자 2차 피드백 반영.

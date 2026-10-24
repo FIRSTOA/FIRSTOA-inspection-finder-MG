@@ -1,82 +1,59 @@
 /**
- * 홈 지표 판 — 미처리 토탈(2026-10-19): 접수 6종 미처리 + 지난 일정 미처리를 한 목록으로.
- * 탭: 전체 · A~E · 경영/운영/영업. 목록은 "접수·AS" 묶음 + "물류" 묶음. 접수 행 → 서비스접수 미처리 현황, AS일정 행 → 일정리스트 미처리, 물류 → 네이버 캘린더 안내.
- * 모양·폴링은 OverduePanel 과 같다(60초, 숨은 탭 쉼, 포커스 때 새로).
- * 2026-10-24 속도: 홈이 다른 화면 뒤에 숨어 있으면(KeepAlive) 폴링·포커스 조회를 멈춘다 — 전에는 다른 탭을 쓰는 중에도 60초마다,
- * 그리고 탭을 바꿀 때마다(KeepAlive 가 focus 를 쏨) 접수·일정·시트를 다시 읽었다. 겹친 호출은 하나로.
+ * 홈 미처리 칸(2026-10-19, 2026-10-24 "미처리 전체" 카드와 하나로 합침).
+ * 숫자는 전부 현황판 묶음(HomeKpiBoard → loadKpiBundle)의 facts.unhandled = homeUnhandled.mergeUnhandled 한 벌에서 센다:
+ *  · 머리 "미처리 n건" = 전체 행 수 = 팀 탭 합(A~E·경영·운영·영업·기타) = 종류 칸 합(복합기 AS·원격·IT·경영·운영·영업·AS 일정·물류)
+ *  · 재계약 확인 지남 = kpiCompute.recontractOverdue(묶음 recontract, 무거운 원본이라 늦게 옴) — 팀·일정 행이 아니라 합계 밖 칸, 없으면 "—"
+ * 전에는 이 칸이 자기 로더로 따로 읽었고, 옆 카드(HomeReceptionPanel)는 시트를 빼고 DB 접수만 셌다(접수 27 vs 435).
+ * 탭(팀)·종류 칸(누르면 목록 거르기) → 목록은 "접수·AS" 묶음 + "물류" 묶음. 접수 행 → 서비스접수 미처리 현황, AS일정 행 → 일정리스트 미처리.
+ * 갱신은 HomeKpiBoard 가 한다(unhandled 는 60초 가벼운 원본, 숨은 화면·탭에서 쉼).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { CalendarClock } from "lucide-react";
-import { selectRows } from "./supabase";
-import { kstDate } from "./visits";
 import { fieldTicketVendor } from "./ids";
 import { formatAssignees } from "./assignees";
 import { overdueAgeTone } from "./overdueLogic";
-import { fetchOpenReceptions } from "./deptReceptionApi";
-import { loadSheetOpen, mergeSheetAndDb } from "./receptionSheetOpen";
 import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
-import { useScreenActive } from "./screenActive";
+import type { KpiBundle } from "./kpi/kpiData";
+import { unhandledParts } from "./kpi/homeKpiModel";
 import {
-  countUnhandledTabs, mergeUnhandled, rowsForTab, splitByGroup, UNHANDLED_BADGE,
-  type TicketInput, type UnhandledKind, type UnhandledRow, type UnhandledTab,
+  countUnhandledKinds, countUnhandledTabs, oldestUnhandled, rowsForTab, splitByGroup, UNHANDLED_BADGE, UNHANDLED_KIND_LABEL, UNHANDLED_KINDS,
+  type UnhandledKind, type UnhandledRow, type UnhandledTab,
 } from "./homeUnhandled";
 
 const card = "rounded-2xl border border-white/[0.08] bg-white/[0.03]";
-const TAB_GROUPS: UnhandledTab[][] = [["전체"], ["A", "B", "C", "D", "E"], ["경영", "운영", "영업"]];
+const TAB_GROUPS: UnhandledTab[][] = [["전체"], ["A", "B", "C", "D", "E"], ["경영", "운영", "영업"], ["기타"]];
 const DEPT_TEAMS = new Set(["경영", "운영", "영업"]);
 
 const dotOf = (k: UnhandledKind): string =>
   k === "AS일정" || k === "물류" ? "bg-slate-400" : RECEPTION_TYPE_META[k as ReceptionType]?.dot || "bg-slate-400";
+const vendorOf = (r: UnhandledRow) => (r.source === "ticket" ? (fieldTicketVendor(r.vendor).vendor || r.vendor) : r.vendor);
 
-export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: { onOpenOverdue: () => void; onOpenReception: () => void }) {
-  const [rows, setRows] = useState<UnhandledRow[] | null>(null);
-  const [error, setError] = useState("");
+type Props = {
+  /** 현황판 묶음 — unhandled(K16)·recontract(K12) 원본을 쓴다. null = 아직 안 읽음 */
+  bundle: KpiBundle | null;
+  onOpenOverdue: () => void;
+  onOpenReception: () => void;
+  onRetry?: () => void;
+};
+
+export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenReception, onRetry }: Props) {
   const [tab, setTab] = useState<UnhandledTab>("전체");
-  // 시트 기준(C3) 안내·90일 넘은 시트 건수. 스위치 꺼짐이면 sheetMode=false(지금과 같은 DB 숫자)
-  const [sheetInfo, setSheetInfo] = useState<{ sheetMode: boolean; notice: string; over90: number }>({ sheetMode: false, notice: "", over90: 0 });
-  const active = useScreenActive();
-  const busy = useRef(false);
-  const loadOnce = useCallback(async () => {
-    const today = kstDate();
-    const from = new Date(Date.now() - 180 * 86400_000 + 9 * 3600_000).toISOString().slice(0, 10);
-    const [rec, tic, sheetRes] = await Promise.allSettled([
-      fetchOpenReceptions(90),
-      selectRows<TicketInput>("as_tickets", `select=id,team,date,time,vendor,assignee,status,scheduleType,receptionId,issue&date=lt.${today}&date=gte.${from}&status=neq.${encodeURIComponent("완료")}&scheduleType=neq.${encodeURIComponent("매월점검")}&order=date.desc,time.asc&limit=3000`),
-      loadSheetOpen(),
-    ]);
-    const errs: string[] = [];
-    if (rec.status === "rejected") errs.push("접수");
-    if (tic.status === "rejected") errs.push("일정");
-    // 접수를 못 읽으면 AS 중복 제외도 못 한다 — 숫자가 틀릴 수 있음을 안내문으로 알린다
-    setError(errs.length ? `${errs.join("·")} 미처리를 불러오지 못했습니다 — 숫자가 빠지거나 겹쳤을 수 있음` : "");
-    const sheet = sheetRes.status === "fulfilled" ? sheetRes.value : { enabled: true as const, data: null, error: "시트 조회 실패" };
-    const dbRows = rec.status === "fulfilled" ? rec.value : [];
-    if (sheet.enabled) {
-      const merged = mergeSheetAndDb(dbRows, sheet.data, today, sheet.error);
-      setSheetInfo({ sheetMode: merged.sheetKinds.length > 0, notice: merged.notice, over90: merged.over90.length });
-      setRows(mergeUnhandled(merged.db, tic.status === "fulfilled" ? tic.value : [], today, merged.sheet));
-    } else {
-      setSheetInfo({ sheetMode: false, notice: "", over90: 0 });
-      setRows(mergeUnhandled(dbRows, tic.status === "fulfilled" ? tic.value : [], today));
-    }
-  }, []);
-  const load = useCallback(async () => {
-    if (busy.current) return; // 첫 조회와 화면 복귀 focus 가 겹쳐도 한 번만
-    busy.current = true;
-    try { await loadOnce(); } finally { busy.current = false; }
-  }, [loadOnce]);
-  useEffect(() => {
-    if (!active) return; // 다른 화면이 떠 있으면(KeepAlive 숨김) 쉰다
-    const first = window.setTimeout(() => { void load(); }, 0);
-    const timer = window.setInterval(() => { if (!document.hidden) void load(); }, 60_000);
-    const onFocus = () => { void load(); };
-    window.addEventListener("focus", onFocus);
-    return () => { window.clearTimeout(first); window.clearInterval(timer); window.removeEventListener("focus", onFocus); };
-  }, [load, active]);
+  const [kind, setKind] = useState<UnhandledKind | null>(null);
+  const rows = bundle?.facts.unhandled ?? null;
+  const src = bundle?.sources.unhandled;
+  const srcError = src && src.status !== "ok" ? src.error : "";
+  const recSrc = bundle?.sources.recontract;
+  const recontract = unhandledParts(bundle).recontract;
+  const recState = recontract !== null ? "" : recSrc && recSrc.status !== "ok" ? "재계약 원본을 못 읽음" : "재계약 확인 중";
+  const info = bundle?.unhandledInfo ?? null;
+
   const counts = useMemo(() => countUnhandledTabs(rows || []), [rows]);
-  const list = useMemo(() => rowsForTab(rows || [], tab), [rows, tab]);
+  const tabRows = useMemo(() => rowsForTab(rows || [], tab), [rows, tab]);
+  const kinds = useMemo(() => countUnhandledKinds(tabRows), [tabRows]);
+  const list = useMemo(() => (kind ? tabRows.filter((r) => r.kind === kind) : tabRows), [tabRows, kind]);
   const groups = useMemo(() => splitByGroup(list), [list]);
+  const oldest = useMemo(() => oldestUnhandled(tabRows), [tabRows]);
   const total = counts["전체"];
   // 서비스접수 화면이 이미 떠 있으면(KeepAlive) localStorage 를 다시 읽지 않으므로 이벤트도 같이 보낸다
   const openReception = () => {
@@ -86,7 +63,7 @@ export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: {
   };
   const renderRow = (r: UnhandledRow) => {
     const tone = overdueAgeTone(r.ageDays);
-    const vendor = r.source === "ticket" ? (fieldTicketVendor(r.vendor).vendor || r.vendor) : r.vendor;
+    const vendor = vendorOf(r);
     const body = (
       <>
         <span className="w-11 shrink-0 font-mono text-[11px] font-bold tabular-nums text-slate-400">{r.date.slice(5).replace("-", "/")}</span>
@@ -103,40 +80,67 @@ export default function HomeUnhandledPanel({ onOpenOverdue, onOpenReception }: {
     if (r.kind === "물류") return <div className="flex w-full items-center gap-2.5 px-3 py-2 opacity-80">{body}</div>;
     return <button type="button" onClick={r.source === "reception" ? openReception : onOpenOverdue} className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-white/[0.05]">{body}</button>;
   };
+  // 작은 칸 — 종류 8칸(누르면 목록 거르기) + 재계약 확인 지남(합계 밖, 점선)
+  const cell = (key: string, label: string, value: number | null, on: boolean, onClick?: () => void, note?: string) => (
+    <button
+      key={key} type="button" onClick={onClick} disabled={!onClick} title={note} data-kind={key}
+      className={`flex min-w-0 flex-col items-start rounded-lg border px-2 py-1.5 text-left transition ${on ? "border-white/40 bg-white/[0.10]" : "border-white/[0.06] bg-white/[0.03]"} ${onClick ? "hover:border-white/25" : "cursor-default border-dashed"}`}
+    >
+      <span className="w-full truncate text-[10px] font-black text-slate-400">{label}</span>
+      <span className={`font-mono text-[14px] font-black ${value === null ? "text-slate-500" : value ? "text-rose-200" : "text-emerald-300"}`}>{value === null ? "—" : value}</span>
+    </button>
+  );
   return (
     <div className={`p-4 sm:col-span-2 ${card}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="flex items-center gap-1.5 text-[10.5px] font-black tracking-[0.18em] text-slate-400"><CalendarClock size={13} className={total ? "text-rose-300" : "text-emerald-300"} />미처리 일정</span>
+        <span className="flex items-center gap-1.5 text-[10.5px] font-black tracking-[0.18em] text-slate-400"><CalendarClock size={13} className={total ? "text-rose-300" : "text-emerald-300"} />미처리</span>
         <span className={`font-mono text-[13px] font-black ${total ? "text-rose-200" : "text-emerald-300"}`}>{rows === null ? "…" : `${total}건`}</span>
-        {rows !== null && tab !== "전체" && <span className="text-[10.5px] font-bold text-slate-500">{tab} {list.length}건</span>}
+        {rows !== null && tab !== "전체" && <span className="text-[10.5px] font-bold text-slate-500">{tab} {tabRows.length}건</span>}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1">
-        {TAB_GROUPS.map((group, gi) => (
-          <span key={gi} className="flex items-center gap-1">
-            {gi > 0 && <span className="mx-0.5 h-4 w-px bg-white/10" aria-hidden />}
-            {group.map((t) => {
-              const n = counts[t];
-              const on = tab === t;
-              return (
-                <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${on ? "bg-white text-slate-950" : n ? "bg-white/[0.06] text-rose-200 hover:text-white" : "bg-white/[0.06] text-slate-500 hover:text-slate-300"}`}>
-                  {t}{n ? <span className={`ml-1 font-mono ${on ? "text-rose-600" : ""}`}>{n}</span> : ""}
-                </button>
-              );
-            })}
-          </span>
-        ))}
+        {TAB_GROUPS.map((group, gi) => {
+          const shown = group.filter((t) => t !== "기타" || counts[t] > 0); // 기타(팀 없는 일정)는 있을 때만
+          if (!shown.length) return null;
+          return (
+            <span key={gi} className="flex items-center gap-1">
+              {gi > 0 && <span className="mx-0.5 h-4 w-px bg-white/10" aria-hidden />}
+              {shown.map((t) => {
+                const n = counts[t];
+                const on = tab === t;
+                return (
+                  <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${on ? "bg-white text-slate-950" : n ? "bg-white/[0.06] text-rose-200 hover:text-white" : "bg-white/[0.06] text-slate-500 hover:text-slate-300"}`}>
+                    {t}{n ? <span className={`ml-1 font-mono ${on ? "text-rose-600" : ""}`}>{n}</span> : ""}
+                  </button>
+                );
+              })}
+            </span>
+          );
+        })}
       </div>
-      {error && <p className="mt-2 text-[11px] font-bold text-amber-300">{error}</p>}
-      {sheetInfo.notice && <p className="mt-2 text-[11px] font-bold text-amber-300">{sheetInfo.notice}</p>}
-      {sheetInfo.sheetMode && (
+      <div className="mt-2.5 grid grid-cols-3 gap-1.5 sm:grid-cols-5 lg:grid-cols-9">
+        {UNHANDLED_KINDS.map((k) => cell(k, UNHANDLED_KIND_LABEL[k], rows === null ? null : kinds[k], kind === k, () => setKind(kind === k ? null : k)))}
+        {cell("recontract", "재계약 확인 지남", recontract, false, undefined, recState ? `${recState} · 합계 밖(업체 단위)` : "합계 밖(업체 단위) — 다음확인일이 지난 재계약")}
+      </div>
+      {rows !== null && oldest && (
+        <p className="mt-2 truncate text-[11px] font-bold text-slate-400">
+          가장 오래된 건 · <span className="text-slate-200">{vendorOf(oldest) || oldest.title || "업체 미정"}</span> ({oldest.ageDays}일 · {UNHANDLED_BADGE[oldest.kind]})
+        </p>
+      )}
+      {srcError && (
+        <p className="mt-2 text-[11px] font-bold text-amber-300">
+          미처리를 새로 읽지 못했습니다{rows ? " — 마지막 값" : ""} · {srcError}
+          {onRetry && <button type="button" onClick={onRetry} className="ml-2 font-black text-blue-300 hover:text-white">다시</button>}
+        </p>
+      )}
+      {info?.sheetMode && (
         <p className="mt-1.5 text-[10.5px] font-bold text-slate-500">
-          영업·경영·원격은 시트 상태 열 기준 · 최근 90일
-          {sheetInfo.over90 > 0 && <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-black text-slate-300">90일 넘음 {sheetInfo.over90}</span>}
+          영업·경영·원격·IT 는 시트 상태 열 기준 · 최근 90일
+          {info.over90 > 0 && <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-black text-slate-300">90일 넘음 {info.over90}</span>}
         </p>
       )}
       <div className="mt-3 max-h-[320px] overflow-y-auto rounded-xl border border-white/[0.06]">
         {rows === null && <ul>{Array.from({ length: 3 }).map((_, i) => <li key={i} className="px-3 py-2.5"><div className="h-3.5 animate-pulse rounded bg-white/[0.06]" /></li>)}</ul>}
-        {rows !== null && !list.length && <p className="px-3 py-5 text-center text-[12px] font-bold text-emerald-300">{tab === "전체" ? "" : `${tab} `}미처리 없음</p>}
+        {rows !== null && !list.length && <p className="px-3 py-5 text-center text-[12px] font-bold text-emerald-300">{tab === "전체" ? "" : `${tab} `}{kind ? `${UNHANDLED_KIND_LABEL[kind]} ` : ""}미처리 없음</p>}
         {rows !== null && groups.work.length > 0 && (
           <section>
             <h4 className="sticky top-0 bg-slate-900/95 px-3 py-1.5 text-[10.5px] font-black tracking-wide text-slate-300">접수·AS <span className="font-mono text-rose-200">{groups.work.length}건</span></h4>

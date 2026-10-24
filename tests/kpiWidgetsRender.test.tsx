@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { KpiWidget, type KpiTableRow, type KpiView } from "../src/kpi/KpiWidgets.view";
+import { KpiWidget, RowDetail, SHOW_OPEN_LINKS, type KpiTableRow, type KpiView } from "../src/kpi/KpiWidgets.view";
 
 const render = (el: Parameters<typeof renderToString>[0]) => renderToString(el).replace(/<!-- -->/g, "");
 const noop = () => {};
@@ -84,5 +84,31 @@ describe("홈 위젯 실제 렌더", () => {
   it("로딩·준비 중·오류는 숫자를 그리지 않는다", () => {
     expect(render(createElement(KpiWidget, { kind: "kpiTable", title: "T", basis: "b", status: "loading" }))).toContain("animate-pulse");
     expect(render(createElement(KpiWidget, { kind: "okr", title: "T", basis: "b", status: "pending" }))).toContain("준비 중");
+  });
+  it("OKR 범위: 머리 글자 기본 'CS 4파트(A~D) · 이번 주', 범위 칩 [전체/A~D]+[개인]", () => {
+    const base0 = { kind: "okr" as const, period: "week" as const, onPeriod: noop, pct: 50, counts: [], weeks: [], missingTeams: [] };
+    expect(W("okr", base0)).toContain("CS 4파트(A~D) · 이번 주");
+    const html = W("okr", { ...base0, scope: { team: "B", member: "이호준", members: ["박X", "이호준"], onScope: noop } });
+    expect(html).toContain("이호준(B) · 이번 주");
+    for (const c of ["전체", ">A<", ">D<"]) expect(html).toContain(c);
+    expect(html).toContain("OKR 범위(파트)");
+  });
+  it("행 펼침: 개인 칩 올해 누계·보조 글자, K2 분기 블록(팀 5줄), 화면 열기 단추 없음", () => {
+    const r: KpiTableRow = { ...rows[0], onOpen: noop, people: [{ name: "한왕주", team: "C", value: 1, target: 2, done: false, total: 37, sub: "수리 1점" }] };
+    const html = render(createElement(RowDetail, { r, theme: "deck" }));
+    expect(html).toContain("올해 누계");
+    expect(html).toContain("37");
+    expect(html).toContain("수리 1점");
+    expect(html).not.toContain("화면 열기");
+    const teams = ["A", "B", "C", "D", "CSS"].map((t) => ({ team: t, done: 1, total: 10, pct: 10, headcount: 3, need: 1.2, now: 0.4 }));
+    const q = render(createElement(RowDetail, { r: { ...r, quarter: { basis: "end", onBasis: noop, endLabel: "분기 말일(12/31)", bizDaysLeft: 40, elapsed: 0.3, teams } }, theme: "deck" }));
+    for (const t of ["A팀", "CSS팀", "말일 10일 전", "필요", "지금"]) expect(q).toContain(t);
+    expect(q).not.toContain("팀별 실적"); // 팀 막대 대신 분기 블록
+  });
+  it("이동 단추 끔(SHOW_OPEN_LINKS=false): 띠 칩은 단추 아님, 바닥 '자세히' 없음", () => {
+    expect(SHOW_OPEN_LINKS).toBe(false);
+    const strip = W("todayStrip", { kind: "todayStrip", items: [{ key: "a", label: "점검", value: 4, unit: "대", onOpen: noop }] }, { onOpen: noop });
+    expect(strip).not.toContain("<button type=\"button\" aria-label=\"오늘");
+    expect(strip).not.toContain("자세히");
   });
 });

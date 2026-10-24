@@ -27,6 +27,7 @@ import {
   type OkrCycle, type OkrGoal, type OkrJudgment, type OkrReport, type OkrResultRow,
 } from "../okr";
 import { blogTeamOf, countBlog, type BlogRow } from "../blogSheet";
+import { countOverhaul, overhaulDeptTeam, type OverhaulCount, type OverhaulRow } from "../overhaulSheet";
 import { effectiveMisuVisits, type MisuVisit } from "../misuVisit";
 import { weekCompletionRate } from "../deptReception";
 import { isYmd } from "../recontractSchedule";
@@ -203,6 +204,8 @@ export type KpiFacts = Partial<{
   office: OfficeLite[];
   itQuiz: ItLogLite[];
   itPractice: ItLogLite[];
+  /** 오버홀 기록 시트(overhaulSheet.loadOverhaulRows) — K33 원본(2026-10-24, 사무실 일지 대신) */
+  overhaul: OverhaulRow[];
 }>;
 
 /* ───────────── 공통: 양식 표(초과조정·재계약·불만) 행 정리 ───────────── */
@@ -367,12 +370,9 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
       return { n: keys.size };
     }
     case "K33": {
-      if (!f.office) return null;
-      // 오버홀만 직책자(팀장·파트장·부파트장) 제외 — 사용자 2026-10-24. 다른 KPI 는 팀장만 제외(기존 그대로)
-      const titled = titledNames(f.roster);
-      const n = f.office.filter((o) => o.work_date >= r.from && o.work_date <= r.to && !isMgr(o.author) && !titled.has(String(o.author || "").trim()) && teamOk(ctx.teamOf(o.author)) && (!s.author || o.author === s.author))
-        .reduce((a, o) => a + (Number(o.values?.overhaul?.count) || 0), 0);
-      return { n };
+      if (!f.overhaul) return null;
+      // 원본 = 오버홀 기록 구글 시트(2026-10-24). 오버홀만 직책자(팀장·파트장·부파트장) 제외 — 다른 KPI 는 팀장만 제외(기존 그대로)
+      return { n: countOverhaul(overhaulRowsIn(f.overhaul, f.roster, ctx.teamOf, s), r.from, r.to).points };
     }
     case "K10": return f.overage ? { n: countOverageVisits(f.overage, { ...r, ...s }) } : null;
     case "K11": {
@@ -409,11 +409,17 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
       return { n: need.filter((k) => k.greeting_done).length, d: need.length };
     }
     case "K19": {
-      if (!f.okr || s.author) return null;
+      if (!f.okr) return null;
       // 주 범위(7일 이하)면 이번 주 주차 기록, 아니면 이번 달 파트 종합(기존)
       const w = f.okr.week;
       const weekMode = dayDiff(r.from, r.to) <= 6;
       if (weekMode && !w) return null;
+      if (s.author) {
+        // 개인 = 그 주 그 사람 okr_reports member 행의 판정(주 단위만 — 달은 파트 종합뿐)
+        if (!weekMode || !w) return null;
+        const mine = okrWeekMemberRows(w.goals, w.reports, w.id, s.author, s.team);
+        return { n: mine.filter((x) => ["완료", "해당없음"].includes(normalizeJudgment(x.judgment))).length, d: mine.filter((x) => normalizeJudgment(x.judgment)).length };
+      }
       const rows = OKR_TEAMS.filter((t) => teamOk(t)).flatMap((t) => (weekMode && w ? okrWeekTeamRows(w.goals, w.reports, w.id, t) : okrTeamRows(f.okr!.cycle, f.okr!.quarter, f.okr!.reports, t)));
       return { n: rows.filter((x) => ["완료", "해당없음"].includes(normalizeJudgment(x.judgment))).length, d: rows.filter((x) => normalizeJudgment(x.judgment)).length };
     }
@@ -495,6 +501,34 @@ export type KpiProgressRow = {
 };
 
 export type KpiSettingsLite = { targets: Partial<Record<KpiId, KpiTarget>>; holidays: readonly string[] };
+
+/**
+ * 오버홀 시트 행 중 KPI 로 세는 것(범위 적용, 기간은 countOverhaul 이 본다):
+ * 팀 = 명단 팀(teamOf, A~E) → 없으면 부서명 끝 글자(강북A → A, CSS → E) · 외부인력·퇴사자·팀 모름·팀장·직책자 제외.
+ */
+export function overhaulRowsIn(rows: OverhaulRow[], roster: RosterMember[] | undefined, teamOf: (a: string) => string, s: KpiScope = {}): OverhaulRow[] {
+  const titled = titledNames(roster);
+  return rows.filter((o) => {
+    const a = String(o.author || "").trim();
+    if (!a || titled.has(a)) return false;
+    const rosterTeam = teamOf(a);
+    if (rosterTeam === "팀장") return false;
+    const team = KPI_TEAMS.includes(rosterTeam) ? rosterTeam : overhaulDeptTeam(o.dept);
+    if (!team) return false;
+    return (!s.team || s.team === "전체" || team === s.team) && (!s.author || a === s.author);
+  });
+}
+
+/** 오버홀 사람별 오버홀포인트·수리포인트(달성표 개인 칩 보조 글자 "수리 n점"용) — kpiCount K33 와 같은 거름 */
+export function overhaulByPerson(rows: OverhaulRow[], roster: RosterMember[] | undefined, teamOf: (a: string) => string, r: KpiRange): OverhaulCount {
+  return countOverhaul(overhaulRowsIn(rows, roster, teamOf), r.from, r.to);
+}
+
+/** 블로그 사람별 올해 누계(1/1 ~ 오늘) — 달성표 K20 개인 칩 "올해 누계 n". 셈 = countBlog 그대로 */
+export function blogYearTotals(rows: BlogRow[], today: string): Map<string, number> {
+  const c = countBlog(rows, { from: `${today.slice(0, 4)}-01-01`, to: today });
+  return new Map(c.byPerson.map((p) => [p.name, p.count]));
+}
 
 /** 오버홀(K33) 집계·목표 인원에서 빼는 직책(cs_members.title) — 사용자 2026-10-24 */
 export const OVERHAUL_EXCLUDED_TITLES: ReadonlySet<string> = new Set(["팀장", "파트장", "부파트장"]);
@@ -651,7 +685,7 @@ export function overageKpi(rows: FormRow[], r: KpiRanges, target?: KpiTarget): K
     }),
     extra: {
       quarter: countOverageVisits(rows, r.quarter),
-      quarterTarget: t.quarterTotal ?? 0,
+      quarterTarget: t.quarterTotal ?? (teamGoal !== null ? teamGoal * KPI_TEAMS.length * 3 : 0),
       teamsMet: teamGoal === null ? 0 : KPI_TEAMS.filter((team) => countOverageVisits(rows, { ...r.month, team }) >= teamGoal).length,
     },
   });
@@ -756,8 +790,41 @@ export type OkrWeekResult = {
   missingTeams: string[];
   byTeam: Array<{ team: string; pct: number | null }>;
 };
-export function okrWeekResult(w: OkrWeekFacts, weekId: string = w.id): OkrWeekResult {
-  const per = OKR_TEAMS.map((team) => ({ team, rows: okrWeekTeamRows(w.goals, w.reports, weekId, team) }));
+/** OKR 범위(2026-10-24 사용자 "어디의 달성률인지 + 팀/개인 필터"): ALL = CS 4파트(A~D), 팀 하나, member = 그 사람 */
+export type OkrScopeTeam = "ALL" | "A" | "B" | "C" | "D";
+export type OkrScope = { team: OkrScopeTeam; member?: string };
+
+/** 그 주 그 사람(member 행)의 목표별 판정 — 팀을 주면 그 팀 행만. 기록이 없으면 빈 판정 행 */
+export function okrWeekMemberRows(goals: OkrGoal[], reports: OkrReport[], weekId: string, member: string, team?: string): OkrResultRow[] {
+  const rep = reports.find((r) => r.cycle_id === weekId && r.member === member && (!team || team === "ALL" || r.team === team));
+  return goals.map((g) => resultRowFor(rep, g.no));
+}
+
+/** 개인 고르기 목록 — 그 달 주차 기록(w.reports)에 member 행이 있는 사람(이름순). team ALL 이면 A~D 전부 */
+export function okrWeekMembers(w: OkrWeekFacts, team: OkrScopeTeam = "ALL"): string[] {
+  const names = new Set(w.reports.filter((r) => r.member && (team === "ALL" ? (OKR_TEAMS as readonly string[]).includes(r.team) : r.team === team)).map((r) => r.member));
+  return [...names].sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+/** 머리 범위 글자 — "CS 4파트(A~D) · 이번 주" · "A파트 · 이번 주" · "홍길동(A) · 이번 주" */
+export function okrScopeLabel(scope: OkrScope | undefined, period: "week" | "month"): string {
+  const when = period === "week" ? "이번 주" : "이번 달";
+  if (!scope || scope.team === "ALL") return scope?.member ? `${scope.member} · ${when}` : `CS 4파트(A~D) · ${when}`;
+  return scope.member ? `${scope.member}(${scope.team}) · ${when}` : `${scope.team}파트 · ${when}`;
+}
+
+/**
+ * 주 OKR 결과. scope 없음/ALL = A~D 전체(기존 그대로). 팀 = 그 파트만(파트 종합 → 없으면 팀원 중 가장 나쁜 것).
+ * member = 그 사람 member 행 판정만(missingTeams 는 비고, 판정 없으면 pct null).
+ */
+export function okrWeekResult(w: OkrWeekFacts, weekId: string = w.id, scope?: OkrScope): OkrWeekResult {
+  if (scope?.member) {
+    const rows = okrWeekMemberRows(w.goals, w.reports, weekId, scope.member, scope.team);
+    const team = w.reports.find((r) => r.cycle_id === weekId && r.member === scope.member)?.team ?? (scope.team === "ALL" ? "" : scope.team);
+    return { pct: achievementRate(rows), counts: judgmentCounts(rows), missingTeams: [], byTeam: team ? [{ team, pct: achievementRate(rows) }] : [] };
+  }
+  const teams = !scope || scope.team === "ALL" ? [...OKR_TEAMS] as string[] : [scope.team];
+  const per = teams.map((team) => ({ team, rows: okrWeekTeamRows(w.goals, w.reports, weekId, team) }));
   const all = per.flatMap((p) => p.rows);
   return {
     pct: achievementRate(all),

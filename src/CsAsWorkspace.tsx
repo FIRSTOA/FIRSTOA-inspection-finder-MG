@@ -1921,6 +1921,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
           {listDept && (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 sm:px-4">배정·완료는 서비스접수 › {DEPT_CAL_LABEL[listDept]} › 일정리스트에서 합니다. 여기는 달 단위로 보기.</div>
               <DeptCalendarPanel key={listDept} team={listDept} month={currentMonth} days={calendarDays} today={todayYmd} mode="list" reloadTick={naverReloadTick} onMonth={(d) => setCurrentMonth(addMonths(currentMonth, d))} />
             </div>
           )}

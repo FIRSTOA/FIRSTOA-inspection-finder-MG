@@ -182,8 +182,9 @@ export async function runDeptSave(input: DeptReceptionInput, extraMeta: Record<s
 }
 
 // ── 처리(상세 [처리 저장]·단추 5개) ───────────────────
-export type DeptActionKind = "done" | "tomorrow" | "date" | "hold" | "memo";
-export type DeptActionOpts = { by: string; date?: string; text?: string; handled?: string; progress?: string; today?: string };
+export type DeptActionKind = "done" | "tomorrow" | "date" | "hold" | "memo" | "assign";
+/** handler: kind "assign" 의 새 처리자(빈 문자열 = 미배정, 1명) */
+export type DeptActionOpts = { by: string; date?: string; text?: string; handled?: string; progress?: string; today?: string; handler?: string };
 export type DeptActionResult = { row: DeptRowLike; warnings: string[] };
 
 async function freshRow(row: DeptRowLike): Promise<DeptRowLike> {
@@ -248,6 +249,20 @@ export async function runDeptAction(row0: DeptRowLike, kind: DeptActionKind, opt
       }
     } catch (e) { warnings.push(`부서 달력 반영 실패: ${(e as Error).message}`); }
     return { row: next, warnings }; // 시트에는 예정일 칸이 없다 — 갱신 없음
+  }
+
+  if (kind === "assign") {
+    // 배정(서비스접수 › 부서 › 일정리스트, 2026-10-24) — 최신 행 위에서 처리자만 바꾼다(1명). 메모·이력은 그대로.
+    const handler = String(opts.handler ?? "").trim().split(/[,·]/)[0].trim();
+    if ((meta.handler || "") === handler) return { row, warnings };
+    await updateDeptHandling(row.id, { handler });
+    const next: DeptRowLike = { ...row, remote_meta: { ...meta, handler } };
+    if (meta.calendar_id || meta.schedule_date) { // 달력 메모의 "처리자 …" 줄도 맞춘다
+      try { await upsertDeptCalendar({ id: row.id, type: row.type, vendor: row.vendor, field: row.field || "", symptom: row.symptom || "", author: row.author, remote_meta: next.remote_meta || {} }); }
+      catch (e) { warnings.push(`부서 달력 반영 실패: ${(e as Error).message}`); }
+    }
+    await pushSheetUpdate(next, warnings);
+    return { row: next, warnings };
   }
 
   if (kind === "hold") {

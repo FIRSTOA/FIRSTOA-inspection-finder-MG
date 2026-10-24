@@ -65,6 +65,12 @@ export const isSheetOpenOn = (cfg: Record<string, string> | null | undefined) =>
 export const sheetRowUrl = (source: SheetSource, sheetRow: number) =>
   `https://docs.google.com/spreadsheets/d/${RECEPTION_SPREADSHEET_ID}/edit#gid=${SHEET_GID[source]}&range=A${sheetRow}`;
 
+/** 부서 접수 시트 탭 링크(서비스접수 › 경영·영업 [시트 열기]). 운영지원·그 밖은 시트가 없어 null. */
+export const deptSheetUrl = (dept: string): string | null =>
+  dept === "영업팀" ? `https://docs.google.com/spreadsheets/d/${RECEPTION_SPREADSHEET_ID}/edit#gid=${SHEET_GID.sales}`
+    : dept === "경영지원" ? `https://docs.google.com/spreadsheets/d/${RECEPTION_SPREADSHEET_ID}/edit#gid=${SHEET_GID.mgmt}`
+      : null;
+
 function normalizeResponse(raw: Partial<SheetOpenResponse> | null | undefined): SheetOpenResponse {
   const r = raw || {};
   return {

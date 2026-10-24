@@ -13,6 +13,8 @@ import { vendorMatchKey } from "./ids";
 import { countableEvents, distinctVendors, EXPANSION_BASIS_TEXT, FIELD_BASIS_TEXT } from "./workCount";
 import { loadWorkEvents } from "./expansionSource";
 import BlogCommentCard from "./BlogCommentCard";
+import { UI } from "./ui/card";
+import StateBox from "./ui/StateBox";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Props = { author: string };
@@ -215,68 +217,78 @@ export default function OperationsDashboard({ author: _author }: Props) {
 
 
   return (
-    <div className="space-y-3 pb-16">
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className={`${UI.gap} pb-16`}>
+      {/* 요약 카드 1장 — 기간·필터, 요약 4칸, 업무 구성을 한 카드로(2026-10-24, 카드 8장 → 3장) */}
+      <section className={UI.card}>
         {/* 기간 선택 — 조회 허브의 다크바 아래 밝은 헤더 (관리 내부 카드와 같은 톤) */}
-        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <p className="text-[11px] font-semibold text-slate-400">팀 운영량과 기록 누락을 확인합니다. 팀장 기록·오발송 취소분은 빼고, 같은 거래처 재전송은 1건으로 셉니다(확장성은 같은 날, 그 밖은 10분 안). 건수 = 업무 기록 수, 거래처 = 서로 다른 거래처 수(같은 곳 여러 번은 1곳).<br />확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT} — 조회 탭과 같은 숫자.<br />점검·AS 기준: 점검·AS 표(FIELD 전송·카톡 가져오기 포함), {FIELD_BASIS_TEXT} — 홈·순위표·조회 탭과 같은 숫자.</p>
-          <div className="grid grid-cols-4 rounded-full bg-slate-100 p-1 lg:w-72">
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <details className="min-w-0 flex-1">
+            <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-[11px] font-semibold text-slate-500">
+              <span className="min-w-0">팀 운영량과 기록 누락을 확인합니다. <span className="font-black text-blue-600">계산 기준 보기</span></span>
+            </summary>
+            <p className="pb-2 text-[11px] font-semibold leading-5 text-slate-400">팀장 기록·오발송 취소분은 빼고, 같은 거래처 재전송은 1건으로 셉니다(확장성은 같은 날, 그 밖은 10분 안). 건수 = 업무 기록 수, 거래처 = 서로 다른 거래처 수(같은 곳 여러 번은 1곳).<br />확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT} — 조회 탭과 같은 숫자.<br />점검·AS 기준: 점검·AS 표(FIELD 전송·카톡 가져오기 포함), {FIELD_BASIS_TEXT} — 홈·순위표·조회 탭과 같은 숫자.</p>
+          </details>
+          <div className={`${UI.seg} lg:w-72`}>
             {([["week", "주간"], ["month", "월간"], ["quarter", "분기"], ["year", "연간"]] as Array<[Period, string]>).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setPeriod(value)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${period === value ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
+              <button key={value} type="button" onClick={() => setPeriod(value)} className={UI.segBtn(period === value)}>{label}</button>
             ))}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 p-4">
-          {period === "week" && <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />}
-          {period !== "week" && <select value={year} onChange={(event) => setYear(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{Array.from({ length: 6 }, (_, index) => currentYear - 4 + index).map((value) => <option key={value} value={value}>{value}년</option>)}</select>}
-          {period === "month" && <select value={month} onChange={(event) => setMonth(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}월</option>)}</select>}
-          {period === "quarter" && <select value={quarter} onChange={(event) => setQuarter(Number(event.target.value))} className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">{[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value}분기</option>)}</select>}
+          {period === "week" && <input type="date" value={anchor} onChange={(event) => setAnchor(event.target.value)} aria-label="기준 날짜" className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 lg:h-10" />}
+          {period !== "week" && <PortalSelect width={110} value={String(year)} onChange={(next) => setYear(Number(next))} className="min-h-11 lg:min-h-10"
+            options={Array.from({ length: 6 }, (_, index) => currentYear - 4 + index).map((value) => ({ value: String(value), label: `${value}년` }))} />}
+          {period === "month" && <PortalSelect width={90} value={String(month)} onChange={(next) => setMonth(Number(next))} className="min-h-11 lg:min-h-10"
+            options={Array.from({ length: 12 }, (_, index) => index + 1).map((value) => ({ value: String(value), label: `${value}월` }))} />}
+          {period === "quarter" && <PortalSelect width={90} value={String(quarter)} onChange={(next) => setQuarter(Number(next))} className="min-h-11 lg:min-h-10"
+            options={[1, 2, 3, 4].map((value) => ({ value: String(value), label: `${value}분기` }))} />}
           <span className="mr-auto rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 tabular-nums">{range.start} ~ {range.end}</span>
 
-          <div className="flex rounded-full bg-slate-100 p-1">
+          <div className="flex flex-wrap items-center gap-1.5">
             {["전체", ...OPERATIONS_TEAMS].map((value) => (
-              <button key={value} type="button" onClick={() => { setTeam(value); setMember("전체"); }} className={`rounded-full px-3 py-1.5 text-xs font-black ${team === value ? "bg-slate-900 text-white" : "text-slate-500"}`}>{value === "전체" ? "전체" : `${value}팀`}</button>
+              <button key={value} type="button" onClick={() => { setTeam(value); setMember("전체"); }} className={UI.chip(team === value)}>{value === "전체" ? "전체" : `${value}팀`}</button>
             ))}
           </div>
-          <PortalSelect width={160} value={member} onChange={setMember}
+          <PortalSelect width={160} value={member} onChange={setMember} className="min-h-11 lg:min-h-10"
             options={[{ value: "전체", label: "전체 팀원" }, ...memberOptions.map((name) => ({ value: name, label: name }))]} />
-          <PortalSelect width={180} value={category} onChange={(next) => setCategory(next as FilterKey)}
+          <PortalSelect width={180} value={category} onChange={(next) => setCategory(next as FilterKey)} className="min-h-11 lg:min-h-10"
             options={[{ value: "all", label: "전체 업무" }, ...FILTER_OPTIONS.map((option) => ({ value: option.key, label: option.label }))]} />
         </div>
-      </section>
 
-      {error && <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">운영현황을 불러오지 못했습니다.<br /><span className="text-xs">Supabase SQL Editor에서 최신 operations.sql을 실행해 주세요.</span></div>}
-      {loading && <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-400">운영현황을 불러오는 중…</div>}
+        {error && <div className="border-t border-slate-100"><StateBox kind="error" inside message="운영현황을 불러오지 못했습니다." hint="Supabase SQL Editor에서 최신 operations.sql을 실행해 주세요." onRetry={() => { load(); }} /></div>}
+        {loading && <div className="border-t border-slate-100"><StateBox kind="loading" inside message="운영현황을 불러오는 중입니다…" /></div>}
+
+        {!loading && !error && (
+          <>
+            <div className={`${UI.kpiRow} grid-cols-4 border-t border-slate-100`}>
+              {[["업무", `${filtered.length}건`], ["거래처", `${vendors}곳`], ["기기·물품", `${machineCount}대`], ["활동 인원", `${people}명`]].map(([label, value]) => (
+                <div key={label} className={UI.kpiCell}>
+                  <div className="text-[11px] font-bold text-slate-400">{label}</div>
+                  <div className="mt-1 break-keep text-lg font-black tabular-nums leading-6 text-slate-950 sm:text-2xl lg:text-[28px]">{value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-slate-100">
+              <div className="px-4 pb-2 pt-3"><h3 className={UI.title}>업무 구성</h3></div>
+              <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 border-t border-slate-100 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
+                {FILTER_OPTIONS.map((option) => (
+                  <button key={option.key} type="button" onClick={() => setCategory(category === option.key ? "all" : option.key)} className={`flex min-h-11 items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 ${category === option.key ? "bg-blue-50" : ""}`}>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${option.tone}`}>{option.label}</span>
+                    <b className="text-lg tabular-nums text-slate-950">{filterCount(teamScopedAllCategories, option.key)}</b>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </section>
 
       {!loading && !error && (
         <>
-          <section className="grid grid-cols-2 gap-2 lg:grid-cols-4 2xl:grid-cols-8">
-            {[["업무", `${filtered.length}건`], ["거래처", `${vendors}곳`], ["기기·물품", `${machineCount}대`], ["활동 인원", `${people}명`]].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                <div className="text-[11px] font-bold text-slate-400">{label}</div>
-                <div className="mt-1 text-2xl font-black tabular-nums text-slate-950 lg:text-[28px]">{value}</div>
-              </div>
-            ))}
-          </section>
-
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
-              <h3 className="text-sm font-black text-slate-950 lg:text-[15px]">업무 구성</h3>
-            </div>
-            <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 sm:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
-              {FILTER_OPTIONS.map((option) => (
-                <button key={option.key} type="button" onClick={() => setCategory(category === option.key ? "all" : option.key)} className={`flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50 ${category === option.key ? "bg-blue-50" : ""}`}>
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${option.tone}`}>{option.label}</span>
-                  <b className="text-lg tabular-nums text-slate-950">{filterCount(teamScopedAllCategories, option.key)}</b>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[420px_minmax(0,1fr)]">
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950 lg:text-[15px]">팀별 현황</h3></div>
+          <section className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[420px_minmax(0,1fr)]">
+            <div className={UI.card}>
+              <div className={UI.head}><h3 className={UI.title}>팀별 현황</h3></div>
               <div className="divide-y divide-slate-100">
                 {teamRows.map((row) => (
                   <button key={row.name} type="button" onClick={() => { setTeam(team === row.name ? "전체" : row.name); setMember("전체"); }} className="block w-full px-4 py-3 text-left hover:bg-slate-50">
@@ -287,13 +299,13 @@ export default function OperationsDashboard({ author: _author }: Props) {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3"><h3 className="text-sm font-black text-slate-950 lg:text-[15px]">인원별 현황</h3></div>
+            <div className={UI.card}>
+              <div className={UI.head}><h3 className={UI.title}>인원별 현황</h3></div>
               {peopleRows.length === 0 ? (
-                <div className="p-10 text-center text-sm font-semibold text-slate-400">기록이 없습니다.</div>
+                <StateBox kind="empty" inside message="기록이 없습니다." hint="기간·팀·업무 조건을 바꿔 보세요." />
               ) : (
                 <>
-                  <div className="divide-y divide-slate-100 md:hidden">
+                  <div className="divide-y divide-slate-100 lg:hidden">
                     {peopleRows.map((row) => {
                       const personEvents = filtered.filter((event) => event.author === row.name);
                       return (
@@ -302,14 +314,14 @@ export default function OperationsDashboard({ author: _author }: Props) {
                           <div className="mt-1 text-xs font-semibold text-slate-400">거래처 {row.vendors}곳</div>
                           <div className="mt-2 flex flex-wrap gap-1">
                             {FILTER_OPTIONS.filter((option) => filterCount(personEvents, option.key) > 0).map((option) => (
-                              <span key={option.key} className={`rounded px-2 py-1 text-[10px] font-black ${option.tone}`}>{option.label} {filterCount(personEvents, option.key)}</span>
+                              <span key={option.key} className={`rounded px-2 py-1 text-[11px] font-black ${option.tone}`}>{option.label} {filterCount(personEvents, option.key)}</span>
                             ))}
                           </div>
                         </button>
                       );
                     })}
                   </div>
-                  <div className="hidden overflow-x-auto md:block">
+                  <div className="hidden overflow-x-auto lg:block">
                     <table className="w-full min-w-[1320px] text-sm">
                       <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500"><th className="px-4 py-3 text-left">작성자</th><th>팀</th><th title="업무 기록 수(재전송 묶음 뒤)">전체(건)</th><th title="서로 다른 거래처 수 — 같은 곳을 여러 번 가면 1곳">거래처(곳)</th><th>점검</th><th>AS</th><th>물류</th><th>기타(여분,마감)</th><th>확장성(IT,복합기)</th><th>불만</th><th>미수</th><th>초과조정</th><th>재계약</th><th>담당자 변경</th><th>교체양식</th></tr></thead>
                       <tbody>{peopleRows.map((row) => {

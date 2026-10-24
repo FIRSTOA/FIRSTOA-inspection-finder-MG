@@ -6,24 +6,31 @@
  *  · 위젯 보기(view) 만들기 — 숫자는 kpiCompute·homeUnhandled 의 함수만 부른다(여기서 새로 세지 않음)
  * 조회·화면 없음. 테스트: tests/homeKpiBoard.test.tsx
  */
-import { KPI_BY_ID, KPI_DEFS, RECONTRACT_OVERDUE_DEFINITION, mainKpiIds, type KpiId, type KpiPeriodKey, type KpiSource, type KpiTarget } from "./kpiDefs";
+import { KPI_BY_ID, KPI_DEFS, mainKpiIds, type KpiId, type KpiPeriodKey, type KpiSource, type KpiTarget } from "./kpiDefs";
 import {
-  kpiCount, kpiProgress, kpiRowStatus, KPI_TEAMS, okrKpi, okrTeamRows, okrWeekResult, pct, recontractOverdue, shiftYmd, workinPace,
-  type KpiRange, type KpiRanges, type KpiRowStatus,
+  blogYearTotals, kpiCount, kpiProgress, kpiRowStatus, KPI_TEAMS, okrKpi, okrScopeLabel, okrTeamRows, okrWeekMembers, okrWeekResult, overhaulByPerson, pct,
+  rangeOfPeriod, recontractOverdue, shiftYmd, workinPace,
+  type KpiRange, type KpiRanges, type KpiRowStatus, type OkrScope,
 } from "./kpiCompute";
 import { kpiCellState, sourcesFor, type KpiBundle, type KpiSourceStatus } from "./kpiData";
 import { splitByGroup } from "../homeUnhandled";
-import { OKR_TEAMS, judgmentCounts, normalizeJudgment, type OkrJudgment } from "../okr";
+import { OKR_TEAMS, achievementRate, judgmentCounts, normalizeJudgment, type OkrJudgment } from "../okr";
 import type {
-  KpiOkrView, KpiPersonCell, KpiQuarterGoalView, KpiScope as KpiCellScope, KpiSize, KpiTableRow, KpiTodayItem, KpiUnhandledTotalView,
+  KpiOkrScope, KpiOkrView, KpiPersonCell, KpiQuarterBlock, KpiQuarterGoalView, KpiScope as KpiCellScope, KpiSize, KpiTableRow, KpiTodayItem,
   KpiView, KpiWidgetProps,
 } from "./KpiWidgets.view";
 import type { KpiLayoutItem } from "./HomeKpiGrid.view";
 
 /* ───────────── 위젯 목록 · 기본 배치 ───────────── */
 
-/** 2026-10-24 개편: 6개만(점검·AS 추세·확장성·초과 제안·재계약 지남·미처리 요약 위젯은 삭제 — 달성표 행 펼치기·미처리 합산 카드가 대신) */
-export type HomeWidgetId = "today" | "table" | "K2" | "receptionPanel" | "unhandledPanel" | "K19";
+/**
+ * 2026-10-24 개편: 점검·AS 추세·확장성·초과 제안·재계약 지남·미처리 요약 위젯은 삭제(달성표 행 펼치기가 대신).
+ * 같은 날 오후: "미처리 전체"(receptionPanel) 카드도 삭제 — 숫자가 옆 미처리 칸과 달랐다(접수 27 = 시트 빠진 DB 만 vs 435).
+ * 미처리는 unhandledPanel 하나(머리 합계·팀 탭·종류 칸·물류·재계약 확인 지남)로 합쳤다. 저장된 배치의 receptionPanel 은 읽을 때 버린다.
+ * 같은 날 마무리: "분기 점검 진행"(K2) 위젯도 삭제 — 달성표 K2 행을 펼치면 같은 블록(팀 5줄·기준일 칩)이 나온다. 저장된 배치의 K2 는 읽을 때 버린다.
+ * 최종 4개: 금일 현황(4x1) → KPI 달성표(4x2) → 미처리(4x1, 2x2 가능) → OKR(2x1).
+ */
+export type HomeWidgetId = "today" | "table" | "unhandledPanel" | "K19";
 export type HomeWidgetDef = {
   id: HomeWidgetId;
   title: string;
@@ -40,16 +47,13 @@ export type HomeWidgetDef = {
 const ALL_KPI_IDS = KPI_DEFS.map((d) => d.id);
 const TODAY_KPI_IDS = KPI_DEFS.filter((d) => d.today).map((d) => d.id);
 
-/** 순서 = 기본 배치 순서(2026-10-24): 금일 현황 → KPI 달성표(주인공, 전체 폭 두 줄) → 분기 점검 진행 → 미처리 전체 → 미처리 일정 → OKR */
+/** 순서 = 기본 배치 순서(2026-10-24): 금일 현황 → KPI 달성표(주인공, 전체 폭 두 줄) → 미처리 → OKR */
 export const HOME_WIDGETS: HomeWidgetDef[] = [
   { id: "today", title: "금일 현황", kind: "todayStrip", kpis: TODAY_KPI_IDS, sizes: ["4x1"], description: "오늘 점검·AS·물류·확장성·칭찬 … 한 줄" },
-  { id: "table", title: "KPI 달성표", kind: "kpiTable", kpis: ALL_KPI_IDS, sizes: ["4x2", "4x1"], description: "지표별 달성·순항·부족 · CS 전체 → 팀 → 개인(행 펼치기)" },
-  { id: "K2", title: "분기 점검 진행", kind: "quarterGoal", kpis: ["K2"], sizes: ["2x1", "4x1"], description: "팀별 완료/대상 · 필요 페이스 vs 지금 페이스(팀 인원 기준)" },
-  // 미처리 전체 = 접수 미처리(현황판 같은 계산, 자기 로더) + 물류 미처리 + 재계약 확인 지남(현황판 묶음) — K12·K16 원본을 묶음에서 받는다
-  { id: "receptionPanel", title: "미처리 전체", kind: "unhandledTotal", kpis: ["K12", "K16"], sizes: ["2x1", "1x1"], description: "접수 + 물류 + 재계약 확인 지남 합산 · 접수 종류별" },
-  // 팀장 결정(2026-10-23): 사용자가 요청해 만든 홈 미처리 칸(팀 탭) — 자기 로더로 읽는다. kpis 를 비워 현황판 원본을 더 읽지 않게
-  { id: "unhandledPanel", title: "미처리 일정", kind: "panel", kpis: [], sizes: ["2x2", "4x1"], description: "기존 홈 미처리 칸 — 팀 탭 · 접수·AS / 물류 묶음" },
-  { id: "K19", title: "OKR 달성률", kind: "okr", kpis: ["K19"], sizes: ["1x1", "2x1"], description: "이번 주 파트 판정 · 이번 달 주별 막대 · 미작성 파트" },
+  { id: "table", title: "KPI 달성표", kind: "kpiTable", kpis: ALL_KPI_IDS, sizes: ["4x2", "4x1"], description: "지표별 달성·순항·부족 · CS 전체 → 팀 → 개인(행 펼치기, 분기 점검 진행은 K2 행 안)" },
+  // 미처리(2026-10-24 하나로): 현황판 묶음의 unhandled(K16 = mergeUnhandled) + recontract(K12 = 재계약 확인 지남)를 그린다 — 따로 읽지 않는다
+  { id: "unhandledPanel", title: "미처리", kind: "panel", kpis: ["K16", "K12"], sizes: ["4x1", "2x2"], description: "미처리 합계 · 팀 탭 · 종류 칸(복합기 AS·원격·IT·경영·운영·영업·AS 일정·물류) · 재계약 확인 지남 · 목록" },
+  { id: "K19", title: "OKR 달성률", kind: "okr", kpis: ["K19"], sizes: ["2x1", "1x1"], description: "이번 주 파트 판정 · 이번 달 주별 막대 · 미작성 파트 · 범위 칩(전체/A~D/개인)" },
 ];
 export const HOME_WIDGET_BY_ID: Record<HomeWidgetId, HomeWidgetDef> = Object.fromEntries(HOME_WIDGETS.map((w) => [w.id, w])) as Record<HomeWidgetId, HomeWidgetDef>;
 
@@ -61,7 +65,7 @@ export const HOME_KPI_LAYOUT_KEY = "home_kpi_layout_v1";
 export const HOME_KPI_LAYOUT_VERSION = 1;
 
 /**
- * 저장 글 → 배치. 모양이 틀리거나 버전이 다르면 기본 배치. 모르는 id(2026-10-24 에 없앤 K1·K3·exp·K10·K12·unhandled 포함)·중복은 버리고,
+ * 저장 글 → 배치. 모양이 틀리거나 버전이 다르면 기본 배치. 모르는 id(2026-10-24 에 없앤 K1·K3·exp·K10·K12·unhandled·receptionPanel·K2 포함)·중복은 버리고,
  * 허용 안 된 크기는 그 위젯 첫 크기, 저장 뒤에 새로 생긴 위젯은 끝에 붙인다(설계안 4-5 "모르는 id 는 버리고 새 위젯은 끝에").
  */
 export function parseHomeLayout(raw: string | null | undefined): { items: KpiLayoutItem[]; restored: boolean } {
@@ -119,7 +123,7 @@ export function sourcesForLayout(layout: KpiLayoutItem[]): Set<KpiSource> {
  * 지금 홈은 60초마다 13개 조회였다(설계안 7절). 점검·AS 오늘 숫자는 최대 5분 늦을 수 있다.
  * IT 퀴즈·실습 기록(2026-10-24)은 기간 안 행만 한 번 — 가벼운 쪽.
  */
-export const FAST_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>(["unhandled", "receptionWeek", "keyman", "office", "praise", "customerPraise", "overage", "bulman", "itQuiz", "itPractice"]);
+export const FAST_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>(["unhandled", "receptionWeek", "keyman", "praise", "customerPraise", "overage", "bulman", "itQuiz", "itPractice"]);
 export const SLOW_REFRESH_MS = 5 * 60_000;
 export const FAST_REFRESH_MS = 60_000;
 
@@ -135,11 +139,22 @@ export function splitSources(want: Set<KpiSource>, full: boolean): Set<KpiSource
  */
 export const HEAVY_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>(["field", "expansion", "events", "workin", "visits", "recontract"]);
 
-/** 첫 로드 두 단계: [가벼운 원본(+명단) 먼저, 무거운 원본 뒤에]. 숫자는 같은 loadKpiBundle·같은 함수 — 순서만 나눈다 */
-export function firstLoadPhases(sources: Set<KpiSource>): [Set<KpiSource>, Set<KpiSource>] {
-  const light = new Set([...sources].filter((s) => !HEAVY_SOURCES.has(s)));
+/**
+ * 바깥(구글 시트·엣지 함수)을 거치는 느린 원본(2026-10-24 실측): 블로그 시트 CSV 1.25MB 1,033ms(첫 단계 전체 1,241ms 중 이것 하나),
+ * 미처리 = 접수 시트 엣지 함수 reception-sheet-open(24시간 760회 평균 1,206ms · p90 2,710ms, 캐시 빗나가면 1.9초), 오버홀 시트.
+ * 첫 숫자를 이것들이 붙잡지 않게 첫 단계에서 뺀다.
+ */
+export const LATE_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>(["blog", "unhandled", "overhaul"]);
+
+/**
+ * 첫 로드 세 묶음: [첫 숫자(Supabase 한두 번 조회 원본 + 명단), 바깥 느린 원본, 무거운 원본].
+ * 첫 묶음을 받아 바로 그리고, 나머지 둘은 동시에 읽어 오는 대로 덮는다(HomeKpiBoard). 숫자는 같은 loadKpiBundle·같은 함수 — 순서만 나눈다.
+ */
+export function firstLoadPhases(sources: Set<KpiSource>): [Set<KpiSource>, Set<KpiSource>, Set<KpiSource>] {
+  const first = new Set([...sources].filter((s) => !HEAVY_SOURCES.has(s) && !LATE_SOURCES.has(s)));
+  const late = new Set([...sources].filter((s) => LATE_SOURCES.has(s)));
   const heavy = new Set([...sources].filter((s) => HEAVY_SOURCES.has(s)));
-  return [light, heavy];
+  return [first, late, heavy];
 }
 
 /**
@@ -277,25 +292,31 @@ export function quarterGoalView(b: KpiBundle, basis: "end" | "early" = "end"): O
 /**
  * ⑤ OKR — 주 단위(기본) / 이번 달. 셈법은 achievementRate·judgmentCounts 그대로, 입력 기록만 주간으로.
  * 판정이 하나도 없는 파트는 missingTeams("이번 주 OKR 미작성 n팀") — 0% 로 보이지 않는다(pct null).
- * weeks = 이번 주가 든 달의 1~n주차 달성률(아직 판정 없는 주는 null).
+ * weeks = 이번 주가 든 달의 1~n주차 달성률(아직 판정 없는 주는 null) — 고른 범위(팀·개인)와 같은 범위로 센다.
+ * scope(2026-10-24 사용자 "어디의 달성률인지 + 팀/개인 필터"): 이번 주 = okrWeekResult(…, scope).
+ *   이번 달 = 파트 종합 행만 있어(개인 행 없음) 팀 칩만 쓴다 — 개인 고르기는 비운다(members [], 칩 자체는 남김).
+ * 돌려주는 scope 에는 onScope 가 없다(순수·캐시용) — 컨테이너(HomeKpiBoard)가 붙인다.
  */
-export function okrView(b: KpiBundle, period: "week" | "month" = "week"): Omit<KpiOkrView, "onPeriod"> | null {
+export type OkrViewModel = Omit<KpiOkrView, "onPeriod" | "scope"> & { scope: Omit<KpiOkrScope, "onScope"> };
+export function okrView(b: KpiBundle, period: "week" | "month" = "week", scope: OkrScope = { team: "ALL" }): OkrViewModel | null {
   const okr = b.facts.okr;
   if (!okr) return null;
   let pctValue: number | null;
   let counts: Record<OkrJudgment, number>;
   let missingTeams: string[];
+  const w = okr.week;
+  const sc: OkrScope = period === "month" ? { team: scope.team } : scope;
   if (period === "week") {
-    if (!okr.week) return null;
-    const r = okrWeekResult(okr.week);
+    if (!w) return null;
+    const r = okrWeekResult(w, w.id, sc);
     pctValue = r.pct; counts = r.counts; missingTeams = r.missingTeams;
   } else {
-    const per = OKR_TEAMS.map((team) => ({ team, rows: okrTeamRows(okr.cycle, okr.quarter, okr.reports, team) }));
-    pctValue = okrKpi(okr, b.ranges).value;
+    const teams = sc.team === "ALL" ? OKR_TEAMS : OKR_TEAMS.filter((t) => t === sc.team);
+    const per = teams.map((team) => ({ team, rows: okrTeamRows(okr.cycle, okr.quarter, okr.reports, team) }));
+    pctValue = sc.team === "ALL" ? okrKpi(okr, b.ranges).value : achievementRate(per.flatMap((p) => p.rows));
     counts = judgmentCounts(per.flatMap((p) => p.rows));
     missingTeams = per.filter((p) => !p.rows.some((x) => normalizeJudgment(x.judgment))).map((p) => p.team);
   }
-  const w = okr.week;
   return {
     kind: "okr", period, pct: pctValue,
     counts: [
@@ -305,46 +326,14 @@ export function okrView(b: KpiBundle, period: "week" | "month" = "week"): Omit<K
       { label: "미착수", value: counts["미착수"], tone: counts["미착수"] ? "bad" : "idle" },
       ...(counts["해당없음"] ? [{ label: "해당없음", value: counts["해당없음"], tone: "idle" }] : []),
     ],
-    weeks: w ? w.weeks.map((x) => ({ label: x.label, pct: okrWeekResult(w, x.id).pct, current: x.id === w.id })) : [],
+    weeks: w ? w.weeks.map((x) => ({ label: x.label, pct: okrWeekResult(w, x.id, sc).pct, current: x.id === w.id })) : [],
     missingTeams,
+    scope: { team: sc.team, ...(sc.member ? { member: sc.member } : {}), members: period === "week" && w ? okrWeekMembers(w, sc.team) : [] },
+    scopeLabel: okrScopeLabel(sc, period),
   };
 }
 
-/**
- * ④ 미처리 전체 — 큰 숫자 = 접수 미처리 + 물류 미처리 + 재계약 확인 지남(세 숫자 합, 새로 세지 않음).
- *  접수 = 서비스접수 현황판 계산(receptionBoardData.summarizeForHome, HomeReceptionPanel 이 읽음)
- *  물류 = 홈 미처리 일정 칸과 같은 함수(homeUnhandled.splitByGroup(mergeUnhandled …).logistics)
- *  재계약 = kpiCompute.recontractOverdue
- */
-export const UNHANDLED_TOTAL_DEFS: Array<{ label: string; text: string }> = [
-  { label: "접수", text: "서비스접수 미처리 현황판과 같은 계산 — 열린 접수 6종(일정이 완료된 복합기 AS 접수는 뺌)." },
-  { label: "물류", text: "일정(as_tickets) 중 물류 종류 · 날짜 지남 · 완료 아님 · 180일 안 — 홈 '미처리 일정' 칸 물류 묶음과 같은 함수." },
-  { label: "재계약 확인 지남", text: RECONTRACT_OVERDUE_DEFINITION },
-];
-/**
- * recontract null = 재계약 원본이 아직 안 옴(무거운 원본, 2단계) 또는 실패 — 합계는 접수+물류만, 칸은 "—"
- * (recontractState: loading = "재계약 확인 중", error = "재계약 제외"). 0 으로 더하거나 그리지 않는다.
- */
-export function unhandledTotalView(o: {
-  reception: number; logistics: number; recontract: number | null; recontractState?: "loading" | "error";
-  breakdown: Array<{ label: string; value: number; tone?: string }>;
-  oldest?: string; weekDelta?: number | null;
-}): KpiUnhandledTotalView {
-  const tone = (n: number) => (n > 0 ? "bad" : "ok");
-  return {
-    kind: "unhandledTotal",
-    total: o.reception + o.logistics + (o.recontract ?? 0),
-    parts: [
-      { label: "접수", value: o.reception, tone: tone(o.reception) },
-      { label: "물류", value: o.logistics, tone: tone(o.logistics) },
-      o.recontract === null
-        ? { label: `재계약 확인 지남(${o.recontractState === "error" ? "재계약 제외" : "재계약 확인 중"})`, value: null }
-        : { label: "재계약 확인 지남", value: o.recontract, tone: tone(o.recontract) },
-    ],
-    breakdown: o.breakdown, oldest: o.oldest, weekDelta: o.weekDelta ?? null, defs: UNHANDLED_TOTAL_DEFS,
-  };
-}
-/** 묶음에서 물류 미처리·재계약 확인 지남. 원본을 아직 못 읽었으면 그 칸 null(0 으로 그리지 않는다) */
+/** 묶음에서 물류 미처리(홈 미처리 칸 물류 칸과 같은 splitByGroup)·재계약 확인 지남. 원본을 아직 못 읽었으면 그 칸 null(0 으로 그리지 않는다) */
 export function unhandledParts(b: KpiBundle | null): { logistics: number | null; recontract: number | null } {
   const ok = (s: KpiSource) => b?.sources[s]?.status === "ok" || (b?.sources[s]?.status === "error" && b.facts[s as keyof typeof b.facts] !== undefined);
   return {
@@ -392,15 +381,27 @@ function cellStateOf(st: ReturnType<typeof kpiCellState>): { cellState: KpiTable
  * cells = CS 전체 + A~E(없는 팀은 값 null·none), teamBars = 팀별 막대(펼치기 ⓐ), people = 개인 칩(펼치기 ⓑ — 팀 순서·실적 내림차순).
  * 목표 없는 지표는 trend(지난 기간 대비) — 전체 지표 보기에서 실적만 크게.
  */
-export function tableRows(b: KpiBundle, ctx: ModelCtx): Array<Omit<KpiTableRow, "onOpen">> {
+/** 달성표 행(순수·캐시용) — K2 행의 분기 블록은 onBasis 없이(컨테이너가 붙인다) */
+export type TableRowModel = Omit<KpiTableRow, "onOpen" | "quarter"> & { quarter?: Omit<KpiQuarterBlock, "onBasis"> };
+/** 행 기준 글 + 고른 기간과 실제 기간이 다르면 그 기간 칩(예: 이번 주를 골랐는데 K10 은 "이번 달") */
+function targetLabelOf(id: KpiId, t: KpiTarget | undefined, board: KpiPeriodKey): string {
+  const hint = targetHint(id, t);
+  if (effectivePeriod(id, board) === board) return hint;
+  const chip = periodChip(id, board);
+  return hint ? `${hint} · ${chip}` : chip;
+}
+
+export function tableRows(b: KpiBundle, ctx: ModelCtx, basis: "end" | "early" = "end"): TableRowModel[] {
   const main = new Set(mainKpiIds(b.settings.targets));
+  // 개인 칩 보조 글자 — 블로그 올해 누계(K20)·오버홀 수리 점수(K33). 원본이 없으면 붙이지 않는다
+  const blogTotals = b.facts.blog ? blogYearTotals(b.facts.blog, b.today) : null;
   return KPI_DEFS.map((def) => {
     const st = kpiCellState(def.id, b);
     const p = effectivePeriod(def.id, ctx.period) ?? "month";
     const open = !isPeriodKey(def.period) && !def.periods.length; // 열린 건·7일 — 기간 경과 판정 없음
     const pace = open ? null : paceOf(b.ranges, p);
     const base = {
-      id: def.id, name: def.name, unit: def.unit, targetLabel: targetHint(def.id, b.settings.targets[def.id]),
+      id: def.id, name: def.name, unit: def.unit, targetLabel: targetLabelOf(def.id, b.settings.targets[def.id], ctx.period),
       basis: def.basis, pace: pace === null ? null : pace / 100, main: main.has(def.id), ...cellStateOf(st),
     };
     if (st.status !== "ok") {
@@ -429,24 +430,23 @@ export function tableRows(b: KpiBundle, ctx: ModelCtx): Array<Omit<KpiTableRow, 
     const people: KpiPersonCell[] = rows.filter((r) => r.scope === "person")
       .sort((a, z) => order(a.team) - order(z.team) || (z.actual ?? 0) - (a.actual ?? 0) || a.label.localeCompare(z.label, "ko"))
       .map((r) => ({ name: r.label, team: teamLabelOf(r.team), value: r.actual ?? 0, target: r.target, done: statusOf(r.actual, r.target) === "done" }));
+    if (def.id === "K20" && blogTotals) for (const person of people) person.total = blogTotals.get(person.name) ?? 0;
+    if (def.id === "K33" && b.facts.overhaul) {
+      const by = new Map(overhaulByPerson(b.facts.overhaul, b.facts.roster, ctx.teamOf, rangeOfPeriod(b.ranges, p)).byPerson.map((x) => [x.name, x]));
+      for (const person of people) { const o = by.get(person.name); if (o && o.repairPoints) person.sub = `수리 ${o.repairPoints}점`; }
+    }
+    // 분기 점검 진행(K2) — 위젯을 없애고 행 펼침 안으로(2026-10-24). 숫자는 quarterGoalView 그대로
+    let quarter: TableRowModel["quarter"];
+    if (def.id === "K2") {
+      const q = quarterGoalView(b, basis);
+      if (q) { const { kind: _kind, ...rest } = q; void _kind; quarter = rest; } // 위젯 kind 는 행 블록에 없다
+    }
     let trend: KpiTableRow["trend"];
     if (status === "none" && all) {
       const pr = open ? null : prevRangeOf(b.ranges, p);
       const prev = pr ? kpiCount(def.id, b.facts, {}, pr.range, { today: b.ranges.today, teamOf: ctx.teamOf })?.n ?? null : null;
       trend = { delta: prev === null || all.actual === null ? null : all.actual - prev, label: pr ? `${pr.label} 대비` : "" };
     }
-    return { ...base, status, cells, teamBars, people, ...(trend ? { trend } : {}) };
+    return { ...base, status, cells, teamBars, people, ...(trend ? { trend } : {}), ...(quarter ? { quarter } : {}) };
   });
-}
-
-/* ───────────── 내 이번 주(운영 블록 절약 효과) ───────────── */
-
-/** "이번 주 내 점검 n대 · AS n건" 과 전체·이번 주 양식 장수 — 표 원본이 없으면 null */
-export function weekSummary(b: KpiBundle | null, author: string, teamOf: (a: string) => string): { mine: { inspection: number; as: number } | null; all: { inspection: number; as: number }; weekRecords: number } | null {
-  if (!b?.facts.field) return null;
-  const c = { today: b.ranges.today, teamOf };
-  const w = b.ranges.week;
-  const n = (id: KpiId, s: { author?: string }) => kpiCount(id, b.facts, s, w, c)?.n ?? 0;
-  const weekRecords = b.facts.field.filter((r) => !r.hidden && r.day >= w.from && r.day <= w.to).length;
-  return { mine: author ? { inspection: n("K1", { author }), as: n("K3", { author }) } : null, all: { inspection: n("K1", {}), as: n("K3", {}) }, weekRecords };
 }

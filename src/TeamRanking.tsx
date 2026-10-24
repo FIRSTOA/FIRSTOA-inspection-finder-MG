@@ -11,6 +11,8 @@ import { useMembers } from "./authors";
 import { kstDate, weekRange } from "./visits";
 import { vendorMatchKey } from "./ids";
 import { countableEvents, EXPANSION_BASIS_TEXT, FIELD_BASIS_TEXT } from "./workCount";
+import { UI } from "./ui/card";
+import StateBox from "./ui/StateBox";
 
 type Period = "week" | "month" | "quarter" | "year";
 type Metric = { key: string; label: string; unit: string; count: (evs: ActivityEvent[]) => number };
@@ -47,16 +49,18 @@ export default function TeamRanking({ author }: { author: string }) {
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
   const [metric, setMetric] = useState("inspection");
   const [person, setPerson] = useState(author);
+  const [loadFailed, setLoadFailed] = useState(false); // 조회 실패 표시용(숫자 계산과 무관) — 실패하면 빈 목록 대신 에러 안내
+  const [retry, setRetry] = useState(0);
   const members = useMembers();
   const range = rangeOf(period);
 
   useEffect(() => {
-    let alive = true; setEvents(null);
+    let alive = true; setEvents(null); setLoadFailed(false);
     // 확장성은 pc_expansion·mfp_expansion(시트 포함) 원본 — 팀 현황·조회 탭과 같은 함수(2026-10-22)
-    void loadWorkEvents(range.start, range.end).then((rows) => { if (alive) setEvents(countableEvents(rows)); }).catch(() => { if (alive) setEvents([]); });
+    void loadWorkEvents(range.start, range.end).then((rows) => { if (alive) setEvents(countableEvents(rows)); }).catch(() => { if (alive) { setEvents([]); setLoadFailed(true); } });
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
+  }, [period, retry]);
 
   // 대상 인원 — 명단(CS A~E 팀)에서. 기록이 0이어도 순위표에 나온다
   const people = useMemo(() => {
@@ -89,64 +93,68 @@ export default function TeamRanking({ author }: { author: string }) {
     return { strong: rows.filter((r) => r.ratio >= 1.2).sort((x, y) => y.ratio - x.ratio).slice(0, 3), weak: rows.filter((r) => r.ratio < 0.8).sort((x, y) => x.ratio - y.ratio).slice(0, 3), rows };
   }, [me, avg, table]);
 
-  const chip = (on: boolean) => `rounded-full px-3 py-1 text-[12px] font-black ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
   const medal = (i: number) => (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`);
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="flex rounded-full bg-slate-100 p-0.5">{(["week", "month", "quarter", "year"] as Period[]).map((p) => <button key={p} type="button" onClick={() => setPeriod(p)} className={`rounded-full px-3 py-1 text-[12px] font-black ${period === p ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>{rangeOf(p).label}</button>)}</span>
-        <span className="flex rounded-full bg-slate-100 p-0.5">{["전체", ...OPERATIONS_TEAMS].map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`rounded-full px-2.5 py-1 text-[12px] font-black ${team === t ? "bg-slate-900 text-white" : "text-slate-500"}`}>{t === "전체" ? "전체" : `${t}팀`}</button>)}</span>
-        <span className="ml-auto text-[11px] font-bold text-slate-400">{range.start} ~ {range.end} · 활동 기록 기준(점검·AS 는 점검·AS 표, 확장성은 확장성 표) · 취소 제외</span>
-      </div>
-
-      {/* 항목별 순위 */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <b className="mr-1 text-[14px] text-slate-900">순위표</b>
-          {METRICS.map((mt) => <button key={mt.key} type="button" onClick={() => setMetric(mt.key)} className={chip(metric === mt.key)}>{mt.label}</button>)}
+    <div className={UI.gap}>
+      {/* 카드 1장 — 기간·팀 머리 / 항목별 순위 / 한 사람 강점·보완(구분선으로 나눔, 2026-10-24) */}
+      <section className={UI.card}>
+        <div className={UI.head}>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className={UI.seg}>{(["week", "month", "quarter", "year"] as Period[]).map((p) => <button key={p} type="button" onClick={() => setPeriod(p)} className={`${UI.segBtn(period === p)} px-3.5`}>{rangeOf(p).label}</button>)}</span>
+            <span className="flex flex-wrap items-center gap-1.5">{["전체", ...OPERATIONS_TEAMS].map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={UI.chip(team === t)}>{t === "전체" ? "전체" : `${t}팀`}</button>)}</span>
+          </div>
         </div>
-        {events === null ? <div className="py-10 text-center text-[12px] font-bold text-slate-400">불러오는 중…</div> : (
-          <ol className="mt-3 space-y-1">
-            {ranked.map((r, i) => (
-              <li key={r.name}>
-                <button type="button" onClick={() => setPerson(r.name)} className={`flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left ${person === r.name ? "bg-blue-50" : "hover:bg-slate-50"}`}>
-                  <span className="w-7 shrink-0 text-center text-[13px] font-black text-slate-500">{medal(i)}</span>
-                  <span className="w-20 shrink-0 truncate text-[13px] font-black text-slate-900">{r.name}{r.name === author ? " (나)" : ""}</span>
-                  <span className="w-8 shrink-0 text-[11px] font-bold text-slate-400">{r.team}팀</span>
-                  <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400" style={{ width: `${(r.values[metric] / max) * 100}%` }} /></span>
-                  <span className="w-16 shrink-0 text-right font-mono text-[13px] font-black tabular-nums text-slate-900">{r.values[metric]}{cur.unit}</span>
-                </button>
-              </li>
-            ))}
-            {!ranked.length && <li className="py-6 text-center text-[12px] font-bold text-slate-400">대상 인원이 없습니다</li>}
-          </ol>
-        )}
-        <div className="mt-2 text-[11px] font-semibold text-slate-400">팀 평균 {avg[metric]?.toFixed(1)}{cur.unit} · 이름을 누르면 아래에 그 사람의 강점·보완점</div>
-      </section>
+        <p className="border-b border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-400 lg:px-5">{range.start} ~ {range.end} · 활동 기록 기준(점검·AS 는 점검·AS 표, 확장성은 확장성 표) · 취소 제외</p>
 
-      {/* 한 사람 — 잘한 것·부족한 것 */}
-      {insight && me && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-baseline gap-2"><b className="text-[14px] text-slate-900">{me.name}</b><span className="text-[11px] font-bold text-slate-400">{me.team}팀 · {range.label} · 비교 대상 {table.length}명 평균</span></div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl bg-emerald-50 p-3">
-              <div className="text-[12px] font-black text-emerald-800">뛰어난 부분</div>
-              {insight.strong.length ? insight.strong.map((r) => <div key={r.mt.key} className="mt-1 text-[12.5px] font-bold text-emerald-900">{r.mt.label} {r.v}{r.mt.unit} — 평균의 {Math.round(r.ratio * 100)}% · {r.rank}위</div>) : <div className="mt-1 text-[12px] font-semibold text-emerald-700">평균보다 20% 이상 높은 항목이 없습니다</div>}
-            </div>
-            <div className="rounded-xl bg-amber-50 p-3">
-              <div className="text-[12px] font-black text-amber-800">보완할 부분</div>
-              {insight.weak.length ? insight.weak.map((r) => <div key={r.mt.key} className="mt-1 text-[12.5px] font-bold text-amber-900">{r.mt.label} {r.v}{r.mt.unit} — 평균 {r.a.toFixed(1)}{r.mt.unit}의 {Math.round(r.ratio * 100)}% · {r.rank}위</div>) : <div className="mt-1 text-[12px] font-semibold text-amber-700">평균보다 20% 이상 낮은 항목이 없습니다</div>}
-            </div>
+        {/* 항목별 순위 */}
+        <div className="p-4 lg:p-5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <h3 className={`${UI.title} mr-1`}>순위표</h3>
+            {METRICS.map((mt) => <button key={mt.key} type="button" onClick={() => setMetric(mt.key)} className={UI.chip(metric === mt.key)}>{mt.label}</button>)}
           </div>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead><tr className="text-left text-[11px] font-black text-slate-400"><th className="py-1">항목</th><th className="py-1 text-right">나</th><th className="py-1 text-right">평균</th><th className="py-1 text-right">순위</th></tr></thead>
-              <tbody>{insight.rows.map((r) => <tr key={r.mt.key} className="border-t border-slate-100"><td className="py-1 font-bold text-slate-700">{r.mt.label}</td><td className={`py-1 text-right font-mono font-black ${r.ratio >= 1.2 ? "text-emerald-700" : r.ratio < 0.8 ? "text-amber-700" : "text-slate-800"}`}>{r.v}{r.mt.unit}</td><td className="py-1 text-right font-mono text-slate-500">{r.a.toFixed(1)}</td><td className="py-1 text-right font-mono text-slate-500">{r.rank}/{table.length}</td></tr>)}</tbody>
-            </table>
+          {events === null ? <StateBox kind="loading" inside message="순위표를 불러오는 중입니다…" /> : loadFailed ? <StateBox kind="error" inside message="순위표를 불러오지 못했습니다." hint="잠시 후 다시 시도해 주세요." onRetry={() => setRetry((n) => n + 1)} /> : (
+            <ol className="mt-3 space-y-1">
+              {ranked.map((r, i) => (
+                <li key={r.name}>
+                  <button type="button" onClick={() => setPerson(r.name)} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left ${person === r.name ? "bg-blue-50" : "hover:bg-slate-50"}`}>
+                    <span className="w-7 shrink-0 text-center text-[13px] font-black text-slate-500">{medal(i)}</span>
+                    <span className="w-20 shrink-0 truncate text-[13px] font-black text-slate-900">{r.name}{r.name === author ? " (나)" : ""}</span>
+                    <span className="w-8 shrink-0 text-[11px] font-bold text-slate-400">{r.team}팀</span>
+                    <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400" style={{ width: `${(r.values[metric] / max) * 100}%` }} /></span>
+                    <span className="w-16 shrink-0 text-right font-mono text-[13px] font-black tabular-nums text-slate-900">{r.values[metric]}{cur.unit}</span>
+                  </button>
+                </li>
+              ))}
+              {!ranked.length && <li><StateBox kind="empty" inside message="대상 인원이 없습니다." hint="팀을 바꾸거나 기간을 늘려 보세요." /></li>}
+            </ol>
+          )}
+          <div className="mt-2 text-[11px] font-semibold text-slate-400">팀 평균 {avg[metric]?.toFixed(1)}{cur.unit} · 이름을 누르면 아래에 그 사람의 강점·보완점</div>
+        </div>
+
+        {/* 한 사람 — 잘한 것·부족한 것 (순위표 아래 구분선 구역) */}
+        {insight && me && (
+          <div className={UI.section}>
+            <div className="flex flex-wrap items-baseline gap-2"><h3 className={UI.title}>{me.name}</h3><span className="text-[11px] font-bold text-slate-400">{me.team}팀 · {range.label} · 비교 대상 {table.length}명 평균</span></div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="border-l-4 border-emerald-400 pl-3">
+                <div className="text-[12px] font-black text-emerald-800">뛰어난 부분</div>
+                {insight.strong.length ? insight.strong.map((r) => <div key={r.mt.key} className="mt-1 text-[12.5px] font-bold text-emerald-900">{r.mt.label} {r.v}{r.mt.unit} — 평균의 {Math.round(r.ratio * 100)}% · {r.rank}위</div>) : <div className="mt-1 text-[12px] font-semibold text-emerald-700">평균보다 20% 이상 높은 항목이 없습니다</div>}
+              </div>
+              <div className="border-l-4 border-amber-400 pl-3">
+                <div className="text-[12px] font-black text-amber-800">보완할 부분</div>
+                {insight.weak.length ? insight.weak.map((r) => <div key={r.mt.key} className="mt-1 text-[12.5px] font-bold text-amber-900">{r.mt.label} {r.v}{r.mt.unit} — 평균 {r.a.toFixed(1)}{r.mt.unit}의 {Math.round(r.ratio * 100)}% · {r.rank}위</div>) : <div className="mt-1 text-[12px] font-semibold text-amber-700">평균보다 20% 이상 낮은 항목이 없습니다</div>}
+              </div>
+            </div>
+            <div className="mt-3">
+              <table className="w-full text-[12px]">
+                <thead><tr className="text-left text-[11px] font-black text-slate-400"><th className="py-1">항목</th><th className="py-1 text-right">나</th><th className="py-1 text-right">평균</th><th className="py-1 text-right">순위</th></tr></thead>
+                <tbody>{insight.rows.map((r) => <tr key={r.mt.key} className="border-t border-slate-100"><td className="py-1.5 font-bold text-slate-700">{r.mt.label}</td><td className={`py-1.5 text-right font-mono font-black ${r.ratio >= 1.2 ? "text-emerald-700" : r.ratio < 0.8 ? "text-amber-700" : "text-slate-800"}`}>{r.v}{r.mt.unit}</td><td className="py-1.5 text-right font-mono text-slate-500">{r.a.toFixed(1)}</td><td className="py-1.5 text-right font-mono text-slate-500">{r.rank}/{table.length}</td></tr>)}</tbody>
+              </table>
+            </div>
+            <div className="mt-2 text-[11px] font-semibold text-slate-400">숫자는 FIELD 보고·확장성·불만·미수 등 활동 기록을 센 것입니다. 같은 업체를 10분 안에 다시 보낸 것은 1건. 점검·AS 기준: 점검·AS 표, {FIELD_BASIS_TEXT}. 확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT}. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
           </div>
-          <div className="mt-2 text-[10.5px] font-semibold text-slate-400">숫자는 FIELD 보고·확장성·불만·미수 등 활동 기록을 센 것입니다. 같은 업체를 10분 안에 다시 보낸 것은 1건. 점검·AS 기준: 점검·AS 표, {FIELD_BASIS_TEXT}. 확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT}. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
-        </section>
-      )}
+        )}
+      </section>
     </div>
   );
 }

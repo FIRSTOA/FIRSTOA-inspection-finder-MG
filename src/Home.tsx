@@ -4,7 +4,6 @@ import AgentTeamCard from "./AgentTeamCard";
 import HomeKpiBoard from "./HomeKpiBoard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight,
   ChevronDown,
   Clock3,
   Bot,
@@ -13,7 +12,6 @@ import {
   Check,
   Server,
   ShieldCheck,
-  Timer,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -23,15 +21,16 @@ import { AGENT_DEPTS } from "./agentTeam";
 import { AGENT_WORK_LOG } from "./agentWorkLog";
 import { countRows, selectRows } from "./supabase";
 import { kstDate } from "./visits";
-import { teamForAuthor } from "./operations";
 import { useScreenActive } from "./screenActive";
-import { weekSummary, type HomeKpiState } from "./kpi/homeKpiModel";
+import { type HomeKpiState } from "./kpi/homeKpiModel";
+import { bizDays, kpiRanges } from "./kpi/kpiCompute";
 
 // 홈 = CS KPI 현황판 (2026-10-23 개편, 2026-10-24 전면 개편 docs/tasks/home-redesign-2026-10-24.md — KPI 달성표가 주인공)
-// ① 한 줄 머리: "10월 24일(토) · 43주차 · 4분기 · 갱신 n분 전" + [편집](관제 덱 큰 시계·인사말·알약은 없앴다 — 1초 시계 없음, 60초 시계만)
-// ② CS KPI 현황판(HomeKpiBoard): 금일 현황 → KPI 달성표 → 분기 점검 진행(팀별) → 미처리 전체 → 미처리 일정 → OKR(주)
+// ① 머리 띠(2026-10-24 마무리, 사용자 "상단 한 줄 너무 밋밋, 주차 빼"): 왼쪽 큰 날짜 "10월 24일 토요일" + 작은 연도,
+//    가운데 칩 "4분기 · 말일까지 n영업일"(kpiCompute.bizDays), 오른쪽 "갱신 n분 전" + [편집]. 장식은 얇은 그라데이션 선 하나. 60초 시계(1초 금지)
+// ② CS KPI 현황판(HomeKpiBoard): 금일 현황 → KPI 달성표(분기 점검 진행은 K2 행 안) → 미처리 → OKR(주·범위 칩)
 // ③ 운영·시스템(접을 수 있음, 기본 펼침): DB·시트 상태·최근 배포·AI 에이전트 팀 알약, 비용, 실시간 전송 현황판,
-//    AI 에이전트 팀 카드, 업데이트 목록, 맨 아래 절약 효과(IMPACT) — 접혀 있으면 그리지 않으므로 전송 현황판 15초 폴링·누적 건수 조회도 멈춘다
+//    AI 에이전트 팀 카드, 업데이트 목록 — 접혀 있으면 그리지 않으므로 전송 현황판 15초 폴링도 멈춘다. 절약 효과(IMPACT)는 2026-10-24 삭제
 // ④ 피드백 보드 → 시스템 푸터
 // 예전 지표 판(오늘 점검·이번 주 방문·키맨 7일·7일 추이·팀별 점검·분기 진행률)과 미처리 판은 KPI 위젯으로 옮겼다(같은 함수).
 // 데이터는 전부 anon 읽기 가능한 테이블만. 조회가 실패해도 화면은 뜬다(경고 한 줄).
@@ -41,28 +40,20 @@ type Screen =
   | "okr" | "weekly" | "growth" | "itHistory" | "counterSms" | "selfdev" | "copierNotes" | "operations"
   | "lookup" | "contactChanges";
 
-// 절약 근거 — 방문 1건당 반복 업무 약 10분(양식 5~8→1~2, 전송 3~5→1~2, 보고 5~10→자동)
-const MINUTES_SAVED_PER_RECORD = 10;
-const savings = [
-  { task: "양식 작성", before: "5~8분", after: "1~2분", how: "카톡 원본 붙여넣기 → 자동 변환" },
-  { task: "업무방 전송", before: "3~5분", after: "1~2분", how: "업무 종류 한 번 → 지정 방에 내용·사진" },
-  { task: "업무 보고", before: "5~10분", after: "자동", how: "FIELD 기록이 일일·주간 실적으로" },
-];
-
 // ── 운영 상태(관제 덱·운영 접힘) ─────────────────────────────────────────────
-// 늘 읽는 것: 재직 인원(=DB 응답 시간)·시트 동기화 큐(접힘 머리 점). 접힘을 펼쳤을 때만: 누적 기록 수(절약 효과)
+// 늘 읽는 것: 재직 인원(=DB 응답 시간)·시트 동기화 큐(접힘 머리 점). (누적 기록 수 조회는 절약 효과와 함께 2026-10-24 삭제)
 type Telemetry = {
   fetchedAt: number; latencyMs: number;
   sheetPending: number; sheetFailed: number;
   /** 가장 최근 실패 작업이 며칠 전인지(7일 창 안, 없으면 null) — 홈 칩 "실패 n · n일 전" */
   sheetFailedDaysAgo: number | null;
-  totalRecords: number | null; activeMembers: number;
+  activeMembers: number;
   errors: string[];
 };
 
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return kstDate(d); };
 
-async function loadTelemetry(withTotals: boolean): Promise<Telemetry> {
+async function loadTelemetry(): Promise<Telemetry> {
   const d7 = daysAgo(6);
   const errors: string[] = [];
   const t0 = performance.now();
@@ -71,11 +62,7 @@ async function loadTelemetry(withTotals: boolean): Promise<Telemetry> {
   const safe = async <T,>(label: string, p: Promise<T>, fallback: T): Promise<T> => {
     try { return await p; } catch (e) { errors.push(`${label} ${(e as Error).message}`); return fallback; }
   };
-  const [sheetJobs, totalInsp, totalAs] = await Promise.all([
-    safe("시트큐", selectRows<{ sheet_status: string | null; created_at: string | null }>("field_sheet_sync_jobs", `select=sheet_status,created_at&created_at=gte.${d7}&order=id.desc&limit=300`), []),
-    withTotals ? safe("점검누적", countRows("jeomgeom"), null) : Promise.resolve(null),
-    withTotals ? safe("AS누적", countRows("as_records"), null) : Promise.resolve(null),
-  ]);
+  const sheetJobs = await safe("시트큐", selectRows<{ sheet_status: string | null; created_at: string | null }>("field_sheet_sync_jobs", `select=sheet_status,created_at&created_at=gte.${d7}&order=id.desc&limit=300`), []);
   const statusOf = (s: string | null) => (s || "").toLowerCase();
   const failed = sheetJobs.filter((j) => ["failed", "error"].includes(statusOf(j.sheet_status)));
   const lastFailed = failed.map((j) => String(j.created_at || "")).filter(Boolean).sort().pop();
@@ -84,12 +71,12 @@ async function loadTelemetry(withTotals: boolean): Promise<Telemetry> {
     sheetPending: sheetJobs.filter((j) => ["pending", "queued", "retry"].includes(statusOf(j.sheet_status))).length,
     sheetFailed: failed.length,
     sheetFailedDaysAgo: lastFailed ? sheetDaysAgo(lastFailed, kstDate()) : null,
-    totalRecords: totalInsp === null || totalAs === null ? null : totalInsp + totalAs, activeMembers,
+    activeMembers,
     errors,
   };
 }
 
-function useTelemetry(withTotals: boolean) {
+function useTelemetry() {
   const [data, setData] = useState<Telemetry | null>(null);
   const busy = useRef(false);
   const active = useScreenActive();
@@ -98,20 +85,20 @@ function useTelemetry(withTotals: boolean) {
     const refresh = async () => {
       if (busy.current) return;
       busy.current = true;
-      try { setData(await loadTelemetry(withTotals)); } finally { busy.current = false; }
+      try { setData(await loadTelemetry()); } finally { busy.current = false; }
     };
     const first = window.setTimeout(() => { void refresh(); }, 0);
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60_000);
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.clearTimeout(first); window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [withTotals, active]);
+  }, [active]);
   return data;
 }
 
 /**
  * 시계(1분 단위). 화면이 숨어 있으면(KeepAlive) 멈춘다.
- * 2026-10-24 속도·개편: 1초 시계(LiveClock)는 없앴다 — 홈 전체가 매초 다시 그려졌다. 한 줄 머리(날짜·주차·분기·갱신)만 1분마다.
+ * 2026-10-24 속도·개편: 1초 시계(LiveClock)는 없앴다 — 홈 전체가 매초 다시 그려졌다. 머리 띠(날짜·분기 남은 영업일·갱신)만 1분마다.
  */
 function useClock(stepMs: number) {
   const active = useScreenActive();
@@ -125,29 +112,8 @@ function useClock(stepMs: number) {
   return now;
 }
 
-/** 숫자가 이전 값에서 목표값까지 올라간다(0.9초). 움직임 줄이기 설정이면 즉시. */
-function useCountUp(target: number, ms = 900) {
-  const [value, setValue] = useState(0);
-  const fromRef = useRef(0);
-  useEffect(() => {
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduce || !Number.isFinite(target)) { setValue(target); fromRef.current = target; return; }
-    const from = fromRef.current, start = performance.now();
-    let raf = 0;
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / ms), eased = 1 - Math.pow(1 - p, 3);
-      setValue(Math.round(from + (target - from) * eased));
-      if (p < 1) raf = requestAnimationFrame(tick); else fromRef.current = target;
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [target, ms]);
-  return value;
-}
-
 function readAuthor(): string { try { return localStorage.getItem("author") || ""; } catch { return ""; } }
 
-const fmt = (n: number) => n.toLocaleString("ko-KR");
 const relTime = (iso: string | null) => {
   if (!iso) return "기록 없음";
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -156,10 +122,10 @@ const relTime = (iso: string | null) => {
 /** 시트 실패 "n일 전" — KST 날짜 차 */
 const sheetDaysAgo = (iso: string, today: string) => Math.max(0, Math.round((Date.parse(today) - Date.parse(kstDate(new Date(iso)))) / 86_400_000));
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
-/** 한 줄 머리 날짜 "10월 24일(토)" — KST(kstDate) 기준 */
+/** 머리 띠 큰 날짜 "10월 24일 토요일" — KST(kstDate) 기준 */
 function headDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
-  return `${m}월 ${d}일(${WEEKDAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]})`;
+  return `${m}월 ${d}일 ${WEEKDAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}요일`;
 }
 
 // ── 조각 ─────────────────────────────────────────────────────────────────────
@@ -205,11 +171,6 @@ function focusAgentTeam() {
   el.dispatchEvent(new CustomEvent("agent-team:focus"));
 }
 
-function BigNumber({ value, className = "" }: { value: number; className?: string }) {
-  const v = useCountUp(value);
-  return <span className={`tabular-nums ${className}`}>{fmt(v)}</span>;
-}
-
 const OPS_OPEN_KEY = "home_ops_open_v1";
 /** 기본 펼침(팀장 결정 2026-10-23 — 전송 현황판 등은 사용자가 요청해 만든 화면). 접으면 "0" 으로 기기에 기억 */
 function readOpsOpen(): boolean { try { return localStorage.getItem(OPS_OPEN_KEY) !== "0"; } catch { return true; } }
@@ -223,7 +184,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
     setOpsOpen(next);
     try { localStorage.setItem(OPS_OPEN_KEY, next ? "1" : "0"); } catch { /* 기억 못 해도 지금 화면은 바뀐다 */ }
   };
-  const data = useTelemetry(opsOpen);
+  const data = useTelemetry();
   const [kpi, setKpi] = useState<HomeKpiState | null>(null);
   const [editing, setEditing] = useState(false);
   const [author, setAuthor] = useState(readAuthor);
@@ -234,7 +195,9 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
 
   const todayYmd = kstDate(now);
   const quarter = Math.floor((Number(todayYmd.slice(5, 7)) - 1) / 3) + 1;
-  const weekNo = Math.ceil((((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000) + new Date(now.getFullYear(), 0, 1).getDay() + 1) / 7);
+  // 분기 말일까지 남은 영업일(오늘 포함, 주말·공휴일·설정 휴일 제외) — 달성표와 같은 bizDays
+  const holidays = kpi?.bundle.settings.holidays;
+  const bizLeft = useMemo(() => bizDays(todayYmd, kpiRanges(todayYmd).quarter.to, holidays ?? []), [todayYmd, holidays]);
 
   const agentPillValue = useMemo(() => {
     const total = AGENT_DEPTS.reduce((n, d) => n + d.roles.length, 0);
@@ -257,11 +220,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
     : { tone: data.latencyMs < 400 ? "ok" : "warn", value: `응답 ${data.latencyMs}ms` };
   const opsTone: Tone = sheet.tone === "bad" || db.tone === "bad" ? "bad" : sheet.tone === "warn" || db.tone === "warn" ? "warn" : sheet.tone === "idle" ? "idle" : "ok";
 
-  // 절약 효과 = KPI 현황판이 읽은 점검·AS 표(같은 원본·같은 함수 — 두 번 읽지 않는다)
-  const week = useMemo(() => weekSummary(kpi?.bundle ?? null, author, teamForAuthor), [kpi, author]);
-  const weekRecords = week ? week.weekRecords : 0; // 양식 장수 — 절약 효과(양식 1장 × 10분) 계산에만
-  const savedWeekHours = Math.round((weekRecords * MINUTES_SAVED_PER_RECORD) / 60);
-  const savedTotalHours = data?.totalRecords != null ? Math.round((data.totalRecords * MINUTES_SAVED_PER_RECORD) / 60) : 0;
   const opsDot = opsTone === "ok" ? "bg-emerald-400" : opsTone === "warn" ? "bg-amber-400" : opsTone === "bad" ? "bg-rose-500" : "bg-slate-500";
 
   return (
@@ -273,17 +231,24 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         <div className="pointer-events-none absolute right-0 top-[38%] h-[28rem] w-[28rem] rounded-full bg-violet-600/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
 
-        {/* ── ① 한 줄 머리(2026-10-24) — 날짜·주차·분기·갱신 + [편집] ── */}
-        <div className="relative flex min-h-12 items-center gap-2 border-b border-white/[0.08] px-4 py-2 sm:px-6">
-          <p className="min-w-0 flex-1 truncate text-[12.5px] font-black text-slate-200">
-            {headDate(todayYmd)} <span className="text-slate-600">·</span> {weekNo}주차 <span className="text-slate-600">·</span> {quarter}분기
-            <span className="text-slate-600"> · </span><span className="font-bold text-slate-400">갱신 {kpi ? relTime(new Date(kpi.bundle.loadedAt).toISOString()) : "불러오는 중"}</span>
+        {/* ── ① 머리 띠(2026-10-24) — 큰 날짜·연도 | 분기 남은 영업일 칩 | 갱신 + [편집]. 장식은 아래 얇은 그라데이션 선 하나 ── */}
+        <div className="relative flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+          <p className="flex min-w-0 items-baseline gap-1.5">
+            <span className="truncate text-2xl font-black tracking-tight text-white">{headDate(todayYmd)}</span>
+            <span className="font-mono text-[12px] font-bold tabular-nums text-slate-500">{todayYmd.slice(0, 4)}</span>
           </p>
-          <button type="button" onClick={() => setEditing(!editing)} aria-pressed={editing}
-            className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 ${editing ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-white/[0.07] text-slate-200 hover:bg-white/[0.12]"}`}>
-            {editing ? <><Check size={14} aria-hidden />완료</> : <><Pencil size={14} aria-hidden />편집</>}
-          </button>
+          <span className="order-3 inline-flex items-center rounded-full border border-white/[0.10] bg-white/[0.05] px-2.5 py-1 text-[11.5px] font-black text-slate-200 sm:order-none">
+            {quarter}분기 <span className="mx-1 text-slate-600">·</span> 말일까지 <b className="mx-1 font-mono tabular-nums text-white">{bizLeft}</b>영업일
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-2">
+            <span className="text-[11.5px] font-bold text-slate-400">갱신 {kpi ? relTime(new Date(kpi.bundle.loadedAt).toISOString()) : "불러오는 중"}</span>
+            <button type="button" onClick={() => setEditing(!editing)} aria-pressed={editing}
+              className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 ${editing ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-white/[0.07] text-slate-200 hover:bg-white/[0.12]"}`}>
+              {editing ? <><Check size={14} aria-hidden />완료</> : <><Pencil size={14} aria-hidden />편집</>}
+            </button>
+          </span>
         </div>
+        <div aria-hidden className="relative h-px bg-linear-to-r from-transparent via-blue-400/60 to-transparent" />
 
         {/* ── ② CS KPI 현황판 ── */}
         <HomeKpiBoard
@@ -318,7 +283,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
                 <CostTile />
               </div>
 
-              {/* 실시간 전송 현황판 — 모든 방 + 오늘 전송 흐름(접혀 있으면 그리지 않아 15초 폴링도 멈춤) */}
+              {/* 실시간 전송 현황판 — 모든 방 + 오늘 봇/노트북 배달 건수·흐름(접혀 있으면 그리지 않아 15초 폴링도 멈춤) */}
               <LiveSendBoard />
 
               <AgentTeamCard />
@@ -345,28 +310,6 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
                     ))}
                   </ol>
                   <button type="button" onClick={() => setPatchExpanded(!patchExpanded)} className="flex w-full items-center justify-center gap-1.5 border-t border-white/[0.08] py-2.5 text-[11.5px] font-black text-slate-400 transition hover:bg-white/[0.04] hover:text-white">{patchExpanded ? "접기" : "최근 배포 더 보기"}<ChevronDown size={14} className={`transition ${patchExpanded ? "rotate-180" : ""}`} /></button>
-                </div>
-              </div>
-              {/* 절약 효과(IMPACT) — 운영 블록 맨 아래(2026-10-24, 데이터 자산 칸은 없앰) */}
-              <div className="relative border-t border-white/[0.08] px-4 py-5 sm:px-6">
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-                  <div className={`min-w-0 p-5 lg:col-span-6 ${card}`}>
-                    <div className={`flex items-center gap-2 ${eyebrow}`}><Timer size={13} className="text-emerald-300" />Impact · 절약 추정</div>
-                    <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
-                      <div><div className="text-[38px] font-black leading-none text-white sm:text-[44px]">{week ? <BigNumber value={savedWeekHours} /> : "—"}<span className="ml-1 text-[16px] font-black text-emerald-300">시간</span></div><div className="mt-1.5 text-[11px] font-bold text-slate-400">이번 주 · 기록 {fmt(weekRecords)}건 × 약 {MINUTES_SAVED_PER_RECORD}분</div></div>
-                      <div><div className="text-[24px] font-black leading-none text-slate-200">{data?.totalRecords != null ? <BigNumber value={savedTotalHours} /> : "—"}<span className="ml-1 text-[12px] font-black text-slate-400">시간</span></div><div className="mt-1.5 text-[11px] font-bold text-slate-500">누적 · 기록 {data?.totalRecords != null ? fmt(data.totalRecords) : "—"}건</div></div>
-                    </div>
-                    <p className="mt-4 text-[11px] font-semibold leading-5 text-slate-500">반복 업무(양식·전송·보고) 기준의 추정치입니다. 실제 방문·처리 시간은 포함하지 않습니다.</p>
-                  </div>
-                  <div className={`p-2 lg:col-span-6 ${card}`}>
-                    {savings.map((s, i) => (
-                      <div key={s.task} className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-3 ${i ? "border-t border-white/[0.06]" : ""}`}>
-                        <span className="w-24 shrink-0 text-[13px] font-black text-white">{s.task}</span>
-                        <span className="flex items-center gap-1.5 font-mono text-[12px] font-black tabular-nums"><span className="text-slate-500 line-through decoration-slate-600">{s.before}</span><ArrowRight size={12} className="text-slate-500" /><span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-emerald-300">{s.after}</span></span>
-                        <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-slate-400">{s.how}</span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             </div>

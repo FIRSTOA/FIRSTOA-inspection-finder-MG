@@ -10,12 +10,14 @@ import { kpiRanges, workinPace, type KpiFacts } from "../src/kpi/kpiCompute";
 import { ALL_KPI_SOURCES, type KpiBundle } from "../src/kpi/kpiData";
 import { parseKpiTargets, type KpiSource } from "../src/kpi/kpiDefs";
 import {
-  HOME_KPI_DEFAULT_LAYOUT, HOME_KPI_LAYOUT_KEY, HOME_KPI_LAYOUT_VERSION, HOME_WIDGETS, UNHANDLED_TOTAL_DEFS, effectivePeriod, mergeBundle, okrView,
+  HOME_KPI_DEFAULT_LAYOUT, HOME_KPI_LAYOUT_KEY, HOME_KPI_LAYOUT_VERSION, HOME_WIDGETS, effectivePeriod, mergeBundle, okrView,
   parseHomeLayout, quarterGoalView, readHomeLayout, serializeHomeLayout, sourcesForLayout, splitSources, tableRows, todayItems, unhandledParts,
-  unhandledTotalView, weekSummary, writeHomeLayout,
+  writeHomeLayout,
 } from "../src/kpi/homeKpiModel";
-import { RECONTRACT_OVERDUE_DEFINITION } from "../src/kpi/kpiDefs";
-import { countUnhandledTabs, mergeUnhandled, splitByGroup, type TicketInput } from "../src/homeUnhandled";
+import { countUnhandledKinds, countUnhandledTabs, mergeUnhandled, splitByGroup, UNHANDLED_KINDS, UNHANDLED_TABS, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
+import { isLogisticsSchedule } from "../src/overdueLogic";
+import { LOGISTICS_SCHEDULE_TYPES } from "../src/receptionBoardData";
+import HomeUnhandledPanel from "../src/HomeUnhandledPanel";
 import { recontractOverdue, toFormRows } from "../src/kpi/kpiCompute";
 import { emptyReport, type OkrReport } from "../src/okr";
 import { KpiWidget } from "../src/kpi/KpiWidgets.view";
@@ -53,28 +55,27 @@ const WORKIN = [
 ];
 const FACTS: KpiFacts = { roster: ROSTER, field: FIELD, expansion: [], workin: WORKIN };
 
-describe("기본 배치(2026-10-24 개편 — 위젯 6개)", () => {
-  it("금일 현황(4x1) → KPI 달성표(4x2) → 분기 점검 진행(2x1) → 미처리 전체(2x1) → 미처리 일정(2x2) → OKR(1x1)", () => {
+describe("기본 배치(2026-10-24 마무리 — 위젯 4개, 분기 점검 진행은 달성표 K2 행 안)", () => {
+  it("금일 현황(4x1) → KPI 달성표(4x2) → 미처리(4x1, 2x2 가능) → OKR(2x1)", () => {
     expect(HOME_KPI_DEFAULT_LAYOUT).toEqual([
       { id: "today", size: "4x1", hidden: false },
       { id: "table", size: "4x2", hidden: false },
-      { id: "K2", size: "2x1", hidden: false },
-      { id: "receptionPanel", size: "2x1", hidden: false },
-      { id: "unhandledPanel", size: "2x2", hidden: false },
-      { id: "K19", size: "1x1", hidden: false },
+      { id: "unhandledPanel", size: "4x1", hidden: false },
+      { id: "K19", size: "2x1", hidden: false },
     ]);
+    expect(HOME_WIDGETS.find((w) => w.id === "unhandledPanel")?.sizes).toContain("2x2");
     const kinds = Object.fromEntries(HOME_WIDGETS.map((w) => [w.id, w.kind]));
-    expect(kinds).toEqual({ today: "todayStrip", table: "kpiTable", K2: "quarterGoal", receptionPanel: "unhandledTotal", unhandledPanel: "panel", K19: "okr" });
+    expect(kinds).toEqual({ today: "todayStrip", table: "kpiTable", unhandledPanel: "panel", K19: "okr" });
     for (const w of HOME_WIDGETS) expect(w.sizes).toContain(HOME_KPI_DEFAULT_LAYOUT.find((x) => x.id === w.id)!.size);
   });
 
-  it("옛 배치(10-23)에 남은 없앤 위젯 id(K1·exp·K10·K3·K12·unhandled)는 버리고, 버전은 1 그대로", () => {
+  it("옛 배치(10-23·10-24)에 남은 없앤 위젯 id(K1·exp·K10·K3·K12·unhandled·receptionPanel·K2)는 버리고, 버전은 1 그대로", () => {
     const old = JSON.stringify({ v: 1, items: ["today", "K2", "table", "K1", "exp", "K10", "unhandledPanel", "receptionPanel", "K3", "K19", "K12", "unhandled"].map((id) => ({ id, size: id === "table" ? "4x1" : "1x1", hidden: id === "K19" })) });
     const { items, restored } = parseHomeLayout(old);
     expect(restored).toBe(true);
-    expect(items.map((x) => x.id)).toEqual(["today", "K2", "table", "unhandledPanel", "receptionPanel", "K19"]);
+    expect(items.map((x) => x.id)).toEqual(["today", "table", "unhandledPanel", "K19"]);
     expect(items.find((x) => x.id === "table")?.size).toBe("4x1"); // 허용 크기면 사용자가 고른 크기 유지
-    expect(items.find((x) => x.id === "K2")?.size).toBe("2x1"); // 허용 안 된 크기(1x1) → 첫 크기
+    expect(items.find((x) => x.id === "unhandledPanel")?.size).toBe("4x1"); // 허용 안 된 크기(1x1) → 첫 크기
     expect(items.find((x) => x.id === "K19")?.hidden).toBe(true);
     expect(HOME_KPI_LAYOUT_VERSION).toBe(1);
   });
@@ -85,7 +86,7 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
 
   it("저장한 순서·크기·숨김이 그대로 돌아온다", () => {
     const st = memory();
-    const changed = [...HOME_KPI_DEFAULT_LAYOUT].reverse().map((x) => (x.id === "K2" ? { ...x, size: "4x1" as const } : x.id === "K19" ? { ...x, hidden: true } : x));
+    const changed = [...HOME_KPI_DEFAULT_LAYOUT].reverse().map((x) => (x.id === "unhandledPanel" ? { ...x, size: "2x2" as const } : x.id === "K19" ? { ...x, hidden: true } : x));
     expect(writeHomeLayout(st, changed)).toBe("");
     expect(JSON.parse(st.m.get(HOME_KPI_LAYOUT_KEY)!).v).toBe(1);
     expect(readHomeLayout(st)).toEqual(changed);
@@ -116,15 +117,13 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
 });
 
 describe("읽을 원본 — 숨긴 위젯 원본은 안 읽는다", () => {
-  it("분기 점검 진행만 보이면 워킨맵·명단만", () => {
-    const only = HOME_KPI_DEFAULT_LAYOUT.map((x) => ({ ...x, hidden: x.id !== "K2" }));
-    expect([...sourcesForLayout(only)].sort()).toEqual(["roster", "workin"]);
+  it("OKR 만 보이면 OKR·명단만", () => {
+    const only = HOME_KPI_DEFAULT_LAYOUT.map((x) => ({ ...x, hidden: x.id !== "K19" }));
+    expect([...sourcesForLayout(only)].sort()).toEqual(["okr", "roster"]);
   });
-  it("미처리 일정 칸은 현황판 원본을 더 읽게 하지 않고, 미처리 전체 카드는 미처리·재계약(+명단)만", () => {
+  it("미처리 칸은 묶음의 미처리·재계약(+명단)만 — 따로 읽지 않는다", () => {
     const panel = HOME_KPI_DEFAULT_LAYOUT.map((x) => ({ ...x, hidden: x.id !== "unhandledPanel" }));
-    expect(sourcesForLayout(panel).size).toBe(0);
-    const total = HOME_KPI_DEFAULT_LAYOUT.map((x) => ({ ...x, hidden: x.id !== "receptionPanel" }));
-    expect([...sourcesForLayout(total)].sort()).toEqual(["recontract", "roster", "unhandled"]);
+    expect([...sourcesForLayout(panel)].sort()).toEqual(["recontract", "roster", "unhandled"]);
   });
   it("달성표가 보이면 전 KPI 원본, 다 숨기면 0", () => {
     expect(sourcesForLayout(HOME_KPI_DEFAULT_LAYOUT)).toEqual(ALL_KPI_SOURCES);
@@ -240,9 +239,21 @@ describe("위젯 보기 = kpiCompute 와 같은 값", () => {
     expect(early.endLabel).toMatch(/^말일 10일 전/);
   });
 
-  it("절약 효과 '이번 주' = 같은 함수", () => {
-    expect(weekSummary(b, "이민구", teamOf)).toMatchObject({ mine: { inspection: 1, as: 0 }, all: { inspection: 3, as: 0 } });
-    expect(weekSummary(bundleOf({}), "이민구", teamOf)).toBeNull();
+  it("K2 행 펼침 = 분기 점검 블록(quarterGoalView 그대로, kind 없음) — 기준 바꾸면 그 기준", () => {
+    const k2 = tableRows(b, ctx).find((r) => r.id === "K2")!;
+    const { kind: _kind, ...q } = quarterGoalView(b, "end")!;
+    void _kind;
+    expect(k2.quarter).toEqual(q);
+    expect(tableRows(b, ctx, "early").find((r) => r.id === "K2")?.quarter?.basis).toBe("early");
+    expect(tableRows(b, ctx).find((r) => r.id === "K1")?.quarter).toBeUndefined();
+  });
+
+  it("고른 기간과 실제 기간이 다른 행은 기준 글에 기간 칩(이번 주 → K10 '이번 달')", () => {
+    const rows = tableRows(b, ctx);
+    expect(rows.find((r) => r.id === "K10")?.targetLabel).toMatch(/이번 달$/);
+    expect(rows.find((r) => r.id === "K1")?.targetLabel).not.toMatch(/이번 (주|달)$/);
+    const month = tableRows(b, { ...ctx, period: "month" });
+    expect(month.find((r) => r.id === "K19")?.targetLabel).not.toMatch(/이번 주$/); // K19 는 월도 된다
   });
 });
 
@@ -268,6 +279,25 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
     ]);
   });
 
+  it("범위 칩: 팀 하나 = 그 파트만, 개인 = 그 사람 행만(주별 막대도 같은 범위), 이번 달은 개인 고르기 비움", () => {
+    const all = okrView(okrBundle, "week")!;
+    expect(all.scope).toEqual({ team: "ALL", members: ["박X", "이호준"] });
+    expect(all.scopeLabel).toBe("CS 4파트(A~D) · 이번 주");
+    const a = okrView(okrBundle, "week", { team: "A" })!;
+    expect(a.pct).toBe(50); // 완료 1 / 판정 2
+    expect(a.missingTeams).toEqual([]);
+    expect(a.scopeLabel).toBe("A파트 · 이번 주");
+    expect(a.scope.members).toEqual([]);
+    const me = okrView(okrBundle, "week", { team: "B", member: "이호준" })!;
+    expect(me.pct).toBe(100);
+    expect(me.scope).toEqual({ team: "B", member: "이호준", members: ["박X", "이호준"] });
+    expect(me.weeks.find((w) => w.current)?.pct).toBe(100);
+    expect(me.weeks.find((w) => w.label === "2주")?.pct).toBeNull(); // 2주는 C 파트 기록뿐
+    const month = okrView(okrBundle, "month", { team: "B", member: "이호준" })!;
+    expect(month.scope).toEqual({ team: "B", members: [] });
+    expect(month.scopeLabel).toBe("B파트 · 이번 달");
+  });
+
   it("이번 주 보고서가 하나도 없으면 pct null + 4팀 미작성", () => {
     const empty = bundleOf({ okr: { cycle: null, quarter: null, reports: [], week: { id: "2026-10-W4", weeks, goals, reports } } });
     const v = okrView(empty, "week")!;
@@ -276,38 +306,58 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
   });
 });
 
-describe("④ 미처리 전체 = 접수 + 물류 + 재계약 확인 지남", () => {
-  it("큰 숫자 = 세 숫자 합, 정의문 그대로", () => {
-    const v = unhandledTotalView({ reception: 27, logistics: 44, recontract: 3, breakdown: [{ label: "IT", value: 2 }] });
-    expect(v.total).toBe(27 + 44 + 3);
-    expect(v.parts.map((p) => [p.label, p.value])).toEqual([["접수", 27], ["물류", 44], ["재계약 확인 지남", 3]]);
-    expect(v.defs).toBe(UNHANDLED_TOTAL_DEFS);
-    expect(v.defs.find((d) => d.label === "재계약 확인 지남")?.text).toBe(RECONTRACT_OVERDUE_DEFINITION);
-    expect(RECONTRACT_OVERDUE_DEFINITION).toBe('재계약 표에서 업체별 마지막 기록의 "다음확인일"이 오늘보다 지났는데 최종상태가 갱신완료·종료가 아닌 곳.');
+describe("미처리 칸 하나 — 숫자는 mergeUnhandled 한 벌(2026-10-24 불일치 수정)", () => {
+  // 실측(2026-10-24): 익일AS 2건이 물류로 세였고(홈 물류 46 vs 현황판 44), 팀 "기타" 물류 4건은 어느 탭에도 없었다(탭 합 431 vs 전체 435)
+  const recs: ReceptionInput[] = [
+    { id: "r1", type: "복합기 AS", region: "수도권A", receipt_date: "2026-10-10", vendor: "가", status: "접수" },
+    { id: "r2", type: "IT", region: "", receipt_date: "2026-10-12", vendor: "나", status: "접수" },
+    { id: "r3", type: "영업팀", region: "", receipt_date: "2026-10-15", vendor: "다", status: "접수" },
+  ];
+  const tks: TicketInput[] = [
+    { id: "t1", team: "B", date: "2026-10-20", vendor: "라", assignee: "", status: "배정", scheduleType: "익일AS" },
+    { id: "t2", team: "C", date: "2026-10-19", vendor: "마", assignee: "", status: "배정", scheduleType: "납품철수교체휴가교육" },
+    { id: "t3", team: "기타", date: "2026-10-18", vendor: "바", assignee: "", status: "배정", scheduleType: "납품철수교체휴가교육" },
+    { id: "t4", team: "D", date: "2026-10-17", vendor: "사", assignee: "", status: "배정", scheduleType: "물류" },
+    { id: "t5", team: "E", date: "2026-10-16", vendor: "아", assignee: "", status: "배정", scheduleType: "AS" },
+  ];
+  const rows = mergeUnhandled(recs, tks, TODAY);
+
+  it("전체 = 팀 탭 합 = 종류 칸 합", () => {
+    const tabs = countUnhandledTabs(rows);
+    const kinds = countUnhandledKinds(rows);
+    expect(tabs["전체"]).toBe(8);
+    expect(UNHANDLED_TABS.filter((t) => t !== "전체").reduce((n, t) => n + tabs[t], 0)).toBe(tabs["전체"]);
+    expect(UNHANDLED_KINDS.reduce((n, k) => n + kinds[k], 0)).toBe(tabs["전체"]);
+    expect(tabs["기타"]).toBe(2); // 팀 없는 IT 접수 + 팀 "기타" 물류
   });
 
-  it("재계약 미도착(2단계 전)·실패 시 접수+물류 합계, 재계약 칸은 '—'(0 없음)", () => {
-    const loading = unhandledTotalView({ reception: 27, logistics: 44, recontract: null, breakdown: [] });
-    expect(loading.total).toBe(71);
-    const rc = loading.parts[2];
-    expect(rc.value).toBeNull();
-    expect(rc.label).toContain("재계약 확인 중");
-    expect(loading.parts.some((p) => p.value === 0)).toBe(false);
-    const failed = unhandledTotalView({ reception: 27, logistics: 44, recontract: null, recontractState: "error", breakdown: [] });
-    expect(failed.total).toBe(71);
-    expect(failed.parts[2]).toMatchObject({ value: null });
-    expect(failed.parts[2].label).toContain("재계약 제외");
-    // 도착하면 합계 갱신
-    expect(unhandledTotalView({ reception: 27, logistics: 44, recontract: 2, breakdown: [] }).total).toBe(73);
-    // 렌더: null 칸은 "—"
-    const html = renderToString(createElement(KpiWidget, { kind: "unhandledTotal", title: "미처리 전체", basis: "x", status: "ready", size: "2x1", view: loading })).replace(/<!-- -->/g, "");
-    expect(html).toContain("재계약 확인 중");
-    expect(html).toMatch(/재계약 확인 중\)\s*<b[^>]*>—<\/b>/);
+  it("익일AS 는 AS 일정, 물류는 현황판과 같은 유형 목록(한 정의)", () => {
+    expect(rows.find((r) => r.key === "t:t1")?.kind).toBe("AS일정");
+    expect(countUnhandledKinds(rows)["물류"]).toBe(3);
+    expect(LOGISTICS_SCHEDULE_TYPES.every((t) => isLogisticsSchedule(t))).toBe(true);
+    for (const t of ["AS", "익일AS", "매월점검", ""]) expect(isLogisticsSchedule(t)).toBe(false);
+  });
+
+  it("물류 칸 = 팀 현황 물류(unhandledParts, splitByGroup)와 같은 값 · 패널 렌더 숫자 = 같은 함수", () => {
+    const b = bundleOf({ unhandled: rows }, ["unhandled", "roster"]);
+    expect(unhandledParts(b).logistics).toBe(countUnhandledKinds(rows)["물류"]);
+    expect(unhandledParts(b).logistics).toBe(splitByGroup(rows).logistics.length);
+    const html = renderToString(createElement(HomeUnhandledPanel, { bundle: b, onOpenOverdue: () => {}, onOpenReception: () => {} })).replace(/<!-- -->/g, "");
+    expect(html).toContain("8건");
+    expect(html).toMatch(/data-kind="물류"[^>]*>.*?<span[^>]*>3<\/span>/);
+    expect(html).toMatch(/data-kind="recontract"[^>]*>.*?<span[^>]*>—<\/span>/); // 재계약 원본 전: 0 아님
+    expect(html).toContain("기타"); // 팀 없는 행이 있으면 기타 탭
+    expect(html).not.toContain("미처리 전체");
+  });
+
+  it("묶음 전에는 … (0 으로 그리지 않음)", () => {
+    const html = renderToString(createElement(HomeUnhandledPanel, { bundle: null, onOpenOverdue: () => {}, onOpenReception: () => {} }));
+    expect(html).toContain("…");
   });
 
   it("물류 = 홈 미처리 일정 칸과 같은 함수(splitByGroup), 재계약 = recontractOverdue — 못 읽은 원본은 null(0 아님)", () => {
     const tickets: TicketInput[] = [
-      { id: "1", team: "C", date: "2026-10-20", vendor: "가", assignee: "", status: "대기", scheduleType: "납품" },
+      { id: "1", team: "C", date: "2026-10-20", vendor: "가", assignee: "", status: "대기", scheduleType: "납품철수교체휴가교육" },
       { id: "2", team: "A", date: "2026-10-21", vendor: "나", assignee: "", status: "대기", scheduleType: "AS" },
     ];
     const unhandled = mergeUnhandled([], tickets, TODAY);
@@ -330,9 +380,11 @@ describe("렌더 스모크(서버 렌더, fetch 막음)", () => {
   afterAll(() => { vi.unstubAllGlobals(); });
   const render = (el: Parameters<typeof renderToString>[0]) => renderToString(el).replace(/<!-- -->/g, "");
 
-  it("현황판: 위젯 6개 제목이 뜨고(불러오는 중), 없앤 위젯은 없다", () => {
+  it("현황판: 위젯 4개 제목이 뜨고(불러오는 중), 없앤 위젯(미처리 전체 카드·분기 점검 진행 위젯 포함)은 없다", () => {
     const html = render(createElement(HomeKpiBoard, {}));
-    for (const t of ["금일 현황", "KPI 달성표", "분기 점검 진행", "미처리 전체", "미처리 일정", "OKR 달성률"]) expect(html).toContain(t);
+    for (const t of ["금일 현황", "KPI 달성표", "미처리", "OKR 달성률"]) expect(html).toContain(t);
+    expect(HOME_WIDGETS.map((w) => w.title)).not.toContain("분기 점검 진행");
+    for (const gone of ["미처리 전체", "미처리 일정"]) expect(html).not.toContain(gone);
     for (const tab of ["전체", "A", "E", "경영", "운영", "영업"]) expect(html).toContain(`>${tab}</button>`);
     for (const gone of ["초과사용 제안 방문", "PC·복합기 확장성", "미처리 요약"]) expect(html).not.toContain(gone);
     expect(html).toContain('aria-busy="true"');
@@ -351,10 +403,14 @@ describe("렌더 스모크(서버 렌더, fetch 막음)", () => {
     expect(html).toContain("분기 점검 진행");
   });
 
-  it("홈: 한 줄 머리(날짜·주차·분기·갱신 + 편집) → KPI 현황판 → 운영·시스템(데이터 자산 없음, 절약 효과는 맨 아래)", () => {
+  it("홈: 머리 띠(큰 날짜·연도 | 분기 남은 영업일 칩 | 갱신 + 편집, 주차 없음) → KPI 현황판 → 운영·시스템(데이터 자산·절약 효과 없음)", () => {
     const html = render(createElement(Home, { onGoField: () => {} }));
-    expect(html).toMatch(/\d+월 \d+일\([일월화수목금토]\) <span[^>]*>·<\/span> \d+주차 <span[^>]*>·<\/span> [1-4]분기/);
+    expect(html).toMatch(/\d+월 \d+일 [일월화수목금토]요일<\/span>/);
+    expect(html).toMatch(/[1-4]분기 <span[^>]*>·<\/span> 말일까지 <b[^>]*>\d+<\/b>영업일/);
+    const head = html.slice(0, html.indexOf("CS KPI 현황판"));
+    expect(head).not.toContain("주차");
     expect(html).toContain("갱신 ");
+    expect(html).toContain("text-2xl");
     expect(html).not.toContain("FIRSTOA CS · KPI");
     expect(html).not.toContain("데이터 자산");
     const iBoard = html.indexOf("CS KPI 현황판");
@@ -363,9 +419,8 @@ describe("렌더 스모크(서버 렌더, fetch 막음)", () => {
     expect(iOps).toBeGreaterThan(iBoard);
     expect(html).toContain('aria-expanded="true" aria-controls="home-ops"');
     const iAgent = html.indexOf('id="agent-team"');
-    const iImpact = html.indexOf("Impact · 절약 추정");
     expect(iAgent).toBeGreaterThan(iOps);
-    expect(iImpact).toBeGreaterThan(iAgent); // IMPACT 는 운영 블록 맨 아래
+    expect(html).not.toContain("절약 추정"); // IMPACT 삭제(2026-10-24)
   });
 });
 

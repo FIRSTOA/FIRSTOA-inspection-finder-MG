@@ -26,7 +26,8 @@ import { authorLocked } from "./sso";
 import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import ReceptionBoardPanel from "./ReceptionBoardPanel";
 import { requestOpenOverdue } from "./receptionBoardData";
-import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT, parseRightView, unhandledTotal, type ReceptionRightView } from "./receptionRightView";
+import { RECEPTION_RIGHT_KEY, RECEPTION_RIGHT_DEPT_KEY, SHOW_BOARD_EVENT, parseDeptRightView, parseRightView, unhandledTotal, type DeptRightView, type ReceptionRightView } from "./receptionRightView";
+import DeptWorkspacePanel, { DeptRightTabs, DeptSheetLink, type DeptCounts } from "./DeptWorkspacePanel";
 import DeptReception from "./DeptReceptionScreen";
 import DeptReceptionDetail from "./DeptReceptionDetail";
 import DeptActionBar from "./DeptActionBar";
@@ -459,7 +460,10 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   // 오른쪽 기둥 보기: 접수리스트(기본) ↔ 미처리 현황(접수 + 일정). 홈 카드에서 들어오면 board 로 열린다.
   const [rightView, setRightView] = useState<ReceptionRightView>(() => { try { return parseRightView(localStorage.getItem(RECEPTION_RIGHT_KEY)); } catch { return "list"; } });
   useEffect(() => { try { localStorage.setItem(RECEPTION_RIGHT_KEY, rightView); } catch { /* 무시 */ } }, [rightView]);
-  useEffect(() => { const show = () => setRightView("board"); window.addEventListener(SHOW_BOARD_EVENT, show); return () => window.removeEventListener(SHOW_BOARD_EVENT, show); }, []);
+  // 부서 화면(경영·운영·영업)은 3칸 [일정리스트|접수리스트|미처리현황] — 기억 키 따로(dept-mini-workspace, 2026-10-24)
+  const [deptRight, setDeptRight] = useState<DeptRightView>(() => { try { return parseDeptRightView(localStorage.getItem(RECEPTION_RIGHT_DEPT_KEY)); } catch { return "plan"; } }); const [deptCounts, setDeptCounts] = useState<DeptCounts | null>(null);
+  useEffect(() => { try { localStorage.setItem(RECEPTION_RIGHT_DEPT_KEY, deptRight); } catch { /* 무시 */ } }, [deptRight]);
+  useEffect(() => { const show = () => { setRightView("board"); setDeptRight("board"); }; window.addEventListener(SHOW_BOARD_EVENT, show); return () => window.removeEventListener(SHOW_BOARD_EVENT, show); }, []);
   const [scheduleCount, setScheduleCount] = useState(0);
   const [deptEnabled, setDeptEnabled] = useState(false); useEffect(() => { getConfig().then((c) => { const on = String(c.DEPT_RECEPTION_ENABLED || "").toLowerCase() === "true"; setDeptEnabled(on); if (!on && isDeptType(PAGE_TYPE[page])) goPage("copier"); }).catch(() => { setDeptEnabled(false); if (isDeptType(PAGE_TYPE[page])) goPage("copier"); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 마운트 때 한 번만. 설정을 못 읽으면 지원 줄을 숨긴 채(안전한 쪽) 둔다
   // 원격·IT 작업 보드는 기간과 무관하게 최근 30일 건을 모아 본다 (어제 미완료 건이 사라지면 안 된다)
@@ -691,6 +695,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [listDate, listPeriod, loadList, loadRemoteQueue]);
   const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT", mgmt: "경영지원", ops: "운영지원", sales: "영업팀" } as const;
+  const deptPage = deptEnabled && isDeptType(PAGE_TYPE[page]);
   const goPage = (next: keyof typeof PAGE_TYPE) => {
     setPage(next);
     setActionResult("");
@@ -1612,6 +1617,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
           </span>
           {counts.addr > 0 && <span className="rounded bg-amber-400/15 px-2 py-0.5 text-[11px] font-black text-amber-300">📍 주소확인 {counts.addr}</span>}
           <span className="ml-auto flex items-center gap-2">
+            {deptEnabled && <DeptSheetLink dept={PAGE_TYPE[page]} />}
             {authorLocked() ? <span className="px-1 text-[11px] font-black text-white">{author}</span> /* 그룹웨어 로그인 고정 — 고르기 없이 이름만(2026-10-19) */ : <select value={author} onChange={(e) => setAuthor(e.target.value)} title="접수 작성자 (원격팀)"
               className="rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-black text-white outline-none">
               {!(book.IT || []).includes(author) && <option value={author} className="text-slate-900">{author || "미지정"}</option>}
@@ -2009,7 +2015,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
         {/* ==== 우: 접수 리스트 / 미처리 현황 (상시) ==== */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="px-3 pt-3">
-          <div className="grid h-9 grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="tablist" aria-label="오른쪽 보기">
+          {deptPage ? <DeptRightTabs value={deptRight} onChange={setDeptRight} counts={deptCounts} /> : <div className="grid h-9 grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="tablist" aria-label="오른쪽 보기">
             {([["list", "접수리스트"], ["board", "미처리 현황"]] as const).map(([v, label]) => {
               const on = rightView === v;
               const n = v === "board" ? unhandledTotal(boardCounts, scheduleCount, deptEnabled) : 0;
@@ -2020,16 +2026,17 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                 </button>
               );
             })}
+          </div>}
           </div>
-          </div>
+          {deptPage && <DeptWorkspacePanel dept={PAGE_TYPE[page] as DeptType} view={deptRight} author={author} reloadKey={boardReload} onCounts={setDeptCounts} onChanged={() => void loadList(listDate, listPeriod, true)} />}
           {/* 현황판은 늘 붙여 둔다(숨김) — 종류 선택기 배지·N 숫자가 접수리스트 보기에서도 살아 있게 */}
-          <div className={rightView === "board" ? "pt-1" : "hidden"}>
+          <div className={rightView === "board" && !deptPage ? "pt-1" : "hidden"}>
             <ReceptionBoardPanel compact onOpenSchedule={onOpenSchedule ? () => { requestOpenOverdue(); onOpenSchedule(); } : undefined} deptEnabled={deptEnabled} reloadKey={boardReload} onCounts={setBoardCounts} onScheduleCount={setScheduleCount} selectedType={boardFocus} onSelectedTypeChange={setBoardFocus}
               onSelectType={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
               onOpenFieldRow={(r) => { if (r.type === "복합기 AS") setListFilter("복합기 AS"); else goPage(r.type === "IT" ? "it" : "remote"); setOpenRowId(r.id); setRightView("list"); }}
               renderDeptActions={(_r, ctx) => (ctx.source ? <DeptActionBar row={ctx.source} compact author={author} onChanged={() => { ctx.onDone(); void loadList(listDate, listPeriod, true); }} /> : null)} />
           </div>
-          <div className={rightView === "list" ? "" : "hidden"}>
+          <div className={(deptPage ? deptRight : rightView) === "list" ? "" : "hidden"}>
           {/* 어두운 "접수 리스트" 띠는 없앴다 — 위 전환 막대가 제목 역할. 날짜·기간·새로고침 줄이 패널 첫 줄 */}
           <div className="border-b border-slate-100 px-3 pb-3 pt-2.5">
             <h3 className="sr-only">접수 리스트</h3>

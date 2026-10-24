@@ -18,6 +18,8 @@ import { buildMessage, formatPhone, mergeTargets, parseBlocks, parseListHeader, 
 import { contactChoices, contactVendorKey, loadContactRules, normalizePhone, pickDefaultPhone, removeContactRule, ruleStamp, rulesForVendor, saveContactRule, type ContactRule } from "./counterSmsContacts";
 import { counterRoomEntries, prepareCounterSend, sendCounterPhoto, type SendPlan } from "./counterSmsPhoto";
 import { saveActivityEvent } from "./operations";
+import { historyOf, isNewTarget, kstIso, logLines, logWhen, md, mdt, moreActions, primaryAction, sortTargets, statusLine, warnBadge, type CardAction } from "./counterSmsView";
+import { ChipGroup, CounterCard, HelpBox, LogPanel, StatusHeader } from "./CounterSmsParts.view";
 
 type SettingsRow = { region: string; machines: Record<string, string>; templates: Record<string, string>; sort_order?: number };
 
@@ -77,9 +79,9 @@ export default function CounterSms({ author }: { author: string }) {
     const loose = rr.some((r) => r.how === "이름 유사") && !rr.some((r) => r.how !== "이름 유사");
     return (
       <>
-        {prefer && <span title={`⭐ 새 담당 ${prefer.name || formatPhone(prefer.phone)} · ${ruleStamp(prefer)} · ${prefer.how}`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-black text-amber-800">⭐</span>}
-        {blocked.length > 0 && <span title={blocked.map((r) => `🚫 ${formatPhone(r.phone)} ${r.memo || ""} · ${ruleStamp(r)} · ${r.how}`).join("\n")} className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-black ${allBlocked ? "bg-rose-600 text-white" : "bg-rose-100 text-rose-700"}`}>🚫{allBlocked ? " 전부" : ""}</span>}
-        {loose && <span title="업체명이 비슷하게만 맞는 기록 — 같은 업체인지 확인" className="shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-black text-slate-600">이름 유사</span>}
+        {prefer && <span title={`⭐ 새 담당 ${prefer.name || formatPhone(prefer.phone)} · ${ruleStamp(prefer)} · ${prefer.how}`} className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-black text-amber-800">⭐</span>}
+        {blocked.length > 0 && <span title={blocked.map((r) => `🚫 ${formatPhone(r.phone)} ${r.memo || ""} · ${ruleStamp(r)} · ${r.how}`).join("\n")} className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-black ${allBlocked ? "bg-rose-600 text-white" : "bg-rose-100 text-rose-700"}`}>🚫{allBlocked ? " 전부" : ""}</span>}
+        {loose && <span title="업체명이 비슷하게만 맞는 기록 — 같은 업체인지 확인" className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-black text-slate-600">이름 유사</span>}
       </>
     );
   };
@@ -106,6 +108,8 @@ export default function CounterSms({ author }: { author: string }) {
   //   merge: 없는 업체만 추가(빠진 업체 그대로) · replace: 새 목록(달이 바뀔 때)
   const [uploadMode, setUploadMode] = useState<"sync" | "merge" | "replace">("sync");
   const [showDone, setShowDone] = useState(false); // 완료된 카드는 접어 둔다 — 열린 업체만 보이게
+  const [newOnly, setNewOnly] = useState(false);   // 신규(목록 생긴 뒤 추가된 업체)만 보기 — 2026-10-24
+  const [sortBy, setSortBy] = useState<"stage" | "added">("stage");
   // 완료·추가 이력 컬럼이 있는지(supabase/counter-sms-done.sql 실행 여부) — 없으면 그 기능만 안내하고 나머지는 예전처럼
   const [extended, setExtended] = useState<boolean | null>(null);
   useEffect(() => {
@@ -127,17 +131,16 @@ export default function CounterSms({ author }: { author: string }) {
   const ruleCtx = (row: TargetRow) => ({ phones: row.phones, leaseCodes: row.lease_code ? [row.lease_code] : [], serials: row.serials || [] });
   // 관리부 목록 도착함 — 봇 폰의 점검AS 스크립트(gas-and-bot/supabase-outbox-poller.js ⑧)가 마감방 글을 넣어 둔다. 표가 없으면 조용히 빈 목록
   // 2026-10-10 "그냥 자동으로 올라가게": 탭을 열 때 엣지 함수 counter-inbox-ingest 를 먼저 불러 대기 중인 글을 넣고(크론도 2분마다 같은 일),
-  // 도착함에는 자동으로 못 넣은 글(팀 불명·형식 오류)만 남아 [직접 넣기]로 처리한다. 최근 자동 반영 결과는 따로 보여 준다
+  // 도착함에는 자동으로 못 넣은 글(팀 불명·형식 오류)만 남아 [직접 넣기]로 처리한다. 자동 반영 결과는 목록의 "변경 이력"(batch.log)
   const [inbox, setInbox] = useState<InboxRow[]>([]);
-  const [autoDone, setAutoDone] = useState<InboxRow[]>([]);
   const [uploadInboxId, setUploadInboxId] = useState<number | null>(null);
   const runIngest = useCallback(async (): Promise<number> => {
     const out = await invokeEdgeFunction<{ processed?: unknown[] }>("counter-inbox-ingest", {}, 25_000).catch(() => ({ processed: [] as unknown[] }));
     return Array.isArray(out?.processed) ? out.processed.length : 0;
   }, []);
-  const loadInbox = useCallback(async (t: string) => {
+  // 자동 반영 결과(applied_by=자동) 조회는 2026-10-24 뺐다 — 같은 내용이 batch.log 에 있어 목록의 "변경 이력"으로만 보여 준다
+  const loadInbox = useCallback(async () => {
     setInbox(await selectRows<InboxRow>("counter_sms_inbox", "select=id,room,sender,text,received_at,note&applied_at=is.null&order=received_at.desc&limit=5").catch(() => [] as InboxRow[]));
-    setAutoDone(t ? await selectRows<InboxRow>("counter_sms_inbox", `select=id,room,sender,received_at,applied_at,applied_by,note&applied_by=eq.${encodeURIComponent("자동")}&note=like.${encodeURIComponent(`${t}팀*`)}&order=applied_at.desc&limit=4`).catch(() => [] as InboxRow[]) : []);
   }, []);
   // 카운터 사진 한 장으로 마감방 전송 + 완료 — 사진 고르기 외엔 손이 안 간다(2026-10-10)
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -215,7 +218,7 @@ export default function CounterSms({ author }: { author: string }) {
   }, []);
   useEffect(() => {
     if (!team) return;
-    void (async () => { await runIngest(); await loadBatch(team); await loadInbox(team); })();
+    void (async () => { await runIngest(); await loadBatch(team); await loadInbox(); })();
   }, [team, loadBatch, loadInbox, runIngest]);
 
   // 팀 글자 → 문구 세트 지역 ("A" → "A지역"). 없으면 지금 고른 지역 세트
@@ -554,35 +557,25 @@ export default function CounterSms({ author }: { author: string }) {
 
       {tab === "main" ? (
         <>
-          {/* 관리부 목록 — 봇이 마감방 글을 넣으면 엣지 함수가 자동으로 반영한다(있는 업체 그대로, 없는 업체만 추가). 여기엔 최근 자동 반영 결과와 자동으로 못 넣은 글만 보인다(2026-10-10) */}
-          {(autoDone.length > 0 || inbox.length > 0) && (
-            <section className={`rounded-xl border p-3 ${inbox.length ? "border-amber-300 bg-amber-50/70" : "border-emerald-300 bg-emerald-50/70"}`}>
-              {autoDone.length > 0 && (
-                <div>
-                  <div className="text-[12px] font-black text-emerald-900">⚡ 관리부 목록 자동 반영 <span className="font-bold text-emerald-700">· 있는 업체는 그대로(완료·문자 보냄 유지), 없는 업체만 추가 · "목록에 없는 열린 곳"은 관리부가 끝낸 것이면 카드에서 [완료]</span></div>
-                  <ul className="mt-1 space-y-0.5 text-[11px] font-bold text-slate-700">
-                    {autoDone.map((r) => <li key={r.id}>{(r.applied_at || "").slice(5, 16).replace("T", " ")} · {r.sender || r.room} → {r.note}</li>)}
-                  </ul>
+          {/* 자동으로 못 넣은 관리부 목록만 보인다 — 자동 반영 결과는 아래 목록의 "변경 이력"에서 본다(2026-10-24 단순화, 같은 내용 두 번 나열하던 초록 블록 뺌) */}
+          {inbox.length > 0 && (
+            <section className="rounded-xl border border-amber-300 bg-amber-50/70 p-3">
+              <div>
+                <div className="text-[12px] font-black text-amber-900">📥 자동으로 못 넣은 목록 {inbox.length}건 — 확인하고 [직접 넣기]</div>
+                <div className="mt-2 space-y-1.5">
+                  {inbox.map((row) => {
+                    const head = parseListHeader(row.text); const first = row.text.trim().split("\n").find((l) => l.trim()) || "";
+                    return (
+                      <div key={row.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px]">
+                        <span className="font-black text-slate-800">{head.team ? `${head.team}팀` : row.room}{head.monthLabel ? ` · ${head.monthLabel}` : ""}</span>
+                        <span className="min-w-0 flex-1 truncate font-semibold text-slate-500">{first.slice(0, 40)} · {row.text.length.toLocaleString()}자 · {row.sender} · {row.received_at.slice(5, 16).replace("T", " ")}{row.note ? ` · ${row.note}` : " · 아직 처리 전"}</span>
+                        <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); setUploadMode("merge"); setUploadRaw(row.text); setUploadInboxId(row.id); setUploadTitle(""); window.setTimeout(() => uploadConvert(row.text), 0); }} className="min-h-11 rounded-full bg-amber-600 px-3 text-[12px] font-black text-white hover:bg-amber-700">직접 넣기</button>
+                        <button type="button" onClick={() => void markInbox(row.id, "", "무시")} className="min-h-11 rounded-full border border-slate-300 bg-white px-3 text-[12px] font-black text-slate-500 hover:bg-slate-50">무시</button>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-              {inbox.length > 0 && (
-                <div className={autoDone.length ? "mt-2 border-t border-amber-200 pt-2" : ""}>
-                  <div className="text-[12px] font-black text-amber-900">📥 자동으로 못 넣은 목록 {inbox.length}건 — 확인하고 [직접 넣기]</div>
-                  <div className="mt-2 space-y-1.5">
-                    {inbox.map((row) => {
-                      const head = parseListHeader(row.text); const first = row.text.trim().split("\n").find((l) => l.trim()) || "";
-                      return (
-                        <div key={row.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px]">
-                          <span className="font-black text-slate-800">{head.team ? `${head.team}팀` : row.room}{head.monthLabel ? ` · ${head.monthLabel}` : ""}</span>
-                          <span className="min-w-0 flex-1 truncate font-semibold text-slate-500">{first.slice(0, 40)} · {row.text.length.toLocaleString()}자 · {row.sender} · {row.received_at.slice(5, 16).replace("T", " ")}{row.note ? ` · ${row.note}` : " · 아직 처리 전"}</span>
-                          <button type="button" onClick={() => { setUploadOpen(true); setUploadBlocks(null); setUploadMode("merge"); setUploadRaw(row.text); setUploadInboxId(row.id); setUploadTitle(""); window.setTimeout(() => uploadConvert(row.text), 0); }} className="rounded-full bg-amber-600 px-3 py-1.5 text-[11px] font-black text-white hover:bg-amber-700">직접 넣기</button>
-                          <button type="button" onClick={() => void markInbox(row.id, "", "무시")} className="rounded-full border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-black text-slate-500 hover:bg-slate-50">무시</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              </div>
             </section>
           )}
           {/* 팀 공유 마감 목록 — 관리부가 한 번 올리면 팀원 모두 여기서 바로 보낸다 */}
@@ -594,107 +587,82 @@ export default function CounterSms({ author }: { author: string }) {
             </div>
           )}
           {!batchLoading && batch && (() => {
-            const sentCount = batchTargets.filter((t) => t.sent_at).length;
-            const doneCount = batchTargets.filter((t) => t.done_at).length;
-            const stage = (t: TargetRow) => (t.done_at ? 2 : t.sent_at ? 1 : 0); // 안 보낸 것 → 보냄 → 완료 순
-            // 카드 이력(2026-10-10 "언제 리스트가 올라간 건지, 문자 보낸 날짜, 사진 보낸 날짜가 다 나와야 오해가 없다"):
-            //   목록에 오른 때 = added_at(없으면 목록 생성 시각), 다시 오른 때 = 배치 log 항목(자동·추가·맞추기)의 skipped 이름이 이 업체인 시각.
-            //   문자 보낸 뒤 또 오른 것은 주황, 완료된 뒤 또 오른 것은 빨강으로 따로 표시한다.
-            const md = (iso?: string | null) => (iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}` : "");
-            const mdt = (iso?: string | null) => (iso ? `${md(iso)} ${iso.slice(11, 16)}` : "");
-            const historyOf = (t: TargetRow) => {
-              const listedAt = t.added_at || batch?.created_at || "";
-              const key = contactVendorKey(t.vendor);
-              const again = (batch?.log || [])
-                .filter((e) => e.mode !== "remove" && (e.skipped || []).some((name) => contactVendorKey(name) === key) && (!listedAt || e.at > listedAt))
-                .map((e) => e.at);
-              const afterDone = t.done_at ? again.filter((at) => at > (t.done_at as string)) : [];
-              const afterSent = t.sent_at && !t.done_at ? again.filter((at) => at > (t.sent_at as string)) : [];
-              return { listedAt, again, afterDone, afterSent };
-            };
-            const groupRows = batchTargets
-              .filter((t) => t.grade_group === gradeTab)
-              .sort((a, b) => stage(a) - stage(b));
+            // 2026-10-24 단순화: 상태 한 줄·신규·변경 이력·카드 단추 1개+⋯ — 판정은 src/counterSmsView.ts, 표시 틀은 CounterSmsParts.view.tsx. 숫자·저장은 그대로
+            const s = statusLine(batch, batchTargets);
+            const groupRows = sortTargets(batchTargets.filter((t) => t.grade_group === gradeTab && (!newOnly || isNewTarget(t, batch))), sortBy, batch);
             const doneRows = groupRows.filter((t) => t.done_at);
             // 완료는 접어 둔다 — 관리부 목록에서 빠진 업체가 자동 완료되면 카드가 쌓이는데, 할 일은 열린 업체뿐(2026-10-10)
             const shownRows = showDone ? groupRows : groupRows.filter((t) => !t.done_at);
+            const gradeCount = (g: TargetRow["grade_group"]) => batchTargets.filter((t) => t.grade_group === g).length;
+            const actionLabel: Record<CardAction, string> = { send: "문자 보내기", photo: "📷 카운터 전송", done: "완료", unsend: "전송 취소", undone: "완료 취소", remove: "이 업체 삭제" };
+            const runAction = (a: CardAction, row: TargetRow) => {
+              if (a === "send") openSendRow(row);
+              else if (a === "photo") pickCounterPhoto(row);
+              else if (a === "done") markDone(row);
+              else if (a === "unsend") unmarkSent(row);
+              else if (a === "undone") unmarkDone(row);
+              else void removeTarget(row);
+            };
             return (
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="break-words text-[13px] font-black text-slate-900">{batch.title} <span className="font-bold text-slate-400">· {batch.created_by} · {batch.created_at.slice(5, 16).replace("T", " ")}</span></div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <div className="h-1.5 w-32 overflow-hidden rounded-full bg-slate-200 sm:w-40">
-                        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${batchTargets.length ? Math.round((sentCount / batchTargets.length) * 100) : 0}%` }} />
-                      </div>
-                      <span className="text-[11px] font-black tabular-nums text-emerald-600">{sentCount}/{batchTargets.length} 전송</span>
-                      <span className="text-[11px] font-black tabular-nums text-indigo-600">· 완료 {doneCount}</span>
-                    </div>
-                    {(batch.log || []).length > 0 && (
-                      <div className="mt-1 space-y-0.5 text-[10px] font-bold text-slate-500">
-                        {(batch.log || []).slice(-3).reverse().map((entry, i) => (
-                          <div key={`${entry.at}-${i}`}>{entry.mode === "auto" ? "⚡" : entry.mode === "sync" ? "⇄" : entry.mode === "remove" ? "－" : "＋"} {entry.at.slice(5, 16).replace("T", " ")} {entry.by} · {entry.mode === "remove" ? `삭제 ${(entry.removed || []).join(", ")}` : entry.mode === "auto" ? `자동 반영 — 신규 ${entry.added}곳 · 중복 ${entry.skipped.length}곳${entry.missing?.length ? ` · 목록에 없는 열린 곳 ${entry.missing.length}곳(${entry.missing.join(", ")})` : ""}` : `${entry.mode === "sync" ? "목록 맞춤 — " : ""}${entry.added}곳 추가`}{entry.kept !== undefined && entry.mode === "sync" ? ` · 유지 ${entry.kept}곳` : ""}{entry.dropped?.length ? ` · 빠져서 완료 ${entry.dropped.length}곳(${entry.dropped.join(", ")})` : ""}{entry.skipped.length && entry.mode === "merge" ? ` · 중복 건너뜀 ${entry.skipped.length}곳(${entry.skipped.join(", ")})` : ""}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button type="button" onClick={() => void loadBatch(team)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-black text-slate-500">새로고침</button>
-                  <button type="button" onClick={() => void removeBatch()} className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-black text-rose-600">목록 삭제</button>
-                </div>
+                <StatusHeader s={s} sub={`올림 ${batch.created_by} · ${logWhen(batch.created_at)}`} newOnly={newOnly}
+                  onToggleNew={() => setNewOnly((v) => !v)} onRefresh={() => void loadBatch(team)}
+                  more={[{ label: `목록 전체 삭제 (${batchTargets.length}곳)`, hint: "보냄·완료 표시까지 전 직원 화면에서 지워집니다", danger: true, onClick: () => void removeBatch() }]} />
+                <HelpBox photoNote={photoTeams.includes(team)} />
+                <LogPanel lines={logLines(batch, batchTargets)} />
                 <div className="flex gap-1 border-b border-slate-100 bg-slate-50/40 px-3 pt-2">
-                  {([["s_group", `🟢 S·NN·N급 ${batchTargets.filter((t) => t.grade_group === "s_group").length}`], ["v_group", `💎 V·SS급 ${batchTargets.filter((t) => t.grade_group === "v_group").length}`]] as const).map(([key, label]) => (
+                  {([["s_group", `일반 S·NN·N ${gradeCount("s_group")}`], ["v_group", `우수 V·SS ${gradeCount("v_group")}`]] as const).map(([key, label]) => (
                     <button key={key} type="button" onClick={() => setGradeTab(key)}
-                      className={`rounded-t-lg px-4 py-2 text-xs font-black transition ${gradeTab === key ? "border-b-2 border-blue-600 bg-white text-blue-700" : "text-slate-400 hover:text-slate-600"}`}>{label}</button>
+                      className={`min-h-11 rounded-t-lg px-4 text-[12px] font-black transition ${gradeTab === key ? "border-b-2 border-blue-600 bg-white text-blue-700" : "text-slate-500 hover:text-slate-700"}`}>{label}</button>
                   ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
+                  <ChipGroup value={sortBy} onChange={setSortBy} options={[["stage", "처리 순"], ["added", "추가된 날짜순"]]} />
+                  <ChipGroup value={newOnly ? "new" : "all"} onChange={(v) => setNewOnly(v === "new")} options={[["all", "전체"], ["new", `신규 ${s.fresh}`]]} />
                 </div>
                 <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {shownRows.map((row) => (
-                    <div key={row.id} className={`relative min-w-0 overflow-hidden rounded-lg border px-3 py-2.5 transition ${row.done_at ? "border-indigo-300 bg-indigo-50/70" : row.sent_at ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-white hover:border-blue-300"}`}>
-                      <button type="button" onClick={() => openSendRow(row)} className="block w-full text-left">
-                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                          <span className="min-w-0 flex-1 basis-[60%] truncate text-[13px] font-black text-slate-900">{row.grade_group === "v_group" ? "💎" : "✉️"} {row.vendor}</span>
-                          {row.list_kind === "CMS" && <span title="CMS 마감 — 관리부가 따로 올리는 목록. 맞추기는 CMS끼리만" className="shrink-0 rounded bg-cyan-100 px-1 py-0.5 text-[9px] font-black text-cyan-800">CMS{row.cms_day ? ` ${row.cms_day}일` : ""}</span>}
+                  {shownRows.map((row) => {
+                    const h = historyOf(row, batch);
+                    const isNew = isNewTarget(row, batch);
+                    const primary = primaryAction(row, photoTeams);
+                    const dateParts = [
+                      h.listedAt ? `추가 ${md(h.listedAt)}${row.added_by ? ` ${/^자동/.test(row.added_by) ? "자동" : row.added_by}` : ""}` : "",
+                      row.sent_at ? `문자 ${mdt(row.sent_at)} ${row.sent_by || ""}`.trim() : "",
+                      row.done_at ? `${/카운터 사진/.test(row.done_by || "") ? "📷 사진 전송" : "완료"} ${mdt(row.done_at)} ${(row.done_by || "").replace(/\s*·\s*카운터 사진$/, "")}`.trim() : "",
+                    ].filter(Boolean);
+                    return (
+                      <CounterCard key={row.id} vendor={row.vendor}
+                        status={row.done_at ? "done" : row.sent_at ? "sent" : "none"}
+                        newLabel={isNew ? `신규 ${md(row.added_at)}` : ""}
+                        warn={warnBadge(h)}
+                        extraBadges={<>
+                          {row.list_kind === "CMS" && <span title="CMS 마감 — 관리부가 따로 올리는 목록. 맞추기는 CMS끼리만" className="shrink-0 rounded bg-cyan-100 px-1.5 py-0.5 text-[11px] font-black text-cyan-800">CMS{row.cms_day ? ` ${row.cms_day}일` : ""}</span>}
                           {ruleBadges(row)}
-                          {(() => { const h = historyOf(row); return (<>
-                            {h.listedAt && <span title={`목록에 오른 때 ${h.listedAt.slice(0, 16).replace("T", " ")}${row.added_by ? ` · ${row.added_by}` : ""}`} className="shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[9px] font-black text-slate-600">목록 {md(h.listedAt)}</span>}
-                            {h.afterDone.length > 0
-                              ? <span title={`완료한 뒤 관리부 목록에 또 올라옴: ${h.afterDone.map(mdt).join(", ")} — 관리부에 완료 사실을 알리거나 사진을 다시 확인하세요`} className="shrink-0 rounded bg-rose-600 px-1 py-0.5 text-[9px] font-black text-white">완료 후 또 올라옴 {md(h.afterDone[h.afterDone.length - 1])}</span>
-                              : h.afterSent.length > 0
-                              ? <span title={`문자를 보낸 뒤 목록에 또 올라옴: ${h.afterSent.map(mdt).join(", ")} — 고객 회신이 아직이면 다시 보내지 말고 확인 전화`} className="shrink-0 rounded bg-amber-500 px-1 py-0.5 text-[9px] font-black text-white">문자 후 또 올라옴 {md(h.afterSent[h.afterSent.length - 1])}</span>
-                              : h.again.length > 0 && <span title={`목록에 다시 올라옴: ${h.again.map(mdt).join(", ")}`} className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-black text-amber-800">🔁 또 올라옴 ×{h.again.length}</span>}
-                          </>); })()}
-                          {row.done_at
-                            ? <span className="shrink-0 rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓✓ 완료</span>
-                            : row.sent_at && <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">✓ 보냄</span>}
-                        </div>
-                        <div className="mt-0.5 truncate text-[11px] font-bold text-slate-400">
-                          {row.machines.length}대 · {row.phones.length ? row.phones.map(formatPhone).join(", ") : "번호 없음"}
-                        </div>
-                        {(row.sent_at || row.done_at)
-                          ? <div className={`mt-0.5 truncate text-[10px] font-black ${row.done_at ? "text-indigo-700" : "text-emerald-700"}`} title={[row.sent_at && `문자 ${row.sent_at.slice(0, 16).replace("T", " ")} ${row.sent_by || ""}${row.sent_phone ? ` → ${formatPhone(row.sent_phone)}` : ""}`, row.done_at && `${/카운터 사진/.test(row.done_by || "") ? "카운터 사진 전송" : "완료"} ${row.done_at.slice(0, 16).replace("T", " ")} ${row.done_by || ""}`].filter(Boolean).join("\n")}>
-                              {row.sent_at ? `문자 ${mdt(row.sent_at)} ${row.sent_by || ""}` : "문자 안 보냄"}
-                              {row.done_at ? ` · ${/카운터 사진/.test(row.done_by || "") ? "📷 사진 전송" : "완료"} ${mdt(row.done_at)} ${(row.done_by || "").replace(/\s*·\s*카운터 사진$/, "")}` : ""}
-                            </div>
-                          : row.vendor_names.length > 1 && <div className="mt-0.5 truncate text-[10px] font-bold text-blue-500">지점 {row.vendor_names.length}곳 통합</div>}
-                      </button>
-                      <span className="mt-1.5 flex justify-end gap-1">
-                        {row.sent_at && (row.done_at
-                          ? <button type="button" onClick={() => unmarkDone(row)} className="rounded border border-indigo-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-indigo-600">완료 취소</button>
-                          : <>
-                            <button type="button" onClick={() => markDone(row)} title="마감(카운터 회신·처리)까지 끝났으면 완료" className="rounded bg-indigo-600 px-1.5 py-0.5 text-[9px] font-black text-white">완료</button>
-                            <button type="button" onClick={() => unmarkSent(row)} className="rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-emerald-600">전송 취소</button>
-                          </>)}
-                        {/* 카운터 사진 한 장 → 마감방에 업체·기기·주소 글 + 사진 → 완료 */}
-                        {!row.done_at && photoTeams.includes(row.team) && <button type="button" disabled={busy || photoBusyId === row.id} onClick={() => pickCounterPhoto(row)} title="고객이 보낸 카운터 사진을 고르면 마감방에 업체명·기종·시리얼·자산기번·주소와 함께 올리고 이 카드를 완료로 표시합니다" className="rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-black text-white hover:bg-slate-700 disabled:opacity-40">{photoBusyId === row.id ? "전송 중…" : "📷 카운터 전송"}</button>}
-                        {/* 이 업체만 삭제 — 통째 삭제 말고 */}
-                        <button type="button" disabled={busy} onClick={() => void removeTarget(row)} title="이 업체 카드만 목록에서 지웁니다 (나머지는 그대로)" className="rounded border border-rose-200 bg-white px-1.5 py-0.5 text-[9px] font-black text-rose-500 hover:bg-rose-50 disabled:opacity-40">삭제</button>
-                      </span>
-                    </div>
-                  ))}
-                  {!shownRows.length && <div className="col-span-full py-6 text-center text-xs font-bold text-slate-400">{doneRows.length ? "열린 업체가 없습니다 — 이 등급군은 모두 완료" : "이 등급군에 업체가 없습니다."}</div>}
+                        </>}
+                        infoLine={`${row.machines.length}대 · ${row.phones.length ? row.phones.map(formatPhone).join(", ") : "번호 없음"}${row.vendor_names.length > 1 ? ` · 지점 ${row.vendor_names.length}곳 통합` : ""}`}
+                        dateLine={dateParts.join(" · ")}
+                        dateTitle={[h.listedAt && `목록에 오른 때 ${kstIso(h.listedAt).replace("T", " ")}${row.added_by ? ` · ${row.added_by}` : ""}`, row.sent_at && `문자 ${kstIso(row.sent_at).replace("T", " ")} ${row.sent_by || ""}${row.sent_phone ? ` → ${formatPhone(row.sent_phone)}` : ""}`, row.done_at && `${/카운터 사진/.test(row.done_by || "") ? "카운터 사진 전송" : "완료"} ${kstIso(row.done_at).replace("T", " ")} ${row.done_by || ""}`].filter(Boolean).join("\n")}
+                        onOpen={() => openSendRow(row)}
+                        primary={primary ? {
+                          label: primary === "photo" && photoBusyId === row.id ? "전송 중…" : actionLabel[primary],
+                          tone: primary === "photo" ? "dark" : primary === "done" ? "indigo" : "blue",
+                          disabled: primary === "photo" ? busy || photoBusyId === row.id : false,
+                          title: primary === "photo" ? "고객이 보낸 카운터 사진을 고르면 마감방에 업체명·기종·시리얼·자산기번·주소와 함께 올리고 이 카드를 완료로 표시합니다" : primary === "done" ? "마감(카운터 회신·처리)까지 끝났으면 완료" : undefined,
+                          onClick: () => runAction(primary, row),
+                        } : null}
+                        more={moreActions(row, photoTeams).map((a) => ({
+                          label: a === "photo" && photoBusyId === row.id ? "전송 중…" : actionLabel[a],
+                          danger: a === "remove",
+                          disabled: a === "remove" || a === "photo" ? busy || photoBusyId === row.id : false,
+                          hint: a === "remove" ? "이 업체 카드만 지웁니다 (나머지는 그대로)" : a === "photo" ? "사진을 고르면 확인창에서 방·글을 보고 보냅니다" : undefined,
+                          onClick: () => runAction(a, row),
+                        }))} />
+                    );
+                  })}
+                  {!shownRows.length && <div className="col-span-full py-6 text-center text-[12px] font-bold text-slate-400">{newOnly ? "이 등급군에 신규 업체가 없습니다 — [전체]로 돌아가기" : doneRows.length ? "열린 업체가 없습니다 — 이 등급군은 모두 완료" : "이 등급군에 업체가 없습니다."}</div>}
                   {doneRows.length > 0 && (
-                    <button type="button" onClick={() => setShowDone((v) => !v)} className="col-span-full rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 py-2 text-[11px] font-black text-indigo-600 transition hover:bg-indigo-50">
-                      {showDone ? `✓✓ 완료 ${doneRows.length}곳 접기` : `✓✓ 완료 ${doneRows.length}곳 보기 (관리부 목록에서 빠진 업체는 자동 완료)`}
+                    <button type="button" onClick={() => setShowDone((v) => !v)} className="col-span-full min-h-11 rounded-lg border border-dashed border-indigo-200 bg-indigo-50/40 text-[12px] font-black text-indigo-600 transition hover:bg-indigo-50">
+                      {showDone ? `완료 ${doneRows.length}곳 접기` : `완료 ${doneRows.length}곳 보기 (관리부 목록에서 빠진 업체는 자동 완료)`}
                     </button>
                   )}
                 </div>

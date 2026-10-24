@@ -126,9 +126,9 @@ describe("점검·AS 수 — 활동 기록 제외, 기기 열쇠, 화면 입구"
 
   it("화면 파일이 같은 입구를 쓴다", () => {
     // 홈(2026-10-23 KPI 현황판): 점검·AS 는 KPI 로더(kpiData → loadFieldRows)가 읽고 kpiCompute(countField)가 센다.
-    // 관제 덱 인사말도 그 묶음을 weekSummary 로 받는다(Home 이 따로 읽지 않음)
+    // 홈은 점검·AS 를 따로 읽지 않는다(절약 효과·누적 기록 수 조회는 2026-10-24 삭제)
     const homeSrc = readFileSync("src/Home.tsx", "utf8");
-    expect(homeSrc).toMatch(/weekSummary\(/);
+    expect(homeSrc).not.toMatch(/countRows\("(jeomgeom|as_records)"/);
     expect(homeSrc.includes("weekCols")).toBe(false);
     expect(readFileSync("src/kpi/kpiData.ts", "utf8")).toMatch(/loadFieldRows\(/);
     expect(readFileSync("src/kpi/kpiCompute.ts", "utf8")).toMatch(/countField\(/);

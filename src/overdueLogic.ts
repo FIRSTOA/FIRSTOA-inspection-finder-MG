@@ -2,8 +2,15 @@
 export type OverdueKind = "AS" | "물류";
 export type KindFilter = "" | OverdueKind;
 
-/** AS 만 일정리스트에서 처리, 나머지(납품철수교체휴가교육·물류)는 네이버 캘린더에서 완료 */
-export const overdueKind = (scheduleType: string): OverdueKind => (scheduleType === "AS" ? "AS" : "물류");
+/**
+ * 물류 미처리로 세는 일정 유형(서비스접수 현황판 물류 칸·홈 미처리·일정리스트 미처리 패널이 함께 쓰는 한 정의, 2026-10-24).
+ * 전에는 "AS" 가 아니면 전부 물류로 봐서 익일AS 를 물류로 셌다 — 홈 물류 46 ≠ 현황판 44 의 원인.
+ */
+export const LOGISTICS_SCHEDULE_TYPES = ["물류", "납품철수교체휴가교육"] as const;
+export const isLogisticsSchedule = (scheduleType: string): boolean => (LOGISTICS_SCHEDULE_TYPES as readonly string[]).includes(String(scheduleType || ""));
+
+/** 물류(납품철수교체휴가교육·물류)는 네이버 캘린더에서 완료, 그 밖(AS·익일AS)은 AS — 일정리스트에서 처리 */
+export const overdueKind = (scheduleType: string): OverdueKind => (isLogisticsSchedule(scheduleType) ? "물류" : "AS");
 
 export const overdueBadge = (scheduleType: string): string =>
   scheduleType === "납품철수교체휴가교육" ? "납품" : scheduleType === "물류" ? "물류" : scheduleType;

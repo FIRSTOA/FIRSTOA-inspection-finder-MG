@@ -1,4 +1,4 @@
-// 미처리 접수 현황판·홈 카드의 데이터 층(순수 변환 + 한 번 읽기). 화면은 ReceptionBoardPanel·HomeReceptionPanel.
+// 미처리 접수 현황판의 데이터 층(순수 변환 + 한 번 읽기). 화면은 ReceptionBoardPanel. 홈 미처리는 homeUnhandled.mergeUnhandled(2026-10-24 하나로).
 // 설계: docs/tasks/reception-dept-types.md 4-1, 4-5. Supabase 접근은 래퍼(selectAllRows·fetchOpenReceptions)만.
 import type { ReceptionRow } from "./ReceptionBoard";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
@@ -7,6 +7,7 @@ import { ageDays, isDeptType, isStaleRemote, weekCompletionRate } from "./deptRe
 import { selectAllRows, selectRows, updateRows } from "./supabase";
 import { fieldTicketVendor } from "./ids";
 import { kstDate } from "./visits";
+import { LOGISTICS_SCHEDULE_TYPES } from "./overdueLogic";
 import { mergeSheetAndDb, sheetRowStatus, sheetRowUrl, type SheetOpenResult, type SheetOpenRow } from "./receptionSheetOpen";
 
 const KNOWN_TYPES = new Set<string>(RECEPTION_TYPES.map((m) => m.type));
@@ -225,8 +226,8 @@ export function daysBefore(today: string, n: number): string {
   return new Date(t - n * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** 물류 미처리로 세는 일정 유형 */
-export const LOGISTICS_SCHEDULE_TYPES = ["물류", "납품철수교체휴가교육"] as const;
+/** 물류 미처리로 세는 일정 유형 — 정의는 overdueLogic 한 곳(홈 미처리와 같은 값) */
+export { LOGISTICS_SCHEDULE_TYPES };
 
 /**
  * 물류 미처리 — as_tickets 중 유형이 물류·납품철수교체휴가교육(일정리스트 '납품' 칸)만,

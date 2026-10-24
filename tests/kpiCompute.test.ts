@@ -10,7 +10,7 @@ import { blogPeriods, countBlog, type BlogRow } from "../src/blogSheet";
 import { teamWorkinProgress, type WorkinPlaceLite } from "../src/workinProgress";
 import {
   bizDays, countOverageVisits, dailyNeedText, fieldKpi, expansionKpi, kpiCount, kpiProgress, kpiRanges, kpiTargetFor, kpiTodayLine, okrKpi,
-  kpiRowStatus, okrWeekResult, recontractOverdue, titledNames, toFormRows, unhandledKpis, workinPace, type FormRaw, type KpiFacts, type RosterMember,
+  kpiRowStatus, okrWeekResult, recontractOverdue, overageKpi, okrWeekMembers, okrScopeLabel, blogYearTotals, overhaulByPerson, titledNames, toFormRows, unhandledKpis, workinPace, type FormRaw, type KpiFacts, type RosterMember,
 } from "../src/kpi/kpiCompute";
 import { KPI_DEFS, mainKpiIds, parseKpiTargets } from "../src/kpi/kpiDefs";
 
@@ -244,14 +244,26 @@ describe("목표(인당 × 인원) · 주요 목표 · 설정", () => {
     const base = { range: R.month, period: "month" as const, today: TODAY, teamCount: 5, holidays: [] };
     expect(kpiTargetFor("K7", { perPersonBizDay: 1 }, { ...base, scope: "team", headcount: 3 })).toEqual({ full: 60, toDate: 45 });
   });
-  it("초과 파트당 월 2 · 전체 8 · 인당 설정 · 주 단위는 목표 없음", () => {
+  it("초과 파트당 월 2 · 전체 = 파트 수 × 2(5팀 = 10) · 인당 설정 · 주 단위는 목표 없음", () => {
     const base = { range: R.month, period: "month" as const, today: TODAY, teamCount: 5, holidays: [] };
     const t = parseKpiTargets("").targets.K10;
     expect(kpiTargetFor("K10", t, { ...base, scope: "team", headcount: 3 }).full).toBe(2);
-    expect(kpiTargetFor("K10", t, { ...base, scope: "all", headcount: 7 }).full).toBe(8);
+    expect(kpiTargetFor("K10", t, { ...base, scope: "all", headcount: 7 }).full).toBe(10);
+    expect(kpiTargetFor("K10", t, { ...base, period: "quarter", range: R.quarter, scope: "all", headcount: 7 }).full).toBe(30);
+    expect(kpiTargetFor("K10", { ...t, monthTotal: 8 }, { ...base, scope: "all", headcount: 7 }).full).toBe(8); // 설정하면 그 값
     expect(kpiTargetFor("K10", t, { ...base, scope: "person", headcount: 1 }).full).toBeNull();
     expect(kpiTargetFor("K10", { ...t, perPersonMonth: 1 }, { ...base, scope: "person", headcount: 1 }).full).toBe(1);
     expect(kpiTargetFor("K10", t, { ...base, period: "week", range: R.week, scope: "team", headcount: 3 }).full).toBeNull();
+  });
+  it("K10 '—' 원인: 달성표 기본 기간(이번 주)엔 월 목표가 없었다 → 기간을 월·분기로 묶어 이번 주 보기에서도 이번 달 목표", () => {
+    const K10 = KPI_DEFS.find((d) => d.id === "K10")!;
+    expect(K10.periods).toEqual(["month", "quarter"]);
+    const rows = kpiProgress("K10", { overage: [], roster: ROSTER }, { ranges: R, period: "month", settings: parseKpiTargets(""), teamOf });
+    expect(rows[0]).toMatchObject({ scope: "all", actual: 0, target: 10 });
+    expect(rows.filter((r) => r.scope === "team").map((r) => r.target)).toEqual([2, 2, 2, 2, 2]);
+    expect(rows.filter((r) => r.scope === "person").every((r) => r.target === null)).toBe(true); // 개인은 실적만
+    const v = overageKpi([], R, parseKpiTargets("").targets.K10);
+    expect([v.target, v.extra.quarterTarget]).toEqual([10, 30]);
   });
   it("주요 목표 기본 7개, 설정으로 끄고 켬, 이상한 값은 버리고 알림", () => {
     expect(mainKpiIds(parseKpiTargets("").targets)).toEqual(["K2", "K33", "K7", "K10", "K20", "K21", "K34"]);
@@ -342,13 +354,21 @@ describe("⑥ 오버홀(K33)만 직책자(팀장·파트장·부파트장) 제�
     { name: "한왕주", team: "C", title: "" }, { name: "박영현", team: "C", title: "파트장" }, { name: "이민구", team: "C", title: "부파트장" },
     { name: "엄재현", team: "E", title: "" }, { name: "이권선", team: "A", title: "팀장" },
   ];
-  const office = (author: string, count: number) => ({ work_date: "2026-10-20", author, values: { overhaul: { count } } });
-  const f: KpiFacts = { roster, office: [office("한왕주", 2), office("박영현", 5), office("이민구", 3), office("엄재현", 1), office("이권선", 4)] };
+  const oh = (author: string, points: number, dept = "", date = "2026-10-20", repairPoints = 0) => ({ author, date, points, repairPoints, dept });
+  const f: KpiFacts = { roster, overhaul: [oh("한왕주", 2, "", "2026-10-20", 1), oh("박영현", 5), oh("이민구", 3), oh("엄재현", 1), oh("이권선", 4), oh("외부김", 9, "외부인력"), oh("한왕주", 7, "", "2026-10-12")] };
 
   it("집계: 직책자 기록은 빼고 프로만", () => {
     expect(kpiCount("K33", f, {}, R.week, ctx)?.n).toBe(3); // 한왕주 2 + 엄재현 1
     expect(kpiCount("K33", f, { team: "C" }, R.week, ctx)?.n).toBe(2);
     expect(titledNames(roster)).toEqual(new Set(["박영현", "이민구", "이권선"]));
+  });
+  it("원본 = 오버홀 시트: 외부인력 제외, 명단에 없으면 부서명 끝 글자 팀, 수리포인트는 사람별 따로", () => {
+    const g: KpiFacts = { roster, overhaul: [...f.overhaul!, oh("신입", 2, "경기D")] };
+    expect(kpiCount("K33", g, {}, R.week, ctx)?.n).toBe(5);
+    expect(kpiCount("K33", g, { team: "D" }, R.week, ctx)?.n).toBe(2);
+    expect(kpiCount("K33", { roster }, {}, R.week, ctx)).toBeNull(); // 시트 못 읽음 = null(0 아님)
+    const p = overhaulByPerson(g.overhaul!, roster, teamOf, R.week);
+    expect(p.byPerson.find((x) => x.name === "한왕주")).toMatchObject({ points: 2, repairPoints: 1 });
   });
   it("목표 인원도 직책자 제외(인당 주 2) — 개인 칸에도 직책자 없음", () => {
     const rows = kpiProgress("K33", f, { ranges: R, period: "week", settings: parseKpiTargets(""), teamOf });
@@ -373,5 +393,40 @@ describe("⑤ OKR 주 단위 — okrWeekResult", () => {
     expect(r.pct).toBe(50);
     expect(r.missingTeams).toEqual(["C", "D"]);
     expect(kpiCount("K19", { okr: { cycle: null, quarter: null, reports: [], week: { id: "2026-10-W3", weeks: [], goals, reports } } }, {}, R.week, ctx)).toEqual({ n: 2, d: 4 });
+  });
+  it("범위: 팀 하나 · 개인(member 행) · 범위 글자 · 개인 목록", () => {
+    const goals = [1, 2].map((no) => ({ no, pillar: "P", bottleneck: "", objective: `목표${no}`, criteria: "" }));
+    const rep = (team: string, member: string, js: string[], cycle = "2026-10-W3"): OkrReport => ({ ...emptyReport(cycle, team, member), rows: js.map((j, i) => ({ no: i + 1, actual: "", judgment: j, reason: "", plan: "", evidence: "" })) });
+    const reports = [rep("A", "", ["완료", "완료"]), rep("A", "한X", ["미착수", "완료"]), rep("B", "이호준", ["완료", "미흡"]), rep("B", "박X", ["부분달성", ""]), rep("C", "최X", ["완료"], "2026-10-W2")];
+    const w = { id: "2026-10-W3", weeks: [], goals, reports };
+    const all = okrWeekResult(w);
+    expect(okrWeekResult(w, w.id, { team: "ALL" })).toEqual(all); // 기존 그대로
+    const b = okrWeekResult(w, w.id, { team: "B" });
+    expect([b.pct, b.missingTeams, b.byTeam]).toEqual([0, [], [{ team: "B", pct: 0 }]]);
+    expect(okrWeekResult(w, w.id, { team: "C" }).missingTeams).toEqual(["C"]); // 이번 주 C 판정 없음
+    const me = okrWeekResult(w, w.id, { team: "A", member: "한X" });
+    expect([me.pct, me.missingTeams, me.byTeam]).toEqual([50, [], [{ team: "A", pct: 50 }]]);
+    expect(okrWeekResult(w, w.id, { team: "A", member: "없는사람" }).pct).toBeNull();
+    expect(kpiCount("K19", { okr: { cycle: null, quarter: null, reports: [], week: w } }, { author: "이호준" }, R.week, ctx)).toEqual({ n: 1, d: 2 });
+    expect(okrWeekMembers(w, "B")).toEqual(["박X", "이호준"]);
+    expect(okrWeekMembers(w)).toEqual(["박X", "이호준", "최X", "한X"]);
+    expect(okrScopeLabel(undefined, "week")).toBe("CS 4파트(A~D) · 이번 주");
+    expect(okrScopeLabel({ team: "A" }, "week")).toBe("A파트 · 이번 주");
+    expect(okrScopeLabel({ team: "B", member: "이호준" }, "month")).toBe("이호준(B) · 이번 달");
+  });
+});
+
+describe("블로그 올해 누계 — countBlog 1/1~오늘", () => {
+  it("사람별 누계(작년·내일 이후 제외)", () => {
+    const rows: BlogRow[] = [
+      { seq: "1", date: "2026-01-01", name: "한왕주", dept: "CS", points: 1 },
+      { seq: "2", date: "2026-10-23", name: "한왕주", dept: "CS", points: 1 },
+      { seq: "3", date: "2025-12-31", name: "한왕주", dept: "CS", points: 1 },
+      { seq: "4", date: "2026-10-24", name: "이권선", dept: "CS", points: 1 },
+      { seq: "5", date: "2026-05-02", name: "이권선", dept: "CS", points: 1 },
+    ];
+    const m = blogYearTotals(rows, TODAY);
+    expect(m.get("한왕주")).toBe(2);
+    expect(m.get("이권선")).toBe(1);
   });
 });

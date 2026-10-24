@@ -13,6 +13,13 @@
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, ChevronRight, Clock3, Info, Minus, RefreshCw, type LucideIcon } from "lucide-react";
+import PortalSelect from "../PortalSelect";
+
+/**
+ * 화면 이동 단추(띠 칩 누르기·행 펼침 [화면 열기 →]·바닥 "자세히"·[워킨맵 →]) 보이기.
+ * 사용자 2026-10-24 "버튼 누르면 자꾸 어디로 이동되는데 일단 필요 없어" → 끔. 타입(onOpen)은 그대로 — 되살리려면 true 로.
+ */
+export const SHOW_OPEN_LINKS = false;
 
 // ── 타입(props) ─────────────────────────────────────────────────────────────
 export type KpiSize = "1x1" | "2x1" | "2x2" | "4x1" | "4x2";
@@ -94,7 +101,8 @@ export type KpiListView = {
 export type KpiStatus = "done" | "onTrack" | "behind" | "none" | "pending";
 /** 범위. E 는 화면에 "CSS". */
 export type KpiScope = "CS" | "A" | "B" | "C" | "D" | "E";
-export type KpiPersonCell = { name: string; team: string; value: number; target: number | null; done: boolean };
+/** total = 올해 누계(블로그 등, "올해 누계 n" 작은 글자) · sub = 보조 글자(오버홀 "수리 n점" 등) */
+export type KpiPersonCell = { name: string; team: string; value: number; target: number | null; done: boolean; total?: number; sub?: string };
 export type KpiTableRow = {
   id: string; name: string; unit: string; targetLabel: string; basis: string;
   status: KpiStatus; pace: number | null; // 기간 경과 0~1 (막대 점선)
@@ -103,13 +111,22 @@ export type KpiTableRow = {
   people: KpiPersonCell[];
   trend?: { delta: number | null; label: string }; // 목표 없는 지표용
   cellState: "ready" | "pending" | "error"; pendingText?: string; main: boolean;
+  /** 분기 점검 진행(K2) 행 펼침 — 있으면 팀 막대 대신 팀 5줄·기준일 칩·필요/지금 페이스(분기 점검 위젯과 같은 모양) */
+  quarter?: KpiQuarterBlock;
   onOpen?: () => void;
 };
 export type KpiTableView = { kind: "kpiTable"; period: "week" | "month" | "quarter"; view: "main" | "all"; rows: KpiTableRow[]; counts: { main: number; all: number }; onPeriod: (p: "week" | "month" | "quarter") => void; onView: (v: "main" | "all") => void };
 export type KpiQuarterGoalView = { kind: "quarterGoal"; basis: "end" | "early"; onBasis: (b: "end" | "early") => void; endLabel: string; bizDaysLeft: number; elapsed: number;
   teams: Array<{ team: string; done: number; total: number; pct: number; headcount: number; need: number | null; now: number | null }> };
+/** 달성표 K2 행 안에 넣는 같은 블록(kind 없음) */
+export type KpiQuarterBlock = Omit<KpiQuarterGoalView, "kind">;
 export type KpiUnhandledTotalView = { kind: "unhandledTotal"; total: number; parts: Array<{ label: string; value: number | null; tone?: string }>; breakdown: Array<{ label: string; value: number; tone?: string }>; oldest?: string; weekDelta?: number | null; defs: Array<{ label: string; text: string }> };
-export type KpiOkrView = { kind: "okr"; period: "week" | "month"; onPeriod: (p: "week" | "month") => void; pct: number | null; counts: Array<{ label: string; value: number; tone: string }>; weeks: Array<{ label: string; pct: number | null; current: boolean }>; missingTeams: string[] };
+/** OKR 범위 필터: 팀 칩 [전체/A/B/C/D] + [개인 ▾](그 팀 멤버 보고서) — 없으면 칩 없이 "CS 4파트(A~D)" */
+export type KpiOkrScope = { team: "ALL" | "A" | "B" | "C" | "D"; member?: string; members: string[]; onScope: (s: { team: "ALL" | "A" | "B" | "C" | "D"; member?: string }) => void };
+export type KpiOkrView = { kind: "okr"; period: "week" | "month"; onPeriod: (p: "week" | "month") => void; pct: number | null; counts: Array<{ label: string; value: number; tone: string }>; weeks: Array<{ label: string; pct: number | null; current: boolean }>; missingTeams: string[];
+  scope?: KpiOkrScope;
+  /** 머리 범위 글자(없으면 scope 로 만든다) — kpiCompute.okrScopeLabel 과 같은 글 */
+  scopeLabel?: string };
 
 /** 금일 현황 칩 하나. value=null 이면 "—", pending 이면 회색 "원본 연결 필요". */
 export type KpiTodayItem = { key: string; label: string; value: number | null; unit: string; tone?: KpiTone; pending?: boolean; onOpen?: () => void };
@@ -499,7 +516,7 @@ function ListBody({ v, size, theme, onOpen, disabled }: { v: KpiListView; size?:
       ) : (
         <ul className={`mt-2 divide-y overflow-hidden rounded-xl border ${t.divider}`}>
           {shown.map((it) => {
-            const open = it.onOpen || onOpen;
+            const open = SHOW_OPEN_LINKS ? it.onOpen || onOpen : undefined;
             const body = (
               <>
                 {it.ageLabel && <span className={`w-12 shrink-0 text-[10.5px] font-black ${tones[it.tone || "idle"]}`}>{it.ageLabel}</span>}
@@ -537,7 +554,7 @@ function paceToneNum(need: number | null, now: number | null): KpiTone {
   return now >= need * 0.8 ? "warn" : "bad";
 }
 
-function QuarterGoalBody({ v, theme, disabled }: { v: KpiQuarterGoalView; theme: KpiTheme; disabled?: boolean }) {
+function QuarterGoalBody({ v, theme, disabled }: { v: KpiQuarterBlock; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
   const tones = TONE_TEXT[theme];
   const elapsedPct = clamp(v.elapsed > 1 ? v.elapsed : v.elapsed * 100);
@@ -655,17 +672,18 @@ function TeamCell({ c, theme }: { c?: KpiTableRow["cells"][number]; theme: KpiTh
 }
 
 /** 펼친 내용: ⓐ 팀별 가로 막대 ⓑ 개인 칩(팀별 묶음) ⓒ 숫자 기준 + 화면 열기. */
-function RowDetail({ r, theme, disabled }: { r: KpiTableRow; theme: KpiTheme; disabled?: boolean }) {
+export function RowDetail({ r, theme, disabled }: { r: KpiTableRow; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
   const order = (team: string) => { const i = TEAM_SCOPES.indexOf(team as KpiScope); return i < 0 ? 99 : i; };
   const groups = new Map<string, KpiPersonCell[]>();
   for (const p of r.people) groups.set(p.team, [...(groups.get(p.team) ?? []), p]);
   const groupList = [...groups.entries()].sort((a, b) => order(a[0]) - order(b[0])).map(([team, list]) => [team, [...list].sort((a, b) => b.value - a.value)] as const);
   const paceFrac = r.pace;
-  const empty = r.teamBars.length === 0 && r.people.length === 0;
+  const empty = r.teamBars.length === 0 && r.people.length === 0 && !r.quarter;
   return (
     <div className="space-y-3">
-      {r.teamBars.length > 0 && (
+      {r.quarter && <QuarterGoalBody v={r.quarter} theme={theme} disabled={disabled} />}
+      {!r.quarter && r.teamBars.length > 0 && (
         <ul className="space-y-1.5" aria-label="팀별 실적">
           {r.teamBars.map((b) => {
             const pct = b.pct ?? (b.target ? Math.round((b.value / b.target) * 100) : null);
@@ -695,6 +713,8 @@ function RowDetail({ r, theme, disabled }: { r: KpiTableRow; theme: KpiTheme; di
                     <li key={`${p.team}-${p.name}`} className={`inline-flex min-h-8 items-center gap-1 rounded-lg px-2.5 text-[11.5px] font-black ${cls}`}>
                       <span>{p.name}</span>
                       <span className="font-mono tabular-nums">{fmt(p.value)}{p.target !== null ? `/${fmt(p.target)}` : ""}</span>
+                      {p.sub ? <span className="text-[10px] font-bold opacity-75">{p.sub}</span> : null}
+                      {p.total !== undefined ? <span className="text-[10px] font-bold opacity-75">올해 누계 <span className="font-mono tabular-nums">{fmt(p.total)}</span></span> : null}
                       <span className="sr-only">{p.done ? "달성" : p.target !== null ? "부족" : ""}</span>
                     </li>
                   );
@@ -707,7 +727,7 @@ function RowDetail({ r, theme, disabled }: { r: KpiTableRow; theme: KpiTheme; di
       {empty && <p className={`text-[11.5px] font-bold ${t.sub}`}>팀·개인 세부 기록이 아직 없습니다.</p>}
       <div className={`flex flex-wrap items-center gap-x-3 border-t pt-1 ${t.divider}`}>
         <span className={`min-w-0 flex-1 py-1 text-[10.5px] font-semibold leading-4 ${t.muted}`}>숫자 기준: {r.basis}</span>
-        {r.onOpen && !disabled && (
+        {SHOW_OPEN_LINKS && r.onOpen && !disabled && (
           <button type="button" onClick={r.onOpen} className={`inline-flex min-h-11 items-center gap-0.5 px-1 text-[12px] font-black ${t.link} ${focusRing}`}>화면 열기<ArrowRight size={13} aria-hidden /></button>
         )}
       </div>
@@ -864,17 +884,46 @@ function UnhandledTotalBody({ v, theme }: { v: KpiUnhandledTotalView; theme: Kpi
 }
 
 // ── OKR(okr) ────────────────────────────────────────────────────────────────
+const OKR_SCOPE_TEAMS = ["ALL", "A", "B", "C", "D"] as const;
+/** kpiCompute.okrScopeLabel 과 같은 글(이 파일은 kpi/* 를 import 하지 않아 여기 한 번 더) */
+function okrScopeText(sc: KpiOkrScope | undefined, period: "week" | "month"): string {
+  const when = period === "week" ? "이번 주" : "이번 달";
+  if (!sc || sc.team === "ALL") return sc?.member ? `${sc.member} · ${when}` : `CS 4파트(A~D) · ${when}`;
+  return sc.member ? `${sc.member}(${sc.team}) · ${when}` : `${sc.team}파트 · ${when}`;
+}
 function OkrBody({ v, theme, disabled }: { v: KpiOkrView; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
   const tones = TONE_TEXT[theme];
   const unitWord = v.period === "week" ? "주" : "달";
   const ringTone: KpiTone = v.pct === null ? "idle" : v.pct >= 80 ? "ok" : v.pct >= 50 ? "warn" : "bad";
+  const sc = v.scope;
+  const label = v.scopeLabel || okrScopeText(sc, v.period);
   return (
     <div>
+      <p className={`mb-1.5 text-[12px] font-black ${t.text}`} aria-live="polite">{label}</p>
       <div className="mb-2 flex gap-1" role="group" aria-label="OKR 기간">
         <button type="button" aria-pressed={v.period === "week"} disabled={disabled} onClick={() => v.onPeriod("week")} className={chipClass(v.period === "week", theme)}>이번 주</button>
         <button type="button" aria-pressed={v.period === "month"} disabled={disabled} onClick={() => v.onPeriod("month")} className={chipClass(v.period === "month", theme)}>이번 달</button>
       </div>
+      {sc && (
+        <div className="mb-2 flex flex-wrap items-center gap-1">
+          <div className="flex flex-wrap gap-1" role="group" aria-label="OKR 범위(파트)">
+            {OKR_SCOPE_TEAMS.map((tm) => (
+              <button key={tm} type="button" aria-pressed={sc.team === tm && !sc.member} disabled={disabled} onClick={() => sc.onScope({ team: tm })} className={chipClass(sc.team === tm && !sc.member, theme)}>{tm === "ALL" ? "전체" : tm}</button>
+            ))}
+          </div>
+          <PortalSelect
+            value={sc.member || ""}
+            onChange={(m) => sc.onScope({ team: sc.team, member: m || undefined })}
+            options={[{ value: "", label: "개인 선택 안 함" }, ...sc.members.map((m) => ({ value: m, label: m }))]}
+            tone={theme === "deck" ? "dark" : "light"}
+            placeholder="개인"
+            width={160}
+            disabled={disabled || sc.members.length === 0}
+            className="min-h-11"
+          />
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <Ring pct={v.pct} tone={ringTone} theme={theme} />
         <div className="min-w-0 flex-1 space-y-1.5">
@@ -934,7 +983,7 @@ function TodayStripBody({ v, theme, disabled }: { v: KpiTodayStripView; theme: K
         const box = `flex min-h-11 shrink-0 snap-start flex-col justify-center gap-1 rounded-xl px-3 py-2 ${t.chip} ${it.pending ? "opacity-60" : ""}`;
         return (
           <li key={it.key} className="shrink-0">
-            {it.onOpen && !disabled && !it.pending
+            {SHOW_OPEN_LINKS && it.onOpen && !disabled && !it.pending
               ? <button type="button" onClick={it.onOpen} aria-label={`오늘 ${it.label} ${it.value === null ? "값 없음" : `${it.value}${it.unit}`} — 화면 열기`} className={`${box} text-left transition ${t.hover} ${focusRing}`}>{inner}</button>
               : <div className={box}>{inner}</div>}
           </li>
@@ -1027,7 +1076,7 @@ export function KpiWidget(props: KpiWidgetProps) {
       : <ListBody v={v} size={size} theme={theme} onOpen={onOpen} disabled={disabled} />;
   }
 
-  const bodyClickable = Boolean(onOpen) && !disabled && (effective === "ready" || effective === "empty") && !NO_BODY_BUTTON.includes(kind);
+  const bodyClickable = SHOW_OPEN_LINKS && Boolean(onOpen) && !disabled && (effective === "ready" || effective === "empty") && !NO_BODY_BUTTON.includes(kind);
 
   return (
     <article className={`flex h-full min-w-0 flex-col rounded-2xl ${t.card}`} aria-label={headTitle} aria-busy={effective === "loading" || undefined}>
@@ -1062,7 +1111,7 @@ export function KpiWidget(props: KpiWidgetProps) {
 
       <footer className={`mt-auto flex items-center gap-2 border-t px-4 ${t.divider}`}>
         <span className={`min-w-0 flex-1 truncate py-2 text-[10px] font-semibold ${t.muted}`} title={basisText}>{basisText}</span>
-        {onOpen && !disabled && (
+        {SHOW_OPEN_LINKS && onOpen && !disabled && (
           <button type="button" onClick={onOpen} className={`-mr-2 inline-flex min-h-11 shrink-0 items-center gap-0.5 px-2 text-[11px] font-black transition ${t.link} ${focusRing}`}>
             {openLabel}<ArrowRight size={12} aria-hidden />
           </button>

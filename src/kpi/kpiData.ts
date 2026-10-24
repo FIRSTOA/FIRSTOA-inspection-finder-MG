@@ -21,10 +21,11 @@ import { currentWeekOf, getOkrCycle, getOkrReports, getOkrReportsIn, isLegacyMon
 import { loadItPracticeLogs, loadItQuizAttempts } from "../itLogs";
 import { fetchBlogRows } from "../blogSheet";
 import { loadMisuVisits, isTableMissingError } from "../misuVisitHistoryData";
+import { loadOverhaulRows, overhaulTabFrom } from "../overhaulSheet";
 import { KPI_BY_ID, KPI_DEFS, KPI_TARGETS_CONFIG_KEY, parseKpiTargets, type KpiId, type KpiSettings, type KpiSource } from "./kpiDefs";
 import {
   BULMAN_COLUMNS, kpiLoadFrom, kpiRanges, OVERAGE_COLUMNS, RECONTRACT_COLUMNS, shiftYmd, toFormRows,
-  type CustomerPraiseRow, type FormRaw, type KeymanRow, type KpiFacts, type KpiRanges, type OfficeLite, type OkrFacts,
+  type CustomerPraiseRow, type FormRaw, type KeymanRow, type KpiFacts, type KpiRanges, type OkrFacts,
   type PraiseRow, type ReceptionWeekRow, type RosterMember, type VisitLite,
 } from "./kpiCompute";
 
@@ -56,6 +57,9 @@ export function sourcesFor(ids: Iterable<KpiId>): Set<KpiSource> {
 }
 
 export const ALL_KPI_SOURCES: Set<KpiSource> = sourcesFor(KPI_DEFS.map((d) => d.id));
+
+/** 로더 안에서 작성자 → 팀(teamForAuthor)을 매기는 원본 — 명단을 다 읽은 뒤에 조회를 시작한다(expansionSource·operations.getActivityEvents) */
+export const ROSTER_FIRST: ReadonlySet<KpiSource> = new Set<KpiSource>(["field", "expansion", "events"]);
 
 const enc = (name: string) => encodeURIComponent(/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) ? name : `"${name}"`);
 const cols = (list: string[]) => `select=${list.map(enc).join(",")}`;
@@ -105,24 +109,33 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     const missing = isTableMissingError(e) || (e instanceof Error && e.name === "ItLogsMissingError");
     sources[s] = missing ? { status: "missing", at: Date.now(), error: "원본 표가 아직 없습니다(SQL 실행 대기) — 준비 중" } : { status: "error", at: Date.now(), error: msg(e) };
   };
-  const run = async <T,>(s: KpiSource, p: () => Promise<T>, put: (v: T) => void) => {
-    if (!want.has(s)) return;
-    try { put(await p()); if (!sources[s]) ok(s); } catch (e) { fail(s, e); }
-  };
+  // 설정(목표·주요 목표·휴일) — 못 읽으면 기본 목표 + 안내. 다른 원본과 동시에 읽고 끝에서 기다린다(2026-10-24 속도: 설정 → 명단 → 원본 직렬 3왕복을 1왕복으로)
+  // 설정 글은 한 번 읽어 목표(KPI_TARGETS)와 오버홀 시트 탭(OVERHAUL_SHEET_TAB)에 같이 쓴다
+  const configP = getConfig();
+  const settingsP: Promise<KpiSettings> = configP.then(
+    (cfg) => parseKpiTargets(cfg[KPI_TARGETS_CONFIG_KEY]),
+    (e) => ({ ...parseKpiTargets(""), error: `설정을 못 읽어 기본 목표를 씁니다(${msg(e)})` }),
+  );
 
-  // 설정(목표·주요 목표·휴일) — 못 읽으면 기본 목표 + 안내
-  let settings: KpiSettings;
-  try { settings = parseKpiTargets((await getConfig())[KPI_TARGETS_CONFIG_KEY]); }
-  catch (e) { settings = { ...parseKpiTargets(""), error: `설정을 못 읽어 기본 목표를 씁니다(${msg(e)})` }; }
-
-  // 명단 먼저 — 작성자 → 팀(teamForAuthor)이 이 명단을 쓴다. 못 읽으면 기기에 남은 명단(또는 시드)으로 판정하고 그렇게 알린다
-  if (want.has("roster")) {
-    try {
-      const members = await fetchMembers();
+  // 명단 — 작성자 → 팀(teamForAuthor)이 이 명단을 쓴다. 못 읽으면 기기에 남은 명단(또는 시드)으로 판정하고 그렇게 알린다.
+  // 조회는 동시에 시작하되, 팀 판정을 쓰는 곳(행 → 팀 변환 put, 로더 안에서 팀을 매기는 ROSTER_FIRST)은 명단이 끝난 뒤에 돈다 — 숫자는 예전 직렬과 같다
+  const rosterReady: Promise<void> = !want.has("roster") ? Promise.resolve() : fetchMembers().then(
+    (members) => {
       facts.roster = members.filter((m) => m.active && ["A", "B", "C", "D", "E"].includes(m.team)).map<RosterMember>((m) => ({ name: m.name, team: m.team, title: String(m.title || "").trim() }));
       ok("roster");
-    } catch (e) { fail("roster", e); }
-  }
+    },
+    (e) => { fail("roster", e); },
+  );
+  const run = async <T,>(s: KpiSource, p: () => Promise<T>, put: (v: T) => void) => {
+    if (!want.has(s)) return;
+    try {
+      if (ROSTER_FIRST.has(s)) await rosterReady;
+      const v = await p();
+      await rosterReady;
+      put(v);
+      if (!sources[s]) ok(s);
+    } catch (e) { fail(s, e); }
+  };
 
   // Promise.all 안 콜백이 채운다(지역 변수 재대입은 타입 좁히기가 풀리지 않아 묶음 객체로)
   const hold: { activity: Awaited<ReturnType<typeof getActivityEvents>> | null; unhandled: KpiUnhandledInfo | null } = { activity: null, unhandled: null };
@@ -165,8 +178,11 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     run("visits", () => getTeamVisits(from, to, { columns: "id,work_date,author,vendor,visited,status" }), (v) => { facts.visits = v.map<VisitLite>((x) => ({ workDate: x.workDate, author: x.author, vendor: x.vendor, visited: x.visited })); }),
     run("itQuiz", () => loadItQuizAttempts(from, to), (v) => { facts.itQuiz = v; }),
     run("itPractice", () => loadItPracticeLogs(from, to), (v) => { facts.itPractice = v; }),
-    run("office", () => selectAllRows<OfficeLite>("office_logs", `select=work_date,author,values&work_date=gte.${from}&work_date=lte.${to}&order=work_date.asc`), (v) => { facts.office = v; }),
+    // 오버홀(K33, 2026-10-24 사무실 일지 대신): 탭 = 설정 OVERHAUL_SHEET_TAB(못 읽으면 기본 "리스트(26년)") — 실패는 overhaul 원본 상태로
+    run("overhaul", async () => loadOverhaulRows(overhaulTabFrom(await configP.catch(() => null))), (v) => { facts.overhaul = v; }),
+    rosterReady,
   ]);
+  const settings = await settingsP;
 
   // 활동 기록 = 팀 현황 입구와 같은 합성 → 팀장 제외 → 재전송 묶음(OperationsDashboard 와 같은 순서)
   if (hold.activity && facts.field && facts.expansion) {

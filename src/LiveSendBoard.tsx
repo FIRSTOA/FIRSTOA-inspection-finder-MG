@@ -5,15 +5,21 @@
  * 위: 폰 봇 / 노트북 실행기 / 밀린 글 / 오늘 배달 요약. 15초마다 새로 읽는다(홈 나머지 지표는 60초).
  * 2026-10-24(사용자 9): 머리 큰 숫자 = "봇 n · 노트북 n"(오늘 배달한 방 수), 방 줄마다 배달 주체 📱(폰 봇)·💻(노트북).
  *   room_activity 는 방마다 마지막 활동 한 줄뿐이라(배달 건수 칸 없음) 숫자는 "방" 단위다 — 건수를 세려면 배달 기록 표가 필요.
+ * 2026-10-24 마무리: 배달 기록 표 kakao_delivery_log(SQL 실행 대기)가 있으면 머리 숫자 = 오늘(KST) "📱 봇 n건 · 💻 노트북 n건"
+ *   + 노트북 배달 목록(시각·방·종류·업체, 최근 20). 표가 없으면(404·42P01) 지금처럼 방 수 + "배달 기록 표 준비 중" 작은 글자.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Laptop, RefreshCw } from "lucide-react";
 import { selectRows } from "./supabase";
+import { kstDate } from "./visits";
+import { isDeliveryTableMissing, kstDayStartIso, kstHm, summarizeDeliveries, type DeliveryRow, type DeliverySummary } from "./kakaoDelivery";
 import { buildRoomRows, CATEGORY_LABEL, relMin, SOURCE_LABEL, STATUS_LABEL, summarizeRooms, type ActRow, type OutRow, type RoomMapRow, type RoomRow, type RoomStatus } from "./roomDelivery";
 
 type EventRow = { id: string; created_at: string; author: string; category: string; vendor: string | null; team: string | null; status: string | null };
 type Heartbeat = { name: string; host: string; last_seen: string; note: string | null };
-type Snapshot = { rows: RoomRow[]; events: EventRow[]; worker: Heartbeat | null; at: number; error: string };
+/** 배달 기록 표 — ok = 오늘 건수·노트북 목록, missing = 표 없음(SQL 실행 대기), error = 읽기 실패(error 글에 같이 적힘) */
+type Delivery = { state: "ok"; sum: DeliverySummary } | { state: "missing" } | { state: "error" };
+type Snapshot = { rows: RoomRow[]; events: EventRow[]; worker: Heartbeat | null; delivery: Delivery; at: number; error: string };
 
 const card = "rounded-2xl border border-white/[0.08] bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]";
 const eyebrow = "text-[10px] font-black uppercase tracking-[0.16em] text-slate-500";
@@ -25,19 +31,32 @@ const STATUS_STYLE: Record<RoomStatus, { tile: string; dot: string }> = {
 };
 /** 배달 주체 아이콘 — 방 마지막 활동이 봇/노트북 배달일 때만 */
 const DELIVERER: Record<string, { icon: string; label: string }> = { bot_send: { icon: "📱", label: "폰 봇" }, pc_send: { icon: "💻", label: "노트북" } };
-const kstDayStartIso = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); };
+
+/** 오늘(KST) 배달 기록. 표가 없으면 missing(실패로 알리지 않음 — 준비 중), 그 밖의 실패는 error 글로 */
+async function loadDelivery(dayStart: string, errors: string[]): Promise<Delivery> {
+  try {
+    const rows = await selectRows<DeliveryRow>("kakao_delivery_log", `select=sender,sent_at,room,kind,vendor&sent_at=gte.${encodeURIComponent(dayStart)}&order=sent_at.desc&limit=2000`);
+    return { state: "ok", sum: summarizeDeliveries(rows, 20) };
+  } catch (e) {
+    if (isDeliveryTableMissing(e)) return { state: "missing" };
+    errors.push(`배달 기록 ${(e as Error).message}`);
+    return { state: "error" };
+  }
+}
 
 async function load(): Promise<Snapshot> {
   const errors: string[] = [];
   const safe = async <T,>(label: string, p: Promise<T>, fallback: T): Promise<T> => { try { return await p; } catch (e) { errors.push(`${label} ${(e as Error).message}`); return fallback; } };
-  const [map, acts, out, events, hb] = await Promise.all([
+  const dayStart = kstDayStartIso(kstDate());
+  const [map, acts, out, events, hb, delivery] = await Promise.all([
     safe("방", selectRows<RoomMapRow>("room_map", "select=category,region,room"), []),
     safe("활동", selectRows<ActRow>("room_activity", "select=room,last_at,source&limit=500"), []),
     safe("대기", selectRows<OutRow>("outbox", "select=room,created_at&order=created_at.asc&limit=500"), []),
-    safe("흐름", selectRows<EventRow>("activity_events", `select=id,created_at,author,category,vendor,team,status&created_at=gte.${encodeURIComponent(kstDayStartIso())}&order=created_at.desc&limit=40`), []),
+    safe("흐름", selectRows<EventRow>("activity_events", `select=id,created_at,author,category,vendor,team,status&created_at=gte.${encodeURIComponent(dayStart)}&order=created_at.desc&limit=40`), []),
     safe("실행기", selectRows<Heartbeat>("worker_heartbeat", "select=name,host,last_seen,note&order=last_seen.desc&limit=1"), []),
+    loadDelivery(dayStart, errors),
   ]);
-  return { rows: buildRoomRows(map, acts, out), events: events.filter((e) => e.status !== "cancelled"), worker: hb[0] || null, at: Date.now(), error: errors.join(" · ") };
+  return { rows: buildRoomRows(map, acts, out), events: events.filter((e) => e.status !== "cancelled"), worker: hb[0] || null, delivery, at: Date.now(), error: errors.join(" · ") };
 }
 
 export default function LiveSendBoard() {
@@ -52,6 +71,7 @@ export default function LiveSendBoard() {
   }, []);
 
   const rows = snap?.rows || [];
+  const delivery = snap?.delivery;
   const sum = useMemo(() => summarizeRooms(rows), [rows]);
   const visible = showAll ? rows : rows.filter((r) => r.status !== "quiet" && r.status !== "ok").concat(rows.filter((r) => r.status === "ok").slice(0, 12));
   const hiddenCount = rows.length - visible.length;
@@ -71,11 +91,22 @@ export default function LiveSendBoard() {
           <div className={`flex items-center gap-2 ${eyebrow}`}><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60 motion-reduce:hidden" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>Live · 카톡 전송 현황</div>
           <h3 className="mt-0.5 text-[15px] font-black text-white">모든 방과 전송을 한눈에 <span className="text-[11px] font-bold text-slate-500">· 15초마다 갱신{snap ? ` · ${relMin(new Date(snap.at).toISOString())}` : ""}</span></h3>
         </div>
-        <div className="ml-auto flex items-baseline gap-3 font-mono tabular-nums" aria-label="오늘 배달한 방 수">
-          <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">📱 봇</span>{snap ? sum.botToday : "—"}</span>
-          <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">💻 노트북</span>{snap ? sum.pcToday : "—"}</span>
-          <span className="text-[10.5px] font-bold text-slate-500">방 · 오늘</span>
-        </div>
+        {delivery?.state === "ok" ? (
+          <div className="ml-auto flex items-baseline gap-3 font-mono tabular-nums" aria-label="오늘 배달 건수">
+            <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">📱 봇</span>{delivery.sum.bot}<span className="ml-0.5 text-[12px] font-black text-slate-400">건</span></span>
+            <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">💻 노트북</span>{delivery.sum.pc}<span className="ml-0.5 text-[12px] font-black text-slate-400">건</span></span>
+            <span className="text-[10.5px] font-bold text-slate-500">오늘</span>
+          </div>
+        ) : (
+          <div className="ml-auto flex flex-col items-end gap-0.5">
+            <div className="flex items-baseline gap-3 font-mono tabular-nums" aria-label="오늘 배달한 방 수">
+              <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">📱 봇</span>{snap ? sum.botToday : "—"}</span>
+              <span className="text-[22px] font-black leading-none text-white"><span className="mr-1 text-[12px] font-black text-slate-400">💻 노트북</span>{snap ? sum.pcToday : "—"}</span>
+              <span className="text-[10.5px] font-bold text-slate-500">방 · 오늘</span>
+            </div>
+            {delivery?.state === "missing" && <span className="text-[10px] font-bold text-slate-500">배달 기록 표 준비 중 — 건수는 표가 생기면</span>}
+          </div>
+        )}
         <button type="button" onClick={() => void refresh()} className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10.5px] font-black text-slate-300 transition hover:bg-white/20"><RefreshCw size={11} />새로고침</button>
       </div>
 
@@ -145,6 +176,24 @@ export default function LiveSendBoard() {
           </ul>
         </div>
       </div>
+      {/* 노트북 배달 목록 — 배달 기록 표가 있을 때만(오늘, 최근 20) */}
+      {delivery?.state === "ok" && (
+        <div className={`mt-3 ${card}`}>
+          <div className="flex items-center justify-between border-b border-white/[0.08] px-4 py-2.5"><span className={eyebrow}>💻 노트북 배달 <span className="normal-case tracking-normal text-slate-600">· 오늘 최근 {delivery.sum.pcList.length}건</span></span><span className="font-mono text-[10.5px] font-black text-slate-500">전체 {delivery.sum.pc}건</span></div>
+          {delivery.sum.pcList.length ? (
+            <ul className="max-h-[280px] divide-y divide-white/[0.06] overflow-y-auto">
+              {delivery.sum.pcList.map((d, i) => (
+                <li key={`${d.sent_at}-${i}`} className="flex items-center gap-3 px-4 py-2">
+                  <span className="w-[42px] shrink-0 font-mono text-[10.5px] font-bold tabular-nums text-slate-500">{kstHm(d.sent_at)}</span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-slate-100">{d.room}</span>
+                  {d.kind && <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-200">{d.kind}</span>}
+                  <span className="w-24 shrink-0 truncate text-right text-[11px] font-black text-slate-400">{d.vendor || "—"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="px-4 py-5 text-center text-xs font-bold text-slate-500">오늘 노트북이 배달한 글이 아직 없습니다</p>}
+        </div>
+      )}
       {snap?.error && <div className="mt-2 text-[11px] font-bold text-amber-300">일부를 못 불러왔습니다: {snap.error}</div>}
     </div>
   );

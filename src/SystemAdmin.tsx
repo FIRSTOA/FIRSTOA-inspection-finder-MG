@@ -8,6 +8,7 @@ import PortalSelect from "./PortalSelect";
 import VendorCodeAdmin from "./VendorCodeAdmin";
 import RoomDeliveryBoard from "./RoomDeliveryBoard";
 import KpiTargetsEditor from "./kpi/KpiTargetsEditor";
+import { OVERHAUL_SHEET_DEFAULT_TAB, OVERHAUL_SHEET_TAB_KEY } from "./overhaulSheet";
 
 /**
  * 카톡방·전송 설정 관리.
@@ -222,6 +223,15 @@ export default function SystemAdmin() {
               <p className="mt-0.5 text-[11px] font-semibold text-slate-400">비워두면 연동 계정의 기본 캘린더. 특정 캘린더로 보내려면 그 캘린더의 공유 URL(naver.me/…)을 그대로 붙여넣으세요 — 자동으로 ID로 바뀝니다. (캘린더 설정 → 공개 설정 → URL 복사)</p>
             </div>
             <input defaultValue={valueOf("NAVER_CALENDAR_ID")} placeholder="defaultCalendarId" onBlur={(e) => { if (e.target.value !== valueOf("NAVER_CALENDAR_ID")) void saveConfig("NAVER_CALENDAR_ID", e.target.value.trim()); }}
+              className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
+          </div>
+          {/* 오버홀 기록 시트 탭(2026-10-24) — 홈 KPI 달성표 K33 오버홀 원본. 비우면 기본 "리스트(26년)" */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+            <div>
+              <div className="text-sm font-black text-slate-900">오버홀 시트 탭 이름 (OVERHAUL_SHEET_TAB)</div>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-400">홈 KPI 달성표의 오버홀 점수를 읽는 오버홀 기록 시트의 탭 이름입니다. 비워두면 기본 "{OVERHAUL_SHEET_DEFAULT_TAB}". 해가 바뀌어 새 탭을 만들면 여기 이름을 바꾸세요.</p>
+            </div>
+            <input defaultValue={valueOf(OVERHAUL_SHEET_TAB_KEY)} placeholder={OVERHAUL_SHEET_DEFAULT_TAB} onBlur={(e) => { if (e.target.value.trim() !== valueOf(OVERHAUL_SHEET_TAB_KEY)) void saveConfig(OVERHAUL_SHEET_TAB_KEY, e.target.value.trim()); }}
               className="w-56 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">

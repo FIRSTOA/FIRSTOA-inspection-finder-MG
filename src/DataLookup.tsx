@@ -17,6 +17,8 @@ import { okrWeeksInMonth } from "./okr";
 import { calendarRange } from "./periodRange";
 import { maskDeep } from "./privacy";
 import { editFieldState, lookupCsv, lookupText } from "./lookupCells";
+import { UI } from "./ui/card";
+import StateBox from "./ui/StateBox";
 
 type Row = Record<string, unknown>;
 
@@ -304,13 +306,13 @@ export default function DataLookup({ author = "" }: { author?: string }) {
   // 묶음별 항목 목록 — PC 왼쪽 세로 목록(compact=false)과 휴대폰 바닥 창(compact=true)이 같이 쓴다
   const groupedList = (compact: boolean) => LOOKUP_GROUPS.map((group) => (
     <div key={group}>
-      <div className={`px-3 text-[10px] font-black tracking-wide text-slate-400 ${compact ? "mb-1 mt-3" : "bg-slate-50 py-1.5"}`}>{group}</div>
+      <div className={`px-3 text-[11px] font-black tracking-wide text-slate-400 ${compact ? "mb-1 mt-3" : "bg-slate-50 py-1.5"}`}>{group}</div>
       <div className={compact ? "grid grid-cols-2 gap-1.5 px-3" : ""}>
         {LOOKUP_CATEGORIES.filter((c) => c.group === group).map((item) => (
           <button key={item.key} type="button" onClick={() => pick(item.key)}
             className={compact
-              ? `rounded-lg border px-3 py-2 text-left text-[13px] font-black ${item.key === categoryKey ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700"}`
-              : `flex w-full items-center px-3 py-1.5 text-left text-[12.5px] font-bold transition ${item.key === categoryKey ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}>
+              ? `min-h-11 rounded-lg border px-3 py-2 text-left text-[13px] font-black ${item.key === categoryKey ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`
+              : `flex min-h-9 w-full items-center px-3 py-1.5 text-left text-[12.5px] font-bold transition ${item.key === categoryKey ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}>
             {item.label}
           </button>
         ))}
@@ -318,35 +320,56 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     </div>
   ));
 
+  // 결과 카드 맨 위 요약 3칸 — 숫자 계산은 그대로(필터가 반영된 정확한 수)
+  const kpiCells: [string, string][] = [
+    [expansionCount ? expansionCount.count.toLocaleString() + "건" : fieldCount && isFieldTable(category.table) ? fieldCount.count.toLocaleString() + FIELD_SOURCES[category.table].unit : totalCount != null ? totalCount.toLocaleString() + (isExpansionTable(category.table) || isFieldTable(category.table) ? "행" : "건") : "…", period === "week" ? `${weekLabel} (${md(week.start)}~${md(week.end)}) 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
+    [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
+    [team === "전체" ? "전 팀" : teamLabel(team), query ? `"${query}" 검색 중` : "보는 범위"],
+  ];
+  // 계산 기준 설명(접이식) + 지금 화면에서 달라지는 한 줄 — 확장성·점검·AS 표에서만
+  const basisText = isExpansionTable(category.table)
+    ? `기준: ${EXPANSION_SOURCES[category.table].label} 표(시트 포함), ${EXPANSION_BASIS_TEXT} — 주간현황판 팀 현황·순위표와 같은 숫자.`
+    : isFieldTable(category.table)
+      ? `기준: ${FIELD_SOURCES[category.table].label} 표, ${FIELD_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.`
+      : "";
+  const basisNote = isExpansionTable(category.table)
+    ? (expansionCount && expansionCount.rows !== expansionCount.count
+      ? `목록 ${expansionCount.rows}행 중 재전송 ${expansionCount.resends}·팀장 ${expansionCount.managers} 제외.`
+      : !expansionCount && (query.trim() || chip || showHidden) ? "검색·유형·삭제한 기록 보기 중에는 행 수만 보입니다." : "")
+    : isFieldTable(category.table)
+      ? (fieldCount
+        ? `목록 ${fieldCount.rows}행(양식) 중 재전송 ${fieldCount.resends}·팀장 ${fieldCount.managers} 제외.`
+        : !fieldCount && (query.trim() || chip || showHidden || period === "all") ? "검색·유형·삭제한 기록·전체 기간 보기 중에는 행 수만 보입니다." : "")
+      : "";
+
   return (
-    <div className="space-y-4">
-      {/* PC: 묶음별 목록을 위에 가로로 — 왼쪽은 읽기 힘들고, 알약보다 이 목록 형식이 낫다(2026-10-12) */}
-      <nav className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid lg:grid-cols-6 lg:divide-x lg:divide-slate-100">{groupedList(false)}</nav>
-      <div className="min-w-0 space-y-4">
-      {/* 카테고리 — 그룹별로 묶어 한 줄씩 */}
-      {/* 휴대폰·태블릿: 현재 항목 단추 + 최근 칩. PC(lg)에서는 왼쪽 목록이 있어 숨긴다 */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:hidden">
-        <div className="flex items-center gap-2 px-3 py-2">
-          <button type="button" onClick={() => setPickerOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left">
-            <span className="shrink-0 text-[10.5px] font-black text-slate-400">{category.group}</span>
-            <span className="min-w-0 truncate text-[14px] font-black text-slate-900">{category.label}</span>
-            <span className="ml-auto shrink-0 text-[11px] font-bold text-slate-400">항목 고르기 ▾</span>
-          </button>
-          <button type="button" onClick={() => void fetchPage(0)} title="새로고침" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
-        </div>
-        {recentKeys.filter((k) => k !== categoryKey).length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto border-t border-slate-100 px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <span className="shrink-0 text-[10px] font-black text-slate-400">최근</span>
-            {recentKeys.filter((k) => k !== categoryKey).slice(0, 5).map((k) => { const c = LOOKUP_CATEGORIES.find((x) => x.key === k); return c ? <button key={k} type="button" onClick={() => pick(k)} className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11.5px] font-black text-slate-600">{c.label}</button> : null; })}
+    <div className={UI.gap}>
+      <div className={`min-w-0 ${UI.gap}`}>
+      {/* 항목 고르기 카드 1장 — PC: 묶음별 가로 목록 + 현재 항목 줄(구분선), 휴대폰: 현재 항목 단추 + 최근 칩(2026-10-24 카드 합침) */}
+      <section className={UI.card}>
+        <nav className="hidden lg:grid lg:grid-cols-6 lg:divide-x lg:divide-slate-100">{groupedList(false)}</nav>
+        <div className="lg:hidden">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <button type="button" onClick={() => setPickerOpen(true)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left">
+              <span className="shrink-0 text-[11px] font-black text-slate-400">{category.group}</span>
+              <span className="min-w-0 truncate text-[14px] font-black text-slate-900">{category.label}</span>
+              <span className="ml-auto shrink-0 text-[11px] font-bold text-slate-400">항목 고르기 ▾</span>
+            </button>
+            <button type="button" onClick={() => void fetchPage(0)} title="새로고침" aria-label="새로고침" className={UI.btnIcon}><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
           </div>
-        )}
-      </section>
-      {/* PC: 현재 항목 이름·설명·새로고침 한 줄 */}
-      <section className="hidden items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm lg:flex">
-        <span className="shrink-0 text-[10.5px] font-black text-slate-400">{category.group}</span>
-        <span className="shrink-0 text-[15px] font-black text-slate-900">{category.label}</span>
-        <span className="min-w-0 truncate text-[11px] font-semibold text-slate-400">{category.note || "기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다."}</span>
-        <button type="button" onClick={() => void fetchPage(0)} title="새로고침" className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
+          {recentKeys.filter((k) => k !== categoryKey).length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto border-t border-slate-100 px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <span className="shrink-0 text-[11px] font-black text-slate-400">최근</span>
+              {recentKeys.filter((k) => k !== categoryKey).slice(0, 5).map((k) => { const c = LOOKUP_CATEGORIES.find((x) => x.key === k); return c ? <button key={k} type="button" onClick={() => pick(k)} className={UI.chip(false)}>{c.label}</button> : null; })}
+            </div>
+          )}
+        </div>
+        <div className="hidden items-center gap-3 border-t border-slate-100 px-4 py-2.5 lg:flex">
+          <span className="shrink-0 text-[11px] font-black text-slate-400">{category.group}</span>
+          <span className="shrink-0 text-[15px] font-black text-slate-900">{category.label}</span>
+          <span className="min-w-0 truncate text-[11px] font-semibold text-slate-400">{category.note || "기록이 저장된 표를 그대로 조회합니다. 행을 누르면 모든 항목과 원문을 볼 수 있습니다."}</span>
+          <button type="button" onClick={() => void fetchPage(0)} title="새로고침" aria-label="새로고침" className={`${UI.btnIcon} ml-auto`}><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
+        </div>
       </section>
 
       {/* 전용 보드가 있는 카테고리: CS체크·정렬·수량조절 등 기능이 범용 표보다 풍부해 그대로 흡수 */}
@@ -356,87 +379,66 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {category.custom === "self" && <SupplyBoard author={author} kind="자가" withTools />}
       {category.custom === "parts" && <SupplyBoard author={author} kind="부품" withTools />}
 
-      {/* KPI — 미수 보드와 같은 요약 카드 (필터가 그대로 반영된 정확한 수) */}
-      {!category.custom && (
-        <div className="grid grid-cols-3 gap-2">
-          {([
-            [expansionCount ? expansionCount.count.toLocaleString() + "건" : fieldCount && isFieldTable(category.table) ? fieldCount.count.toLocaleString() + FIELD_SOURCES[category.table].unit : totalCount != null ? totalCount.toLocaleString() + (isExpansionTable(category.table) || isFieldTable(category.table) ? "행" : "건") : "…", period === "week" ? `${weekLabel} (${md(week.start)}~${md(week.end)}) 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
-            [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
-            [team === "전체" ? "전 팀" : teamLabel(team), query ? `"${query}" 검색 중` : "보는 범위"],
-          ] as [string, string][]).map(([value, label]) => (
-            <div key={label} className="rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm">
-              <div className="truncate text-lg font-black tabular-nums text-slate-950 sm:text-xl">{value}</div>
-              <div className="mt-1 text-[11px] font-bold text-slate-400">{label}</div>
+      {/* 검색 + 결과 (범용) — 요약 3칸·계산 기준·필터·목록을 카드 한 장에(2026-10-24) */}
+      {!category.custom && <section className={UI.card}>
+        {/* 요약 3칸: 카드 안 한 줄(divide-x). 금액·날짜는 잘라내지 않고 줄바꿈 */}
+        <div className={`${UI.kpiRow} grid-cols-3 border-b border-slate-100`}>
+          {kpiCells.map(([value, label]) => (
+            <div key={label} className={UI.kpiCell}>
+              <div className={UI.kpiValue}>{value}</div>
+              <div className={UI.kpiLabel}>{label}</div>
             </div>
           ))}
         </div>
-      )}
-      {!category.custom && isExpansionTable(category.table) && (
-        <div className="-mt-1 px-1 text-[11px] font-bold text-slate-500">
-          기준: {EXPANSION_SOURCES[category.table].label} 표(시트 포함), {EXPANSION_BASIS_TEXT} — 주간현황판 팀 현황·순위표와 같은 숫자.
-          {expansionCount && expansionCount.rows !== expansionCount.count && <span className="text-slate-400"> 목록 {expansionCount.rows}행 중 재전송 {expansionCount.resends}·팀장 {expansionCount.managers} 제외.</span>}
-          {!expansionCount && (query.trim() || chip || showHidden) && <span className="text-slate-400"> 검색·유형·삭제한 기록 보기 중에는 행 수만 보입니다.</span>}
-        </div>
-      )}
-
-      {!category.custom && isFieldTable(category.table) && (
-        <div className="-mt-1 px-1 text-[11px] font-bold text-slate-500">
-          기준: {FIELD_SOURCES[category.table].label} 표, {FIELD_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.
-          {fieldCount && <span className="text-slate-400"> 목록 {fieldCount.rows}행(양식) 중 재전송 {fieldCount.resends}·팀장 {fieldCount.managers} 제외.</span>}
-          {!fieldCount && (query.trim() || chip || showHidden || period === "all") && <span className="text-slate-400"> 검색·유형·삭제한 기록·전체 기간 보기 중에는 행 수만 보입니다.</span>}
-        </div>
-      )}
-
-      {/* 검색 + 결과 (범용) */}
-      {!category.custom && <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="space-y-2 border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+        {basisText && (
+          <details className="border-b border-slate-100 bg-slate-50">
+            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-4 text-[11px] font-black text-slate-500">
+              <span className="min-w-0">계산 기준 보기{basisNote && <span className="ml-2 font-bold text-slate-400">{basisNote}</span>}</span>
+            </summary>
+            <p className="px-4 pb-3 text-[11px] font-semibold leading-5 text-slate-500">{basisText}</p>
+          </details>
+        )}
+        <div className="space-y-2 border-b border-slate-100 px-4 py-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">기간</span>
+            <span className={UI.rowLabel}>기간</span>
             {category.key === "pc" && (
-              <button type="button" onClick={() => setPeriod("week")}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === "week" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>이번 주</button>
+              <button type="button" onClick={() => setPeriod("week")} className={UI.chip(period === "week")}>이번 주</button>
             )}
             {PERIODS.map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setPeriod(value)}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${period === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label.replace("최근 ", "")}</button>
+              <button key={value} type="button" onClick={() => setPeriod(value)} className={UI.chip(period === value)}>{label.replace("최근 ", "")}</button>
             ))}
             {period === "week" && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1 py-0.5">
-                <button type="button" onClick={() => setWeekStart(shiftDays(week.start, -7))} className="rounded-full px-2 py-1 text-[12px] font-black text-slate-600 hover:bg-white" title="지난 주">◀</button>
+                <button type="button" onClick={() => setWeekStart(shiftDays(week.start, -7))} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-[12px] font-black text-slate-600 hover:bg-white lg:min-h-9 lg:min-w-9" title="지난 주" aria-label="지난 주">◀</button>
                 <span className="min-w-[132px] text-center text-[11px] font-black tabular-nums text-slate-800">{weekLabel} <span className="font-bold text-slate-500">{md(week.start)}~{md(week.end)}</span></span>
-                <button type="button" onClick={() => setWeekStart(shiftDays(week.start, 7))} className="rounded-full px-2 py-1 text-[12px] font-black text-slate-600 hover:bg-white" title="다음 주">▶</button>
-                {week.start !== weekOf(kstDate()).start && <button type="button" onClick={() => setWeekStart(weekOf(kstDate()).start)} className="rounded-full px-2 py-1 text-[10px] font-black text-blue-600 hover:bg-white">이번 주</button>}
+                <button type="button" onClick={() => setWeekStart(shiftDays(week.start, 7))} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-[12px] font-black text-slate-600 hover:bg-white lg:min-h-9 lg:min-w-9" title="다음 주" aria-label="다음 주">▶</button>
+                {week.start !== weekOf(kstDate()).start && <button type="button" onClick={() => setWeekStart(weekOf(kstDate()).start)} className="inline-flex min-h-11 items-center rounded-full px-2.5 text-[11px] font-black text-blue-600 hover:bg-white lg:min-h-9">이번 주</button>}
               </span>
             )}
             <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:inline-block" />
             {([["desc", "최신순"], ["asc", "오래된순"]] as const).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setSortDir(value)} title={`${category.orderField} 기준`}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${sortDir === value ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label}</button>
+              <button key={value} type="button" onClick={() => setSortDir(value)} title={`${category.orderField} 기준`} className={UI.chip(sortDir === value)}>{label}</button>
             ))}
             <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
-              <button type="button" onClick={exportCsv} disabled={!rows.length}
-                className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-[11px] font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
+              <button type="button" onClick={exportCsv} disabled={!rows.length} className={UI.btnGhost}>
                 <Download size={13} />CSV
               </button>
             </div>
           </div>
           {category.chipFilter && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">유형</span>
-              <button type="button" onClick={() => setChip("")}
-                className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${chip === "" ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>전체</button>
+              <span className={UI.rowLabel}>유형</span>
+              <button type="button" onClick={() => setChip("")} className={UI.chip(chip === "")}>전체</button>
               {category.chipFilter.options.map(([value, label]) => (
-                <button key={value} type="button" onClick={() => setChip(value)}
-                  className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${chip === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label}</button>
+                <button key={value} type="button" onClick={() => setChip(value)} className={UI.chip(chip === value)}>{label}</button>
               ))}
             </div>
           )}
           {category.teamField && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">팀</span>
+              <span className={UI.rowLabel}>팀</span>
               {["전체", "A", "B", "C", "D", "E"].map((value) => (
-                <button key={value} type="button" onClick={() => setTeam(value)}
-                  className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
+                <button key={value} type="button" onClick={() => setTeam(value)} className={UI.chip(team === value)}>
                   {value === "전체" ? "전체" : teamLabel(value)}
                 </button>
               ))}
@@ -444,13 +446,11 @@ export default function DataLookup({ author = "" }: { author?: string }) {
           )}
           {canMember && team !== "전체" && teamMembers.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="w-full shrink-0 text-[10px] font-black text-slate-400 sm:w-8">인원</span>
-              <button type="button" onClick={() => setMember("")}
-                className={`rounded-full px-3.5 py-1.5 text-[11px] font-black transition ${member === "" ? "bg-blue-600 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{teamLabel(team)} 전체</button>
+              <span className={UI.rowLabel}>인원</span>
+              <button type="button" onClick={() => setMember("")} className={UI.chip(member === "")}>{teamLabel(team)} 전체</button>
               {teamMembers.map((m) => (
-                <button key={m.name} type="button" onClick={() => setMember(member === m.name ? "" : m.name)} title={`${m.name}이(가) 작성자인 기록만`}
-                  className={`rounded-full px-3 py-1.5 text-[11px] font-black transition ${member === m.name ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"}`}>
-                  {m.name}<span className={`ml-1 tabular-nums ${member === m.name ? "text-blue-100" : "text-slate-400"}`}>{memberCounts[m.name] === undefined ? "…" : memberCounts[m.name] < 0 ? "?" : memberCounts[m.name]}</span>
+                <button key={m.name} type="button" onClick={() => setMember(member === m.name ? "" : m.name)} title={`${m.name}이(가) 작성자인 기록만`} className={UI.chip(member === m.name)}>
+                  {m.name}<span className={`ml-1 tabular-nums ${member === m.name ? "text-slate-300" : "text-slate-400"}`}>{memberCounts[m.name] === undefined ? "…" : memberCounts[m.name] < 0 ? "?" : memberCounts[m.name]}</span>
                 </button>
               ))}
             </div>
@@ -461,35 +461,35 @@ export default function DataLookup({ author = "" }: { author?: string }) {
               <input value={queryDraft} onChange={(e) => setQueryDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") setQuery(queryDraft); }}
                 placeholder={`${category.label} 검색 — 업체명 · 작성자 · 내용`}
-                className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-9 pr-8 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-              {queryDraft && <button type="button" onClick={() => { setQueryDraft(""); setQuery(""); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={14} /></button>}
+                className={UI.inputIcon} />
+              {queryDraft && <button type="button" onClick={() => { setQueryDraft(""); setQuery(""); }} aria-label="검색어 지우기" className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center text-slate-400 hover:text-slate-600"><X size={14} /></button>}
             </div>
-            <button type="button" onClick={() => setQuery(queryDraft)} className="shrink-0 rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.3)] transition hover:bg-blue-700">검색</button>
+            <button type="button" onClick={() => setQuery(queryDraft)} className={`${UI.btn} shrink-0`}>검색</button>
           </div>
         </div>
 
-        {category.note && <div className="border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-[11px] font-bold text-amber-800">{category.note}</div>}
-        {error && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
+        {category.note && <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[11px] font-bold text-amber-800">{category.note}</div>}
+        {error && rows.length > 0 && <div className="border-b border-rose-100 bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-700">{error}</div>}
 
         {/* 표 머리 */}
-        <div className="hidden gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-2.5 sm:grid" style={{ gridTemplateColumns: template }}>
+        <div className="hidden gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 sm:grid" style={{ gridTemplateColumns: template }}>
           {visibleColumns.map((column) => (
             <span key={column.key} className={`truncate text-[11px] font-black text-slate-500 ${column.align === "right" ? "text-right" : ""} ${hideClass(column)}`}>{column.label}</span>
           ))}
         </div>
 
         {HIDEABLE.has(category.table) && (
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-1.5">
-            <span className="text-[10px] font-bold text-slate-400">{showHidden ? "오발송 삭제한 기록만 보는 중 — 잘못 지운 건 상세에서 삭제 취소" : "오발송·잘못된 기록은 상세에서 오발송 삭제 (모든 화면·숫자에서 빠짐, 원문 보존)"}</span>
-            <button type="button" onClick={() => { setShowHidden((v) => !v); setRows([]); }}
-              className={`rounded-full px-2.5 py-1 text-[10px] font-black transition ${showHidden ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-1.5">
+            <span className="min-w-0 flex-1 text-[11px] font-bold text-slate-400">{showHidden ? "오발송 삭제한 기록만 보는 중 — 잘못 지운 건 상세에서 삭제 취소" : "오발송·잘못된 기록은 상세에서 오발송 삭제 (모든 화면·숫자에서 빠짐, 원문 보존)"}</span>
+            <button type="button" onClick={() => { setShowHidden((v) => !v); setRows([]); }} className={UI.chip(showHidden)}>
               {showHidden ? "일반 기록 보기" : "삭제한 기록 보기"}
             </button>
           </div>
         )}
         <div className="max-h-[68vh] divide-y divide-slate-100 overflow-y-auto">
-          {loading && !rows.length && <div className="p-12 text-center text-sm font-bold text-slate-400">불러오는 중…</div>}
-          {!loading && !rows.length && !error && <div className="p-12 text-center text-sm font-bold text-slate-400">조건에 맞는 기록이 없습니다.</div>}
+          {loading && !rows.length && <StateBox kind="loading" inside />}
+          {!loading && !rows.length && error && <StateBox kind="error" inside message={error} onRetry={() => void fetchPage(0)} />}
+          {!loading && !rows.length && !error && <StateBox kind="empty" inside message="조건에 맞는 기록이 없습니다." hint="기간·팀·검색어를 바꿔 보세요." />}
 
           {rows.map((row, index) => (
             <button key={String(row.id ?? index)} type="button" onClick={() => { setEditDraft(null); setDetail(row); }}
@@ -522,7 +522,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
         {!reachedEnd && rows.length > 0 && (
           <div className="border-t border-slate-100 p-3 text-center">
             <button type="button" disabled={loading} onClick={() => void fetchPage(rows.length)}
-              className="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40">
+              className={`${UI.btnGhost} px-5`}>
               {loading ? "불러오는 중…" : `${PAGE}건 더 보기`}
             </button>
           </div>
@@ -532,16 +532,17 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {detail && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => { setEditDraft(null); setDetail(null); }}>
           <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-w-3xl sm:rounded-xl" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
               <div className="min-w-0">
                 <div className="text-[11px] font-black text-blue-600">{category.label}</div>
                 <div className="truncate text-base font-black text-slate-950">{text(detail, category.vendorField) || "제목 없음"}</div>
               </div>
-              <button type="button" onClick={() => setDetail(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100"><X size={18} /></button>
+              <button type="button" onClick={() => setDetail(null)} aria-label="닫기" className={UI.btnIcon}><X size={18} /></button>
             </div>
-            <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
+            {/* 상세 안 묶음은 박스 대신 구분선(2026-10-24) */}
+            <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto px-4">
               {/* 미수 상세와 같은 라벨-값 줄 — 전화번호가 보이면 바로 걸 수 있게 */}
-              <div className="rounded-lg border border-slate-200 p-3">
+              <div className="py-3">
                 {detailFields.filter(([key]) => !["_원문", "원문", "source_text", "report_text", "_raw", "photos", "remote_meta"].includes(key)).map(([key, value]) => {
                   const phone = value.match(/0\d{1,2}[-\s.]?\d{3,4}[-\s.]?\d{4}/)?.[0];
                   const editable = editDraft !== null && (EDITABLE_FIELDS[category.table] || []).includes(key);
@@ -560,14 +561,14 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                         ? <input value={editDraft[key] ?? edit?.initial ?? ""} onChange={(e) => setEditDraft((cur) => ({ ...(cur || {}), [key]: e.target.value }))}
                             className="min-w-0 flex-1 rounded-lg border border-blue-300 bg-blue-50/40 px-2 py-1 text-sm font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
                         : <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-slate-800">{value}</span>}
-                      {!editable && phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white transition hover:bg-emerald-700">📞</a>}
+                      {!editable && phone && <a href={`tel:${phone.replace(/[^0-9]/g, "")}`} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full bg-emerald-600 px-2.5 text-[11px] font-black text-white transition hover:bg-emerald-700" aria-label="전화 걸기">📞</a>}
                     </div>
                   );
                 })}
               </div>
               {Array.isArray(detail["_edit_log"]) && (detail["_edit_log"] as unknown[]).length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
-                  <div className="mb-1 text-[10px] font-black tracking-wide text-amber-700">수정 이력</div>
+                <div className="py-3">
+                  <div className="mb-1 text-[11px] font-black tracking-wide text-amber-700">수정 이력</div>
                   {(detail["_edit_log"] as Array<{ at?: string; by?: string; changes?: Record<string, [string, string]> }>).map((entry, index) => (
                     <div key={index} className="border-b border-amber-100 py-1 text-[11px] font-bold text-amber-900 last:border-0">
                       <span className="tabular-nums text-amber-700">{String(entry.at || "").slice(0, 16).replace("T", " ")}</span> · {entry.by || "미지정"}
@@ -579,22 +580,22 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                 </div>
               )}
               {detailFields.filter(([key]) => ["_원문", "원문", "source_text", "report_text"].includes(key)).map(([key, value]) => (
-                <div key={key} className="rounded-lg border border-slate-200 p-3">
-                  <div className="mb-1 text-[10px] font-black tracking-wide text-slate-400">{key.replace(/^_/, "")}</div>
+                <div key={key} className="py-3">
+                  <div className="mb-1 text-[11px] font-black tracking-wide text-slate-400">{key.replace(/^_/, "")}</div>
                   <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-700">{value}</pre>
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-3">
               {/* 기기 식별자 수정 — 잘못 접수된 기번이 이력으로 남으면 다음 AS 판단이 틀려진다.
                   이 행이 통합이력·FIELD 검색·접수 AS히스토리의 원본이라 여기서 고치면 전부 반영된다. */}
               {(EDITABLE_FIELDS[category.table] || []).length > 0 && detail.id != null && (
                 editDraft === null
                   ? <button type="button" onClick={() => setEditDraft({})}
-                      className="mr-auto rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 transition hover:bg-blue-100">✏️ 기록 수정</button>
+                      className="mr-auto inline-flex min-h-11 items-center rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 transition hover:bg-blue-100">✏️ 기록 수정</button>
                   : <>
                       <button type="button" onClick={() => setEditDraft(null)}
-                        className="mr-auto rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600">취소</button>
+                        className={`${UI.btnGhost} mr-auto`}>취소</button>
                       <button type="button" disabled={editBusy || !Object.keys(editDraft).length}
                         onClick={async () => {
                           // 잠긴 칸(원본에 주민번호)은 저장 대상에서 뺀다 — 2026-10-22
@@ -659,11 +660,11 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                             setEditBusy(false);
                           }
                         }}
-                        className="rounded-full bg-blue-600 px-5 py-2 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">{editBusy ? "저장 중…" : "저장"}</button>
+                        className={`${UI.btn} px-5`}>{editBusy ? "저장 중…" : "저장"}</button>
                     </>
               )}
               <button type="button" onClick={() => { void navigator.clipboard.writeText(detailFields.map(([key, value]) => `${key}: ${value}`).join("\n")); }}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-black text-slate-600 transition hover:bg-slate-50">전체 복사</button>
+                className={UI.btnGhost}>전체 복사</button>
               {HIDEABLE.has(category.table) && detail.id != null && (
                 <button type="button" disabled={hideBusy}
                   onClick={async () => {
@@ -717,11 +718,11 @@ export default function DataLookup({ author = "" }: { author?: string }) {
                       .catch((e: unknown) => notify(`처리 실패: ${(e as Error).message}`, "error"))
                       .finally(() => setHideBusy(false));
                   }}
-                  className={`rounded-full border px-4 py-2 text-sm font-black transition disabled:opacity-40 ${showHidden ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"}`}>
+                  className={`inline-flex min-h-11 items-center rounded-full border px-4 py-2 text-sm font-black transition disabled:opacity-40 ${showHidden ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100"}`}>
                   {hideBusy ? "처리 중…" : showHidden ? "삭제 취소" : "오발송 삭제"}
                 </button>
               )}
-              <button type="button" onClick={() => setDetail(null)} className="rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white transition hover:bg-slate-800">닫기</button>
+              <button type="button" onClick={() => setDetail(null)} className="inline-flex min-h-11 items-center rounded-full bg-slate-900 px-5 py-2 text-sm font-black text-white transition hover:bg-slate-800">닫기</button>
             </div>
           </div>
         </div>
@@ -730,7 +731,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       {pickerOpen && (
         <div className="fixed inset-0 z-[200] flex items-end bg-black/40 lg:hidden" onMouseDown={() => setPickerOpen(false)}>
           <div className="max-h-[82vh] w-full overflow-y-auto rounded-t-2xl bg-white pb-6 shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3"><b className="text-[14px] text-slate-900">기록 조회 항목</b><button type="button" onClick={() => setPickerOpen(false)} className="text-[12px] font-black text-slate-500">닫기</button></div>
+            <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3"><b className="text-[14px] text-slate-900">기록 조회 항목</b><button type="button" onClick={() => setPickerOpen(false)} className="min-h-11 px-3 text-[12px] font-black text-slate-500">닫기</button></div>
             {groupedList(true)}
           </div>
         </div>

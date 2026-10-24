@@ -4,6 +4,48 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-24",
+    "hash": "edab3b2eec",
+    "agent": "ui-designer",
+    "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "edab3b2eec",
+    "agent": "db-schema",
+    "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "edab3b2eec",
+    "agent": "developer",
+    "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "edab3b2eec",
+    "agent": "qa-checker",
+    "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "edab3b2eec",
+    "agent": "field-deploy-check",
+    "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "edab3b2eec",
+    "agent": "sql-review",
+    "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "edab3b2eec",
+    "agent": "ops-monitor",
+    "summary": "홈 전면 개편 — KPI 달성표 중심 6위젯 + 미처리 전체 합산 + OKR 주 단위 + 오버홀 직책자 제외 + IT 퀴즈/실습 기록(표 SQL 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
     "hash": "82c0179aea",
     "agent": "debugger",
     "summary": "홈 KPI 현황판 뒤 앱 느려짐 수정 — 1초 시계 분리·계산 캐시·첫 로드 2단계·숨은 홈 조회 중지·페이지 조회 램프"

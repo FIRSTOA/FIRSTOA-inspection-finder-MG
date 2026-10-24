@@ -29,7 +29,9 @@ export type KpiSource =
   | "roster" | "field" | "expansion" | "events" | "workin" | "overage" | "recontract" | "bulman" | "misu"
   | "unhandled" | "receptionWeek" | "keyman" | "okr" | "blog" | "praise" | "customerPraise" | "visits" | "office"
   /** IT 학습 기록 표(2026-10-24, supabase/it-learning-logs-20261024.sql) — 표가 없으면 "준비 중" */
-  | "itQuiz" | "itPractice";
+  | "itQuiz" | "itPractice"
+  /** 오버홀 기록 구글 시트(overhaulSheet.loadOverhaulRows, 탭 = app_config OVERHAUL_SHEET_TAB, 기본 "리스트(26년)") — 2026-10-24 */
+  | "overhaul";
 /** 상태: 바로 됨 · 원본 표 실행 대기(표 없으면 "준비 중") · 원본 없음(회색 안내, 연결 필요) */
 export type KpiStatus = "ready" | "pending-table" | "unlinked";
 /** 셀 수 있는 범위 */
@@ -129,8 +131,9 @@ export const KPI_DEFS: KpiDef[] = [
   },
   {
     id: "K33", name: "오버홀", unit: "점", group: "현장 실행", period: "week", periods: ALL_P, scopes: ATP, widget: "goal", sizes: ["1x1", "2x1"],
-    basis: "사무실 일지(office_logs) '기계오버홀' 건수 합 · 목표 = 인원 × 주 2점", source: "office_logs.values.overhaul.count(주간현황판 사무실 칸 원본)",
-    loads: ["office", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 2, from: "사용자 2026-10-23 '오버홀 인당 주 2점'" },
+    basis: "오버홀 기록 구글 시트 · 한 행 = 1건 · 날짜 칸(yy/mm/dd·yyyy/m/d) · 점 = 오버홀포인트 합(수리포인트는 사람 칸에 따로) · 팀 = 명단 팀(없으면 부서명 끝 글자) · 외부인력·퇴사자·직책자 제외 · 목표 = 인원 × 주 2점",
+    source: "overhaulSheet.loadOverhaulRows·countOverhaul(탭 = app_config OVERHAUL_SHEET_TAB, 없으면 '리스트(26년)' · gviz CSV)",
+    loads: ["overhaul", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 2, from: "사용자 2026-10-23 '오버홀 인당 주 2점'" },
     main: true, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "내 현황 › 사무실" }, today: true,
   },
   // ── B. 고객가치·영업 ──
@@ -148,10 +151,10 @@ export const KPI_DEFS: KpiDef[] = [
     targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "lookup", tab: "복합기 확장성" }, today: true,
   },
   {
-    id: "K10", name: "초과사용 제안 방문", unit: "건", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "goal", sizes: ["2x1", "1x1", "2x2"],
-    basis: "초과조정 표 · 방문일(없으면 작성 시각) · 같은 사람·같은 날·같은 업체 1건 · 오발송 삭제·팀장 제외 · 팀 = 지역 칸 → 출처 괄호 → 작성자 팀 · 목표 = 파트당 월 2건",
+    id: "K10", name: "초과사용 제안 방문", unit: "건", group: "고객가치·영업", period: "month", periods: ["month", "quarter"], scopes: ATP, widget: "goal", sizes: ["2x1", "1x1", "2x2"],
+    basis: "초과조정 표 · 방문일(없으면 작성 시각) · 같은 사람·같은 날·같은 업체 1건 · 오발송 삭제·팀장 제외 · 팀 = 지역 칸 → 출처 괄호 → 작성자 팀 · 팀 과제: 목표 = 파트당 월 2건(CS 전체 = 파트 수 × 2, 분기 = × 3) · 개인은 목표 없이 실적만 · 월 목표라 [이번 주]에서도 이번 달로 셈",
     source: "kpiCompute.countOverageVisits (Q7: 초과조정 양식 1건 = 방문 1건)", loads: ["overage", "roster"], status: "ready",
-    targetBasis: "perTeamMonth", target: { perTeamMonth: 2, monthTotal: 8, quarterTotal: 24, from: `${OKR_Q4} 4번(파트 월 2·분기 6, 전체 월 8·분기 24) · 인당은 perPersonMonth 로 설정` },
+    targetBasis: "perTeamMonth", target: { perTeamMonth: 2, from: `${OKR_Q4} 4번(파트 월 2·분기 6) · 사용자 2026-10-24 '팀 과제, 팀당 월 2건' — 전체 = 파트 수 × 2(monthTotal·quarterTotal 을 설정하면 그 값) · 인당은 perPersonMonth 로 설정` },
     main: true, better: "up", teams: "A~E", screen: { screen: "lookup", tab: "초과조정" }, today: true,
   },
   {

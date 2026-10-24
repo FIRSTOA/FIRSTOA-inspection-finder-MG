@@ -5,7 +5,6 @@ import { renderToString } from "react-dom/server";
 import ReceptionBoardPanel from "../src/ReceptionBoardPanel";
 import { daysBefore, loadBoardData, loadScheduleOverdue, postponeOf, summarizeForHome, toBoardRows, weekStartOf, type ScheduleOverdueRow } from "../src/receptionBoardData";
 import { parseRightView, unhandledTotal } from "../src/receptionRightView";
-import HomeReceptionPanel from "../src/HomeReceptionPanel";
 import type { OpenReceptionRow } from "../src/deptReceptionApi";
 
 const base = { created_at: "2026-10-01T00:00:00Z", route: "", region: "A", grade: "", lease_no: "", title: "", symptom: "", sheet_row: null };
@@ -126,6 +125,5 @@ describe("현황판 감싸개", () => {
 
   it("서버 렌더: 첫 화면은 불러오는 중", () => {
     expect(renderToString(createElement(ReceptionBoardPanel, {}))).toContain("불러오는 중");
-    expect(renderToString(createElement(HomeReceptionPanel, { onOpen: () => {} }))).toContain("미처리 전체"); // 2026-10-24 홈 개편: 미처리 전체 합산 카드
   });
 });

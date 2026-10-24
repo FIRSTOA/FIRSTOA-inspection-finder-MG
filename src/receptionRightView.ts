@@ -17,3 +17,10 @@ export function unhandledTotal(counts: Record<ReceptionType, number> | null, sch
   if (counts) for (const m of RECEPTION_TYPES) if (deptEnabled || !isDeptType(m.type)) n += counts[m.type] || 0;
   return n + (scheduleCount > 0 ? scheduleCount : 0);
 }
+
+/** 부서 화면(경영·운영·영업) 오른쪽 3칸 — 일정리스트(기본) / 접수리스트 / 미처리현황. 현장 3종과 기억 키를 따로 둔다. */
+export type DeptRightView = "plan" | "list" | "board";
+export const RECEPTION_RIGHT_DEPT_KEY = "reception_right_dept_v1";
+export function parseDeptRightView(v: string | null | undefined): DeptRightView {
+  return v === "list" || v === "board" ? v : "plan";
+}
