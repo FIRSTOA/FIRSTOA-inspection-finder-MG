@@ -10,7 +10,7 @@
  * React 없는 순수 로직 + 조회 한 함수(runTabSearch). 테스트: tests/tabSearch.test.ts
  */
 import {
-  buildExactQuery, buildLooseQuery, firstOf, gather, inList, isOtherVendor, matchesEntity, rawTextOf, sameVendorKey, SOURCES, str, toEvent,
+  buildExactQuery, buildLooseQuery, firstOf, gather, inList, isOtherVendor, matchesEntity, MISU_VISITS_SOURCE, rawTextOf, sameVendorKey, SOURCES, str, toEvent,
   type Entity, type Row, type SourceDef, type SourceResult,
 } from "./entity360";
 import { selectRows } from "./supabase";
@@ -136,13 +136,8 @@ export function tabKeyOf(mode: string, pcSubTab?: string): TabKey | null {
 
 // ── SOURCES 밖 표 ──────────────────────────────────────────
 export const EXTRA_SOURCES: SourceDef[] = [
-  // CS 미수 방문이력(2026-10-22). company_code = 마스터 거래처코드. SQL 실행 전이면 404 → 조용히 건너뜀
-  { table: "misu_visits", label: "미수 방문", group: "영업·관리", tone: "bg-orange-50 text-orange-800 border-orange-200",
-    nameCols: ["vendor"], deviceCols: [], rawCols: [], codeCol: "company_code", hidden: "_hidden=not.is.true",
-    dateKeys: ["visited_at", "created_at"], titleKeys: ["visit_round"], snippetKeys: ["open_status", "judgment", "dun_reply", "promise_date"],
-    authorKeys: ["author"], teamKeys: ["author_team", "region"], modelKeys: [], serialKeys: [], assetKeys: [],
-    titleFn: (row) => `미수 ${str(row, "visit_round") || "방문"}${str(row, "judgment") ? ` · ${str(row, "judgment")}` : ""}`,
-    limit: 200 },
+  // CS 미수 방문이력(2026-10-22). SQL 실행 전이면 404 → 조용히 건너뜀. 정의 원본은 entity360(통합 검색 360 과 같은 객체, 2026-10-24)
+  MISU_VISITS_SOURCE,
   // 고객 칭찬(2026-10-24) — 칭찬 양식은 시트 기입 큐(field_sheet_sync_jobs)에만 남는다. 날짜·이유는 payload.data 에서 별칭으로 꺼낸다
   { table: "field_sheet_sync_jobs", label: "칭찬", group: "고객 소통", tone: "bg-lime-50 text-lime-800 border-lime-200",
     nameCols: ["vendor"], deviceCols: [], rawCols: ["source_text"], hidden: "category=eq.praise",

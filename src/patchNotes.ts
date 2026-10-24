@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b5c07c10c0",
+    "date": "2026-10-24",
+    "note": "홈: 미처리·OKR 반반(둘 다 2x2 기본) — 사용자 \"OKR 박스가 너무 작다\""
+  },
+  {
     "hash": "d2c21d578f",
     "date": "2026-10-24",
     "note": "오염 업체명 정리 SQL: 수동 2건 추가(709건, 실행 대기)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "144ba424c9",
     "date": "2026-09-26",
     "note": "주간현황판 머리 — 제목과 조회 조건을 한 줄 왼쪽에, 기간 탭은 오른쪽 가운데 정렬, 표 머리는 밝은 색으로(짙은 띠 두 겹 해소) · 홈 최근 7일 그래프가 제목과 겹치던 것(고정 높이 제거)"
-  },
-  {
-    "hash": "a74ab2883c",
-    "date": "2026-09-26",
-    "note": "골든미팅카드 분기결과표 — [AI 수치 정리] 직전 원본을 보관해 [원본 비교] 창(원본 | AI 정리 나란히, 사용 모델·시각 표시)과 [원본으로 되돌리기] 제공"
   }
 ];

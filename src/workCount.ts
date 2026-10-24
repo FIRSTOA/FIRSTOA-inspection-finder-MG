@@ -219,7 +219,7 @@ export const FIELD_SOURCES: Record<FieldTable, { kind: FieldKind; label: string;
 };
 export const FIELD_TABLE_BY_KIND: Record<FieldKind, FieldTable> = { inspection: "jeomgeom", as: "as_records" };
 /** 로더가 읽는 칸 — 원문은 기기 수를 세려고 필요하다 */
-export const FIELD_COLUMNS = ["id", "_hidden", "작성일", "작성자", "지역", "_출처", "업체명", "_업체명", "모델명", "시리얼넘버", "자산기번", "_원문", "created_at"];
+export const FIELD_COLUMNS = ["id", "_hidden", "작성일", "작성자", "지역", "_출처", "업체명", "_업체명", "모델명", "시리얼넘버", "자산기번", "_원문", "created_at", "구분"];
 export const FIELD_BASIS_TEXT = "점검 = 기기 대수 · AS = 양식 건수 · 같은 날 같은 업체 같은 기기 재전송은 1 · 오발송 삭제·팀장 기록 제외 · 팀 = 지역 칸(없으면 작성자 팀)";
 
 export type FieldRaw = Record<string, unknown> & { id?: unknown; _hidden?: unknown };
@@ -230,6 +230,8 @@ export type FieldRow = {
   author: string; vendor: string;
   team: string; manager: boolean; hidden: boolean;
   machines: string[]; // 기기 열쇠(양식 안 순서)
+  /** 구분 칸 원문('점검, 여분') — 점검·AS 양식의 여분·마감·세팅을 물류로 셀 때 쓴다(formCount.fieldLogisticsRows, 2026-10-24) */
+  reportTypes?: string;
 };
 
 /** 시리얼·자산기번 정규화 — 숫자가 하나도 없으면('-'·'없음'·'확인') 빈 값 */
@@ -276,6 +278,7 @@ export function toFieldRows(table: FieldTable, raws: FieldRaw[], teamOfAuthor: (
       team: regionTeam(r["지역"]) || sourceTeam(r["_출처"]) || authorTeam,
       manager: authorTeam === "팀장", hidden: r._hidden === true,
       machines: machineKeysOf(r["_원문"], { model: r["모델명"], serial: r["시리얼넘버"], asset: r["자산기번"] }),
+      reportTypes: String(r["구분"] ?? ""),
     };
   });
 }

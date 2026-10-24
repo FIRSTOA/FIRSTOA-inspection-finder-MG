@@ -1,6 +1,6 @@
 /**
  * 홈 KPI 현황판 — 로더(설계안 4-6). 기존 로더를 그대로 부르고, 원본 하나는 한 번만 읽는다.
- *  · 점검·AS = expansionSource.loadFieldRows, 확장성 = loadExpansionRows, 활동 기록 = operations.getActivityEvents
+ *  · 점검·AS = expansionSource.loadFieldRows, 확장성 = loadExpansionRows, 양식(물류·불만·초과조정) = loadFormRaw, 활동 기록 = operations.getActivityEvents(담당자 변경·교체만)
  *    → 팀 현황·순위표 입구(loadWorkEvents)와 같은 합성(mergeFieldIntoEvents(mergeExpansionIntoEvents(…)))을 이미 읽은 행으로 만든다(중복 조회 없음)
  *  · 기간은 한 번에: 분기 시작(또는 8주 전) ~ 분기 말 — 금일·주·월·분기 위젯은 메모리에서 거른다
  *  · 숨긴 위젯의 원본은 읽지 않는다(sources 인자)
@@ -11,7 +11,8 @@ import { getConfig, selectAllRows, selectAllRowsFast, selectRows } from "../supa
 import { kstDate, getTeamVisits } from "../visits";
 import { fetchMembers } from "../authors";
 import { getActivityEvents, teamForAuthor } from "../operations";
-import { loadExpansionRows, loadFieldRows } from "../expansionSource";
+import { loadExpansionRows, loadFieldRows, loadFormRaw } from "../expansionSource";
+import { toFormTableRows } from "../formCount";
 import { countableEvents, mergeExpansionIntoEvents, mergeFieldIntoEvents } from "../workCount";
 import { workinProgressQuery, type WorkinPlaceLite } from "../workinProgress";
 import { fetchOpenReceptions } from "../deptReceptionApi";
@@ -24,7 +25,7 @@ import { loadMisuVisits, isTableMissingError } from "../misuVisitHistoryData";
 import { loadOverhaulRows, overhaulTabFrom } from "../overhaulSheet";
 import { KPI_BY_ID, KPI_DEFS, KPI_TARGETS_CONFIG_KEY, parseKpiTargets, type KpiId, type KpiSettings, type KpiSource } from "./kpiDefs";
 import {
-  BULMAN_COLUMNS, kpiLoadFrom, kpiRanges, OVERAGE_COLUMNS, RECONTRACT_COLUMNS, rosterFromMembers, shiftYmd, toFormRows,
+  kpiLoadFrom, kpiRanges, RECONTRACT_COLUMNS, rosterFromMembers, shiftYmd, toFormRows,
   type CustomerPraiseRow, type FormRaw, type KeymanRow, type KpiFacts, type KpiRanges, type OkrFacts,
   type PraiseRow, type ReceptionWeekRow, type VisitLite,
 } from "./kpiCompute";
@@ -144,10 +145,12 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     run("expansion", () => loadExpansionRows(from, to), (v) => { facts.expansion = v; }),
     run("events", () => getActivityEvents(from, to), (v) => { hold.activity = v; }),
     run("workin", () => selectAllRowsFast<WorkinPlaceLite>("workin_map_places", workinProgressQuery(ranges.quarterNo)), (v) => { facts.workin = v; }),
-    run("overage", () => selectAllRowsFast<FormRaw>("overage_adjust", `${cols(OVERAGE_COLUMNS)}&_hidden=not.is.true&created_at=gte.${kstStartIso(from)}&order=id.asc`), (v) => { facts.overage = toFormRows(v, "방문일", teamForAuthor); }),
+    // 양식 표(초과조정·불만·물류)는 팀 현황·순위표와 같은 로더·같은 변환(expansionSource.loadFormRaw → formCount.toFormTableRows, 2026-10-24)
+    run("overage", () => loadFormRaw("overage_adjust", from, to), (v) => { facts.overage = toFormTableRows("overage_adjust", v, teamForAuthor); }),
+    run("logistics", () => loadFormRaw("logistics_records", from, to), (v) => { facts.logistics = toFormTableRows("logistics_records", v, teamForAuthor); }),
     // 재계약 확인 지남은 업체별 마지막 기록이 필요해 기간 없이 전량
     run("recontract", () => selectAllRowsFast<FormRaw>("recontract", `${cols(RECONTRACT_COLUMNS)}&_hidden=not.is.true&order=id.asc`), (v) => { facts.recontract = toFormRows(v, "날짜", teamForAuthor); }),
-    run("bulman", () => selectAllRowsFast<FormRaw>("bulman", `${cols(BULMAN_COLUMNS)}&_hidden=not.is.true&created_at=gte.${kstStartIso(from)}&order=id.asc`), (v) => { facts.bulman = toFormRows(v, "날짜", teamForAuthor); }),
+    run("bulman", () => loadFormRaw("bulman", from, to), (v) => { facts.bulman = toFormTableRows("bulman", v, teamForAuthor); }),
     run("misu", () => loadMisuVisits({ from, to }), (v) => { facts.misu = v; }),
     run("unhandled", () => loadUnhandledRows(today), (v) => { facts.unhandled = v.rows; hold.unhandled = v.info; if (v.partialError || v.info.notice) ok("unhandled", [v.partialError, v.info.notice].filter(Boolean).join(" · ")); }),
     run("receptionWeek", () => selectAllRows<ReceptionWeekRow>("service_receptions", `select=status,receipt_date&receipt_date=gte.${ranges.week.from}&deleted=eq.false`), (v) => { facts.receptionWeek = v; }),

@@ -6,7 +6,8 @@ import { Download, RefreshCw, Search, X } from "lucide-react";
 import { countRows, selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction } from "./supabase";
 import { setActivityEventsCancelledByKey, setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor, teamForAuthor } from "./operations";
 import { EXPANSION_BASIS_TEXT, EXPANSION_SOURCES, countExpansion, countField, expansionTally, FIELD_BASIS_TEXT, FIELD_SOURCES, fieldTally, kstDayOf, kstTextRange, toExpansionRows, toFieldRows, UTC_TEXT_DATE_TABLES, type ExpansionRaw, type ExpansionTable, type FieldRaw, type FieldTable } from "./workCount";
-import { loadExpansionRaw, loadFieldRaw } from "./expansionSource";
+import { loadExpansionRaw, loadFieldRaw, loadFormRaw } from "./expansionSource";
+import { FORM_BASIS_TEXT, FORM_LABELS, FORM_SOURCES, formTally, isFormTable, toFormTableRows, type FormRaw } from "./formCount";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
@@ -227,6 +228,26 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     return fieldTally(fieldRows, { kind: FIELD_SOURCES[table].kind, team, author: member || undefined });
   }, [category.table, fieldRows, showHidden, query, chip, team, member]);
 
+  // 물류·재계약·불만·초과조정 건수 — 홈 KPI·팀 현황·순위표와 같은 원본(양식 표)·같은 함수(formCount countForms)로 센다(2026-10-24).
+  // 목록은 행 그대로, 건수 카드만 이 값(재계약·불만 = 업체 수). 물류 탭은 물류 양식 표만 — 점검·AS 양식의 여분·세팅·마감은 점검·AS 탭에 있다.
+  const [formRaw, setFormRaw] = useState<{ key: string; rows: FormRaw[] } | null>(null);
+  const formKey = `${category.table}|${expansionRange?.from || ""}|${expansionRange?.to || ""}|${expansionNonce}`;
+  useEffect(() => {
+    const table = category.table;
+    if (!isFormTable(table) || !expansionRange) return;
+    let alive = true;
+    loadFormRaw(table, expansionRange.from, expansionRange.to)
+      .then((rows) => { if (alive) setFormRaw({ key: formKey, rows }); })
+      .catch((e: unknown) => { if (alive) setError(`${category.label} 수 계산 실패: ${(e as Error).message}`); });
+    return () => { alive = false; };
+  }, [category.table, category.label, expansionRange, formKey]);
+  const formCount = useMemo(() => {
+    const table = category.table;
+    if (!isFormTable(table) || formRaw?.key !== formKey || !roster || !expansionRange || showHidden || query.trim() || chip) return null;
+    const kind = FORM_SOURCES[table].kind;
+    return { kind, ...formTally(kind, toFormTableRows(table, formRaw.rows, teamForAuthor), { team, author: member || undefined, from: expansionRange.from, to: expansionRange.to }) };
+  }, [category.table, formRaw, formKey, roster, expansionRange, showHidden, query, chip, team, member]);
+
   // 사람별 건수 — 지금 조건(기간·유형·검색어·팀)에서 작성자만 바꿔 가며 세어 단추 옆에 보여 준다
   const canMember = Boolean(category.teamField) && category.searchFields.includes("작성자");
   useEffect(() => {
@@ -243,12 +264,20 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       setMemberCounts(Object.fromEntries(teamMembers.map((m) => [m.name, countField(fieldRows, { kind, team, author: m.name })])));
       return;
     }
+    if (isFormTable(category.table) && formRaw?.key === formKey && expansionRange && !query.trim() && !chip && !showHidden) {
+      // 양식 표도 같은 함수로(같은 날 같은 업체 1·팀장 제외·재계약/불만은 업체 수)
+      const table = category.table;
+      const rows = toFormTableRows(table, formRaw.rows, teamForAuthor);
+      const kind = FORM_SOURCES[table].kind;
+      setMemberCounts(Object.fromEntries(teamMembers.map((m) => [m.name, formTally(kind, rows, { team, author: m.name, from: expansionRange.from, to: expansionRange.to }).count])));
+      return;
+    }
     let alive = true;
     const base = buildQuery(0).split("&").filter((part) => !/^(select|order|limit|offset)=/.test(part) && !part.startsWith(`${encodeURIComponent("작성자")}=`));
     Promise.all(teamMembers.map((m) => countRows(category.table, [...base, `${encodeURIComponent("작성자")}=ilike.*${encodeURIComponent(m.name)}*`].join("&")).then((n) => [m.name, n] as const).catch(() => [m.name, -1] as const)))
       .then((pairs) => { if (alive) setMemberCounts(Object.fromEntries(pairs)); });
     return () => { alive = false; };
-  }, [canMember, teamMembers, buildQuery, category.table, expansionRows, fieldRows, query, chip, showHidden, team]);
+  }, [canMember, teamMembers, buildQuery, category.table, expansionRows, fieldRows, formRaw, formKey, expansionRange, query, chip, showHidden, team]);
 
   const fetchPage = useCallback(async (offset: number) => {
     setLoading(true);
@@ -322,7 +351,7 @@ export default function DataLookup({ author = "" }: { author?: string }) {
 
   // 결과 카드 맨 위 요약 3칸 — 숫자 계산은 그대로(필터가 반영된 정확한 수)
   const kpiCells: [string, string][] = [
-    [expansionCount ? expansionCount.count.toLocaleString() + "건" : fieldCount && isFieldTable(category.table) ? fieldCount.count.toLocaleString() + FIELD_SOURCES[category.table].unit : totalCount != null ? totalCount.toLocaleString() + (isExpansionTable(category.table) || isFieldTable(category.table) ? "행" : "건") : "…", period === "week" ? `${weekLabel} (${md(week.start)}~${md(week.end)}) 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
+    [expansionCount ? expansionCount.count.toLocaleString() + "건" : fieldCount && isFieldTable(category.table) ? fieldCount.count.toLocaleString() + FIELD_SOURCES[category.table].unit : formCount ? formCount.count.toLocaleString() + FORM_LABELS[formCount.kind].unit : totalCount != null ? totalCount.toLocaleString() + (isExpansionTable(category.table) || isFieldTable(category.table) ? "행" : "건") : "…", period === "week" ? `${weekLabel} (${md(week.start)}~${md(week.end)}) 기록` : `${PERIODS.find(([value]) => value === period)?.[1] || ""} 기록`],
     [rows.length ? shortValue(text(rows[0], category.dateField), category.dateField) : "-", "가장 최근 기록"],
     [team === "전체" ? "전 팀" : teamLabel(team), query ? `"${query}" 검색 중` : "보는 범위"],
   ];
@@ -331,7 +360,9 @@ export default function DataLookup({ author = "" }: { author?: string }) {
     ? `기준: ${EXPANSION_SOURCES[category.table].label} 표(시트 포함), ${EXPANSION_BASIS_TEXT} — 주간현황판 팀 현황·순위표와 같은 숫자.`
     : isFieldTable(category.table)
       ? `기준: ${FIELD_SOURCES[category.table].label} 표, ${FIELD_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.`
-      : "";
+      : isFormTable(category.table)
+        ? `기준: ${category.label} 표, ${FORM_BASIS_TEXT} — 홈·주간현황판 팀 현황·순위표와 같은 숫자.${category.table === "logistics_records" ? " 팀 현황 물류·기타 칸에는 점검·AS 양식의 세팅·여분·마감도 더해집니다." : ""}`
+        : "";
   const basisNote = isExpansionTable(category.table)
     ? (expansionCount && expansionCount.rows !== expansionCount.count
       ? `목록 ${expansionCount.rows}행 중 재전송 ${expansionCount.resends}·팀장 ${expansionCount.managers} 제외.`
@@ -340,7 +371,11 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       ? (fieldCount
         ? `목록 ${fieldCount.rows}행(양식) 중 재전송 ${fieldCount.resends}·팀장 ${fieldCount.managers} 제외.`
         : !fieldCount && (query.trim() || chip || showHidden || period === "all") ? "검색·유형·삭제한 기록·전체 기간 보기 중에는 행 수만 보입니다." : "")
-      : "";
+      : isFormTable(category.table)
+        ? (formCount
+          ? (formCount.rows !== formCount.count ? `목록 ${formCount.rows}행 중 재전송 ${formCount.resends}·팀장 ${formCount.managers} 제외${formCount.sameVendor ? `·같은 업체 ${formCount.sameVendor} 묶음` : ""}.` : "")
+          : (query.trim() || chip || showHidden || period === "all") ? "검색·유형·삭제한 기록·전체 기간 보기 중에는 행 수만 보입니다." : "")
+        : "";
 
   return (
     <div className={UI.gap}>

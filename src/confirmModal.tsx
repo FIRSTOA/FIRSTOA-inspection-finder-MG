@@ -7,14 +7,15 @@
  */
 import { useEffect, useState } from "react";
 
-type ConfirmRequest = { message: string; danger?: boolean; okLabel?: string; resolve: (value: boolean) => void };
+type ConfirmRequest = { message: string; danger?: boolean; okLabel?: string; cancelLabel?: string; resolve: (value: boolean) => void };
 
 let pushRequest: ((req: ConfirmRequest) => void) | null = null;
 
-export function askConfirm(message: string, opts?: { danger?: boolean; okLabel?: string }): Promise<boolean> {
+// cancelLabel(2026-10-24): 취소 단추 글자 — "그냥 완료"처럼 아니오도 행동인 질문용. 바깥을 눌러 닫아도 false 다
+export function askConfirm(message: string, opts?: { danger?: boolean; okLabel?: string; cancelLabel?: string }): Promise<boolean> {
   return new Promise((resolve) => {
     if (!pushRequest) { resolve(window.confirm(message)); return; } // 호스트 미장착(테스트 등) 폴백
-    pushRequest({ message, danger: opts?.danger, okLabel: opts?.okLabel, resolve });
+    pushRequest({ message, danger: opts?.danger, okLabel: opts?.okLabel, cancelLabel: opts?.cancelLabel, resolve });
   });
 }
 
@@ -38,7 +39,7 @@ export function ConfirmHost() {
       <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="whitespace-pre-wrap px-5 pb-4 pt-5 text-[14px] font-bold leading-6 text-slate-800">{current.message}</div>
         <div className="flex gap-2 px-4 pb-4">
-          <button type="button" onClick={() => answer(false)} className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50">취소</button>
+          <button type="button" onClick={() => answer(false)} className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50">{current.cancelLabel || "취소"}</button>
           <button type="button" autoFocus onClick={() => answer(true)}
             className={`flex-[1.4] rounded-xl py-3 text-sm font-black text-white transition ${current.danger ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-900 hover:bg-slate-800"}`}>
             {current.okLabel || "확인"}

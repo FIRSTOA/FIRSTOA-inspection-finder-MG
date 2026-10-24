@@ -74,11 +74,17 @@ const JEOMGEOM_COLS = pgCols("id", "작성일", "작성자", "구분", "레벨",
 const HISTORY_SEARCH_TABLES: HistorySearchTable[] = [
   { table: "jeomgeom", category: "점검", dateField: "작성일", regionField: "지역", select: JEOMGEOM_COLS },
   { table: "as_records", category: "AS", dateField: "작성일", regionField: "지역", select: JEOMGEOM_COLS },
+  // 물류 기록(납품·교체·철수·여분·마감, 2026-10-24) — 지역 칸이 없어 지역 탭에선 '기타'로 묶인다
+  { table: "logistics_records", category: "물류", dateField: "작성일", regionField: "지역",
+    select: pgCols("id", "작성일", "작성자", "구분", "거래처명", "품목", "수량", "소모품(납품/청구여부)", "셋팅여부", "상태체크(내부/외부)", "여분토너체크(철수 시)", "특이사항", "_업체명", "_dupKey", "created_at") },
   { table: "overage_adjust", category: "초과", dateField: "방문일", regionField: "지역" },
   // 초과료 원장(시트 유입 2,798건) — 초과조정 활동(overage_adjust)과 같은 '초과' 분류로 합쳐 보여준다
   { table: "overage", category: "초과", dateField: "날짜", regionField: "지역",
     select: pgCols("id", "순번", "날짜", "특이사항", "임대여부", "등급", "접수내용", "컬러초과료", "흑백초과료", "합계", "마감방식", "자산번호", "모델명", "기본금액", "연평균", "계약일", "종료일", "남은개월", "기본매수", "초과장당금액", "미수개월수", "미수금액", "_업체명", "_출처", "_dupKey", "created_at") },
   { table: "misu", category: "미수", dateField: "입력일", regionField: "지역" },
+  // 미수 방문 기록(웹앱 미수 양식, 2026-10-22~) — 옛 미러 misu 는 밤마다 시트로 교체돼 웹앱 기록이 없다. 사진·확인 항목 같은 큰 칸은 뺀다(2026-10-24)
+  { table: "misu_visits", category: "미수방문", dateField: "visited_at", regionField: "region", nameField: "vendor",
+    select: "id,visited_at,visit_round,author,author_team,vendor,region,misu_months,misu_balance,contact_name,contact_title,open_status,closed_estimate,dun_reply,promise_date,return_requested,return_reply,judgment,judgment_reason,supplement_of,created_at" },
   { table: "bulman", category: "불만", dateField: "방문일", regionField: "지역" },
   { table: "pc_expansion", category: "PC확장성", dateField: "날짜", regionField: "지역" },
   { table: "mfp_expansion", category: "복합기확장성", dateField: "등록일", regionField: "미팅지역" },

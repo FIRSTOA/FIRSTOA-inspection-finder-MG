@@ -13,6 +13,7 @@ import {
   kpiRowStatus, okrWeekResult, recontractOverdue, overageKpi, okrWeekMembers, okrScopeLabel, blogYearTotals, overhaulByPerson, rosterFromMembers, headcountByTeam, titledNames, toFormRows, unhandledKpis, workinPace, type FormRaw, type KpiFacts, type RosterMember,
 } from "../src/kpi/kpiCompute";
 import { KPI_DEFS, mainKpiIds, parseKpiTargets } from "../src/kpi/kpiDefs";
+import { toFormTableRows } from "../src/formCount";
 
 // 사용자 원칙: "PC 를 예로 조회랑 주간현황이 다르면 안 된다" — KPI 값 = 조회 탭·팀 현황·순위표·홈 판이 같은 입력에서 내는 값.
 const ROSTER_MAP: Record<string, string> = { 한왕주: "C", 박영현: "C", 이민구: "C", 엄재현: "E", 이권선: "A", 김종희: "D", 이호준: "B", 박옥주: "팀장", 신정훈: "팀장" };
@@ -76,7 +77,21 @@ const ACTIVITY: ActivityEvent[] = [
 /** 팀 현황(OperationsDashboard)과 같은 입구: loadWorkEvents 합성 → 팀장 제외 → countableEvents */
 const EVENTS = countableEvents(mergeFieldIntoEvents(mergeExpansionIntoEvents(ACTIVITY, EXP), FIELD).filter((e) => teamOf(e.author) !== "팀장"));
 
-const FACTS: KpiFacts = { roster: ROSTER, field: FIELD, expansion: EXP, events: EVENTS };
+// 양식 원본 표(2026-10-24 — K24·K25·K26 은 활동 기록 대신 이 표를 formCount 로 센다). 위 활동 a1~a6 과 같은 기록
+const LOGI_RAW: FormRaw[] = [
+  { id: 1, created_at: "2026-10-22T02:00:00Z", "작성일": "2026-10-22", "작성자": "한왕주", "구분": "납품", "거래처명": "물류업체", "_업체명": "물류업체", "_출처": "웹앱:물류", "수량": "2대" },
+  { id: 2, created_at: "2026-10-22T03:00:00Z", "작성일": "2026-10-22", "작성자": "한왕주", "구분": "여분", "거래처명": "여분업체", "_업체명": "여분업체", "_출처": "웹앱:물류" }, // 물류 칸에서 빠짐
+  { id: 3, created_at: "2026-10-23T02:00:00Z", "작성일": "2026-10-23", "작성자": "김종희", "구분": "교체", "거래처명": "물류2", "_업체명": "물류2", "_출처": "웹앱:물류" },
+];
+const RECON_RAW: FormRaw[] = [
+  { id: 1, created_at: "2026-10-20T02:00:00Z", "날짜": "2026-10-20", "작성자": "이민구", "지역": "C", "_출처": "웹앱:재계약", "_업체명": "(주)델타" },
+  { id: 2, created_at: "2026-10-21T02:00:00Z", "날짜": "2026-10-21", "작성자": "이민구", "지역": "C", "_출처": "웹앱:재계약", "_업체명": "델타" }, // 같은 업체(표기 변형) → 1곳
+];
+const BULMAN_RAW: FormRaw[] = [{ id: 1, created_at: "2026-10-21T02:00:00Z", "날짜": "2026-10-21", "작성자": "박영현", "지역": "C", "_출처": "웹앱:불만", "_업체명": "아이더디자인" }];
+const FACTS: KpiFacts = {
+  roster: ROSTER, field: FIELD, expansion: EXP, events: EVENTS,
+  logistics: toFormTableRows("logistics_records", LOGI_RAW, teamOf), recontract: toFormTableRows("recontract", RECON_RAW, teamOf), bulman: toFormTableRows("bulman", BULMAN_RAW, teamOf),
+};
 
 describe("기간 — KST 월요일·월말·분기말 경계", () => {
   it("이번 주 월~일, 지난주 같은 요일까지, 이번 달·분기", () => {
@@ -138,7 +153,7 @@ describe("확장성 — KPI = 조회 탭(expansionTally) = 팀 현황·순위표
   });
 });
 
-describe("활동 기록 종류 — 팀 현황 칸 규칙", () => {
+describe("양식 표(물류·재계약·불만) + 활동 기록(담당자 변경·교체) — 팀 현황 칸 규칙", () => {
   it("물류(여분·마감 제외)·재계약/불만(업체 1곳)·담당자 변경(팀장 제외)·교체(오발송 제외)", () => {
     const wk = R.week;
     expect(kpiCount("K24", FACTS, {}, wk, ctx)?.n).toBe(2);

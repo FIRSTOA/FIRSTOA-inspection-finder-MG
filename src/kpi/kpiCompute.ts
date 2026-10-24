@@ -2,9 +2,10 @@
  * 홈 KPI 현황판 — 순수 집계(설계안 docs/tasks/home-kpi-dashboard.md 3절 "위젯 1개 = 집계 함수 1개").
  *
  * 원칙: 새로 세지 않는다. 조회 탭·주간현황판·순위표·홈 판이 이미 쓰는 함수를 그대로 부른다.
- *   점검·AS = workCount.countField · 확장성 = workCount.countExpansion · 물류·재계약·불만·담당자 변경·교체 = countableEvents(팀 현황 규칙)
+ *   점검·AS = workCount.countField · 확장성 = workCount.countExpansion · 물류·재계약·불만·초과조정·미수 = formCount.countForms(양식 원본 표, 2026-10-24)
+ *   담당자 변경·교체 = countableEvents(팀 현황 규칙 — 활동 기록에만 남는 종류)
  *   미처리 = homeUnhandled.mergeUnhandled/countUnhandledTabs · OKR = okr.achievementRate/judgmentCounts · 블로그 = blogSheet.countBlog
- *   미수 = misuVisit.effectiveMisuVisits · 접수 처리율 = deptReception.weekCompletionRate · 분기 진행 = workinProgress(홈·워킨맵 식)
+ *   미수 = misuVisit.effectiveMisuVisits → formCount · 접수 처리율 = deptReception.weekCompletionRate · 분기 진행 = workinProgress(홈·워킨맵 식)
  *   영업일 = planDate.isBusinessDay(주말·한국 공휴일) + 설정 holidays
  * 기존 단일 함수가 없던 것(초과조정 방문·재계약 확인 지남·재계약 갱신율·불만 완료율·키맨 인사율·칭찬·오버홀·방문 업체)만 여기서 정의하고,
  * 팀·재전송·팀장 규칙은 workCount 의 규칙(지역 칸 → 출처 괄호 → 작성자 팀, 팀장 제외, 같은 날 같은 업체 1건)을 따른다.
@@ -17,7 +18,7 @@ import { weekRange } from "../visits";
 import { isBusinessDay } from "../planDate";
 import { logisticsKindForEvent, OPERATIONS_TEAMS, type ActivityEvent } from "../operations";
 import {
-  countExpansion, countField, kstDayOf, regionTeam, vendorKeyOf,
+  countExpansion, countField, kstDayOf,
   type ExpansionKind, type ExpansionRow, type FieldKind, type FieldRow,
 } from "../workCount";
 import { teamWorkinProgress, type WorkinPlaceLite } from "../workinProgress";
@@ -28,7 +29,8 @@ import {
 } from "../okr";
 import { blogTeamOf, countBlog, type BlogRow } from "../blogSheet";
 import { countOverhaul, overhaulDeptTeam, type OverhaulCount, type OverhaulRow } from "../overhaulSheet";
-import { effectiveMisuVisits, type MisuVisit } from "../misuVisit";
+import { type MisuVisit } from "../misuVisit";
+import { countableForms, countForms, fieldLogisticsRows, latestByVendor, misuFormRows, type FormRow } from "../formCount";
 import { weekCompletionRate } from "../deptReception";
 import { isYmd } from "../recontractSchedule";
 import { KPI_BY_ID, KPI_DEFS, type KpiId, type KpiPeriodKey, type KpiScopeKind, type KpiTarget, type KpiTargetBasis } from "./kpiDefs";
@@ -202,13 +204,15 @@ export type KpiFacts = Partial<{
   roster: RosterMember[];
   field: FieldRow[];
   expansion: ExpansionRow[];
-  /** loadWorkEvents 결과에 팀장 제외 + countableEvents 를 건 것(팀 현황과 같은 입구) */
+  /** loadWorkEvents 결과에 팀장 제외 + countableEvents 를 건 것(팀 현황과 같은 입구) — 이제 담당자 변경(K27)·교체양식(K28)만 센다 */
   events: ActivityEvent[];
   workin: WorkinPlaceLite[];
   overage: FormRow[];
   recontract: FormRow[];
   bulman: FormRow[];
   misu: MisuVisit[];
+  /** 물류 양식 표(logistics_records) — K24 원본(2026-10-24, 활동 기록 대신). 점검·AS 양식의 여분·마감·세팅은 field 의 구분 칸에서 */
+  logistics: FormRow[];
   unhandled: UnhandledRow[];
   receptionWeek: ReceptionWeekRow[];
   keyman: KeymanRow[];
@@ -224,59 +228,14 @@ export type KpiFacts = Partial<{
   overhaul: OverhaulRow[];
 }>;
 
-/* ───────────── 공통: 양식 표(초과조정·재계약·불만) 행 정리 ───────────── */
-
-/** 출처 라벨 괄호의 팀 — '카톡:초과조정(C)' → C (workCount 의 sourceTeam 과 같은 식 — 그쪽은 export 안 됨) */
-export function sourceParenTeam(value: unknown): string {
-  return regionTeam(String(value ?? "").match(/\(([^)]*)\)/)?.[1] || "");
-}
-
-/** '2026-10-21' · '2026.10.21' · '2026/10/21' · '2026-10-21T…'(UTC 시각 글자는 KST 날짜로) → YYYY-MM-DD, 못 읽으면 "" */
-export function looseYmd(value: unknown): string {
-  const s = String(value ?? "").trim();
-  if (!s) return "";
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:/.test(s)) return kstDayOf(s);
-  const m = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
-  if (!m) return "";
-  const ymd = `${m[1]}-${pad(Number(m[2]))}-${pad(Number(m[3]))}`;
-  return isYmd(ymd) ? ymd : "";
-}
-
-export type FormRaw = Record<string, unknown> & { id?: unknown; _hidden?: unknown };
-export type FormRow = {
-  id: string; at: string; day: string; author: string; vendor: string; vendorKey: string;
-  team: string; manager: boolean; hidden: boolean; raw: FormRaw;
-};
-
-/** dateField 를 날짜로 못 읽으면 created_at 의 KST 날짜. 팀 = 지역 칸 → 출처 괄호 → 작성자 팀(workCount.toFieldRows 와 같은 순서) */
-export function toFormRows(raws: FormRaw[], dateField: string, teamOf: (author: string) => string): FormRow[] {
-  return raws.map((r) => {
-    const author = String(r["작성자"] ?? "").trim();
-    const authorTeam = teamOf(author);
-    const vendor = String(r["_업체명"] ?? "").trim() || String(r["업체명"] ?? "").trim();
-    const created = String(r.created_at ?? "");
-    return {
-      id: String(r.id ?? ""), at: created, day: looseYmd(r[dateField]) || (created ? kstDayOf(created) : ""),
-      author, vendor, vendorKey: vendorKeyOf(vendor),
-      team: regionTeam(r["지역"]) || sourceParenTeam(r["_출처"]) || authorTeam,
-      manager: authorTeam === "팀장", hidden: r._hidden === true, raw: r,
-    };
-  });
-}
+/* ───────────── 공통: 양식 표(초과조정·재계약·불만·물류·미수) 행 정리 — formCount.ts 로 옮김(2026-10-24), 여기서는 다시 내보내기만 ───────────── */
+export { looseYmd, sourceParenTeam, toFormRows, latestByVendor, type FormRaw, type FormRow } from "../formCount";
 
 export type KpiScope = { team?: string; author?: string };
 type FormScope = Partial<KpiRange> & KpiScope;
 const inScope = (r: FormRow, s: FormScope) => !r.hidden && !r.manager
   && (!s.team || s.team === "전체" || r.team === s.team) && (!s.author || r.author === s.author)
   && (!s.from || r.day >= s.from) && (!s.to || r.day <= s.to);
-const byTime = (a: FormRow, b: FormRow) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id, undefined, { numeric: true });
-
-/** 업체(표기 변형 묶음)마다 가장 늦은 기록 */
-export function latestByVendor(rows: FormRow[]): FormRow[] {
-  const m = new Map<string, FormRow>();
-  for (const r of [...rows].sort(byTime)) m.set(r.vendorKey || `#${r.id}`, r);
-  return [...m.values()];
-}
 
 const text = (r: FormRow, key: string) => String(r.raw[key] ?? "").trim();
 
@@ -286,21 +245,9 @@ export const OVERAGE_COLUMNS = ["id", "_hidden", "created_at", "방문일", "작
 export const RECONTRACT_COLUMNS = ["id", "_hidden", "created_at", "날짜", "작성자", "지역", "_출처", "업체명", "_업체명", "갱신상태", "최종상태", "다음확인일"];
 export const BULMAN_COLUMNS = ["id", "_hidden", "created_at", "날짜", "작성자", "지역", "_출처", "업체명", "_업체명", "최종상태", "접수/처리"];
 
-/** 초과 제안 방문 세는 대상 — 오발송 삭제·팀장 제외, 같은 사람·같은 방문일·같은 업체 = 1건(재전송) */
-export function countableOverage(rows: FormRow[], s: FormScope = {}): FormRow[] {
-  const seen = new Set<string>();
-  const out: FormRow[] = [];
-  for (const r of rows.filter((x) => inScope(x, s)).sort(byTime)) {
-    if (r.vendorKey) {
-      const k = `${r.author}|${r.day}|${r.vendorKey}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-    }
-    out.push(r);
-  }
-  return out;
-}
-export function countOverageVisits(rows: FormRow[], s: FormScope = {}): number { return countableOverage(rows, s).length; }
+/** 초과 제안 방문 세는 대상 — 오발송 삭제·팀장 제외, 같은 사람·같은 방문일·같은 업체 = 1건(재전송). 규칙 = formCount.countableForms("overage") */
+export function countableOverage(rows: FormRow[], s: FormScope = {}): FormRow[] { return countableForms("overage", rows, s); }
+export function countOverageVisits(rows: FormRow[], s: FormScope = {}): number { return countForms("overage", rows, s.from, s.to, { team: s.team, author: s.author }); }
 const overageFilled = (x: FormRow) => !!text(x, "고객반응") && !!text(x, "진행상태");
 
 const RECONTRACT_CLOSED = new Set(["갱신완료", "종료"]);
@@ -338,10 +285,6 @@ export function complaintCompletion(rows: FormRow[], s: FormScope): { done: numb
 export function isMainLogistics(e: ActivityEvent): boolean {
   return e.category === "logistics" && !["여분", "마감"].includes(logisticsKindForEvent(e));
 }
-/** 재계약·불만은 기간 안 같은 업체 1곳(OperationsDashboard VENDOR_DEDUP_KINDS·순위표 byVendor 와 같은 규칙) */
-export function vendorDedupCount(events: ActivityEvent[]): number {
-  return new Set(events.map((e) => vendorKeyOf(e.vendor || "")).filter(Boolean)).size;
-}
 const eventsIn = (events: ActivityEvent[], s: KpiScope, r: KpiRange, pick: (e: ActivityEvent) => boolean) =>
   events.filter((e) => pick(e) && e.activityDate >= r.from && e.activityDate <= r.to && (!s.team || e.team === s.team) && (!s.author || e.author === s.author));
 
@@ -359,19 +302,16 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
   const teamOk = (team: string) => !s.team || team === s.team;
   const field = (kind: FieldKind) => (f.field ? { n: countField(f.field, { kind, team: s.team, author: s.author, from: r.from, to: r.to }) } : null);
   const exp = (kind: ExpansionKind) => (f.expansion ? { n: countExpansion(f.expansion, { kind, team: s.team, author: s.author, from: r.from, to: r.to }) } : null);
-  const ev = (pick: (e: ActivityEvent) => boolean, dedupVendor = false) => {
-    if (!f.events) return null;
-    const list = eventsIn(f.events, s, r, pick);
-    return { n: dedupVendor ? vendorDedupCount(list) : list.length };
-  };
+  const ev = (pick: (e: ActivityEvent) => boolean) => (f.events ? { n: eventsIn(f.events, s, r, pick).length } : null);
   switch (id) {
     case "K1": return field("inspection");
     case "K3": return field("as");
     case "K7": return exp("expansion_it");
     case "K8": return exp("expansion_copier");
-    case "K24": return ev(isMainLogistics);
-    case "K25": return ev((e) => e.category === "recontract", true);
-    case "K26": return ev((e) => e.category === "complaint", true);
+    // 물류·재계약·불만 = 양식 원본 표(formCount.countForms, 2026-10-24) — 팀 현황·순위표·조회 탭과 같은 함수. 재계약·불만은 업체 수
+    case "K24": return f.logistics && f.field ? { n: countForms("logistics", [...f.logistics, ...fieldLogisticsRows(f.field)], r.from, r.to, { part: "main", team: s.team, author: s.author }) } : null;
+    case "K25": return f.recontract ? { n: countForms("recontract", f.recontract, r.from, r.to, { team: s.team, author: s.author }) } : null;
+    case "K26": return f.bulman ? { n: countForms("complaint", f.bulman, r.from, r.to, { team: s.team, author: s.author }) } : null;
     case "K27": return ev((e) => e.category === "contact_change");
     case "K28": return ev((e) => e.category === "replacement");
     case "K2": {
@@ -399,15 +339,8 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
     case "K12": return f.recontract && !s.author ? { n: recontractOverdue(f.recontract, ctx.today, s.team).count } : null;
     case "K13": { if (!f.recontract) return null; const x = recontractRenewal(f.recontract, { ...r, ...s }); return { n: x.done, d: x.total }; }
     case "K15": { if (!f.bulman) return null; const x = complaintCompletion(f.bulman, { ...r, ...s }); return { n: x.done, d: x.total }; }
-    case "K14": {
-      if (!f.misu) return null;
-      const n = effectiveMisuVisits(f.misu).filter((v) => {
-        const day = kstDayOf(String(v.visited_at || ""));
-        const team = String(v.author_team || "").trim() || ctx.teamOf(v.author);
-        return day >= r.from && day <= r.to && team !== "팀장" && !isMgr(v.author) && teamOk(team) && (!s.author || v.author === s.author);
-      }).length;
-      return { n };
-    }
+    // 미수 방문 = misu_visits(보완 기록은 원 기록 1건) → formCount 규칙(같은 날 같은 사람 같은 업체 1건·팀장 제외)
+    case "K14": return f.misu ? { n: countForms("misu", misuFormRows(f.misu, ctx.teamOf), r.from, r.to, { team: s.team, author: s.author }) } : null;
     case "K16": case "K17": {
       if (!f.unhandled || s.author) return null;
       const src = id === "K16" ? "reception" : "ticket";

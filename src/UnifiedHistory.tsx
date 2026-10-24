@@ -70,7 +70,8 @@ type Props = {
   author?: string; // 특이사항을 누가 적었는지 남기기 위함
 };
 
-const CAT_ORDER = ["접수", "점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성", "재계약", "업체정보"];
+// 미수방문(misu_visits)·물류(logistics_records)는 2026-10-24 추가(api.ts HISTORY_SEARCH_TABLES)
+const CAT_ORDER = ["접수", "점검", "AS", "물류", "초과", "미수", "미수방문", "불만", "복합기확장성", "PC확장성", "재계약", "업체정보"];
 // 기록이 특정 기기(자산기번·시리얼) 것인가 — 기기 칸이 아예 없는 기록(미수·불만 등)은 업체 단위라 그대로 둔다(2026-10-02: 기번만 치면 그 기기 이력 전부)
 const DEVICE_FIELDS = ["자산기번", "시리얼넘버", "자산번호", "기번", "asset_no", "serial"];
 function recordMatchesDevice(record: Record<string, unknown>, needle: string): boolean {
@@ -78,13 +79,13 @@ function recordMatchesDevice(record: Record<string, unknown>, needle: string): b
   if (!values.length) return true;
   return values.some((v) => v.includes(needle) || (v.length >= 4 && needle.includes(v)));
 }
-const ACTIVITY_CATS = ["접수", "점검", "AS", "초과", "미수", "불만", "복합기확장성", "PC확장성"];
+const ACTIVITY_CATS = ["접수", "점검", "AS", "물류", "초과", "미수", "미수방문", "불만", "복합기확장성", "PC확장성"];
 const CAT_SHORT: Record<string, string> = {
-  접수: "접수", 점검: "점검", AS: "AS", 초과: "초과", 미수: "미수", 불만: "불만",
+  접수: "접수", 점검: "점검", AS: "AS", 물류: "물류", 초과: "초과", 미수: "미수", 미수방문: "미수방문", 불만: "불만",
   복합기확장성: "복합기", PC확장성: "PC·IT", 재계약: "재계약", 업체정보: "업체정보",
 };
 const DATE_FIELD: Record<string, string> = {
-  접수: "receipt_date", AS: "작성일", 점검: "작성일", 초과: "방문일", 불만: "방문일", 미수: "입력일",
+  접수: "receipt_date", AS: "작성일", 점검: "작성일", 물류: "작성일", 초과: "방문일", 불만: "방문일", 미수: "입력일", 미수방문: "visited_at",
   PC확장성: "날짜", 복합기확장성: "등록일", 업체정보: "종료일", 재계약: "계약종료일",
 };
 const WHO_KEYS = ["담당팀", "작성팀", "작성자", "입력자", "등록자", "관리담당자", "전략영업담당자", "author"];
@@ -99,6 +100,8 @@ const PRIORITY_FIELDS: Record<string, string[]> = {
   접수: ["type", "symptom", "status", "model", "serial", "asset_no", "address", "author"],
   초과: ["합계", "컬러초과료", "흑백초과료", "접수내용", "제안", "고객반응", "진행상태", "특이사항"],
   미수: ["미수잔액", "미수개월", "실제 잔액", "실제 개월수", "입금약속일", "방문내용", "고객반응"],
+  미수방문: ["visit_round", "judgment", "dun_reply", "promise_date", "open_status", "misu_balance", "misu_months", "judgment_reason"],
+  물류: ["구분", "품목", "수량", "특이사항", "셋팅여부", "소모품(납품/청구여부)"],
   불만: ["불만내용", "불편내용", "조치내용", "고객요청사항", "현장고객반응", "최종상태"],
   재계약: ["진행상황", "내용", "결과", "제안조건", "갱신상태", "계약종료일"],
   복합기확장성: ["프로젝트", "관심품목(세분화)", "진행상황(원문)", "첫등록내용", "특이사항"],
@@ -111,6 +114,10 @@ const FIELD_LABELS: Record<string, string> = {
   completed_at: "완료시각", completed_by: "처리자", region: "지역", title: "제목", notes: "메모", route: "경로",
   시리얼넘버: "시리얼", "어필 OR 추가영업": "영업메모", "렌탈or구매or유지보수": "이용형태", "총 인원": "총인원",
   "관심품목(세분화)": "관심품목", "진행상황(원문)": "진행상황", "수주가능성(A/B/C)": "수주가능성",
+  // 미수 방문(misu_visits) 영문 칸 — 2026-10-24
+  visited_at: "방문 일시", visit_round: "차수", author_team: "작성팀", misu_months: "미수 개월(방문 당시)", misu_balance: "미수 잔액(방문 당시)",
+  contact_name: "응대자", contact_title: "직위", open_status: "영업 여부", closed_estimate: "폐업 추정", dun_reply: "상대 답변", promise_date: "납부 약속일",
+  return_requested: "반환 요구", return_reply: "반환 답변", judgment: "판단", judgment_reason: "판단 사유", supplement_of: "보완 대상 기록",
 };
 const fieldLabel = (key: string) => FIELD_LABELS[key] || key;
 const junkValue = (value: string) => /^[ㅡ_\-\s.]*$/.test(value) || value === "0" || value === "false" || /^(없음|없슴|무|x|X)\.?$/.test(value.trim());
@@ -912,8 +919,8 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
         })()}
         {!loading && detail && activeCat === "전체" && (() => {
           // 분류별 "최신 1건" 나열 대신, 모든 분류를 합친 최근 활동 타임라인 — 무슨 일이 있었는지가 한 흐름으로 읽힌다
-          const CAT_TONE: Record<string, string> = { 접수: "bg-blue-50 text-blue-700", 점검: "bg-emerald-50 text-emerald-700", AS: "bg-indigo-50 text-indigo-700", 초과: "bg-amber-50 text-amber-800", 미수: "bg-rose-50 text-rose-700", 불만: "bg-red-50 text-red-700", 복합기확장성: "bg-slate-100 text-slate-600", PC확장성: "bg-slate-100 text-slate-600" };
-          const CAT_DOT: Record<string, string> = { 접수: "bg-blue-500", 점검: "bg-emerald-500", AS: "bg-indigo-500", 초과: "bg-amber-500", 미수: "bg-rose-500", 불만: "bg-red-500", 복합기확장성: "bg-slate-400", PC확장성: "bg-slate-400" };
+          const CAT_TONE: Record<string, string> = { 접수: "bg-blue-50 text-blue-700", 점검: "bg-emerald-50 text-emerald-700", AS: "bg-indigo-50 text-indigo-700", 초과: "bg-amber-50 text-amber-800", 미수: "bg-rose-50 text-rose-700", 미수방문: "bg-rose-50 text-rose-700", 물류: "bg-yellow-50 text-yellow-800", 불만: "bg-red-50 text-red-700", 복합기확장성: "bg-slate-100 text-slate-600", PC확장성: "bg-slate-100 text-slate-600" };
+          const CAT_DOT: Record<string, string> = { 접수: "bg-blue-500", 점검: "bg-emerald-500", AS: "bg-indigo-500", 초과: "bg-amber-500", 미수: "bg-rose-500", 미수방문: "bg-rose-400", 물류: "bg-yellow-500", 불만: "bg-red-500", 복합기확장성: "bg-slate-400", PC확장성: "bg-slate-400" };
           // 내용은 어차피 눌러서 본다 — 한 줄엔 언제·어디(지역·지역구)·누가 만 (2026-08-17 단순화)
           const recent = ACTIVITY_CATS.flatMap((cat) => rowsForCategory(cat).map((record) => {
             const date = displayDate(recordDateRaw(cat, record));

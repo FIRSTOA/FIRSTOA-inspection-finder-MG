@@ -6,7 +6,7 @@ vi.mock("../src/supabase", async (orig) => {
 });
 
 import { selectRows } from "../src/supabase";
-import { gather, SOURCES, withKeys, type Entity, type SourceResult } from "../src/entity360";
+import { GATHER_ALSO, gather, SOURCES, withKeys, type Entity, type SourceResult } from "../src/entity360";
 import {
   coverageOf, EXTRA_SOURCES, filterByChip, gatherExtra, keepRow, lastEvents, maskRrn, maxRequestsOf, runTabSearch, sourcesOf, summaryText,
   TAB_SPECS, tabKeyOf, toLines, type TabResult,
@@ -20,13 +20,13 @@ const src = (t: string) => SOURCES.find((s) => s.table === t)!;
 const res = (t: string, exact: Record<string, unknown>[], loose: Record<string, unknown>[] = []): SourceResult => ({ source: src(t), exact, loose, ok: true });
 
 describe("gather — 통합 검색 360 무회귀", () => {
-  it("인자 없이 부르면 SOURCES 표 전부(일정 메모 포함)를 같은 순서로 돌려준다", async () => {
+  it("인자 없이 부르면 SOURCES 표 전부 + 미수 방문(GATHER_ALSO) + 일정 메모를 같은 순서로 돌려준다", async () => {
     mocked.mockResolvedValue([]);
     const out = await gather(entity);
-    expect(out.map((r) => r.source.table)).toEqual([...SOURCES.filter((s) => s.table !== "plan_memos").map((s) => s.table), "plan_memos"]);
+    expect(out.map((r) => r.source.table)).toEqual([...SOURCES.filter((s) => s.table !== "plan_memos").map((s) => s.table), ...GATHER_ALSO.map((s) => s.table), "plan_memos"]);
     const asked = new Set(mocked.mock.calls.map((c) => c[0]));
     // 표에 조건이 하나도 안 맞는 counter_sms_targets 처럼 조회 안 하는 표가 있어도, 조회한 표는 모두 SOURCES 안
-    asked.forEach((t) => expect(SOURCES.some((s) => s.table === t) || t === "workin_vendor_code").toBe(true));
+    asked.forEach((t) => expect([...SOURCES, ...GATHER_ALSO].some((s) => s.table === t) || t === "workin_vendor_code").toBe(true));
     expect(asked.has("jeomgeom")).toBe(true);
     expect(asked.has("recontract")).toBe(true);
   });

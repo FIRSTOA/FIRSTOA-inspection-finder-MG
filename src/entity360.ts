@@ -124,6 +124,23 @@ export const SOURCES: SourceDef[] = [
     dateKeys: ["updated_at", "created_at"], titleKeys: ["name"], snippetKeys: ["kind", "condition", "qty", "note"], authorKeys: ["updated_by"], teamKeys: [], modelKeys: [], serialKeys: [], assetKeys: [] },
 ];
 
+/**
+ * 미수 방문 기록(misu_visits, CS 미수 방문이력 2026-10-22) — 표 정의 원본. 탭 검색(src/tabSearch.ts EXTRA_SOURCES)도 이 객체를 그대로 쓴다.
+ * company_code = 마스터 거래처코드. 주민번호 모양 값은 toEvent·deriveState(maskRrn·maskDeep)가 화면에 내보내기 전에 가린다.
+ * SOURCES 에 넣지 않고 GATHER_ALSO 로 둔 이유: 탭 검색은 이 표를 gather(only) 밖에서 따로 모은다(SQL 실행 전 404 조용히 건너뜀) —
+ * SOURCES 에 넣으면 미수 탭이 같은 표를 두 번 조회한다. 통합 검색 360(gather 인자 없음)만 덧붙인다(2026-10-24 개선 목록 C4).
+ */
+export const MISU_VISITS_SOURCE: SourceDef = {
+  table: "misu_visits", label: "미수 방문", group: "영업·관리", tone: T.misu,
+  nameCols: ["vendor"], deviceCols: [], rawCols: [], codeCol: "company_code", hidden: "_hidden=not.is.true",
+  dateKeys: ["visited_at", "created_at"], titleKeys: ["visit_round"], snippetKeys: ["open_status", "judgment", "dun_reply", "promise_date"],
+  authorKeys: ["author"], teamKeys: ["author_team", "region"], modelKeys: [], serialKeys: [], assetKeys: [],
+  titleFn: (row) => `미수 ${str(row, "visit_round") || "방문"}${str(row, "judgment") ? ` · ${str(row, "judgment")}` : ""}`,
+  limit: 200,
+};
+/** gather 가 SOURCES 뒤에 덧붙여 모으는 표 — opts.only 가 있으면 그 안에 들어 있을 때만 */
+export const GATHER_ALSO: SourceDef[] = [MISU_VISITS_SOURCE];
+
 // ── 문자열·날짜 도우미 ─────────────────────────────────────────
 export const str = (row: Row, key: string): string => String(row[key] ?? "").replace(/_x000d_|\r/g, "").trim();
 export const firstOf = (row: Row, keys: string[]): string => { for (const k of keys) { const v = str(row, k); if (v && v !== "null") return v; } return ""; };
@@ -363,12 +380,12 @@ async function gatherWorkin(e: Entity): Promise<Row[]> {
 }
 
 /**
- * opts.only(2026-10-22 탭 검색): 이 표들만 모은다(SOURCES 순서 유지). 없으면 전부 — 통합 검색 360 은 인자 없이 부르므로 지금과 같다.
+ * opts.only(2026-10-22 탭 검색): 이 표들만 모은다(SOURCES 순서 유지). 없으면 전부(SOURCES + GATHER_ALSO 미수 방문) — 통합 검색 360 은 인자 없이 부른다.
  * plan_memos 는 only 에 들어 있을 때만 2차로 붙인다(as_tickets 도 같이 있어야 이어진다).
  */
 export async function gather(e: Entity, opts?: { only?: string[] }): Promise<SourceResult[]> {
   const only = opts?.only ? new Set(opts.only) : null;
-  const results = await Promise.all(SOURCES.filter((s) => s.table !== "plan_memos" && (!only || only.has(s.table))).map(async (src): Promise<SourceResult> => {
+  const results = await Promise.all([...SOURCES, ...GATHER_ALSO].filter((s) => s.table !== "plan_memos" && (!only || only.has(s.table))).map(async (src): Promise<SourceResult> => {
     try {
       let exact: Row[] = src.table === "vendor_info" ? e.leaseRows : [];
       if (src.table === "workin_map_places") exact = await gatherWorkin(e);

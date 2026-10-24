@@ -3,14 +3,16 @@
  * 활동 기록(activity_events)을 사람별로 세어 항목마다 순위를 매기고, 사람마다 "팀 평균보다 뛰어난 것 / 부족한 것"을 짚는다.
  * 점검은 기기 대수, 재계약·불만은 업체 기준 중복 제거, 나머지는 건수. 취소된 기록은 뺀다.
  * 점검·AS 는 2026-10-22부터 jeomgeom·as_records 표 원본(workCount countField, loadWorkEvents 가 갈아 끼움) — 홈·팀 현황·조회 탭과 같은 값.
+ * 물류·재계약·불만·초과조정·미수는 2026-10-24부터 양식 원본 표(formCount, loadWorkEvents 가 갈아 끼움) — 활동 기록으로 세는 건 담당자 변경뿐.
  */
 import { useEffect, useMemo, useState } from "react";
 import { OPERATIONS_TEAMS, type ActivityEvent } from "./operations";
 import { loadWorkEvents } from "./expansionSource";
 import { useMembers } from "./authors";
 import { kstDate, weekRange } from "./visits";
-import { vendorMatchKey } from "./ids";
 import { countableEvents, EXPANSION_BASIS_TEXT, FIELD_BASIS_TEXT } from "./workCount";
+import { countFormEvents, FORM_BASIS_TEXT } from "./formCount";
+import { rankingLogisticsCount } from "./rankingLogistics";
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
 
@@ -18,20 +20,21 @@ type Period = "week" | "month" | "quarter" | "year";
 type Metric = { key: string; label: string; unit: string; count: (evs: ActivityEvent[]) => number };
 
 const byKind = (kind: string) => (evs: ActivityEvent[]) => evs.filter((e) => e.category === kind).length;
-const byVendor = (kind: string) => (evs: ActivityEvent[]) => new Set(evs.filter((e) => e.category === kind).map((e) => vendorMatchKey(e.vendor) || e.vendor)).size;
 // 같은 사람이 같은 업체를 다시 보낸 것(수정 재전송·연타)은 한 건으로 — 2026-10-17 "한왕주 PC 8개인데 실제 6개".
 // 규칙(옛 dedupeForRanking)은 workCount.ts 한 곳에 두고 팀 현황(OperationsDashboard)도 같은 것을 쓴다(2026-10-22).
 
 const METRICS: Metric[] = [
   { key: "inspection", label: "점검", unit: "대", count: (evs) => evs.filter((e) => e.category === "inspection").reduce((n, e) => n + (e.machineCount || 1), 0) },
   { key: "as", label: "AS", unit: "건", count: byKind("as") },
-  { key: "logistics", label: "물류", unit: "건", count: byKind("logistics") },
+  // 물류 = 여분·마감 제외(팀 현황 '물류' 칸·홈 K24 와 같은 판정, 2026-10-24)
+  { key: "logistics", label: "물류", unit: "건", count: rankingLogisticsCount },
   { key: "expansion", label: "확장성", unit: "곳", count: (evs) => evs.filter((e) => e.category === "expansion_it" || e.category === "expansion_copier").length },
-  { key: "recontract", label: "재계약", unit: "곳", count: byVendor("recontract") },
-  { key: "misu", label: "미수", unit: "건", count: byKind("misu") },
-  { key: "overage", label: "초과조정", unit: "건", count: byKind("overage") },
+  // 재계약·미수·초과조정·불만 = 양식 원본 표(loadWorkEvents 가 갈아 끼움) · 단위는 formCount 한 곳(재계약·불만 = 업체 수, 2026-10-24)
+  { key: "recontract", label: "재계약", unit: "곳", count: (evs) => countFormEvents("recontract", evs) },
+  { key: "misu", label: "미수", unit: "건", count: (evs) => countFormEvents("misu", evs) },
+  { key: "overage", label: "초과조정", unit: "건", count: (evs) => countFormEvents("overage", evs) },
   { key: "contact_change", label: "담당자 변경", unit: "건", count: byKind("contact_change") },
-  { key: "complaint", label: "불만 처리", unit: "곳", count: byVendor("complaint") },
+  { key: "complaint", label: "불만 처리", unit: "곳", count: (evs) => countFormEvents("complaint", evs) },
 ];
 
 function rangeOf(period: Period): { start: string; end: string; label: string } {
@@ -104,7 +107,7 @@ export default function TeamRanking({ author }: { author: string }) {
             <span className="flex flex-wrap items-center gap-1.5">{["전체", ...OPERATIONS_TEAMS].map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={UI.chip(team === t)}>{t === "전체" ? "전체" : `${t}팀`}</button>)}</span>
           </div>
         </div>
-        <p className="border-b border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-400 lg:px-5">{range.start} ~ {range.end} · 활동 기록 기준(점검·AS 는 점검·AS 표, 확장성은 확장성 표) · 취소 제외</p>
+        <p className="border-b border-slate-100 px-4 py-2 text-[11px] font-bold text-slate-400 lg:px-5">{range.start} ~ {range.end} · 원본 표 기준(점검·AS·확장성·물류·재계약·불만·초과조정·미수 — 담당자 변경만 활동 기록) · 오발송 제외</p>
 
         {/* 항목별 순위 */}
         <div className="p-4 lg:p-5">
@@ -151,7 +154,7 @@ export default function TeamRanking({ author }: { author: string }) {
                 <tbody>{insight.rows.map((r) => <tr key={r.mt.key} className="border-t border-slate-100"><td className="py-1.5 font-bold text-slate-700">{r.mt.label}</td><td className={`py-1.5 text-right font-mono font-black ${r.ratio >= 1.2 ? "text-emerald-700" : r.ratio < 0.8 ? "text-amber-700" : "text-slate-800"}`}>{r.v}{r.mt.unit}</td><td className="py-1.5 text-right font-mono text-slate-500">{r.a.toFixed(1)}</td><td className="py-1.5 text-right font-mono text-slate-500">{r.rank}/{table.length}</td></tr>)}</tbody>
               </table>
             </div>
-            <div className="mt-2 text-[11px] font-semibold text-slate-400">숫자는 FIELD 보고·확장성·불만·미수 등 활동 기록을 센 것입니다. 같은 업체를 10분 안에 다시 보낸 것은 1건. 점검·AS 기준: 점검·AS 표, {FIELD_BASIS_TEXT}. 확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT}. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
+            <div className="mt-2 text-[11px] font-semibold text-slate-400">숫자는 각 양식의 원본 표를 센 것입니다(담당자 변경만 활동 기록 — 같은 업체를 10분 안에 다시 보낸 것은 1건). 물류·재계약·불만·초과조정·미수 기준: {FORM_BASIS_TEXT}. 점검·AS 기준: 점검·AS 표, {FIELD_BASIS_TEXT}. 확장성 기준: PC·복합기 확장성 표(시트 포함), {EXPANSION_BASIS_TEXT}. 맡은 지역·업체 수·휴가에 따라 차이가 있으니 참고용입니다.</div>
           </div>
         )}
       </section>

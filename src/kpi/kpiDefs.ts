@@ -27,6 +27,8 @@ export type KpiScreen = { screen: "weekly" | "lookup" | "okr" | "walkingMap" | "
 /** 숫자 원본(로더 단위) — kpiData.ts 가 이 단위로 한 번씩만 읽는다 */
 export type KpiSource =
   | "roster" | "field" | "expansion" | "events" | "workin" | "overage" | "recontract" | "bulman" | "misu"
+  /** 물류 양식 표(logistics_records, 2026-10-24 — K24 가 활동 기록 대신) */
+  | "logistics"
   | "unhandled" | "receptionWeek" | "keyman" | "okr" | "blog" | "praise" | "customerPraise" | "visits" | "office"
   /** IT 학습 기록 표(2026-10-24, supabase/it-learning-logs-20261024.sql) — 표가 없으면 "준비 중" */
   | "itQuiz" | "itPractice"
@@ -121,8 +123,8 @@ export const KPI_DEFS: KpiDef[] = [
   },
   {
     id: "K24", name: "물류", unit: "건", group: "현장 실행", period: "week", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
-    basis: `${EVENT_BASIS} · 여분·마감 제외(팀 현황 '물류' 칸)`, source: "expansionSource.loadWorkEvents + workCount.countableEvents, 팀 현황 matchesFilter('logistics_main')",
-    loads: ["events"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 물류" }, today: true,
+    basis: "물류 양식 표 + 점검·AS 양식의 세팅 · 여분·마감 제외(팀 현황 '물류' 칸) · 같은 날 같은 사람 같은 업체 1건 · 오발송 삭제·팀장 제외 · 팀 = 작성자 팀", source: "formCount.countForms(logistics, part main) — 팀 현황·순위표·조회 탭 공통(2026-10-24, 활동 기록 대신)",
+    loads: ["logistics", "field"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 물류" }, today: true,
   },
   {
     id: "K4", name: "방문 업체", unit: "곳", group: "현장 실행", period: "week", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
@@ -153,7 +155,7 @@ export const KPI_DEFS: KpiDef[] = [
   {
     id: "K10", name: "초과사용 제안 방문", unit: "건", group: "고객가치·영업", period: "month", periods: ["month", "quarter"], scopes: ATP, widget: "goal", sizes: ["2x1", "1x1", "2x2"],
     basis: "초과조정 표 · 방문일(없으면 작성 시각) · 같은 사람·같은 날·같은 업체 1건 · 오발송 삭제·팀장 제외 · 팀 = 지역 칸 → 출처 괄호 → 작성자 팀 · 팀 과제: 목표 = 파트당 월 2건(CS 전체 = 파트 수 × 2, 분기 = × 3) · 개인은 목표 없이 실적만 · 월 목표라 [이번 주]에서도 이번 달로 셈",
-    source: "kpiCompute.countOverageVisits (Q7: 초과조정 양식 1건 = 방문 1건)", loads: ["overage", "roster"], status: "ready",
+    source: "kpiCompute.countOverageVisits = formCount.countForms(overage) (Q7: 초과조정 양식 1건 = 방문 1건)", loads: ["overage", "roster"], status: "ready",
     targetBasis: "perTeamMonth", target: { perTeamMonth: 2, from: `${OKR_Q4} 4번(파트 월 2·분기 6) · 사용자 2026-10-24 '팀 과제, 팀당 월 2건' — 전체 = 파트 수 × 2(monthTotal·quarterTotal 을 설정하면 그 값) · 인당은 perPersonMonth 로 설정` },
     main: true, better: "up", teams: "A~E", screen: { screen: "lookup", tab: "초과조정" }, today: true,
   },
@@ -164,8 +166,8 @@ export const KPI_DEFS: KpiDef[] = [
   },
   {
     id: "K25", name: "재계약 진행", unit: "곳", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
-    basis: `${EVENT_BASIS} · 같은 업체는 기간 안 1곳(순위표·팀 현황 재계약 칸)`, source: "loadWorkEvents + countableEvents, 업체 중복 제거(VENDOR_DEDUP_KINDS)",
-    loads: ["events"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 재계약" }, today: true,
+    basis: "재계약 표(FIELD 웹앱·카톡 가져오기) · 같은 업체는 기간 안 1곳 · 오발송 삭제·팀장 제외 · 팀 = 지역 칸 → 출처 괄호 → 작성자 팀", source: "formCount.countForms(recontract) — 팀 현황·순위표·조회 탭 공통(2026-10-24, 활동 기록 대신)",
+    loads: ["recontract"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 재계약" }, today: true,
   },
   {
     // 2026-10-24 홈 개편: 따로 위젯 없이 홈 '미처리 전체' 카드의 한 줄(합산)과 달성표 [전체 지표]에만 나온다
@@ -181,14 +183,14 @@ export const KPI_DEFS: KpiDef[] = [
   },
   {
     id: "K14", name: "미수 방문", unit: "건", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "teamBars", sizes: ["2x1", "1x1"],
-    basis: "미수 방문이력 표 · 숨김 제외 · 보완 기록은 원 기록 1건으로(실효 기록) · 팀 = 작성 당시 팀 · 팀장 제외",
-    source: "misuVisit.effectiveMisuVisits + misuVisitHistoryData.loadMisuVisits", loads: ["misu"], status: "pending-table",
+    basis: "미수 방문이력 표 · 숨김 제외 · 보완 기록은 원 기록 1건으로(실효 기록) · 같은 날 같은 사람 같은 업체 1건 · 팀 = 작성 당시 팀 · 팀장 제외",
+    source: "misuVisit.effectiveMisuVisits → formCount.countForms(misu) + misuVisitHistoryData.loadMisuVisits", loads: ["misu"], status: "pending-table",
     targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "lookup", tab: "미수 › 방문 이력" }, today: true,
   },
   {
     id: "K26", name: "불만 처리", unit: "곳", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
-    basis: `${EVENT_BASIS} · 같은 업체는 기간 안 1곳(순위표·팀 현황 불만 칸)`, source: "loadWorkEvents + countableEvents, 업체 중복 제거",
-    loads: ["events"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 불만" }, today: true,
+    basis: "불만 표(웹앱·시트·카톡 가져오기) · 같은 업체는 기간 안 1곳 · 오발송 삭제·팀장 제외 · 팀 = 지역 칸 → 출처 괄호 → 작성자 팀", source: "formCount.countForms(complaint) — 팀 현황·순위표·조회 탭 공통(2026-10-24, 활동 기록 대신)",
+    loads: ["bulman"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 불만" }, today: true,
   },
   {
     id: "K15", name: "불만 처리 완료율", unit: "%", group: "고객가치·영업", period: "month", periods: ["week", "month", "quarter"], scopes: ATP, widget: "ring", sizes: ["1x1"],
