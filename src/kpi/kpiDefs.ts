@@ -231,7 +231,7 @@ export const KPI_DEFS: KpiDef[] = [
   },
   // ── D. 성장·OKR ──
   {
-    id: "K19", name: "OKR 달성률", unit: "%", group: "성장·OKR", period: "week", periods: ["week", "month"], scopes: AT, widget: "ring", sizes: ["1x1", "2x1"],
+    id: "K19", name: "OKR 달성률", unit: "%", group: "성장·OKR", period: "week", periods: ["week", "month"], scopes: AT, widget: "ring", sizes: ["1x1", "2x1", "2x2"],
     basis: "이번 주(월~금 주차) 파트 판정 — 파트 종합 판정, 없으면 그 주 팀원 판정 중 가장 나쁜 것 · 완료·해당없음 / 판정 있는 목표 · A~D(E 제외) · 이번 주 판정이 없는 파트는 0% 가 아니라 '미작성' · [이번 달] = 월 파트 종합",
     source: "okr.achievementRate·judgmentCounts(입력 = 이번 주 okr_reports, 2026-10-24 사용자 '프로들은 주만 쓴다') — 월은 OKR 월 통합집계 파트 카드와 같은 식", loads: ["okr"], status: "ready",
     targetBasis: "ratio", target: { value: 100, from: `${OKR_Q4} 전 목표 100%` }, main: false, better: "up", teams: "A~D", screen: { screen: "okr", tab: "주차 기록" }, today: false,

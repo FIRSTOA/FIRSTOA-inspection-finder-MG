@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-24",
+    "hash": "d2c21d578f",
+    "agent": "debugger",
+    "summary": "오염 업체명 정리 SQL: 수동 2건 추가(709건, 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "f98c93cf16",
+    "agent": "debugger",
+    "summary": "업체명 파서 꼬리 수정(순번·등급·주소·유상A/S) + 오염 업체명 정리 SQL(707건, 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "f98c93cf16",
+    "agent": "sql-review",
+    "summary": "업체명 파서 꼬리 수정(순번·등급·주소·유상A/S) + 오염 업체명 정리 SQL(707건, 실행 대기)"
+  },
+  {
+    "date": "2026-10-24",
     "hash": "5fda9f5c7e",
     "agent": "developer",
     "summary": "위험 감사 즉시 5건 — 일정 업체명 80자 근본(네이버 동기화 파서 공용화) + 메모 덮어씀·중복 방지 중단 + 숨은 폴링 차단 + 고객 리포트 실패 표시"

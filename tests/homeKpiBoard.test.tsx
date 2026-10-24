@@ -56,12 +56,12 @@ const WORKIN = [
 const FACTS: KpiFacts = { roster: ROSTER, field: FIELD, expansion: [], workin: WORKIN };
 
 describe("기본 배치(2026-10-24 마무리 — 위젯 4개, 분기 점검 진행은 달성표 K2 행 안)", () => {
-  it("금일 현황(4x1, 기본 숨김 — 2026-10-24 사용자 \"금일 현황은 없어도\") → KPI 달성표(4x2) → 미처리(4x1, 2x2 가능) → OKR(2x1)", () => {
+  it("금일 현황(4x1, 기본 숨김 — 2026-10-24 사용자 \"금일 현황은 없어도\") → KPI 달성표(4x2) → 미처리(2x2, 4x1 가능) → OKR(2x2 — 미처리와 반반)", () => {
     expect(HOME_KPI_DEFAULT_LAYOUT).toEqual([
       { id: "today", size: "4x1", hidden: true },
       { id: "table", size: "4x2", hidden: false },
-      { id: "unhandledPanel", size: "4x1", hidden: false },
-      { id: "K19", size: "2x1", hidden: false },
+      { id: "unhandledPanel", size: "2x2", hidden: false },
+      { id: "K19", size: "2x2", hidden: false },
     ]);
     expect(HOME_WIDGETS.find((w) => w.id === "unhandledPanel")?.sizes).toContain("2x2");
     const kinds = Object.fromEntries(HOME_WIDGETS.map((w) => [w.id, w.kind]));
@@ -75,7 +75,7 @@ describe("기본 배치(2026-10-24 마무리 — 위젯 4개, 분기 점검 진�
     expect(restored).toBe(true);
     expect(items.map((x) => x.id)).toEqual(["today", "table", "unhandledPanel", "K19"]);
     expect(items.find((x) => x.id === "table")?.size).toBe("4x1"); // 허용 크기면 사용자가 고른 크기 유지
-    expect(items.find((x) => x.id === "unhandledPanel")?.size).toBe("4x1"); // 허용 안 된 크기(1x1) → 첫 크기
+    expect(items.find((x) => x.id === "unhandledPanel")?.size).toBe("2x2"); // 허용 안 된 크기(1x1) → 첫 크기
     expect(items.find((x) => x.id === "K19")?.hidden).toBe(true);
     expect(items.find((x) => x.id === "today")?.hidden).toBe(true); // v1 이전: 금일 현황은 숨김(2026-10-24 오후)
     expect(HOME_KPI_LAYOUT_VERSION).toBe(2);
@@ -87,7 +87,7 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
 
   it("저장한 순서·크기·숨김이 그대로 돌아온다", () => {
     const st = memory();
-    const changed = [...HOME_KPI_DEFAULT_LAYOUT].reverse().map((x) => (x.id === "unhandledPanel" ? { ...x, size: "2x2" as const } : x.id === "K19" ? { ...x, hidden: true } : x));
+    const changed = [...HOME_KPI_DEFAULT_LAYOUT].reverse().map((x) => (x.id === "unhandledPanel" ? { ...x, size: "4x1" as const } : x.id === "K19" ? { ...x, hidden: true } : x));
     expect(writeHomeLayout(st, changed)).toBe("");
     expect(JSON.parse(st.m.get(HOME_KPI_LAYOUT_KEY)!).v).toBe(2);
     expect(readHomeLayout(st)).toEqual(changed);

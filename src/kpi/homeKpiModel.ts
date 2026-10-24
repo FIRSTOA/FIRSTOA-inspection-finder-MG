@@ -52,8 +52,8 @@ export const HOME_WIDGETS: HomeWidgetDef[] = [
   { id: "today", title: "금일 현황", kind: "todayStrip", kpis: TODAY_KPI_IDS, sizes: ["4x1"], description: "오늘 점검·AS·물류·확장성·칭찬 … 한 줄", defaultHidden: true },
   { id: "table", title: "KPI 달성표", kind: "kpiTable", kpis: ALL_KPI_IDS, sizes: ["4x2", "4x1"], description: "지표별 달성·순항·부족 · CS 전체 → 팀 → 개인(행 펼치기, 분기 점검 진행은 K2 행 안)" },
   // 미처리(2026-10-24 하나로): 현황판 묶음의 unhandled(K16 = mergeUnhandled) + recontract(K12 = 재계약 확인 지남)를 그린다 — 따로 읽지 않는다
-  { id: "unhandledPanel", title: "미처리", kind: "panel", kpis: ["K16", "K12"], sizes: ["4x1", "2x2"], description: "미처리 합계 · 팀 탭 · 종류 칸(복합기 AS·원격·IT·경영·운영·영업·AS 일정·물류) · 재계약 확인 지남 · 목록" },
-  { id: "K19", title: "OKR 달성률", kind: "okr", kpis: ["K19"], sizes: ["2x1", "1x1"], description: "이번 주 파트 판정 · 이번 달 주별 막대 · 미작성 파트 · 범위 칩(전체/A~D/개인)" },
+  { id: "unhandledPanel", title: "미처리", kind: "panel", kpis: ["K16", "K12"], sizes: ["2x2", "4x1"], description: "미처리 합계 · 팀 탭 · 종류 칸(복합기 AS·원격·IT·경영·운영·영업·AS 일정·물류) · 재계약 확인 지남 · 목록" },
+  { id: "K19", title: "OKR 달성률", kind: "okr", kpis: ["K19"], sizes: ["2x2", "2x1", "1x1"], description: "이번 주 파트 판정 · 이번 달 주별 막대 · 미작성 파트 · 범위 칩(전체/A~D/개인)" },
 ];
 export const HOME_WIDGET_BY_ID: Record<HomeWidgetId, HomeWidgetDef> = Object.fromEntries(HOME_WIDGETS.map((w) => [w.id, w])) as Record<HomeWidgetId, HomeWidgetDef>;
 
