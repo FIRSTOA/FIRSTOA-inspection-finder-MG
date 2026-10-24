@@ -4,7 +4,6 @@ import { useScreenActive } from "./screenActive";
 import { canPoll, createGapGate, FOCUS_MIN_GAP_MS, gatedHandler, NAVER_PULL_GAP_MS } from "./pollGate";
 import { Search } from "lucide-react";
 import { askConfirm } from "./confirmModal";
-import { AS_FORM_PROMPT_TEXT, shouldAskAsForm } from "./asFormPrompt";
 import { deleteRows, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow, upsertRows } from "./supabase";
 import { isMobileDevice, kakaoMapSearchLink, naverMapLink } from "./navApp";
 import { mapQuery } from "./address";
@@ -1202,18 +1201,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
   // 완료 사유 입력 모달 대상 (완료 취소는 사유 없이 즉시)
   const [doneTicket, setDoneTicket] = useState<AsTicket | null>(null);
-  // AS 일정은 완료 전에 "AS 양식을 쓸까요?" 한 번 묻는다 — 일정 [완료]만으론 AS 건수(as_records 기준)에 안 잡힘(2026-10-24 개선 목록 A6).
-  // [양식 쓰기] = 일정리스트 [FIELD] 와 같은 경로(접수원본 있으면 그것, 없으면 제목으로 조립) · [그냥 완료](또는 바깥 누름) = 기존 완료 사유 창
-  const openDone = (ticket: AsTicket) => {
-    if (ticket.status === "완료") { toggleDone(ticket); return; }
-    if (!shouldAskAsForm(ticket) || (!onLoadForm && !onUseField)) { setDoneTicket(ticket); return; }
-    void askConfirm(AS_FORM_PROMPT_TEXT, { okLabel: "양식 쓰기", cancelLabel: "그냥 완료" }).then((writeForm) => {
-      if (!writeForm) { setDoneTicket(ticket); return; }
-      const raw = receptionRawOf(ticket);
-      const link = { id: ticket.id, receptionId: ticket.receptionId, vendor: ticket.vendor };
-      if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link);
-    });
-  };
+  const openDone = (ticket: AsTicket) => { if (ticket.status === "완료") toggleDone(ticket); else setDoneTicket(ticket); };
   const applyDone = async (reason: string, mode?: "visit" | "phone") => {
     const ticket = doneTicket;
     setDoneTicket(null);
