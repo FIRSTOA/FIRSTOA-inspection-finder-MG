@@ -47,4 +47,6 @@ IT파트 시트는 **읽기 전용**(남의 데이터)이라 건드리지 않습
 - 자동으로 나가는 안내는 오전 10시 이후에만 나갑니다(00장).
 
 ---
+탭 머리 모양(2026-10-24 저녁): 공지·요청과 IT 학습·처리이력의 머리도 다른 탭과 같은 **다크 머리**(제목 흰 글씨 + 한 줄 설명 + 상태 칩 줄)입니다. 오후에 잠깐 흰 머리였던 것은 사용자 지적("다른 탭들이랑 컨셉은 맞춰야지")으로 되돌렸습니다.
+
 마지막 갱신: 2026-10-24(조회 실패 표시 절 — src/CustomerReport.tsx, src/AutoSchedule.tsx, src/loadState.ts) · 2026-10-24(IT 학습 기록 절) · 이전 2026-10-22 · 근거 파일 src/ItLearningHistory.tsx, src/ItPracticeForm.tsx, src/itLogs.ts, src/App.tsx(메뉴 묶음), src/HelpCenter.tsx(옛 설명서 목록), src/InspectionReport.tsx(점검 리포트 머리 주석) · 각 화면 상세는 다음 갱신 때 장을 나눠 씀

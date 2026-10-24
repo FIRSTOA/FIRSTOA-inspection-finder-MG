@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-24",
+    "hash": "994d098935",
+    "agent": "developer",
+    "summary": "관리 탭 [카톡 수집] 카드(방별 상태 신호등·확인필요·지금 수집) + gas-admin 엣지(GAS 쓰기 동작 토큰 중계) + 사진 이관 토큰"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "994d098935",
+    "agent": "qa-checker",
+    "summary": "관리 탭 [카톡 수집] 카드(방별 상태 신호등·확인필요·지금 수집) + gas-admin 엣지(GAS 쓰기 동작 토큰 중계) + 사진 이관 토큰"
+  },
+  {
+    "date": "2026-10-24",
+    "hash": "994d098935",
+    "agent": "field-deploy-check",
+    "summary": "관리 탭 [카톡 수집] 카드(방별 상태 신호등·확인필요·지금 수집) + gas-admin 엣지(GAS 쓰기 동작 토큰 중계) + 사진 이관 토큰"
+  },
+  {
+    "date": "2026-10-24",
     "hash": "064e72ba23",
     "agent": "feature-planner",
     "summary": "카톡 수집 확장(물류·E방·봇 제외·원문 보존·GAS 관리 토큰) + 숫자 통일 3단계(담당자 변경 원본 표·내 현황) + 날짜 정규화 + 실행기 백업 일감 경로"

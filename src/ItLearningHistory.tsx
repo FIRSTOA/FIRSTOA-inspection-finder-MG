@@ -210,17 +210,17 @@ export default function ItLearningHistory({ author }: { author: string }) {
     {notice && <div role="status" className={`fixed inset-x-4 top-20 z-[5000] rounded-lg px-4 py-3 text-sm font-bold text-white shadow-xl sm:inset-x-auto sm:right-4 sm:max-w-sm ${notice.kind === "success" ? "bg-emerald-600" : notice.kind === "error" ? "bg-rose-600" : "bg-slate-800"}`}>{notice.text}</div>}
 
     <section className={UI.card}>
-      <div className={UI.pageHead}>
+      <div className={`${UI.heroHead} flex flex-wrap items-start justify-between gap-x-4 gap-y-2`}>
         <div className="min-w-0 flex-1 basis-64">
-          <h2 className={UI.pageTitle}>IT 학습·처리이력</h2>
-          <p className={UI.pageDesc}>IT파트가 관리하는 PC DB 시트를 그대로 읽습니다. 지식·처리이력·영업상담·교육자료 검색과 기술 퀴즈는 설정 없이 바로 쓰실 수 있습니다.</p>
+          <h2 className={UI.heroTitle}>IT 학습·처리이력</h2>
+          <p className={UI.desc}>IT파트가 관리하는 PC DB 시트를 그대로 읽습니다. 지식·처리이력·영업상담·교육자료 검색과 기술 퀴즈는 설정 없이 바로 쓰실 수 있습니다.</p>
         </div>
-        <div className={UI.pageActions}>
-          <button type="button" aria-expanded={practiceOpen} onClick={() => setPracticeOpen((open) => !open)} className={practiceOpen ? UI.btn : UI.btnGhost}>
+        <div className={UI.heroActions}>
+          <button type="button" aria-expanded={practiceOpen} onClick={() => setPracticeOpen((open) => !open)} className={UI.heroBtn(practiceOpen)}>
             <Pencil size={14} aria-hidden />실습 기록</button>
-          <button type="button" aria-expanded={connectionOpen} onClick={() => setConnectionOpen((open) => !open)} className={`${UI.btnGhost} ${connected ? "border-emerald-200! bg-emerald-50! text-emerald-700!" : ""}`}>
+          <button type="button" aria-expanded={connectionOpen} onClick={() => setConnectionOpen((open) => !open)} className={`${UI.heroBtn(false)} ${connected ? "bg-emerald-400/20! text-emerald-300!" : ""}`}>
             <Settings2 size={14} aria-hidden />{connected ? "AS 등록 연결됨" : "AS 등록 연결"}</button>
-          <a href={IT_SHEET_URL} target="_blank" rel="noreferrer" className={UI.btnGhost}>시트 원본 ↗</a>
+          <a href={IT_SHEET_URL} target="_blank" rel="noreferrer" className={UI.heroBtn(false)}>시트 원본 ↗</a>
         </div>
       </div>
       <ItPracticeForm author={author} open={practiceOpen} />

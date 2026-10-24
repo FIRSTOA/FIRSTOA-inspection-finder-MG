@@ -62,7 +62,9 @@ export const HOME_KPI_DEFAULT_LAYOUT: KpiLayoutItem[] = HOME_WIDGETS.map((w) => 
 /* ───────────── 배치 저장 (localStorage, 설계안 4-5 2단계-a) ───────────── */
 
 export const HOME_KPI_LAYOUT_KEY = "home_kpi_layout_v1";
-export const HOME_KPI_LAYOUT_VERSION = 2; // v2(2026-10-24 오후): 금일 현황 기본 숨김 — v1 저장분은 today 만 숨기고 나머지 배치는 유지
+export const HOME_KPI_LAYOUT_VERSION = 3; // v2(2026-10-24 오후): 금일 현황 기본 숨김 — v1 저장분은 today 만 숨기고 나머지 배치는 유지
+// v3(2026-10-24 저녁): OKR 달성률(K19)은 미처리와 반반(2x2) — v1·v2 저장분에 남은 작은 크기(2x1·1x1)를 2x2 로 올린다(사용자 "OKR 박스는 왜 그대로임 사이즈")
+const V3_FORCE_SIZE: Partial<Record<HomeWidgetId, KpiSize>> = { K19: "2x2" };
 
 /**
  * 저장 글 → 배치. 모양이 틀리거나 버전이 다르면 기본 배치. 모르는 id(2026-10-24 에 없앤 K1·K3·exp·K10·K12·unhandled·receptionPanel·K2 포함)·중복은 버리고,
@@ -75,8 +77,9 @@ export function parseHomeLayout(raw: string | null | undefined): { items: KpiLay
   try { parsed = JSON.parse(raw); } catch { return fallback; }
   if (!parsed || typeof parsed !== "object") return fallback;
   const { v, items } = parsed as { v?: unknown; items?: unknown };
-  const fromV1 = v === 1; // v1 → v2 이전: 사용자 배치는 살리고 금일 현황만 숨긴다(사용자 "금일 현황은 없어도 되겠다")
-  if ((v !== HOME_KPI_LAYOUT_VERSION && !fromV1) || !Array.isArray(items)) return fallback;
+  const fromV1 = v === 1; // v1 → 이전: 사용자 배치는 살리고 금일 현황만 숨긴다(사용자 "금일 현황은 없어도 되겠다")
+  const beforeV3 = v === 1 || v === 2; // v3 이전 저장분: K19 크기만 2x2 로 올린다
+  if ((v !== HOME_KPI_LAYOUT_VERSION && !beforeV3) || !Array.isArray(items)) return fallback;
   const seen = new Set<string>();
   const out: KpiLayoutItem[] = [];
   for (const it of items) {
@@ -85,7 +88,9 @@ export function parseHomeLayout(raw: string | null | undefined): { items: KpiLay
     if (typeof id !== "string" || !(id in HOME_WIDGET_BY_ID) || seen.has(id)) continue;
     const def = HOME_WIDGET_BY_ID[id as HomeWidgetId];
     seen.add(id);
-    out.push({ id, size: def.sizes.includes(size as KpiSize) ? (size as KpiSize) : def.sizes[0], hidden: hidden === true || (fromV1 && def.defaultHidden === true) });
+    const kept = def.sizes.includes(size as KpiSize) ? (size as KpiSize) : def.sizes[0];
+    const forced = beforeV3 ? V3_FORCE_SIZE[id as HomeWidgetId] : undefined;
+    out.push({ id, size: forced ?? kept, hidden: hidden === true || (fromV1 && def.defaultHidden === true) });
   }
   for (const w of HOME_WIDGETS) if (!seen.has(w.id)) out.push({ id: w.id, size: w.sizes[0], hidden: w.defaultHidden === true });
   return { items: out, restored: true };

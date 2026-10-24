@@ -77,8 +77,9 @@ describe("기본 배치(2026-10-24 마무리 — 위젯 4개, 분기 점검 진�
     expect(items.find((x) => x.id === "table")?.size).toBe("4x1"); // 허용 크기면 사용자가 고른 크기 유지
     expect(items.find((x) => x.id === "unhandledPanel")?.size).toBe("2x2"); // 허용 안 된 크기(1x1) → 첫 크기
     expect(items.find((x) => x.id === "K19")?.hidden).toBe(true);
+    expect(items.find((x) => x.id === "K19")?.size).toBe("2x2"); // v3 이전: OKR 은 미처리와 반반으로 올림
     expect(items.find((x) => x.id === "today")?.hidden).toBe(true); // v1 이전: 금일 현황은 숨김(2026-10-24 오후)
-    expect(HOME_KPI_LAYOUT_VERSION).toBe(2);
+    expect(HOME_KPI_LAYOUT_VERSION).toBe(3);
   });
 });
 
@@ -89,12 +90,12 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
     const st = memory();
     const changed = [...HOME_KPI_DEFAULT_LAYOUT].reverse().map((x) => (x.id === "unhandledPanel" ? { ...x, size: "4x1" as const } : x.id === "K19" ? { ...x, hidden: true } : x));
     expect(writeHomeLayout(st, changed)).toBe("");
-    expect(JSON.parse(st.m.get(HOME_KPI_LAYOUT_KEY)!).v).toBe(2);
+    expect(JSON.parse(st.m.get(HOME_KPI_LAYOUT_KEY)!).v).toBe(3);
     expect(readHomeLayout(st)).toEqual(changed);
   });
 
   it("모르는 id·중복은 버리고, 허용 안 된 크기는 첫 크기로, 새 위젯은 끝에 붙인다", () => {
-    const raw = JSON.stringify({ v: 2, items: [{ id: "K19", size: "2x1" }, { id: "옛위젯", size: "1x1" }, { id: "K19", size: "1x1" }, { id: "table", size: "1x1", hidden: true }] });
+    const raw = JSON.stringify({ v: 3, items: [{ id: "K19", size: "2x1" }, { id: "옛위젯", size: "1x1" }, { id: "K19", size: "1x1" }, { id: "table", size: "1x1", hidden: true }] });
     const { items, restored } = parseHomeLayout(raw);
     expect(restored).toBe(true);
     expect(items[0]).toEqual({ id: "K19", size: "2x1", hidden: false });
@@ -103,8 +104,14 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
     expect(items.slice(2).map((x) => x.id)).toEqual(HOME_WIDGETS.map((w) => w.id).filter((id) => id !== "K19" && id !== "table"));
   });
 
+  it("v2 저장분(OKR 2x1·1x1)은 v3 로 읽을 때 K19 만 2x2 로 올리고 나머지 크기·숨김은 그대로", () => {
+    const raw = JSON.stringify({ v: 2, items: [{ id: "table", size: "4x1" }, { id: "K19", size: "2x1" }, { id: "unhandledPanel", size: "4x1", hidden: true }, { id: "today", size: "4x1", hidden: true }] });
+    const { items } = parseHomeLayout(raw);
+    expect(items.map((x) => [x.id, x.size, x.hidden])).toEqual([["table", "4x1", false], ["K19", "2x2", false], ["unhandledPanel", "4x1", true], ["today", "4x1", true]]);
+  });
+
   it("깨진 글·다른 버전·없음 → 기본 배치", () => {
-    for (const raw of [null, "", "{", JSON.stringify({ v: 3, items: [] }), JSON.stringify({ items: [] }), "[]"]) {
+    for (const raw of [null, "", "{", JSON.stringify({ v: 4, items: [] }), JSON.stringify({ items: [] }), "[]"]) {
       expect(parseHomeLayout(raw)).toEqual({ items: HOME_KPI_DEFAULT_LAYOUT, restored: false });
     }
   });
@@ -113,7 +120,7 @@ describe("배치 저장/복원 — localStorage home_kpi_layout_v1 = {v:1, items
     const full = { getItem: () => null, setItem: () => { throw new Error("QuotaExceeded"); } };
     expect(writeHomeLayout(full, HOME_KPI_DEFAULT_LAYOUT)).toContain("저장하지 못했습니다");
     expect(writeHomeLayout(null, HOME_KPI_DEFAULT_LAYOUT)).toContain("저장할 수 없습니다");
-    expect(serializeHomeLayout([{ id: "K1", size: "1x1" }])).toBe('{"v":2,"items":[{"id":"K1","size":"1x1","hidden":false}]}');
+    expect(serializeHomeLayout([{ id: "K1", size: "1x1" }])).toBe('{"v":3,"items":[{"id":"K1","size":"1x1","hidden":false}]}');
   });
 });
 

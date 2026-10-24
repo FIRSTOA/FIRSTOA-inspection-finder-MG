@@ -10,11 +10,13 @@ export const UI = {
   desc: "mt-0.5 text-[11px] font-semibold text-slate-400",
   heroHead: "bg-[#1E252F] px-4 py-3 lg:px-5 lg:py-4", // 화면당 1개
   heroBar: "flex flex-wrap items-center gap-2 bg-[#151A23] px-4 py-2.5", // 선택: 다크 상태줄
-  // 페이지 머리 패턴(2026-10-24): 라이트 배경, 제목+한 줄 설명은 왼쪽, 액션 단추는 오른쪽. 다크 배너 없음. 카드(UI.card) 맨 위에 둔다.
-  pageHead: "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pb-3 pt-4 lg:px-5",
-  pageTitle: "text-base font-black text-slate-950 lg:text-lg",
-  pageDesc: "mt-0.5 text-[11px] font-semibold leading-4 text-slate-500",
-  pageActions: "flex shrink-0 flex-wrap items-center gap-1.5",
+  // 탭 머리 공통 패턴(2026-10-24 정정): UI.card 맨 위 = heroHead(다크) + 제목(heroTitle)/설명(desc) + 선택 heroBar(다크 상태줄·heroChip) + 아래 pageTabs(흰).
+  // 오른쪽 액션은 heroHead 안 heroActions 에 heroBtn 으로. (라이트 pageHead 는 다른 탭과 어긋나 폐기)
+  heroTitle: "text-base font-black text-white lg:text-lg",
+  heroActions: "flex shrink-0 flex-wrap items-center gap-1.5",
+  heroBtn: (on: boolean) => `inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full px-3.5 text-xs font-black transition lg:min-h-9 ${on ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-white/10 text-white hover:bg-white/20"}`,
+  // 다크 상태줄 안 칩(AdminHub·LookupHub 와 같은 모양). warn = 주의(빨강 계열)
+  heroChip: (warn: boolean) => `inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition lg:min-h-9 ${warn ? "bg-rose-400/15 text-rose-300 hover:bg-rose-400/25" : "bg-white/[0.07] text-slate-400 hover:bg-white/[0.14] hover:text-slate-200"}`,
   // 페이지 머리 아래 탭 줄(밑줄형). 폰은 가로 스크롤 한 줄
   pageTabs: "flex overflow-x-auto border-b border-slate-100 px-2 lg:px-3",
   pageTab: (on: boolean) => `relative flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap px-3.5 text-sm font-black transition ${on ? "text-slate-950 after:absolute after:inset-x-2 after:bottom-0 after:h-[3px] after:rounded-full after:bg-blue-600" : "text-slate-400 hover:text-slate-700"}`,

@@ -10,7 +10,7 @@ import DeptRequests from "./DeptRequests";
 /**
  * 공지·요청 허브 — "사람이 나에게 보낸 것"을 한 지붕 아래.
  * 공지 = 읽으면 끝, 요청 = 처리해야 끝이라 탭으로 가른다 (한 목록에 섞지 않는다).
- * 라이트 머리(UI.pageHead) 아래 상태 칩이 두 탭의 "나에게 온" 숫자를 항상 보여준다.
+ * 다크 머리(UI.heroHead, 다른 탭과 같은 패턴) 아래 상태 칩이 두 탭의 "나에게 온" 숫자를 항상 보여준다.
  */
 type Tab = "notice" | "request";
 
@@ -56,25 +56,23 @@ export default function InboxHub({ author }: { author: string }) {
 
   const chip = (label: string, value: number | null, warn: boolean, go: Tab) => (
     <button type="button" onClick={() => setTab(go)}
-      className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 text-[12px] font-bold transition lg:min-h-9 ${warn ? `${UI.tone.bad} hover:bg-rose-100` : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
-      {label} <b className={`tabular-nums ${warn ? "" : "text-slate-900"}`}>{value ?? "…"}건</b>
+      className={UI.heroChip(warn)}>
+      {label} <b className={`tabular-nums ${warn ? "" : "text-white"}`}>{value ?? "…"}건</b>
     </button>
   );
 
   return (
     <div className="space-y-4 pb-16">
       <section className={UI.card}>
-        <div className={UI.pageHead}>
-          <div className="min-w-0 flex-1 basis-64">
-            <h2 className={UI.pageTitle}>공지·요청</h2>
-            <p className={UI.pageDesc}>공지는 읽으면 끝, 요청은 처리해야 끝입니다. 나에게 온 것부터 보여 드립니다.</p>
-          </div>
-          <span className="text-[11px] font-semibold text-slate-400">{author ? `${author}${groupLabel ? ` · ${groupLabel}` : ""} 기준` : "작성자를 선택하시면 내 것만 골라 보여 드립니다"}</span>
+        <div className={UI.heroHead}>
+          <h2 className={UI.heroTitle}>공지·요청</h2>
+          <p className={UI.desc}>공지는 읽으면 끝, 요청은 처리해야 끝입니다. 나에게 온 것부터 보여 드립니다.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 px-4 pb-3 lg:px-5">
+        <div className={UI.heroBar}>
           {chip("안 읽은 공지", unreadNotices, (unreadNotices ?? 0) > 0, "notice")}
           {chip("내 대기 요청", myWaiting, (myWaiting ?? 0) > 0, "request")}
           {myUpdates > 0 && chip("내 요청 진행 소식", myUpdates, true, "request")}
+          <span className="ml-auto text-[11px] font-semibold text-slate-500">{author ? `${author}${groupLabel ? ` · ${groupLabel}` : ""} 기준` : "작성자를 선택하시면 내 것만 골라 보여 드립니다"}</span>
         </div>
         <div className={UI.pageTabs} role="tablist" aria-label="공지·요청 메뉴">
           {([["notice", "공지사항"], ["request", "부서 요청"]] as Array<[Tab, string]>).map(([key, label]) => (
