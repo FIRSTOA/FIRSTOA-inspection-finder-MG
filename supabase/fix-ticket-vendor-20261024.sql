@@ -6,9 +6,9 @@
 --     importedTicketVendor(제목, 본문 "상호 :" 줄, 물류 캘린더 여부)로 다시 계산한 값으로 바꾼다.
 --     전체 제목은 as_tickets."calendarTitle" 에 그대로 남아 있으므로 정보 손실 없음.
 --
--- 건수: as_tickets 681건 / logistics_records 13건 / photo_albums 13건 (합 707건)
+-- 건수: as_tickets 681건 / logistics_records 14건 / photo_albums 14건 (합 709건)
 --       as_tickets source='naver' 739건 중 58건 건너뜀 — 사유별 목록은 파일 하단 "건너뜀" 절.
---       logistics_records 14건·photo_albums 물류 14건 중 1건씩은 짝 일정을 못 찾아 건너뜀(하단 절).
+--       logistics_records 14건·photo_albums 물류 14건 중 0건씩은 짝 일정을 못 찾아 건너뜀(하단 절).
 -- 데이터 기준: 2026-10-24 Supabase MCP 읽기 조회 시점.
 --
 -- 재실행 안전: 모든 update 에 where <열>=<옛 값> 이 붙어 있어 두 번 돌려도 이미 바뀐 행은 0건 갱신이다.
@@ -703,7 +703,8 @@ update as_tickets set vendor='더좋은새마을금고-휘경본점(단기)' whe
 update as_tickets set vendor='이홍진 계약갱신 세종디앤피, 하이어랭크, 더로렌' where id='nv-645b7557797d5f6676-8e-87-5c3664-4d-56-38-8126-1e56-22-62-7a-7a-4e-4366082946-15-141f-871f-8f-3c071d-3b-692c-88-316a-8' and vendor='이홍진 계약갱신 2차 여름, 피플앤드테크놀러지, 타이탄, 하이어랭크';
 update as_tickets set vendor='(주)윈윈쉬핑' where id='nv-7c-2c7d-39-4a70-60-413e435f296b-33-6419-39055b0e-6f6a-5b-316d4c-896b5a007a-350a-3b-52-77-616801-293f6f-79-1d67-7f2c-8' and vendor='이홍진-A/S    N   SL-X4220RX   16N(주)윈윈쉬핑-단순마감마감   종료일   26. 7. 7    지역   수도권C   접수';
 
--- 2) logistics_records (13건) — 같은 날짜·같은 제목 앞부분의 네이버 물류 일정(as_tickets)의 제목+본문 "상호" 줄로 계산. _원문은 손대지 않음.
+-- 2) logistics_records (14건) — 같은 날짜·같은 제목 앞부분의 네이버 물류 일정(as_tickets)의 제목+본문 "상호" 줄로 계산. _원문은 손대지 않음.
+update logistics_records set "거래처명"='스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장', "_업체명"=case when "_업체명"='전일연락필수-IT/납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장/나스_NAS 2DUAL(새기기)+HD' then '스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장' else "_업체명" end where id=19 and "거래처명"='전일연락필수-IT/납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장/나스_NAS 2DUAL(새기기)+HD';  -- 짝 일정 없음 — 사람이 정한 값(팀장 지시)
 update logistics_records set "거래처명"='한국건설자재기술', "_업체명"=case when "_업체명"='교체(일반)/퍼스트/운영팀/재계약(하향)/한국건설자재기술/VC2265->X3220(새기기)/전자' then '한국건설자재기술' else "_업체명" end where id=25 and "거래처명"='교체(일반)/퍼스트/운영팀/재계약(하향)/한국건설자재기술/VC2265->X3220(새기기)/전자';  -- 짝 일정 없음(거래처명 자체로 계산)
 update logistics_records set "거래처명"='누스탑', "_업체명"=case when "_업체명"='1시이후요청-납품(일반)/퍼스트/운영팀/온라인/누스탑/MA2101(새기기)/전자' then '누스탑' else "_업체명" end where id=32 and "거래처명"='1시이후요청-납품(일반)/퍼스트/운영팀/온라인/누스탑/MA2101(새기기)/전자';  -- 짝 일정 없음(거래처명 자체로 계산)
 update logistics_records set "거래처명"='주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.)', "_업체명"=case when "_업체명"='오후 2시 이후 설치 요청-납품(일반)/퍼스트/운영팀/증설/지투지프라이빗에쿼티/SL-NWE001X(무선랜카드)/전자' then '주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.)' else "_업체명" end where id=41 and "거래처명"='오후 2시 이후 설치 요청-납품(일반)/퍼스트/운영팀/증설/지투지프라이빗에쿼티/SL-NWE001X(무선랜카드)/전자';  -- 짝 일정 nv-20260928T051813Z-162@naver113
@@ -718,7 +719,8 @@ update logistics_records set "거래처명"='주식회사 다옴솔루션', "_�
 update logistics_records set "거래처명"='㈜엠텔', "_업체명"=case when "_업체명"='오후, 전일 시간 조율 필요 -철수(일반)/퍼스트/계약종료/엠텔/ES5473/확인서서명필수' then '㈜엠텔' else "_업체명" end where id=83 and "거래처명"='오후, 전일 시간 조율 필요 -철수(일반)/퍼스트/계약종료/엠텔/ES5473/확인서서명필수';  -- 짝 일정 nv-20261021T012848Z-252@naver102
 update logistics_records set "거래처명"='디지털자산 거래소 공동협의체-메인복합기', "_업체명"=case when "_업체명"='⭐오후 4시반 이후, 각 자리별 IP 현황 사진 참조(노란색 표시 자리는 브라더를 기본 프린터로 하되, 후지도 사용)⭐-납품(일반)/퍼스트/운영' then '디지털자산 거래소 공동협의체-메인복합기' else "_업체명" end where id=85 and "거래처명"='⭐오후 4시반 이후, 각 자리별 IP 현황 사진 참조(노란색 표시 자리는 브라더를 기본 프린터로 하되, 후지도 사용)⭐-납품(일반)/퍼스트/운영';  -- 짝 일정 nv-20261020T023755Z-356@naver106
 
--- 3) photo_albums (13건) — 같은 물류 기록 저장 때 함께 생긴 사진첩(같은 작성자·같은 옛 값·생성 시각 1초 이내)
+-- 3) photo_albums (14건) — 같은 물류 기록 저장 때 함께 생긴 사진첩(같은 작성자·같은 옛 값·생성 시각 1초 이내)
+update photo_albums set vendor='스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장' where id='ef0756dc-c607-4c18-88ed-70543d54362c' and vendor='전일연락필수-IT/납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장/나스_NAS 2DUAL(새기기)+HD';  -- logistics_records id 19
 update photo_albums set vendor='한국건설자재기술' where id='2508aa69-4cca-49ae-a934-1bf7062b3368' and vendor='교체(일반)/퍼스트/운영팀/재계약(하향)/한국건설자재기술/VC2265->X3220(새기기)/전자';  -- logistics_records id 25
 update photo_albums set vendor='누스탑' where id='f312bde4-2bd7-41d6-97d5-c169caec242b' and vendor='1시이후요청-납품(일반)/퍼스트/운영팀/온라인/누스탑/MA2101(새기기)/전자';  -- logistics_records id 32
 update photo_albums set vendor='주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.)' where id='3a26fca6-09b1-4712-ae4b-c6b6a5128cc9' and vendor='오후 2시 이후 설치 요청-납품(일반)/퍼스트/운영팀/증설/지투지프라이빗에쿼티/SL-NWE001X(무선랜카드)/전자';  -- logistics_records id 41
@@ -798,8 +800,7 @@ commit;
 --   nv-20261012T083250Z-268@naver107 | 연차 이혁주 잔여 5일
 --   nv-20261012T084558Z-147@naver109 | 연차 이혁주 잔여 4일
 --   nv-F90CB15E-00BC-4493-B197-E7EDD310B4A6_wjddnd90_1792476397@naver.com_caldavApp | 연차/정웅(잔여: 7일)
--- [logistics_records / photo_albums] 짝 일정 없음·파서가 업체명을 못 좁힘: 1건씩 — 사람이 직접 고칠 것
---   logistics_records id 19 · photo_albums ef0756dc-c607-4c18-88ed-70543d54362c | 전일연락필수-IT/납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장/나스_NAS 2DUAL(새기기)+HD
+-- [logistics_records / photo_albums] 짝 일정 없음·파서가 업체명을 못 좁힘: 0건씩 — 사람이 직접 고칠 것
 
 -- ===================== 되돌리기 (필요할 때만 주석을 풀어 실행) =====================
 -- begin;
@@ -1484,6 +1485,7 @@ commit;
 -- update as_tickets set vendor='전일연락필수, 일정조율가능-철수(일반)/퍼스트/단기종료/더좋은새마을금고-휘경본점 2층/X4225, MA2100/확인서서명필수' where id='nv-20261023T101929Z-230@naver116' and vendor='더좋은새마을금고-휘경본점(단기)';
 -- update as_tickets set vendor='이홍진 계약갱신 2차 여름, 피플앤드테크놀러지, 타이탄, 하이어랭크' where id='nv-645b7557797d5f6676-8e-87-5c3664-4d-56-38-8126-1e56-22-62-7a-7a-4e-4366082946-15-141f-871f-8f-3c071d-3b-692c-88-316a-8' and vendor='이홍진 계약갱신 세종디앤피, 하이어랭크, 더로렌';
 -- update as_tickets set vendor='이홍진-A/S    N   SL-X4220RX   16N(주)윈윈쉬핑-단순마감마감   종료일   26. 7. 7    지역   수도권C   접수' where id='nv-7c-2c7d-39-4a70-60-413e435f296b-33-6419-39055b0e-6f6a-5b-316d4c-896b5a007a-350a-3b-52-77-616801-293f6f-79-1d67-7f2c-8' and vendor='(주)윈윈쉬핑';
+-- update logistics_records set "거래처명"='전일연락필수-IT/납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장/나스_NAS 2DUAL(새기기)+HD', "_업체명"=case when "_업체명"='스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장' then '전일연락필수-IT/납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장/나스_NAS 2DUAL(새기기)+HD' else "_업체명" end where id=19 and "거래처명"='스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장';
 -- update logistics_records set "거래처명"='교체(일반)/퍼스트/운영팀/재계약(하향)/한국건설자재기술/VC2265->X3220(새기기)/전자', "_업체명"=case when "_업체명"='한국건설자재기술' then '교체(일반)/퍼스트/운영팀/재계약(하향)/한국건설자재기술/VC2265->X3220(새기기)/전자' else "_업체명" end where id=25 and "거래처명"='한국건설자재기술';
 -- update logistics_records set "거래처명"='1시이후요청-납품(일반)/퍼스트/운영팀/온라인/누스탑/MA2101(새기기)/전자', "_업체명"=case when "_업체명"='누스탑' then '1시이후요청-납품(일반)/퍼스트/운영팀/온라인/누스탑/MA2101(새기기)/전자' else "_업체명" end where id=32 and "거래처명"='누스탑';
 -- update logistics_records set "거래처명"='오후 2시 이후 설치 요청-납품(일반)/퍼스트/운영팀/증설/지투지프라이빗에쿼티/SL-NWE001X(무선랜카드)/전자', "_업체명"=case when "_업체명"='주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.)' then '오후 2시 이후 설치 요청-납품(일반)/퍼스트/운영팀/증설/지투지프라이빗에쿼티/SL-NWE001X(무선랜카드)/전자' else "_업체명" end where id=41 and "거래처명"='주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.)';
@@ -1497,6 +1499,7 @@ commit;
 -- update logistics_records set "거래처명"='오전,방문전 꼭 연락필수-철수(일반)/퍼스트/계약종료/다옴솔루션/M5526CDN/확인서서명필수', "_업체명"=case when "_업체명"='주식회사 다옴솔루션' then '오전,방문전 꼭 연락필수-철수(일반)/퍼스트/계약종료/다옴솔루션/M5526CDN/확인서서명필수' else "_업체명" end where id=76 and "거래처명"='주식회사 다옴솔루션';
 -- update logistics_records set "거래처명"='오후, 전일 시간 조율 필요 -철수(일반)/퍼스트/계약종료/엠텔/ES5473/확인서서명필수', "_업체명"=case when "_업체명"='㈜엠텔' then '오후, 전일 시간 조율 필요 -철수(일반)/퍼스트/계약종료/엠텔/ES5473/확인서서명필수' else "_업체명" end where id=83 and "거래처명"='㈜엠텔';
 -- update logistics_records set "거래처명"='⭐오후 4시반 이후, 각 자리별 IP 현황 사진 참조(노란색 표시 자리는 브라더를 기본 프린터로 하되, 후지도 사용)⭐-납품(일반)/퍼스트/운영', "_업체명"=case when "_업체명"='디지털자산 거래소 공동협의체-메인복합기' then '⭐오후 4시반 이후, 각 자리별 IP 현황 사진 참조(노란색 표시 자리는 브라더를 기본 프린터로 하되, 후지도 사용)⭐-납품(일반)/퍼스트/운영' else "_업체명" end where id=85 and "거래처명"='디지털자산 거래소 공동협의체-메인복합기';
+-- update photo_albums set vendor='전일연락필수-IT/납품(현장)/퍼스트/운영팀/증설/스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장/나스_NAS 2DUAL(새기기)+HD' where id='ef0756dc-c607-4c18-88ed-70543d54362c' and vendor='스트락스건축사사무소-어퍼하우스 청담2차 인테리어 공사현장';
 -- update photo_albums set vendor='교체(일반)/퍼스트/운영팀/재계약(하향)/한국건설자재기술/VC2265->X3220(새기기)/전자' where id='2508aa69-4cca-49ae-a934-1bf7062b3368' and vendor='한국건설자재기술';
 -- update photo_albums set vendor='1시이후요청-납품(일반)/퍼스트/운영팀/온라인/누스탑/MA2101(새기기)/전자' where id='f312bde4-2bd7-41d6-97d5-c169caec242b' and vendor='누스탑';
 -- update photo_albums set vendor='오후 2시 이후 설치 요청-납품(일반)/퍼스트/운영팀/증설/지투지프라이빗에쿼티/SL-NWE001X(무선랜카드)/전자' where id='3a26fca6-09b1-4712-ae4b-c6b6a5128cc9' and vendor='주식회사 지투지프라이빗에쿼티(GTOG Private Equity Co.,Ltd.)';
