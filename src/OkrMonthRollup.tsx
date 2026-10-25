@@ -12,7 +12,8 @@
 //     onPickTeam?: (team: OkrTeam) => void,                    ← 새로: A~D 동그라미 → 그 달 그 파트 [파트 종합]
 //     onOpenTeam?: (team: OkrTeam) => void })                  ← onPickTeam 과 같은 뜻(둘 중 하나만 넘기면 된다)
 //   editable = !!ops (fromQuarter 여도). weekRows = 그 달 주차 기록(정식 …-Wn id) — monthlyRollup 4번째 인자로 제안(○)을 만든다.
-//   MonthTeamSummary — props 변화 없음.
+//   2026-10-25 행 추가·삭제·보관: goals 에 보관 행(hidden)도 넘긴다 — 표는 보이는 행만, 표 아래 "보관된 병목 n개". ops = { onGoal, onPillar, onAdd(pillar), onRemove(goal), onRestore(no) }.
+//   MonthTeamSummary — props 변화 없음(보관 행은 숨김).
 //   RolledJudgmentCell({ value: OkrRolledJudgment, label, onChange? }) — CS 종합·분기 종합 칸(OkrQuarterView 도 씀).
 import { useState } from "react";
 import RichCell from "./RichCell";
@@ -20,14 +21,15 @@ import JudgmentPicker from "./JudgmentPicker";
 import OkrDirection from "./OkrDirection";
 import { tableCellClick } from "./cellNav";
 import {
-  OKR_TEAMS, achievementRate, actionMembersInMonth, bottleneckText, findReport, isAlert, lastJudgmentInMonth, memberReports, monthlyRollup, normalizeJudgment, resultRowFor,
+  OKR_TEAMS, achievementRate, actionMembersInMonth, archivedGoals, bottleneckText, findReport, isAlert, lastJudgmentInMonth, memberReports, monthlyRollup, normalizeJudgment, resultRowFor, visibleGoals,
   type OkrCycle, type OkrFeedback, type OkrGoal, type OkrJudgedCell, type OkrReport, type OkrRolledJudgment, type OkrTeam,
 } from "./okr";
-import { FragmentRows, JudgmentDot, PillarBar, ResizeHandle, TeamCard } from "./OkrCells";
+import { AddGoalRow, ArchivedGoals, FragmentRows, JudgmentDot, PillarBar, ResizeHandle, TeamCard } from "./OkrCells";
 import { TD, TD_LEADER, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, goalHtml, pillarRuns, shortBottleneck, teamName, useColWidths } from "./okrUi";
 
 const BTN = "rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-black text-slate-700 transition hover:bg-slate-100";
-type GoalOps = { onGoal: (no: number, patch: Partial<OkrGoal>) => void; onPillar: (nos: number[], idx: number) => void; onInsert: (afterNo: number, pillarFull: string) => void; onRemove: (goal: OkrGoal) => void };
+// 2026-10-25: onInsert(재번호) → onAdd(그 Pillar 끝, 번호 = 최대+1) · onRestore(보관 행 되살리기)
+export type FreshGoalOps = { onGoal: (no: number, patch: Partial<OkrGoal>) => void; onPillar: (nos: number[], idx: number) => void; onAdd: (pillarFull: string) => void; onRemove: (goal: OkrGoal) => void; onRestore: (no: number) => void };
 const nextMonthOf = (m: number) => (m >= 12 ? 1 : m + 1);
 const EMPTY_CELL: OkrJudgedCell = { judgment: "", source: "" };
 const EMPTY_ROLLED: OkrRolledJudgment = { judgment: "", auto: "", manual: false };
@@ -49,7 +51,7 @@ export function RolledJudgmentCell({ value, label, onChange }: { value: OkrRolle
 export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQuarter, reports, weekRows, onDirection, onFeedback, onTemplate, ops, onCsJudgment, onPickTeam, onOpenTeam }: {
   cycle: OkrCycle; quarter: OkrCycle | null; goals: OkrGoal[]; goalsOf: (team: OkrTeam) => OkrGoal[]; fromQuarter: boolean; quarterLabel: string; reports: OkrReport[]; weekRows: OkrReport[]; otherMonths: OkrCycle[];
   onDirection: (text: string) => void; onFeedback: (no: number, memo: string, memoHtml?: string) => void; onPaste: () => void; onStartFromQuarter: (() => void) | null; onCopyGoals: (id: string) => void; onRestore: () => void; onTemplate: () => void;
-  ops: GoalOps | null; // null = 읽기 전용
+  ops: FreshGoalOps | null; // null = 읽기 전용
   onCsJudgment?: (no: number, judgment: string) => void; // CS 종합 사람이 고름("" = 자동으로 되돌리기)
   onPickTeam?: (team: OkrTeam) => void; // A~D 동그라미 → 그 파트 [파트 종합]
   onOpenTeam?: (team: OkrTeam) => void; // onPickTeam 과 같은 뜻
@@ -60,11 +62,13 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
   const pickTeam = onPickTeam || onOpenTeam;
   const rollup = monthlyRollup(cycle, reports, quarter, weekRows);
   const byNo = new Map(rollup.map((r) => [r.no, r]));
-  const runs = pillarRuns(goals);
+  const shown = visibleGoals(goals); // 보관 행(hidden)은 표·카드에서 뺀다
+  const archived = archivedGoals(goals);
+  const runs = pillarRuns(shown);
   const partRows = reports.filter((r) => !r.member);
   const perTeam = OKR_TEAMS.map((t) => {
     const rep = partRows.find((r) => r.team === t);
-    const teamGoals = goalsOf(t);
+    const teamGoals = visibleGoals(goalsOf(t));
     const rows = teamGoals.map((g) => resultRowFor(rep, g.no));
     return { team: t, total: teamGoals.length, judged: rows.filter((r) => normalizeJudgment(r.judgment)).length, alerts: rows.filter((r) => isAlert(r.judgment)).length, rate: achievementRate(rows), leader: rep?.header.leader || "" };
   });
@@ -90,7 +94,7 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
           <thead className="text-[11px] font-bold"><tr>{heads.map((h, i) => <th key={`${h}-${i}`} className={`relative ${thClass(i)}`}>{h}<ResizeHandle onDrag={(e) => col.startDrag(i, e)} onReset={() => col.resetCol(i)} /></th>)}</tr></thead>
           <tbody>
             {runs.map((run, ri) => <FragmentRows key={`run-${ri}`}>
-              <PillarBar idx={run.idx} colSpan={heads.length} editable={editable} onPillar={(i) => ops?.onPillar(run.goals.map((g) => g.no), i)} onAdd={() => ops?.onInsert(run.goals[run.goals.length - 1].no, run.goals[0].pillar)} />
+              <PillarBar idx={run.idx} colSpan={heads.length} editable={editable} onPillar={(i) => ops?.onPillar(run.goals.map((g) => g.no), i)} />
               {run.goals.map((goal) => {
                 const r = byNo.get(goal.no);
                 const actions = r?.actionTeams || [];
@@ -98,8 +102,8 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
                 const open = !!openNo[goal.no];
                 return <FragmentRows key={goal.no}>
                   <tr>
-                    <td className={`relative ${editable ? TD_LEADER_EDIT : TD_LEADER} ${actions.length ? "border-l-4 border-l-orange-500" : ""}`}>
-                      {editable && <button type="button" title={`${shortBottleneck(goals, goal.no)} 목표 삭제`} onClick={() => ops?.onRemove(goal)} className="absolute right-0.5 top-0 z-[1] px-1 text-[11px] font-bold text-slate-300 hover:text-rose-600">×</button>}
+                    <td data-okr-goal={goal.no} className={`relative ${editable ? TD_LEADER_EDIT : TD_LEADER} ${actions.length ? "border-l-4 border-l-orange-500" : ""}`}>
+                      {editable && <button type="button" title={`${shortBottleneck(shown, goal.no)} 목표 삭제`} onClick={() => ops?.onRemove(goal)} className="absolute right-0.5 top-0 z-[1] px-1 text-[11px] font-bold text-slate-300 hover:text-rose-600">×</button>}
                       <RichCell readOnly={!editable} text={bottleneckText(goal.bottleneck)} html={goal.html?.bottleneck} minRows={2} className="font-bold text-slate-800" onChange={editable ? (t, h) => ops?.onGoal(goal.no, { bottleneck: t, html: goalHtml(goal, "bottleneck", h) }) : undefined} />
                     </td>
                     <td className={editable ? TD_LEADER_EDIT : TD_LEADER}>
@@ -121,11 +125,13 @@ export default function OkrMonthRollup({ cycle, quarter, goals, goalsOf, fromQua
                   </td></tr>}
                 </FragmentRows>;
               })}
+              {editable && <AddGoalRow colSpan={heads.length} pillarIdx={run.idx} onAdd={() => ops?.onAdd(run.goals[0].pillar)} />}
             </FragmentRows>)}
-            {!goals.length && <tr><td colSpan={heads.length} className="p-8 text-center text-sm font-bold text-slate-400">목표가 없습니다 — [3 × 3 빈 틀]로 시작하세요</td></tr>}
+            {!shown.length && <tr><td colSpan={heads.length} className="p-8 text-center text-sm font-bold text-slate-400">{goals.length ? "보이는 목표가 없습니다 — 아래 보관된 병목에서 되살릴 수 있어요" : "목표가 없습니다 — [3 × 3 빈 틀]로 시작하세요"}</td></tr>}
           </tbody>
         </table>
       </div>
+      <ArchivedGoals goals={archived} onRestore={ops ? ops.onRestore : undefined} />
     </section>
   </div>;
 }
@@ -136,7 +142,7 @@ export function MonthTeamSummary({ team, goals, names, weeks, weekRows, partRepo
   team: OkrTeam; goals: OkrGoal[]; names: string[]; weeks: Array<{ id: string; weekNo: number; label: string }>; weekRows: OkrReport[]; partReport: OkrReport;
   onPick: (name: string, weekNo: number) => void; onFeedback: (no: number, memo: string, memoHtml?: string) => void;
 }) {
-  const runs = pillarRuns(goals);
+  const runs = pillarRuns(visibleGoals(goals)); // 보관 행 숨김(2026-10-25)
   const teamRows = weekRows.filter((r) => r.team === team);
   const NAME0 = 2; // 이름 첫 열 위치(그 뒤 파트 종합까지 가운데 정렬). 3차: "병목 n" 번호 열은 지웠다
   const heads = ["병목현상", "목표", ...names, "조치 필요 인원", "파트 종합", "미흡항목 피드백 & 다음 달 개선 방향"];

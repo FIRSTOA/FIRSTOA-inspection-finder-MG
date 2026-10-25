@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "97cd47f95f",
+    "agent": "developer",
+    "summary": "홈 OKR 박스: [주][월] 대신 주차 칩 [1주]~[4주](5주면 5) — 고른 주차 기준으로 링·팀 %·팀원 목록"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "c3cafd55d4",
     "agent": "developer",
     "summary": "달성표 상태 색 고정 기준(50% 미만 빨강·이상 파랑·100% 초록) + IT 실습 = 실습 기록 ∪ 주간 현황판 배운 점(브랜드 IT)"

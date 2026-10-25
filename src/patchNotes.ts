@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "97cd47f95f",
+    "date": "2026-10-25",
+    "note": "홈 OKR 박스: [주][월] 대신 주차 칩 [1주]~[4주](5주면 5) — 고른 주차 기준으로 링·팀 %·팀원 목록"
+  },
+  {
     "hash": "c3cafd55d4",
     "date": "2026-10-25",
     "note": "달성표 상태 색 고정 기준(50% 미만 빨강·이상 파랑·100% 초록) + IT 실습 = 실습 기록 ∪ 주간 현황판 배운 점(브랜드 IT)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "dbe9122569",
     "date": "2026-09-29",
     "note": "봇 모의 검증 파일을 .cjs로(저장소가 ESM이라 require 불가)"
-  },
-  {
-    "hash": "80e7ae96f7",
-    "date": "2026-09-29",
-    "note": "카톡봇 스크립트: 폰 검증본 WakeLock 그대로 + 방 활동 보고를 폴링 스레드로 + Node 모의 검증(poller-harness) 추가"
   }
 ];

@@ -91,3 +91,11 @@ export function okrCrumbs(p: { quarterView: boolean; quarter: number; tab: strin
   if (p.member === "__sum__") return [part, "팀원 집계", `${p.month}월`];
   return [part, p.member, p.week ? `${p.month}월 ${p.week.weekNo}주차 (${weekRangeShort(p.week.start, p.week.end)})` : `${p.month}월`];
 }
+
+// 새 행의 병목현상 칸에 커서(2026-10-25) — 칸 td 에 data-okr-goal={no} 를 달아 두면, 그려진 뒤 그 칸의 편집을 연다(RichCell 은 더블클릭 = 편집).
+export function focusGoalCell(no: number, tries = 12) {
+  if (typeof document === "undefined") return;
+  const cell = document.querySelector<HTMLElement>(`[data-okr-goal="${no}"] [data-cell]`);
+  if (cell) { cell.scrollIntoView({ block: "nearest", inline: "nearest" }); cell.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); return; }
+  if (tries > 0) window.setTimeout(() => focusGoalCell(no, tries - 1), 60);
+}

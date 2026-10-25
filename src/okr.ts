@@ -40,7 +40,8 @@ export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); 
 // 표시가 있는 칸만 objective를 읽는다(overlayGoals). 표시를 html 안에 두는 건 옛 앱이 html을 통째로 보존하기 때문이다.
 // html.bottleneckSet === "1"(2026-10-21 3차): 같은 규칙으로 주차 덮어쓰기 칸의 bottleneck(병목현상 글)을 사람이 고쳤다는 표시.
 // 4차(2026-10-21): 층별 독립 — 표시가 있으면 빈 글이어도 그 값(비우면 빈 채 유지). 달성기준은 예외(7차): 빈 글이면 위 층이 보인다. html.bottleneck = 병목현상 글자색(RichCell).
-export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; html?: { objective?: string; criteria?: string; bottleneck?: string; objectiveSet?: "1"; bottleneckSet?: "1"; criteriaSet?: "1" } };
+// hidden(2026-10-25): 보관한 행 — 실제결과·판정 기록이 있는 행을 지우면 지우는 대신 숨긴다(표에서 안 보임, 홈 지난 주차 % 는 그대로 셈). docs/tasks/okr-rows-add-remove-2026-10-25.md
+export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; hidden?: boolean; html?: { objective?: string; criteria?: string; bottleneck?: string; objectiveSet?: "1"; bottleneckSet?: "1"; criteriaSet?: "1" } };
 // 글자색(엑셀처럼 검정·빨강·파랑) — 색이 들어간 칸만 html을 함께 둔다. AI·합치기가 평문으로 바꾸면 html은 지운다.
 export type RichField = "actual" | "reason" | "plan" | "evidence";
 // judgment(2026-10-20): 월 행이면 CS 종합, 분기 행이면 분기 종합을 사람이 고른 값(자동값 덮어쓰기)
@@ -332,8 +333,8 @@ export const needsReasonPlan = (judgment: string) => { const j = normalizeJudgme
 export const isAlert = (judgment: string) => { const j = normalizeJudgment(judgment); return j === "미흡" || j === "미착수"; };
 
 // ── Supabase ──
-function normalizeGoals(raw: unknown[]): OkrGoal[] {
-  return raw.map((g, i) => { const x = (g || {}) as Partial<OkrGoal>; return { no: Number(x.no) || i + 1, pillar: String(x.pillar || ""), bottleneck: String(x.bottleneck || ""), objective: String(x.objective || ""), criteria: String(x.criteria || ""), ...(x.html && typeof x.html === "object" ? { html: x.html } : {}) }; });
+export function normalizeGoals(raw: unknown[]): OkrGoal[] {
+  return raw.map((g, i) => { const x = (g || {}) as Partial<OkrGoal>; return { no: Number(x.no) || i + 1, pillar: String(x.pillar || ""), bottleneck: String(x.bottleneck || ""), objective: String(x.objective || ""), criteria: String(x.criteria || ""), ...(x.hidden === true ? { hidden: true } : {}), ...(x.html && typeof x.html === "object" ? { html: x.html } : {}) }; });
 }
 type CycleRow = Partial<OkrCycle> & { id: string };
 function toCycle(r: CycleRow): OkrCycle {
@@ -541,7 +542,7 @@ export function monthDraftFromQuarter(year: number, month: number, quarter?: Okr
 // 같은 번호·Pillar에 글만 비운 틀(없으면 3×3)
 export function blankGoalsLike(goals: OkrGoal[]): OkrGoal[] {
   if (!goals.length) return defaultGoalTemplate().map((g) => ({ ...g, bottleneck: "" }));
-  return goals.map((g) => ({ no: g.no, pillar: g.pillar, bottleneck: "", objective: "", criteria: "" }));
+  return goals.map((g) => ({ no: g.no, pillar: g.pillar, bottleneck: "", objective: "", criteria: "", ...(g.hidden ? { hidden: true } : {}) })); // 보관 행은 복사본에서도 숨김
 }
 
 // 병목현상 글 — 옛 값처럼 "병목현상 1" 꼬리표뿐이면 빈 글. 글 앞에 꼬리표가 붙어 있으면 떼어 낸다.
@@ -549,6 +550,46 @@ export function bottleneckText(value: string): string {
   return String(value || "").replace(/^\s*병목\s*현상\s*\d+\s*[.:：)]?\s*/, "").trim();
 }
 const goalHasText = (g: OkrGoal) => !!(bottleneckText(g.bottleneck) || g.objective.trim() || g.criteria.trim());
+
+// ── 행(병목·목표 줄) 추가·삭제·보관(2026-10-25, docs/tasks/okr-rows-add-remove-2026-10-25.md) ──
+// 번호(no)는 판정·피드백을 잇는 키라 다시 매기지 않는다. 화면 "병목현상 n"은 같은 Pillar 안 순서(bottleneckLabel)라 번호가 띄엄띄엄이어도 1·2·3·4.
+export const visibleGoals = (goals: OkrGoal[]): OkrGoal[] => goals.filter((g) => !g.hidden);
+export const archivedGoals = (goals: OkrGoal[]): OkrGoal[] => goals.filter((g) => g.hidden);
+// 새 번호 = 그 사이클 최대 번호 + 1. otherNos = 같은 번호로 맞물리는 사이클(분기 ↔ 그 분기 달)의 번호 — 겹치면 분기 표에 남의 판정이 붙는다.
+export function nextGoalNo(goals: OkrGoal[], otherNos: number[] = []): number {
+  return Math.max(0, ...goals.map((g) => g.no), ...otherNos.filter((n) => Number.isFinite(n))) + 1;
+}
+// 그 Pillar 묶음 끝(배열에서 같은 Pillar 마지막 행 뒤)에 빈 행. 그 Pillar 행이 없으면 맨 끝.
+export function addGoalRow(goals: OkrGoal[], pillar: string, otherNos: number[] = []): { goals: OkrGoal[]; no: number } {
+  const no = nextGoalNo(goals, otherNos);
+  const idx = pillarIndex(pillar);
+  let at = -1;
+  goals.forEach((g, i) => { if (pillarIndex(g.pillar) === idx) at = i; });
+  const row: OkrGoal = { ...emptyGoal(no), pillar };
+  return { goals: at < 0 ? [...goals, row] : [...goals.slice(0, at + 1), row, ...goals.slice(at + 1)], no };
+}
+// 그 번호에 실제결과·판정이 어디든 있는지 — 보고서(월 파트·주차 팀원 등) rows + 사이클 feedback 의 사람 판정(CS·분기 종합)
+export function goalHasRecords(no: number, reports: OkrReport[], feedbacks: Array<Record<string, OkrFeedback> | undefined> = []): boolean {
+  if (reports.some((r) => { const row = resultRowFor(r, no); return !!(row.actual.trim() || normalizeJudgment(row.judgment)); })) return true;
+  return feedbacks.some((f) => !!normalizeJudgment(f?.[String(no)]?.judgment || ""));
+}
+// 지우기 종류 — empty: 글·기록 없음(확인 없이 바로) · text: 글만 있음(확인 후 삭제) · archive: 기록 있음(삭제 대신 보관)
+export type GoalRemoveKind = "empty" | "text" | "archive";
+export function goalRemoveKind(goal: OkrGoal, hasRecords: boolean): GoalRemoveKind {
+  if (hasRecords) return "archive";
+  return goalHasText(goal) ? "text" : "empty";
+}
+// 행 빼기 — 기록이 있으면 hidden 으로 보관(판정 데이터는 보고서에 그대로), 없으면 배열에서 뺀다. 다른 행 번호는 그대로.
+export function removeGoalRow(goals: OkrGoal[], no: number, hasRecords: boolean): { goals: OkrGoal[]; kind: GoalRemoveKind } {
+  const goal = goals.find((g) => g.no === no);
+  if (!goal) return { goals, kind: "empty" };
+  const kind = goalRemoveKind(goal, hasRecords);
+  return { goals: kind === "archive" ? goals.map((g) => (g.no === no ? { ...g, hidden: true } : g)) : goals.filter((g) => g.no !== no), kind };
+}
+// 보관 행 되살리기 — 같은 자리·같은 번호로(지난 판정이 다시 붙는다)
+export function restoreGoalRow(goals: OkrGoal[], no: number): OkrGoal[] {
+  return goals.map((g) => { if (g.no !== no || !g.hidden) return g; const rest = { ...g }; delete rest.hidden; return rest; });
+}
 
 // 이 기간 goals가 팀장이 정한 것인지(= 그대로 보여 줄지). 복사본('copy')이거나 글이 하나도 없으면 false.
 export function isLeaderGoals(cycle: Pick<OkrCycle, "goals" | "goals_origin"> | null | undefined): boolean {
@@ -763,7 +804,7 @@ export type OkrRollupRow = { no: number; pillar: string; bottleneck: string; obj
 export function monthlyRollup(cycle: OkrCycle, reports: OkrReport[], quarter?: OkrCycle | null, weekReports?: OkrReport[]): OkrRollupRow[] {
   const summary = reports.filter((r) => !r.member && (!r.cycle_id || r.cycle_id === cycle.id));
   const weeks = weekReports || [];
-  return effectiveGoals(cycle, quarter).map((g) => {
+  return visibleGoals(effectiveGoals(cycle, quarter)).map((g) => { // 보관 행 제외(2026-10-25)
     const byTeam = emptyTeamJudgments();
     for (const t of OKR_TEAMS) byTeam[t] = normalizeJudgment(resultRowFor(findReport(summary, t), g.no).judgment);
     const dots = Object.fromEntries(OKR_TEAMS.map((t) => [t, partMonthJudgment(summary, weeks, t, g.no)])) as Record<OkrTeam, OkrJudgedCell>;
@@ -895,10 +936,10 @@ const emptyCell = (): OkrJudgedCell => ({ judgment: "", source: "" });
 // 묶음 목록은 분기 goals(없으면 달들의 번호 합) — quarterProgress와 같다. 달은 넘긴 월 행만(없는 달은 열이 없다).
 export function quarterRollup(quarter: OkrCycle | null, monthCycles: OkrCycle[], monthReports: Record<string, OkrReport[]>, weekReportsByMonth: Record<string, OkrReport[]>): OkrQuarterRollup {
   const months = monthCycles.filter((c) => c.kind === "month").sort((a, b) => (a.id < b.id ? -1 : 1));
-  let base: OkrGoal[] = quarter?.goals || [];
-  if (!base.length) {
+  let base: OkrGoal[] = visibleGoals(quarter?.goals || []); // 보관 행 제외(2026-10-25) — 나머지 행은 같은 번호로 달 판정과 맞물린다
+  if (!quarter?.goals.length) {
     const byNo = new Map<number, OkrGoal>();
-    for (const m of months) for (const g of m.goals) if (!byNo.has(g.no)) byNo.set(g.no, g);
+    for (const m of months) for (const g of visibleGoals(m.goals)) if (!byNo.has(g.no)) byNo.set(g.no, g);
     base = [...byNo.values()].sort((a, b) => a.no - b.no);
   }
   const rollups = new Map(months.map((m) => [m.id, monthlyRollup(m, monthReports[m.id] || [], quarter, weekReportsByMonth[m.id] || [])]));

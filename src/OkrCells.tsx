@@ -1,6 +1,6 @@
 // OKR 표 칸 부품 — OkrHub.tsx 에 있던 것을 그대로 옮겼다(2026-10-20). FreshBottleneckCell·JudgmentDots 만 새로 더했다(분기 → 월 → 주 화면).
-import type { ReactNode } from "react";
-import { JUDGMENT_INFO, OKR_PILLARS, bottleneckText, normalizeJudgment, type OkrGoal, type OkrTeamCard } from "./okr";
+import { useState, type ReactNode } from "react";
+import { JUDGMENT_INFO, OKR_PILLARS, bottleneckText, normalizeJudgment, pillarLabel, type OkrGoal, type OkrTeamCard } from "./okr";
 import { TD_READ, shortBottleneck, teamName } from "./okrUi";
 
 // 파트 카드(월·분기 통합집계 공용, 2026-10-21 OkrMonthRollup 에서 옮김) — 파트 이름 · 판정 n/총 · 달성 % · 미흡·미착수 · 파트장. onClick 이 있으면 단추
@@ -17,8 +17,9 @@ export function TeamCard({ card, onClick }: { card: OkrTeamCard; onClick?: () =>
 
 export const ResizeHandle = ({ onDrag, onReset }: { onDrag: (e: React.MouseEvent) => void; onReset: () => void }) => <span onMouseDown={onDrag} onDoubleClick={onReset} title="끌어서 너비 조절 · 두 번 누르면 기본" className="absolute -right-[3px] top-0 z-10 h-full w-[7px] cursor-col-resize select-none hover:bg-slate-400/60" />;
 
-// Pillar 행 머리 — 표 위 가로 막대. 고칠 수 있는 화면(파트 종합·통합집계)에서는 여기서 Pillar를 바꾸고 병목을 추가한다.
-export function PillarBar({ idx, colSpan, editable, onPillar, onAdd }: { idx: number; colSpan: number; editable: boolean; onPillar: (i: number) => void; onAdd: () => void }) {
+// Pillar 행 머리 — 표 위 가로 막대. 고칠 수 있는 화면에서는 여기서 Pillar를 바꾼다.
+// 2026-10-25: 새 구조 화면(분기·월 통합집계)은 띠 위 "＋ 병목" 대신 묶음 맨 아래 AddGoalRow 를 쓴다 — onAdd 를 넘기는 옛 화면(9월 이하)만 띠 위 단추가 남는다.
+export function PillarBar({ idx, colSpan, editable, onPillar, onAdd }: { idx: number; colSpan: number; editable: boolean; onPillar: (i: number) => void; onAdd?: () => void }) {
   return <tr><td colSpan={colSpan} className="border border-slate-800 bg-slate-800 px-2 py-1 text-[12px] font-black text-white">
     <div className="flex items-center gap-3">
       {editable
@@ -27,9 +28,39 @@ export function PillarBar({ idx, colSpan, editable, onPillar, onAdd }: { idx: nu
           {OKR_PILLARS.map((p, i) => <option key={p.label} value={String(i)}>Pillar {i + 1} · {p.label}</option>)}
         </select>
         : <span className="px-1">{idx >= 0 ? `Pillar ${idx + 1} · ${OKR_PILLARS[idx].label}` : "Pillar 미정"}</span>}
-      {editable && <button type="button" onClick={onAdd} className="ml-auto text-[11px] font-bold text-slate-400 hover:text-white">＋ 병목</button>}
+      {editable && onAdd && <button type="button" onClick={onAdd} className="ml-auto text-[11px] font-bold text-slate-400 hover:text-white">＋ 병목</button>}
     </div>
   </td></tr>;
+}
+
+// [＋ 병목 추가] 줄(2026-10-25) — Pillar 묶음 맨 아래, 표 폭 전체 점선. 누르면 그 Pillar 끝에 빈 행.
+export function AddGoalRow({ colSpan, pillarIdx, onAdd }: { colSpan: number; pillarIdx: number; onAdd: () => void }) {
+  const name = pillarIdx >= 0 ? `Pillar ${pillarIdx + 1} · ${OKR_PILLARS[pillarIdx].label}` : "Pillar 미정";
+  return <tr><td colSpan={colSpan} className="border border-slate-200 bg-white p-1">
+    <button type="button" onClick={onAdd} title={`${name} 묶음 끝에 병목 한 줄 추가`} className="flex min-h-11 w-full items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 text-[12px] font-black text-slate-500 transition hover:border-slate-500 hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-sky-500">
+      <span aria-hidden className="text-base leading-none">＋</span>병목 추가<span className="font-semibold text-slate-400"> · {name}</span>
+    </button>
+  </td></tr>;
+}
+
+// 보관된 병목(2026-10-25) — 표 아래 접힘. 기록(실제결과·판정)이 있어 지우는 대신 숨긴 행. [되살리기] = 같은 자리·같은 번호로.
+export function ArchivedGoals({ goals, onRestore }: { goals: OkrGoal[]; onRestore?: (no: number) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!goals.length) return null;
+  return <div className="border-t border-slate-200 bg-slate-50 px-3 py-1">
+    <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-1 text-left text-[12px] font-black text-slate-600 hover:text-slate-900">
+      <span aria-hidden className="w-3">{open ? "▾" : "▸"}</span>보관된 병목 {goals.length}개<span className="font-semibold text-slate-400"> — 지난 판정은 그대로 남아 있습니다</span>
+    </button>
+    {open && <ul className="space-y-1 pb-2">
+      {goals.map((g) => <li key={g.no} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1">
+        <div className="min-w-0 flex-1 text-[12px] leading-snug">
+          <div className="text-[10px] font-bold text-slate-400">{pillarLabel(g.pillar) || "Pillar 미정"}</div>
+          <div className="truncate font-bold text-slate-700">{bottleneckText(g.bottleneck) || g.objective.trim() || "(빈 병목)"}</div>
+        </div>
+        {onRestore && <button type="button" onClick={() => onRestore(g.no)} className="min-h-11 shrink-0 rounded-full border border-slate-300 bg-white px-3 text-[12px] font-black text-slate-700 hover:bg-slate-100">되살리기</button>}
+      </li>)}
+    </ul>}
+  </div>;
 }
 
 // 병목 칸 — "병목 n" + 작은 ×(목표 삭제, 고칠 수 있을 때만)

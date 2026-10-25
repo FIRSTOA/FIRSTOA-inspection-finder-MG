@@ -11,6 +11,7 @@ import { isMobileDevice } from "./navApp";
 import { dirFromKey, moveCellFocus, nextCell, type CellDir } from "./cellNav";
 import { beginDrag, clearCells, clearRange, copyText, dragOver, extendTo, hasRange, pasteText, rangeAnchor, rangeFocus, redo, rememberCells, setAnchor, undo } from "./cellRange";
 import { RICH_COLORS, richToText, sanitizeRich, shouldRepaint, textToHtml, type RichColorKey } from "./richText";
+import { editKind, historyKey, openHistory, recordEdit, redoEdit, undoEdit, type EditHistory, type EditKind } from "./cellEditHistory";
 
 type Mode = "idle" | "selected" | "editing";
 
@@ -44,6 +45,32 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
   // 다른 칸에서 붙여넣기·지우기로 넘어온 글(cell-set, cellRange.ts) — 평문으로 넣고 저장
   const onChangeRef = useRef(onChange);
   useEffect(() => { onChangeRef.current = onChange; });
+  // 편집 중 되돌리기는 이 칸 기록(cellEditHistory)으로만 — 브라우저 기본 되돌리기는 모든 칸·지난 회차가 한 스택이라 엉뚱한 글이 돌아왔다(2026-10-25)
+  const histRef = useRef<EditHistory | null>(null);
+  const stepHistory = (which: "undo" | "redo") => {
+    const el = ref.current, h = histRef.current;
+    if (!el || !h) return;
+    const v = which === "undo" ? undoEdit(h) : redoEdit(h);
+    if (v === null) return; // 이 회차에 되돌릴 게 없으면 아무것도 안 한다(다른 칸·지난 회차로 넘어가지 않게)
+    el.innerHTML = v;
+    placeCaretEnd(el);
+    lastRef.current = v;
+    onChangeRef.current?.(richToText(v), /<span/.test(v) ? v : undefined);
+  };
+  const stepRef = useRef(stepHistory);
+  useEffect(() => { stepRef.current = stepHistory; });
+  // 메뉴(오른쪽 클릭 '실행 취소')·모바일 되돌리기도 브라우저 스택 대신 이 칸 기록으로
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const h = (ev: InputEvent) => {
+      if (ev.inputType !== "historyUndo" && ev.inputType !== "historyRedo") return;
+      ev.preventDefault();
+      stepRef.current(ev.inputType === "historyUndo" ? "undo" : "redo");
+    };
+    el.addEventListener("beforeinput", h);
+    return () => el.removeEventListener("beforeinput", h);
+  }, [readOnly]);
   useEffect(() => {
     const w = wrapRef.current;
     if (!w) return;
@@ -63,11 +90,12 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     return <div className={`whitespace-pre-wrap break-words px-2 py-1.5 text-[12px] leading-snug text-slate-800 ${className}`} style={{ minHeight }} dangerouslySetInnerHTML={{ __html: wanted || `<span class="text-slate-300">${placeholder}</span>` }} />;
   }
 
-  const emit = () => {
+  const emit = (kind: EditKind = "other") => {
     const el = ref.current;
     if (!el) return;
     const clean = sanitizeRich(el);
     if (!clean && el.innerHTML) el.innerHTML = ""; // 다 지웠을 때 남는 <br> 제거 → 자리표시 글이 다시 보이게
+    if (histRef.current) recordEdit(histRef.current, clean, kind);
     lastRef.current = clean;
     onChange?.(richToText(clean), /<span/.test(clean) ? clean : undefined);
   };
@@ -79,11 +107,12 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     window.setTimeout(() => {
       const el = ref.current;
       if (!el) return;
+      histRef.current = openHistory(sanitizeRich(el)); // 이 편집 회차의 출발점(덮어쓰기면 비우기 전 글 — Ctrl+Z 로 돌아온다)
       if (replace) el.innerHTML = "";
       el.focus();
       placeCaretEnd(el);
       if (firstKey) { try { document.execCommand("insertText", false, firstKey); } catch { el.textContent = firstKey; placeCaretEnd(el); } }
-      if (replace || firstKey) emit();
+      if (replace || firstKey) emit("type");
     }, 0);
   };
   const clearAll = () => { const el = ref.current; if (el) el.innerHTML = ""; lastRef.current = ""; onChange?.("", undefined); };
@@ -141,9 +170,11 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
       {(Object.keys(RICH_COLORS) as RichColorKey[]).map((k) => <button key={k} type="button" tabIndex={-1} title={k === "black" ? "검정" : k === "red" ? "빨강" : "파랑"} onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); paint(k); }} className="h-4 w-4 rounded-full border border-white ring-1 ring-slate-200" style={{ background: RICH_COLORS[k] }} />)}
     </div>}
     <div ref={ref} contentEditable={mode === "editing"} suppressContentEditableWarning spellCheck={false} data-placeholder={placeholder} data-cell-text
-      onInput={emit}
-      onBlur={() => { emit(); setMode("idle"); }}
+      onInput={(e) => emit(editKind((e.nativeEvent as InputEvent).inputType))}
+      onBlur={() => { emit(); histRef.current = null; setMode("idle"); }}
       onKeyDown={(e) => {
+        const hk = historyKey(e);
+        if (hk) { e.preventDefault(); stepHistory(hk); return; } // 브라우저 기본 되돌리기로 넘기지 않는다
         if (e.key === "Escape") { e.preventDefault(); ref.current?.blur(); setMode("selected"); wrapRef.current?.focus(); return; }
         if (e.key === "Tab") { e.preventDefault(); finishAndMove(e.shiftKey ? "left" : "right"); return; }
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finishAndMove("down"); }
