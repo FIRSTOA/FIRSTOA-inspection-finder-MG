@@ -24,10 +24,13 @@ import { kstDate } from "./visits";
 import { useScreenActive } from "./screenActive";
 import { type HomeKpiState } from "./kpi/homeKpiModel";
 import { bizDays, kpiRanges } from "./kpi/kpiCompute";
+import { headlineNumbers } from "./kpi/teamBoard";
 
 // 홈 = CS KPI 현황판 (2026-10-23 개편, 2026-10-24 전면 개편 docs/tasks/home-redesign-2026-10-24.md — KPI 달성표가 주인공)
 // ① 머리 띠(2026-10-24 마무리, 사용자 "상단 한 줄 너무 밋밋, 주차 빼"): 왼쪽 큰 날짜 "10월 24일 토요일" + 작은 연도,
 //    가운데 칩 "4분기 · 말일까지 n영업일"(kpiCompute.bizDays), 오른쪽 "갱신 n분 전" + [편집]. 장식은 얇은 그라데이션 선 하나. 60초 시계(1초 금지)
+//    홈 3차(2026-10-25 팀 보드): 띠를 더 얇게(py-2·px-2), 오른쪽에 큰 숫자 3개 "미처리 · OKR · 분기 점검"(kpi 묶음, 없으면 "—"),
+//    페이지 여백 없음 — 판을 App 컨테이너 안쪽 여백만큼 바깥으로 넓힌다(-mx·-mt, 둥근 모서리 없음)
 // ② CS KPI 현황판(HomeKpiBoard): 금일 현황 → KPI 달성표(분기 점검 진행은 K2 행 안) → 미처리 → OKR(주·범위 칩)
 // ③ 운영·시스템(접을 수 있음, 기본 펼침): DB·시트 상태·최근 배포·AI 에이전트 팀 알약, 비용, 실시간 전송 현황판,
 //    AI 에이전트 팀 카드, 업데이트 목록 — 접혀 있으면 그리지 않으므로 전송 현황판 15초 폴링도 멈춘다. 절약 효과(IMPACT)는 2026-10-24 삭제
@@ -197,6 +200,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const quarter = Math.floor((Number(todayYmd.slice(5, 7)) - 1) / 3) + 1;
   // 분기 말일까지 남은 영업일(오늘 포함, 주말·공휴일·설정 휴일 제외) — 달성표와 같은 bizDays
   const holidays = kpi?.bundle.settings.holidays;
+  const head = useMemo(() => headlineNumbers(kpi?.bundle ?? null), [kpi]);
   const bizLeft = useMemo(() => bizDays(todayYmd, kpiRanges(todayYmd).quarter.to, holidays ?? []), [todayYmd, holidays]);
 
   const agentPillValue = useMemo(() => {
@@ -223,8 +227,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const opsDot = opsTone === "ok" ? "bg-emerald-400" : opsTone === "warn" ? "bg-amber-400" : opsTone === "bad" ? "bg-rose-500" : "bg-slate-500";
 
   return (
-    <div className="pb-8">
-      <div className="relative overflow-hidden rounded-3xl bg-[#0B0F17] text-white shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
+    <div className="-mx-3 -mt-5 pb-8 sm:-mx-6 lg:-mx-8">
+      <div className="relative overflow-hidden bg-[#0B0F17] text-white shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
         {/* 배경 결 — 격자 + 광원 셋 */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(rgba(148,163,184,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.7) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
         <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-blue-600/20 blur-3xl" />
@@ -232,7 +236,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
         <div className="pointer-events-none absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
 
         {/* ── ① 머리 띠(2026-10-24) — 큰 날짜·연도 | 분기 남은 영업일 칩 | 갱신 + [편집]. 장식은 아래 얇은 그라데이션 선 하나 ── */}
-        <div className="relative flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-6">
+        <div className="relative flex flex-wrap items-center gap-x-3 gap-y-1.5 px-2 py-2">
           <p className="flex min-w-0 items-baseline gap-1.5">
             <span className="truncate text-2xl font-black tracking-tight text-white">{headDate(todayYmd)}</span>
             <span className="font-mono text-[12px] font-bold tabular-nums text-slate-500">{todayYmd.slice(0, 4)}</span>
@@ -240,7 +244,20 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
           <span className="order-3 inline-flex items-center rounded-full border border-white/[0.10] bg-white/[0.05] px-2.5 py-1 text-[11.5px] font-black text-slate-200 sm:order-none">
             {quarter}분기 <span className="mx-1 text-slate-600">·</span> 말일까지 <b className="mx-1 font-mono tabular-nums text-white">{bizLeft}</b>영업일
           </span>
-          <span className="ml-auto flex shrink-0 items-center gap-2">
+          {/* 큰 숫자 3개(홈 3차) — 폰은 아래 줄 전체 폭, sm 부터 같은 줄 */}
+          <span className="order-4 flex w-full min-w-0 items-baseline gap-x-3 sm:order-none sm:ml-auto sm:w-auto" aria-label="한눈 숫자">
+            {([
+              ["미처리", head.unhandled === null ? "—" : head.unhandled.toLocaleString("ko-KR"), head.unhandled ? "text-rose-200" : head.unhandled === 0 ? "text-emerald-300" : "text-slate-500"],
+              ["OKR", head.okrPct === null ? "—" : `${head.okrPct}%`, head.okrPct === null ? "text-slate-500" : "text-white"],
+              ["분기 점검", head.inspectionPct === null ? "—" : `${head.inspectionPct}%`, head.inspectionPct === null ? "text-slate-500" : "text-white"],
+            ] as const).map(([label, value, tone]) => (
+              <span key={label} className="flex min-w-0 items-baseline gap-1">
+                <span className="text-[11px] font-bold text-slate-400">{label}</span>
+                <b className={`font-mono text-[18px] font-black tabular-nums ${tone}`}>{value}</b>
+              </span>
+            ))}
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0">
             <span className="text-[11.5px] font-bold text-slate-400">갱신 {kpi ? relTime(new Date(kpi.bundle.loadedAt).toISOString()) : "불러오는 중"}</span>
             <button type="button" onClick={() => setEditing(!editing)} aria-pressed={editing}
               className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-black transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 ${editing ? "bg-blue-600 text-white hover:bg-blue-500" : "bg-white/[0.07] text-slate-200 hover:bg-white/[0.12]"}`}>

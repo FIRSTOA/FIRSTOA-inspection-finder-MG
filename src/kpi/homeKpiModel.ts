@@ -14,9 +14,9 @@ import {
 } from "./kpiCompute";
 import { kpiCellState, sourcesFor, type KpiBundle, type KpiSourceStatus } from "./kpiData";
 import { splitByGroup } from "../homeUnhandled";
-import { OKR_TEAMS, achievementRate, judgmentCounts, normalizeJudgment, type OkrJudgment } from "../okr";
+import { OKR_TEAMS, achievementRate, judgmentCounts, normalizeJudgment, type OkrJudgment, type OkrTeam } from "../okr";
 import type {
-  KpiOkrScope, KpiOkrView, KpiPersonCell, KpiQuarterBlock, KpiQuarterGoalView, KpiScope as KpiCellScope, KpiSize, KpiTableRow, KpiTodayItem,
+  KpiOkrPerson, KpiOkrScope, KpiOkrTeamLine, KpiOkrView, KpiPersonCell, KpiQuarterBlock, KpiQuarterGoalView, KpiScope as KpiCellScope, KpiSize, KpiTableRow, KpiTodayItem,
   KpiView, KpiWidgetProps,
 } from "./KpiWidgets.view";
 import type { KpiLayoutItem } from "./HomeKpiGrid.view";
@@ -52,7 +52,7 @@ export const HOME_WIDGETS: HomeWidgetDef[] = [
   { id: "today", title: "금일 현황", kind: "todayStrip", kpis: TODAY_KPI_IDS, sizes: ["4x1"], description: "오늘 점검·AS·물류·확장성·칭찬 … 한 줄", defaultHidden: true },
   { id: "table", title: "KPI 달성표", kind: "kpiTable", kpis: ALL_KPI_IDS, sizes: ["4x2", "4x1"], description: "지표별 달성·순항·부족 · CS 전체 → 팀 → 개인(행 펼치기, 분기 점검 진행은 K2 행 안)" },
   // 미처리(2026-10-24 하나로): 현황판 묶음의 unhandled(K16 = mergeUnhandled) + recontract(K12 = 재계약 확인 지남)를 그린다 — 따로 읽지 않는다
-  { id: "unhandledPanel", title: "미처리", kind: "panel", kpis: ["K16", "K12"], sizes: ["2x2", "4x1"], description: "미처리 합계 · 팀 탭 · 종류 칸(복합기 AS·원격·IT·경영·운영·영업·AS 일정·물류) · 재계약 확인 지남 · 목록" },
+  { id: "unhandledPanel", title: "미처리", kind: "panel", kpis: ["K16", "K12"], sizes: ["2x2", "4x1"], description: "미처리 합계 · 팀 탭 · 종류 칸(CS 접수·원격·IT·경영·운영·영업·물류 — CS 접수 = 지난 날짜·미완료 일정, 일정리스트 미처리와 같은 수) · 재계약 확인 지남 · 목록" },
   { id: "K19", title: "OKR 달성률", kind: "okr", kpis: ["K19"], sizes: ["2x2", "2x1", "1x1"], description: "이번 주 파트 판정 · 이번 달 주별 막대 · 미작성 파트 · 범위 칩(전체/A~D/개인)" },
 ];
 export const HOME_WIDGET_BY_ID: Record<HomeWidgetId, HomeWidgetDef> = Object.fromEntries(HOME_WIDGETS.map((w) => [w.id, w])) as Record<HomeWidgetId, HomeWidgetDef>;
@@ -302,8 +302,36 @@ export function quarterGoalView(b: KpiBundle, basis: "end" | "early" = "end"): O
  * scope(2026-10-24 사용자 "어디의 달성률인지 + 팀/개인 필터"): 이번 주 = okrWeekResult(…, scope).
  *   이번 달 = 파트 종합 행만 있어(개인 행 없음) 팀 칩만 쓴다 — 개인 고르기는 비운다(members [], 칩 자체는 남김).
  * 돌려주는 scope 에는 onScope 가 없다(순수·캐시용) — 컨테이너(HomeKpiBoard)가 붙인다.
+ * 홈 3차(2026-10-25 팀 보드, 개인 드롭다운 삭제): 아래 셋은 숫자 함수(okrWeekResult·okrWeekMembers·okrKpi·okrTeamRows) 조합만.
+ *   · allPct / teamLines = 칩 안 % 와 [전체] 칩의 팀 4줄 — 고른 범위와 상관없이 늘 A~D 전부(이번 달은 미작성 인원 모름 → missing null)
+ *   · people = 팀 칩(이번 주)을 고르면 그 팀원(그 달 member 기록이 있는 사람, 이름순) — 이번 주 판정이 하나도 없으면 missing(0% 아님), prevPct = 지난주(같은 달 앞 주차, 첫 주면 null)
  */
 export type OkrViewModel = Omit<KpiOkrView, "onPeriod" | "scope"> & { scope: Omit<KpiOkrScope, "onScope"> };
+
+/**
+ * 한 팀의 OKR 팀원 줄(홈 3차, 2026-10-25 팀장 결정 "명단 기준") — 사람 = 명단(facts.roster, 그 팀·팀장 제외) ∪ 그 달 개인 보고를 쓴 사람(okrWeekMembers).
+ * 이번 주 개인 판정이 하나도 없으면 missing(0% 아님) — 이번 달에 한 번도 안 쓴 사람도 여기 잡힌다. prevPct = 같은 달 바로 앞 주차(첫 주면 null).
+ * 숫자는 okrWeekResult(member 범위) 그대로. 정렬: 작성한 사람 % 내림차순(같으면 이름순) → 미작성은 아래(이름순).
+ * [이번 달]은 개인 행이 없어 빈 배열. 팀 카드(teamBoard.okrMissingMembers)도 이 함수를 쓴다 — 이름·시그니처 바꾸지 말 것.
+ */
+export function okrPeopleForTeam(b: KpiBundle, team: OkrTeam, period: "week" | "month"): KpiOkrPerson[] {
+  const w = b.facts.okr?.week;
+  if (period !== "week" || !w) return [];
+  const names = new Set<string>(okrWeekMembers(w, team));
+  for (const m of b.facts.roster ?? []) if (m.team === team && m.title !== "팀장" && m.name) names.add(m.name);
+  const i = w.weeks.findIndex((x) => x.id === w.id);
+  const people = [...names].map((name): KpiOkrPerson => {
+    const r = okrWeekResult(w, w.id, { team, member: name });
+    const judged = Object.values(r.counts).reduce((a, n) => a + n, 0);
+    return {
+      name, pct: r.pct, missing: judged === 0,
+      counts: { done: r.counts["완료"], partial: r.counts["부분달성"], poor: r.counts["미흡"], none: r.counts["미착수"] },
+      prevPct: i > 0 ? okrWeekResult(w, w.weeks[i - 1].id, { team, member: name }).pct : null,
+    };
+  });
+  const byName = (a: KpiOkrPerson, c: KpiOkrPerson) => a.name.localeCompare(c.name, "ko");
+  return people.sort((a, c) => (a.missing !== c.missing ? (a.missing ? 1 : -1) : a.missing ? byName(a, c) : (c.pct ?? -1) - (a.pct ?? -1) || byName(a, c)));
+}
 export function okrView(b: KpiBundle, period: "week" | "month" = "week", scope: OkrScope = { team: "ALL" }): OkrViewModel | null {
   const okr = b.facts.okr;
   if (!okr) return null;
@@ -326,6 +354,22 @@ export function okrView(b: KpiBundle, period: "week" | "month" = "week", scope: 
     missingTeams = per.filter((p) => !p.rows.some((x) => normalizeJudgment(x.judgment))).map((p) => p.team);
     teamPcts = per.map((p) => ({ team: p.team, pct: achievementRate(p.rows) }));
   }
+  // 팀 칩 % · 팀 4줄 · 팀원 목록(홈 3차) — 고른 범위와 따로, 위 숫자 함수 결과만 묶는다
+  let allPct: number | null;
+  let teamLines: KpiOkrTeamLine[];
+  let people: KpiOkrPerson[] = [];
+  if (period === "week" && w) {
+    const all = okrWeekResult(w, w.id);
+    allPct = all.pct;
+    teamLines = all.byTeam.map((t) => ({
+      team: t.team, pct: t.pct,
+      missing: okrPeopleForTeam(b, t.team as OkrTeam, "week").filter((p) => p.missing).length,
+    }));
+    if (sc.team !== "ALL") people = okrPeopleForTeam(b, sc.team, "week");
+  } else {
+    allPct = okrKpi(okr, b.ranges).value;
+    teamLines = OKR_TEAMS.map((team) => ({ team, pct: achievementRate(okrTeamRows(okr.cycle, okr.quarter, okr.reports, team)), missing: null }));
+  }
   return {
     kind: "okr", period, pct: pctValue,
     teams: teamPcts,
@@ -340,6 +384,7 @@ export function okrView(b: KpiBundle, period: "week" | "month" = "week", scope: 
     missingTeams,
     scope: { team: sc.team, ...(sc.member ? { member: sc.member } : {}), members: period === "week" && w ? okrWeekMembers(w, sc.team) : [] },
     scopeLabel: okrScopeLabel(sc, period),
+    allPct, teamLines, people,
   };
 }
 

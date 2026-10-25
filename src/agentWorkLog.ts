@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-24",
+    "hash": "b6e7ea20d6",
+    "agent": "ui-designer",
+    "summary": "공지·IT 학습 탭 머리를 다른 탭과 같은 다크 머리로 + 홈 OKR 박스 저장 배치도 반반(2x2)으로 올림"
+  },
+  {
+    "date": "2026-10-24",
     "hash": "994d098935",
     "agent": "developer",
     "summary": "관리 탭 [카톡 수집] 카드(방별 상태 신호등·확인필요·지금 수집) + gas-admin 엣지(GAS 쓰기 동작 토큰 중계) + 사진 이관 토큰"

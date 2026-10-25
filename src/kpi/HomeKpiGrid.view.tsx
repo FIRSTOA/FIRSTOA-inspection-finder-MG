@@ -255,7 +255,7 @@ export function HomeKpiGrid(props: HomeKpiGridProps) {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-6 lg:grid-cols-12" aria-busy="true" aria-label="KPI 배치를 불러오는 중">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-6 lg:grid-cols-12" aria-busy="true" aria-label="KPI 배치를 불러오는 중">
           {(["1x1", "1x1", "2x1", "2x1"] as KpiSize[]).map((s, i) => <div key={i} className={`h-36 animate-pulse rounded-2xl ${k.skeleton} ${SPAN[s]}`} />)}
         </div>
       ) : visible.length === 0 ? (
@@ -270,7 +270,7 @@ export function HomeKpiGrid(props: HomeKpiGridProps) {
           )}
         </div>
       ) : (
-        <ol className="grid list-none grid-cols-2 gap-3 md:auto-rows-[minmax(10rem,auto)] md:grid-flow-row-dense md:grid-cols-6 lg:grid-cols-12">
+        <ol className="grid list-none grid-cols-2 gap-2 md:auto-rows-[minmax(10rem,auto)] md:grid-flow-row-dense md:grid-cols-6 lg:grid-cols-12">
           {visible.map(({ item, widget, size }, idx) => {
             const dragging = dragId === item.id;
             const marker = drop && drop.id === item.id ? drop : null;

@@ -10,7 +10,7 @@ import { kpiRanges, workinPace, type KpiFacts } from "../src/kpi/kpiCompute";
 import { ALL_KPI_SOURCES, type KpiBundle } from "../src/kpi/kpiData";
 import { parseKpiTargets, type KpiSource } from "../src/kpi/kpiDefs";
 import {
-  HOME_KPI_DEFAULT_LAYOUT, HOME_KPI_LAYOUT_KEY, HOME_KPI_LAYOUT_VERSION, HOME_WIDGETS, effectivePeriod, mergeBundle, okrView,
+  HOME_KPI_DEFAULT_LAYOUT, HOME_KPI_LAYOUT_KEY, HOME_KPI_LAYOUT_VERSION, HOME_WIDGETS, effectivePeriod, mergeBundle, okrView, okrPeopleForTeam,
   parseHomeLayout, quarterGoalView, readHomeLayout, serializeHomeLayout, sourcesForLayout, splitSources, tableRows, todayItems, unhandledParts,
   writeHomeLayout,
 } from "../src/kpi/homeKpiModel";
@@ -21,6 +21,7 @@ import HomeUnhandledPanel from "../src/HomeUnhandledPanel";
 import { recontractOverdue, toFormRows } from "../src/kpi/kpiCompute";
 import { emptyReport, type OkrReport } from "../src/okr";
 import { KpiWidget } from "../src/kpi/KpiWidgets.view";
+import { okrTeamFromFilter, statusTileClass, teamCellDimmed } from "../src/kpi/kpiTiles";
 import HomeKpiBoard from "../src/HomeKpiBoard";
 import Home from "../src/Home";
 
@@ -322,12 +323,84 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
     expect(v.pct).toBeNull();
     expect(v.missingTeams).toEqual(["A", "B", "C", "D"]);
   });
+
+  // 홈 3차(2026-10-25): 개인 드롭다운 대신 팀 칩 → 팀원 목록. 숫자는 okrWeekResult 그대로(새로 세지 않음)
+  const withKim = bundleOf({ okr: { cycle: null, quarter: null, reports: [...reports, rep("2026-10-W2", "B", "김Y", ["완료", "미흡"])], week: { id: "2026-10-W3", weeks, goals, reports: [...reports, rep("2026-10-W2", "B", "김Y", ["완료", "미흡"])] } } });
+  it("팀 칩 B = 그 팀원 목록(% 내림차순, 미작성은 아래): 판정 수·달성률, 이번 주 기록 없는 사람은 미작성 + 지난주 %", () => {
+    const b = okrView(withKim, "week", { team: "B" })!;
+    expect(b.people).toEqual([
+      { name: "이호준", pct: 100, counts: { done: 1, partial: 0, poor: 0, none: 0 }, missing: false, prevPct: null },
+      { name: "박X", pct: 0, counts: { done: 0, partial: 0, poor: 0, none: 1 }, missing: false, prevPct: null },
+      { name: "김Y", pct: null, counts: { done: 0, partial: 0, poor: 0, none: 0 }, missing: true, prevPct: 50 },
+    ]);
+    expect(okrView(withKim, "week", { team: "A" })!.people).toEqual([]); // A 는 파트 종합만 — 팀원 행 없음(명단도 없음)
+  });
+  it("명단(roster) 기준: 이번 달 보고를 한 번도 안 쓴 사람도 미작성으로 나온다(팀장·다른 팀 제외), 팀 4줄 미작성 n명도 같은 정의", () => {
+    const okr = withKim.facts.okr!;
+    const withRoster = bundleOf({ okr, roster: [{ name: "최Z", team: "B" }, { name: "박X", team: "B" }, { name: "장팀", team: "B", title: "팀장" }, { name: "한A", team: "A" }] });
+    const ppl = okrPeopleForTeam(withRoster, "B", "week");
+    expect(ppl.map((p) => [p.name, p.missing])).toEqual([["이호준", false], ["박X", false], ["김Y", true], ["최Z", true]]);
+    expect(ppl.find((p) => p.name === "최Z")).toEqual({ name: "최Z", pct: null, counts: { done: 0, partial: 0, poor: 0, none: 0 }, missing: true, prevPct: null });
+    expect(okrPeopleForTeam(withRoster, "A", "week").map((p) => p.name)).toEqual(["한A"]);
+    expect(okrPeopleForTeam(withRoster, "B", "month")).toEqual([]);
+    expect(okrView(withRoster, "week")!.teamLines?.map((l) => [l.team, l.missing])).toEqual([["A", 1], ["B", 2], ["C", 0], ["D", 0]]);
+  });
+  it("전체 칩 = 팀 4줄(%·미작성 n명), 칩 % 는 고른 범위와 상관없이 A~D 전체 · 이번 달은 팀원 없음", () => {
+    const all = okrView(withKim, "week")!;
+    expect(all.people).toEqual([]);
+    expect(all.allPct).toBe(33);
+    expect(all.teamLines).toEqual([
+      { team: "A", pct: 50, missing: 0 }, { team: "B", pct: 0, missing: 1 }, { team: "C", pct: null, missing: 0 }, { team: "D", pct: null, missing: 0 },
+    ]);
+    const b = okrView(withKim, "week", { team: "B" })!;
+    expect(b.allPct).toBe(33);
+    expect(b.teamLines).toEqual(all.teamLines);
+    const month = okrView(withKim, "month", { team: "B" })!;
+    expect(month.people).toEqual([]);
+    expect(month.teamLines?.map((l) => [l.team, l.missing])).toEqual([["A", null], ["B", null], ["C", null], ["D", null]]);
+  });
+});
+
+describe("홈 3차 달성표 상태 타일 · 팀 필터(2026-10-25)", () => {
+  const render = (el: Parameters<typeof renderToString>[0]) => renderToString(el).replace(/<!-- -->/g, "");
+  it("statusTileClass: 달성 초록·순항 파랑·부족 빨강·목표 없음 회색, 목표 없는 칸은 상태와 상관없이 회색", () => {
+    expect(statusTileClass("done", true)).toBe("bg-emerald-500/15");
+    expect(statusTileClass("onTrack", true)).toBe("bg-sky-500/12");
+    expect(statusTileClass("behind", true)).toBe("bg-rose-500/18");
+    expect(statusTileClass("none", true)).toBe("bg-white/[0.04]");
+    expect(statusTileClass("behind", false)).toBe("bg-white/[0.04]");
+    expect(statusTileClass("pending", false)).toContain("border-dashed");
+  });
+  it("teamCellDimmed: 필터 없으면 아무것도 안 흐림, 있으면 다른 팀만(CS 전체는 그대로)", () => {
+    expect(["CS", "A", "B", "C", "D", "E"].some((s) => teamCellDimmed(s as "A", null))).toBe(false);
+    expect(["CS", "A", "B", "C", "D", "E"].some((s) => teamCellDimmed(s as "A", undefined))).toBe(false);
+    expect(["CS", "A", "B", "C", "D", "E"].filter((s) => teamCellDimmed(s as "A", "C"))).toEqual(["A", "B", "D", "E"]);
+  });
+  it("okrTeamFromFilter: A~D 는 그 팀 칩, CSS(E)·없음은 전체", () => {
+    expect(okrTeamFromFilter("C")).toBe("C");
+    expect(okrTeamFromFilter("E")).toBe("ALL");
+    expect(okrTeamFromFilter(null)).toBe("ALL");
+  });
+  it("달성표 렌더: teamFilter 있으면 다른 팀 칸 opacity-40, 없으면 흐린 칸 없음 · 머리줄 팀 배지·폰 5칸 띠", () => {
+    const rows = tableRows(bundleOf(FACTS), { teamOf, period: "week" }).filter((r) => r.main);
+    const view = (teamFilter?: "A" | "B" | "C" | "D" | "E" | null) => render(createElement(KpiWidget, {
+      kind: "kpiTable", title: "KPI 달성표", basis: "x", status: "ready", size: "4x2",
+      view: { kind: "kpiTable", period: "week", view: "main", rows, counts: { main: rows.length, all: rows.length }, onPeriod: () => {}, onView: () => {}, teamFilter },
+    }));
+    const plain = view();
+    expect(plain).not.toContain("opacity-40");
+    expect(plain).toContain("CSS팀");
+    expect(plain).toContain("grid grid-cols-5"); // 폰 카드 아래 5칸 띠
+    expect(plain).toContain("bg-indigo-400/[0.18]"); // A 팀 배지(팀 색)
+    expect(view("C")).toContain("opacity-40");
+    expect(view(null)).not.toContain("opacity-40");
+  });
 });
 
 describe("미처리 칸 하나 — 숫자는 mergeUnhandled 한 벌(2026-10-24 불일치 수정)", () => {
   // 실측(2026-10-24): 익일AS 2건이 물류로 세였고(홈 물류 46 vs 현황판 44), 팀 "기타" 물류 4건은 어느 탭에도 없었다(탭 합 431 vs 전체 435)
   const recs: ReceptionInput[] = [
-    { id: "r1", type: "복합기 AS", region: "수도권A", receipt_date: "2026-10-10", vendor: "가", status: "접수" },
+    { id: "r1", type: "원격이관", region: "수도권A", receipt_date: "2026-10-10", vendor: "가", status: "접수" }, // 복합기 AS 접수는 2026-10-25부터 일정 기준이라 원격으로
     { id: "r2", type: "IT", region: "", receipt_date: "2026-10-12", vendor: "나", status: "접수" },
     { id: "r3", type: "영업팀", region: "", receipt_date: "2026-10-15", vendor: "다", status: "접수" },
   ];
@@ -349,8 +422,8 @@ describe("미처리 칸 하나 — 숫자는 mergeUnhandled 한 벌(2026-10-24 �
     expect(tabs["기타"]).toBe(2); // 팀 없는 IT 접수 + 팀 "기타" 물류
   });
 
-  it("익일AS 는 AS 일정, 물류는 현황판과 같은 유형 목록(한 정의)", () => {
-    expect(rows.find((r) => r.key === "t:t1")?.kind).toBe("AS일정");
+  it("익일AS 는 CS접수, 물류는 현황판과 같은 유형 목록(한 정의)", () => {
+    expect(rows.find((r) => r.key === "t:t1")?.kind).toBe("CS접수");
     expect(countUnhandledKinds(rows)["물류"]).toBe(3);
     expect(LOGISTICS_SCHEDULE_TYPES.every((t) => isLogisticsSchedule(t))).toBe(true);
     for (const t of ["AS", "익일AS", "매월점검", ""]) expect(isLogisticsSchedule(t)).toBe(false);
@@ -404,7 +477,7 @@ describe("렌더 스모크(서버 렌더, fetch 막음)", () => {
     expect(html).not.toContain("금일 현황");
     expect(HOME_WIDGETS.map((w) => w.title)).not.toContain("분기 점검 진행");
     for (const gone of ["미처리 전체", "미처리 일정"]) expect(html).not.toContain(gone);
-    for (const tab of ["전체", "A", "E", "경영", "운영", "영업"]) expect(html).toContain(`>${tab}</button>`);
+    for (const tab of ["전체", "A", "CSS", "경영", "운영", "영업"]) expect(html).toContain(`>${tab}</button>`); // 홈 3차: E 탭은 화면 이름 CSS
     for (const gone of ["초과사용 제안 방문", "PC·복합기 확장성", "미처리 요약"]) expect(html).not.toContain(gone);
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("편집");

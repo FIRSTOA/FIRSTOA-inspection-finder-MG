@@ -59,3 +59,12 @@ export function richToText(html: string): string {
   el.innerHTML = html.replace(/<br\s*\/?>/gi, "\n");
   return (el.textContent || "").split(NBSP).join(" ");
 }
+
+// RichCell 이 바깥 값(props)으로 칸을 다시 그릴지(2026-10-25 "지우다 보니 커서가 처음으로 가").
+// 편집 중 내보낸 글은 바깥을 한 바퀴 돌아오며 모양이 바뀔 수 있다 — richToText 가 NBSP 를 공백으로, 병목현상 칸은 bottleneckText 가 trim.
+// 그래서 "내가 보낸 값이 돌아온 것"을 글자 비교로 가려낼 수 없고, 다시 그리면(innerHTML) 커서가 맨 앞으로 간다.
+// 편집 중에는 칸(DOM)이 원본이므로 다시 그리지 않고, 편집이 끝나면(blur·Esc·Tab) 바깥 값과 다를 때 맞춘다.
+export function shouldRepaint(wanted: string, last: string | null, editing: boolean): boolean {
+  if (editing) return false;
+  return wanted !== last;
+}

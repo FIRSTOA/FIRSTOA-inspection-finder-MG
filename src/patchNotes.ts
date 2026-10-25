@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b6e7ea20d6",
+    "date": "2026-10-24",
+    "note": "공지·IT 학습 탭 머리를 다른 탭과 같은 다크 머리로 + 홈 OKR 박스 저장 배치도 반반(2x2)으로 올림"
+  },
+  {
     "hash": "ddb6f9127e",
     "date": "2026-10-24",
     "note": "카톡 수집 켜기 — 사용자 체크리스트(외출 뒤 이어서 할 것)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "da8fea692b",
     "date": "2026-09-29",
     "note": "OKR 주차 화면 정리(월 종합은 옛 기록만·이번 주 표시·결과 있는 곳만 점·팀원 집계 상자) + 익일 스케줄 접수자/키맨/담당자 줄 + 지도 주소 정리(로N길 잘림·꼬리 메모) + geocode 수정"
-  },
-  {
-    "hash": "b22b321e10",
-    "date": "2026-09-29",
-    "note": "OKR 주차별 기록(월|1~5주) + 서버 기준 열기·15초 동기화·3자 병합(남이 적은 칸 보존) + 파트 종합 전환 시 목표 칸 빈 문제 + 익일 스케줄 보고에 연락처·주소"
   }
 ];

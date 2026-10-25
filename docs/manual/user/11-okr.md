@@ -51,3 +51,5 @@
 
 ---
 마지막 갱신: 2026-10-22 · 근거 커밋 `da5e0f9`(분기→월→주차 개편), `f386159`(통합집계 점·판정 제안·핵심방향), `7d377c5`(3차), `5580c0a`(층별 독립), `cc62aa1`(머리 구조·3×3 빈 틀만), `5a7d2bd`(분기 표 점·달성기준 접기), `dc3cadd`·`04d5839`(8차 달성기준 규칙), `5c1efe0`(칸 경계) · 근거 파일 src/OkrHub.tsx, src/OkrHeader.tsx, src/OkrMonthRollup.tsx, src/OkrQuarterView.tsx, src/OkrDirection.tsx, src/okr.ts · 설계 docs/tasks/okr-quarter-month-week.md, docs/tasks/okr-feedback-2.md
+
+- 2026-10-25: 칸에서 글자를 지울 때 커서가 맨 앞으로 튀던 문제를 고쳤습니다(편집 중엔 칸을 다시 그리지 않음). 칸 밖을 누르면 끝 공백이 정리돼 보이는 것은 정상입니다.

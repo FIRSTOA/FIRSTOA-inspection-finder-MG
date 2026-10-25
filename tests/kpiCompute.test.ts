@@ -178,14 +178,15 @@ describe("미처리 — KPI = 홈 미처리 판(countUnhandledTabs)", () => {
       { id: "r2", receipt_date: "2026-10-10", type: "경영지원", vendor: "나", region: "", status: "진행중" },
     ];
     const tic: TicketInput[] = [
-      { id: "t1", team: "C", date: "2026-10-21", vendor: "가", assignee: "한왕주", status: "예정", scheduleType: "AS", receptionId: "r1" }, // 접수와 중복
+      { id: "t1", team: "C", date: "2026-10-21", vendor: "가", assignee: "한왕주", status: "예정", scheduleType: "AS", receptionId: "r1" }, // 복합기 접수 r1 은 일정 기준(2026-10-25) → 일정으로 셈
       { id: "t2", team: "D", date: "2026-10-15", vendor: "다", assignee: "", status: "예정", scheduleType: "물류" },
     ];
     const rows = mergeUnhandled(rec, tic, TODAY);
     const board = countUnhandledTabs(rows);
     const k = unhandledKpis(rows);
     expect((k.K16.value || 0) + (k.K17.value || 0)).toBe(board["전체"]);
-    expect(kpiCount("K16", { unhandled: rows }, { team: "C" }, R.week, ctx)?.n).toBe(1);
+    expect(kpiCount("K16", { unhandled: rows }, { team: "C" }, R.week, ctx)?.n).toBe(0);
+    expect(kpiCount("K17", { unhandled: rows }, { team: "C" }, R.week, ctx)?.n).toBe(1);
     expect(kpiCount("K17", { unhandled: rows }, { team: "D" }, R.week, ctx)?.n).toBe(1);
     expect(k.tabs).toEqual(board);
   });

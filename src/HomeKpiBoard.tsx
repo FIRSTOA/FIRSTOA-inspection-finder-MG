@@ -29,6 +29,9 @@ import {
 } from "./kpi/homeKpiModel";
 import { buildHomeSnapshot, mergeSnapshotList, readHomeSnapshot, snapshotAgo, writeHomeSnapshot, type HomeKpiSnapshot } from "./kpi/homeKpiSnapshot";
 import { kpiCellState } from "./kpi/kpiData";
+import { teamBoardView, toggleTeamFilter } from "./kpi/teamBoard";
+import { TeamBoardStrip } from "./kpi/TeamBoard.view";
+import type { TeamKey } from "./kpi/teamColors";
 
 export type HomeKpiBoardProps = {
   /** 위젯·표 행·띠 칩을 누르면 열 화면(App 의 screen 값) */
@@ -77,6 +80,13 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
   const [goalBasis, setGoalBasis] = useState<"end" | "early">("end"); // 달성표 K2 행 안 분기 블록 기준 — 기본 말일
   const [okrPeriod, setOkrPeriod] = useState<"week" | "month">("week"); // OKR — 기본 이번 주(사용자 2026-10-24)
   const [okrScope, setOkrScope] = useState<{ team: KpiOkrScope["team"]; member?: string }>({ team: "ALL" }); // OKR 범위 — 기본 CS 4파트
+  // 홈 3차 팀 카드 거르기(2026-10-25): 카드를 누르면 달성표(그 팀 칸 강조)·미처리(그 팀 탭)·OKR(그 팀 범위)이 그 팀으로, 다시 누르면 전체
+  const [teamFilter, setTeamFilter] = useState<TeamKey | null>(null);
+  const pickTeam = (t: TeamKey) => {
+    const next = toggleTeamFilter(teamFilter, t);
+    setTeamFilter(next);
+    setOkrScope({ team: next && next !== "E" ? next : "ALL" }); // CSS(E)는 OKR 대상 아님 → 전체
+  };
   const [state, setState] = useState<HomeKpiState | null>(null);
   // 마지막 값 캐시(2026-10-24 속도) — 홈을 열자마자 이 값으로 그리고, 새 원본이 오는 대로 바꾼다(homeKpiSnapshot)
   const [snap] = useState<HomeKpiSnapshot | null>(() => readHomeSnapshot(storage(), kstDate(), Date.now()));
@@ -193,7 +203,7 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
       }
       return (
         <div className="h-full min-w-0 [&>*]:h-full">
-          <HomeUnhandledPanel bundle={bundle} onOpenOverdue={() => onOpenOverdue?.()} onOpenReception={() => onOpenReception?.()} onRetry={() => { void refresh(true); }} />
+          <HomeUnhandledPanel bundle={bundle} team={teamFilter} onOpenOverdue={() => onOpenOverdue?.()} onOpenReception={() => onOpenReception?.()} onRetry={() => { void refresh(true); }} />
         </div>
       );
     }
@@ -228,7 +238,7 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
               const q = alt ? withoutKind(alt) : r.quarter;
               return { ...r, quarter: q ? { ...q, onBasis: setGoalBasis } : undefined, onOpen: onNavigate ? () => open(KPI_BY_ID[r.id as keyof typeof KPI_BY_ID].screen) : undefined };
             });
-          view = { kind: "kpiTable", period, view: tableView, rows, counts: { main: all.filter((r) => r.main).length, all: all.length }, onPeriod: setPeriod, onView: setTableView };
+          view = { kind: "kpiTable", period, view: tableView, rows, counts: { main: all.filter((r) => r.main).length, all: all.length }, onPeriod: setPeriod, onView: setTableView, teamFilter };
         }
         onOpen = undefined; break;
       }
@@ -239,7 +249,7 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
         const old = st.status === "loading" && okrScope.team === "ALL" && !okrScope.member ? snap?.okr[okrPeriod] ?? null : null;
         const v = old ?? live;
         fromSnap = !!old;
-        view = v ? { ...v, scope: { ...v.scope, onScope: setOkrScope }, onPeriod: setOkrPeriod } : null;
+        view = v ? { ...v, scope: { ...v.scope, onScope: setOkrScope }, onPeriod: setOkrPeriod, teamFilter } : null;
         chip = okrPeriod === "week" ? "이번 주" : "이번 달";
         emptyText = okrPeriod === "week" ? "이번 주 OKR 기록이 아직 없습니다" : "이번 달 판정이 아직 없습니다"; break;
       }
@@ -283,10 +293,13 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
   const notices = [...new Set([loadError, bundle?.settings.error ? `목표 설정: ${bundle.settings.error}` : "", ...sourceNotices].filter(Boolean))];
   // 마지막 값 캐시로 그린 칸이 있는 동안(아직 안 읽은 원본이 있음) 한 줄로 알린다
   const snapAgo = snap && (!bundle || [...want].some((s) => !bundle.sources[s])) ? snapshotAgo(snap.savedAt, Date.now()) : "";
+  // 팀 카드 5장 — 달성표와 같은 행(cachedView)·미처리 묶음·OKR 이번 주에서 조합(새 조회 없음)
+  const teamCards = useMemo(() => teamBoardView(bundle, period, teamForAuthor, goalBasis), [bundle, period, goalBasis]);
   return (
-    <div className="relative border-b border-white/[0.08] px-4 py-4 sm:px-6">
+    <div className="relative border-b border-white/[0.08] px-2 py-2">
       {snapAgo && <p role="status" className="mb-2 rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-[11.5px] font-bold text-sky-200">{snapAgo === "방금" ? "방금 전" : snapAgo} 값 · {loading || !bundle ? "갱신 중" : "일부 갱신 대기"}</p>}
       {notices.map((n) => <p key={n} role="alert" className="mb-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11.5px] font-bold text-amber-300">{n}</p>)}
+      <TeamBoardStrip cards={teamCards} selected={teamFilter} onSelect={pickTeam} loading={!bundle} />
       <HomeKpiGrid
         layout={layout}
         widgets={widgets}

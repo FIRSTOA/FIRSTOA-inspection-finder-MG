@@ -35,6 +35,8 @@ import { saveVisit } from "./visits";
 import type { ManualScheduleEntry } from "./manualSchedule";
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
+import { isOverdueTicket } from "./overdueLogic";
+import { ilikeNeedle, mergeCalSearchHits, normalizeScheduleQuery, scheduleQueryHit, ticketSearchFields, twoYearsBefore, withTimeout, type CalSearchHit } from "./scheduleSearch";
 
 // 어두운 필터 패널 안의 칩 크기(폰 36px — 이 패널은 줄 수를 줄이려고 일부러 얇게 유지, 2026-08-18) · card.ts 에 올릴 후보
 // 폰 카드 안 동작 단추(폰 44px, flex-1 로 한 줄에 못 들어가면 줄바꿈) · card.ts 에 올릴 후보
@@ -542,6 +544,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   useEffect(() => { try { localStorage.setItem("cs_calendar_dept_v1", JSON.stringify(deptCal)); } catch { /* 저장 실패 무시 */ } }, [deptCal]);
   // 일정리스트 팀 칩의 부서 칸(경영·운영·영업) — team 상태와 따로. 고르면 as_tickets 목록 대신 부서 달력 목록(읽기 전용)
   const [listDept, setListDept] = useState<DeptCalTeam | null>(null); // 세션 안에서만 — 다음 접속엔 늘 내 일정(as_tickets)부터 보이게(2026-10-19 검수 메모)
+  // 일정리스트 검색칸 — 업체·제목·주소·내용·담당자(2자 이상). 팀·일정 구분·상태 칩과 AND, 비우면 원래 목록(2026-10-25)
+  const [listSearch, setListSearch] = useState("");
   const pickListTeam = (value: string) => { const pick = splitTeamPick(value); setListDept(pick.dept); if (pick.team !== null) setTeam(pick.team as typeof team); };
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
@@ -648,15 +652,50 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
   // 캘린더 검색 — 업체·제목·주소·내용에서 찾는다 (웹앱 일정 + 네이버 종일 일정)
   const [calSearch, setCalSearch] = useState("");
+  // 메모리(tickets = 최근 6개월+열어 본 달, naverEvents = 보는 달·오늘 −7~+60일)만으로는 지난 일정을 못 찾았다(2026-10-25)
+  //  → 2자 이상이면 as_tickets 를 서버에서 최근 2년 검색(limit 100)해 합친다. 네이버 종일 일정은 받은 범위만.
+  const [calServer, setCalServer] = useState<{ q: string; rows: AsTicket[]; loading: boolean; error: string }>({ q: "", rows: [], loading: false, error: "" });
+  const calServerSeq = useRef(0);
+  useEffect(() => {
+    const q = normalizeScheduleQuery(calSearch);
+    const needle = ilikeNeedle(calSearch);
+    const seq = ++calServerSeq.current;
+    if (!q || !needle) { setCalServer({ q: "", rows: [], loading: false, error: "" }); return; }
+    setCalServer((cur) => ({ ...cur, q, loading: true, error: "" }));
+    // 글자마다 서버를 치지 않게 0.3초 멈추면 조회, 늦게 온 옛 응답은 버린다
+    const timer = window.setTimeout(() => {
+      const from = twoYearsBefore(getTodayYmd());
+      const query = `select=${TICKET_COLUMNS}&date=gte.${from}&scheduleType=neq.${encodeURIComponent("매월점검")}`
+        + `&or=(vendor.ilike.*${needle}*,calendarTitle.ilike.*${needle}*,issue.ilike.*${needle}*)&order=date.desc,id.asc&limit=100`;
+      withTimeout(selectRows<AsTicket>("as_tickets", query), 15_000, "응답 시간 초과(15초)")
+        .then((rows) => { if (seq === calServerSeq.current) setCalServer({ q, rows: rows.map((row) => normalizeTicketSchedule(row)), loading: false, error: "" }); })
+        .catch((e: unknown) => { if (seq === calServerSeq.current) setCalServer({ q, rows: [], loading: false, error: (e as Error).message || "네트워크 오류" }); });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [calSearch]);
   const calSearchResults = useMemo(() => {
-    const q = calSearch.trim().toLowerCase();
-    if (q.length < 2) return [] as Array<{ kind: "ticket" | "naver"; id: string; date: string; title: string; key: string }>;
-    const hitT = tickets.filter((t) => t.scheduleType !== "매월점검" && [t.vendor, t.calendarTitle, t.address, t.issue].some((v) => (v || "").toLowerCase().includes(q)))
-      .map((t) => ({ kind: "ticket" as const, id: t.id, date: t.date, title: displayTitleOf(t), key: `t-${t.id}` }));
-    const hitN = naverEvents.filter((ev) => [ev.title, ev.location, ev.description].some((v) => (v || "").toLowerCase().includes(q)))
-      .map((ev) => ({ kind: "naver" as const, id: ev.uid, date: ev.date, title: ev.title || "(제목 없음)", key: `n-${ev.uid}` }));
-    return [...hitT, ...hitN].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 20);
-  }, [calSearch, tickets, naverEvents]);
+    const q = normalizeScheduleQuery(calSearch);
+    if (!q) return [] as CalSearchHit[];
+    const ticketHit = (t: AsTicket): CalSearchHit => ({ kind: "ticket", id: t.id, date: t.date, title: displayTitleOf(t), key: `t-${t.id}` });
+    const hitT = tickets.filter((t) => t.scheduleType !== "매월점검" && scheduleQueryHit([t.vendor, t.calendarTitle, t.address, t.issue], q)).map(ticketHit);
+    const hitN = naverEvents.filter((ev) => scheduleQueryHit([ev.title, ev.location, ev.description], q))
+      .map((ev): CalSearchHit => ({ kind: "naver", id: ev.uid, date: ev.date, title: ev.title || "(제목 없음)", key: `n-${ev.uid}` }));
+    const server = calServer.q === q ? calServer.rows.map(ticketHit) : [];
+    return mergeCalSearchHits([...hitT, ...hitN], server, 50);
+  }, [calSearch, tickets, naverEvents, calServer]);
+  // 결과 클릭 — 그 달로 이동하고 상세를 연다. 서버에서만 찾은 옛 일정은 상세가 열리도록 메모리에 넣는다(이후 새로고침에도 유지됨)
+  const openCalSearchHit = (r: CalSearchHit) => {
+    setCalSearch("");
+    setCurrentMonth(monthStart(r.date));
+    if (r.kind === "ticket") {
+      const fromServer = calServer.rows.find((row) => row.id === r.id);
+      if (fromServer) setTicketsState((cur) => (cur.some((row) => row.id === r.id) ? cur : [fromServer, ...cur]));
+      setDetailId(r.id);
+      return;
+    }
+    const ev = naverEvents.find((x) => x.uid === r.id);
+    if (ev) setNaverDetail({ ...ev });
+  };
   // 네이버 일정 필드 저장 — 티켓 모달과 같은 감각(입력창 벗어나면 저장), 네이버에 바로 반영
   const saveNaverField = async (patch: Partial<Pick<NaverEventRow, "title" | "date" | "time" | "location" | "description">>) => {
     const ev = naverDetail;
@@ -1439,7 +1478,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   };
 
   const targetDate = dayFilter === "today" ? todayYmd : tomorrowYmd;
-  const overdueCount = tickets.filter((t) => t.date < todayYmd && t.status !== "완료" && t.scheduleType !== "매월점검").length;
+  const overdueCount = tickets.filter((t) => isOverdueTicket(t, todayYmd)).length; // 홈 미처리 CS 접수와 같은 함수(2026-10-25)
   // 팀·유형·날짜만 거른 기준 행 — 직원 칩의 건수 배지와 목록이 같은 범위를 본다
   const baseRows = tickets.filter((ticket) => {
     if (ticket.scheduleType === "매월점검") return false; // 매월점검은 캘린더에서만 (날짜 맞춰 가면 되는 것들)
@@ -1447,6 +1486,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     else if (team !== "ALL" && ticket.team !== team) return false;
     const dt = displayTypeOf(ticket); // 익일통합as / AS[완료] / 납품철수교체휴가교육
     if (!listTypes.includes(dt === "익일통합as" ? "AS" : dt)) return false;
+    if (!scheduleQueryHit(ticketSearchFields(ticket), listSearch)) return false; // 검색칸(2자 이상) — 팀·구분과 AND
     if (dayFilter === "overdue") return ticket.date < todayYmd && ticket.status !== "완료";   // 지난 날짜·미완료 = 누락인지 그냥 지나간 건지 확인할 것
     if (dayFilter === "today") return ticket.date === todayYmd;
     if (dayFilter === "tomorrow") return ticket.date === tomorrowYmd;
@@ -1462,12 +1502,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const evTeam = ev.time ? (naverTeamOf(ev) || "기타") : "종일";
       if (team === "종일") { if (ev.time) return false; }
       else if (team !== "ALL" && evTeam !== team) return false;
+      if (!scheduleQueryHit([ev.title, ev.location, ev.description], listSearch)) return false;
       if (dayFilter === "today") return ev.date === todayYmd;
       if (dayFilter === "tomorrow") return ev.date === tomorrowYmd;
       return ev.date > todayYmd && ev.date !== tomorrowYmd;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naverEvents, tickets, listTypes, team, dayFilter, todayYmd, tomorrowYmd]);
+  }, [naverEvents, tickets, listTypes, team, dayFilter, todayYmd, tomorrowYmd, listSearch]);
   // 행에서 바로 전화 — 접수자 연락처·키맨의 첫 번호만. 없으면 버튼을 만들지 않는다 (제목에서 긁으면 엉뚱한 숫자가 잡힘)
   /**
    * 행에서 바로 전화 — 접수자·키맨 번호.
@@ -1652,13 +1693,17 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       {calSearch.trim().length >= 2 && (
                         <div className="absolute right-0 z-[70] mt-1.5 max-h-72 w-[min(20rem,calc(100vw_-_6.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-[0_16px_40px_rgba(15,23,42,0.25)] lg:left-0 lg:right-0 lg:w-80">
                           {calSearchResults.map((r) => (
-                            <button key={r.key} type="button" onClick={() => { setCalSearch(""); if (r.kind === "ticket") setDetailId(r.id); else { const ev = naverEvents.find((x) => x.uid === r.id); if (ev) setNaverDetail({ ...ev }); } }}
+                            <button key={r.key} type="button" onClick={() => openCalSearchHit(r)}
                               className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-50">
-                              <span className="w-16 shrink-0 text-[11px] font-black tabular-nums text-slate-400">{r.date.slice(5)}</span>
+                              <span className="w-16 shrink-0 text-[11px] font-black tabular-nums text-slate-400">{r.date.slice(0, 4) === todayYmd.slice(0, 4) ? r.date.slice(5) : `${r.date.slice(2, 4)}.${r.date.slice(5)}`}</span>
                               <span className="min-w-0 flex-1 truncate text-xs font-bold text-slate-800">{r.title}</span>
+                              {r.kind === "naver" && <span className="shrink-0 rounded bg-lime-100 px-1 text-[10px] font-black text-lime-700">N</span>}
                             </button>
                           ))}
-                          {!calSearchResults.length && <div className="px-3 py-3 text-center text-[11px] font-semibold text-slate-400">검색 결과 없음</div>}
+                          {!calSearchResults.length && !calServer.loading && <div className="px-3 py-3 text-center text-[11px] font-semibold text-slate-400">검색 결과 없음</div>}
+                          {calServer.loading && <div className="px-3 py-2 text-center text-[11px] font-semibold text-slate-400">지난 일정(최근 2년)도 찾는 중…</div>}
+                          {!!calServer.error && <div className="mx-2 my-1 rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700">지난 일정 서버 검색 실패 — 최근 6개월 안에서만 찾았습니다. ({calServer.error})</div>}
+                          <div className="border-t border-slate-100 px-3 pb-1 pt-1.5 text-[10.5px] font-semibold text-slate-400">웹앱 일정은 최근 2년(최대 100건) · 네이버 직접 일정은 보고 있는 달과 오늘 앞뒤(7일 전~60일 뒤)만</div>
                         </div>
                       )}
                     </div>
@@ -1895,6 +1940,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 줄바꿈 허용(스크롤 없음). 칩 높이는 그대로 얇게 유지. */}
             {!myPlanOpen && !listDept && (
               <>
+              {/* 검색 — 폰에서도 한 줄 */}
+              <div className="relative">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input value={listSearch} onChange={(e) => setListSearch(e.target.value)} placeholder="일정 검색 — 업체·제목·주소·내용·담당자" aria-label="일정 검색"
+                  className="min-h-10 w-full rounded-full border border-white/15 bg-white/10 py-2 pl-8 pr-9 text-[13px] font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400 focus:bg-white/15" />
+                {!!listSearch && <button type="button" onClick={() => setListSearch("")} aria-label="검색어 지우기"
+                  className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-base font-black text-slate-400 transition hover:bg-white/10 hover:text-white">×</button>}
+              </div>
+              {listSearch.trim().length === 1 && <div className="px-1 text-[11px] font-semibold text-slate-400">두 글자 이상 넣으면 걸러집니다.</div>}
               <div className="flex flex-wrap items-center gap-1">
                 {([["", `전체 ${statusCounts.전체}`, "bg-white text-slate-950", "bg-white/[0.07] text-slate-300"],
                    ["미배정", `미배정 ${statusCounts.미배정}`, "bg-rose-500 text-white", "bg-white/[0.07] text-rose-300"],
@@ -2034,7 +2088,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 {listNaver.map((ev) => compactNaverRow(ev))}
               </div>
             )}
-            {!scheduleRows.length && !listNaver.length && <StateBox kind="empty" message="등록된 일정이 없습니다." />}
+            {!scheduleRows.length && !listNaver.length && <StateBox kind="empty" message={normalizeScheduleQuery(listSearch) ? `"${listSearch.trim()}" 검색 결과가 없습니다 — 팀·금일/익일/예정 칩도 확인해 보세요.` : "등록된 일정이 없습니다."} />}
           </div>
 
           <div className={`hidden space-y-4 ${myPlanOpen || listDept ? "" : "lg:block"}`}>
@@ -2179,7 +2233,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 </section>
               ));
             })()}
-            {!scheduleRows.length && !listNaver.length && <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
+            {!scheduleRows.length && !listNaver.length && <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center text-sm font-semibold text-slate-400">{normalizeScheduleQuery(listSearch) ? `"${listSearch.trim()}" 검색 결과가 없습니다 — 팀·금일/익일/예정 칩도 확인해 보세요.` : "등록된 일정이 없습니다."}</div>}
           </div>
         </section>
       )}

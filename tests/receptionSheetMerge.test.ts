@@ -139,6 +139,6 @@ describe("현황판·홈 연결", () => {
     const teamSum = (["A", "B", "C", "D", "E", "경영", "운영", "영업"] as const).reduce((n, t) => n + c[t], 0);
     expect(teamSum).toBe(c["전체"]);
     // 기본값 [] — 기존 호출 무회귀
-    expect(mergeUnhandled(db, [], TODAY)).toHaveLength(db.length);
+    expect(mergeUnhandled(db, [], TODAY)).toHaveLength(db.filter((r) => r.type !== "복합기 AS").length); // 복합기 AS 접수는 일정 기준(2026-10-25)
   });
 });

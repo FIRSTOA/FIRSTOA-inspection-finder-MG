@@ -4,10 +4,15 @@
  *  · 머리 "미처리 n건" = 전체 행 수 = 팀 탭 합(A~E·경영·운영·영업·기타) = 종류 칸 합(복합기 AS·원격·IT·경영·운영·영업·AS 일정·물류)
  *  · 재계약 확인 지남 = kpiCompute.recontractOverdue(묶음 recontract, 무거운 원본이라 늦게 옴) — 팀·일정 행이 아니라 합계 밖 칸, 없으면 "—"
  * 전에는 이 칸이 자기 로더로 따로 읽었고, 옆 카드(HomeReceptionPanel)는 시트를 빼고 DB 접수만 셌다(접수 27 vs 435).
- * 탭(팀)·종류 칸(누르면 목록 거르기) → 목록은 "접수·AS" 묶음 + "물류" 묶음. 접수 행 → 서비스접수 미처리 현황, AS일정 행 → 일정리스트 미처리.
+ * 탭(팀)·종류 칸(누르면 목록 거르기) → 목록은 "접수·AS" 묶음 + "물류" 묶음. 접수 행 → 서비스접수 미처리 현황, CS접수(일정) 행 → 일정리스트 미처리.
  * 갱신은 HomeKpiBoard 가 한다(unhandled 는 60초 가벼운 원본, 숨은 화면·탭에서 쉼).
+ * 홈 3차(2026-10-25): 팀 탭 A~E 에 팀 색 점(min-h-11), 목록 줄 팀 글자는 팀 색 배지, team prop(홈 팀 카드 선택)이 오면 그 팀 탭으로. 숫자 로직 불변.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import FormModal from "./FormModal";
+import { teamColor, type TeamKey } from "./kpi/teamColors";
+import { kindsForTab } from "./kpi/teamBoard";
 import { CalendarClock } from "lucide-react";
 import { fieldTicketVendor } from "./ids";
 import { formatAssignees } from "./assignees";
@@ -17,7 +22,7 @@ import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
 import type { KpiBundle } from "./kpi/kpiData";
 import { unhandledParts } from "./kpi/homeKpiModel";
 import {
-  countUnhandledKinds, countUnhandledTabs, oldestUnhandled, rowsForTab, splitByGroup, UNHANDLED_BADGE, UNHANDLED_KIND_LABEL, UNHANDLED_KINDS,
+  countUnhandledKinds, countUnhandledTabs, oldestUnhandled, rowsForTab, splitByGroup, UNHANDLED_BADGE, UNHANDLED_KIND_LABEL,
   type UnhandledKind, type UnhandledRow, type UnhandledTab,
 } from "./homeUnhandled";
 
@@ -26,7 +31,15 @@ const TAB_GROUPS: UnhandledTab[][] = [["전체"], ["A", "B", "C", "D", "E"], ["�
 const DEPT_TEAMS = new Set(["경영", "운영", "영업"]);
 
 const dotOf = (k: UnhandledKind): string =>
-  k === "AS일정" || k === "물류" ? "bg-slate-400" : RECEPTION_TYPE_META[k as ReceptionType]?.dot || "bg-slate-400";
+  k === "CS접수" ? RECEPTION_TYPE_META["복합기 AS"].dot : k === "물류" ? "bg-slate-400" : RECEPTION_TYPE_META[k as ReceptionType]?.dot || "bg-slate-400";
+/** 팀 탭(A~E)만 팀 색 — 전체·경영·운영·영업·기타는 null(점 없음) */
+const tc = (t: string) => (t.length === 1 ? teamColor(t) : null);
+/** 목록 줄 팀 글자 배지(팀 색 옅은 배경 + 팀 색 글자, 11px). 색만으로 구별하지 않게 글자(A~D·CSS)도 함께 */
+function TeamBadge({ team }: { team: string }) {
+  const c = tc(team);
+  if (!c) return <span className="text-slate-500">{team}</span>;
+  return <span className="rounded px-1 text-[11px] font-black leading-4" style={{ backgroundColor: c.soft, color: c.text }}>{c.label}</span>;
+}
 const vendorOf = (r: UnhandledRow) => (r.source === "ticket" ? (fieldTicketVendor(r.vendor).vendor || r.vendor) : r.vendor);
 
 type Props = {
@@ -35,11 +48,18 @@ type Props = {
   onOpenOverdue: () => void;
   onOpenReception: () => void;
   onRetry?: () => void;
+  /** 홈 팀 카드에서 고른 팀(없으면 전체) — 바뀌면 그 팀 탭으로 옮긴다 */
+  team?: TeamKey | null;
 };
 
-export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenReception, onRetry }: Props) {
-  const [tab, setTab] = useState<UnhandledTab>("전체");
+export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenReception, onRetry, team = null }: Props) {
+  const [tab, setTab] = useState<UnhandledTab>(team ?? "전체");
+  // 팀 카드 선택이 바뀌면 탭을 따라 옮긴다(렌더 중 상태 맞춤 — effect 없이). 사용자가 탭을 직접 눌러도 다음 카드 선택 전까지 그대로
+  const [seenTeam, setSeenTeam] = useState<TeamKey | null>(team);
+  if (seenTeam !== team) { setSeenTeam(team); setTab(team ?? "전체"); }
   const [kind, setKind] = useState<UnhandledKind | null>(null);
+  const [detail, setDetail] = useState<UnhandledRow | null>(null);
+  const closeDetail = useCallback(() => setDetail(null), []);
   const rows = bundle?.facts.unhandled ?? null;
   const src = bundle?.sources.unhandled;
   const srcError = src && src.status !== "ok" ? src.error : "";
@@ -51,7 +71,11 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
   const counts = useMemo(() => countUnhandledTabs(rows || []), [rows]);
   const tabRows = useMemo(() => rowsForTab(rows || [], tab), [rows, tab]);
   const kinds = useMemo(() => countUnhandledKinds(tabRows), [tabRows]);
-  const list = useMemo(() => (kind ? tabRows.filter((r) => r.kind === kind) : tabRows), [tabRows, kind]);
+  // 고른 탭에 맞는 종류 칸만(2026-10-25) — 숫자는 그대로, 보이는 칸만 줄인다. 고른 칸이 숨겨지면 선택을 풀어 그 탭 전체 목록
+  const shownKinds = useMemo(() => kindsForTab(tab, kinds), [tab, kinds]);
+  const activeKind = kind && shownKinds.kinds.includes(kind) ? kind : null;
+  if (kind && !activeKind) setKind(null);
+  const list = useMemo(() => (activeKind ? tabRows.filter((r) => r.kind === activeKind) : tabRows), [tabRows, activeKind]);
   const groups = useMemo(() => splitByGroup(list), [list]);
   const oldest = useMemo(() => oldestUnhandled(tabRows), [tabRows]);
   const total = counts["전체"];
@@ -72,13 +96,13 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
         <span className="flex shrink-0 items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black text-slate-300">
           <span className={`h-1.5 w-1.5 rounded-full ${dotOf(r.kind)}`} aria-hidden />
           {UNHANDLED_BADGE[r.kind]}
-          {r.team && !DEPT_TEAMS.has(r.team) ? <span className="text-slate-500">{r.team}</span> : null}
+          {r.team && !DEPT_TEAMS.has(r.team) ? <TeamBadge team={r.team} /> : null}
         </span>
         <span className={`w-14 shrink-0 truncate text-right text-[11px] font-black ${r.assignee ? "text-slate-400" : "text-rose-300"}`}>{formatAssignees(r.assignee, { short: true }) || "미배정"}</span>
       </>
     );
-    if (r.kind === "물류") return <div className="flex w-full items-center gap-2.5 px-3 py-2 opacity-80">{body}</div>;
-    return <button type="button" onClick={r.source === "reception" ? openReception : onOpenOverdue} className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-white/[0.05]">{body}</button>;
+    // 2026-10-25 사용자 "제목을 누르면 탭 이동 말고 상세 팝업": 줄 → 상세 팝업, 이동은 팝업 안 [열기] 단추로
+    return <UnhandledRowButton row={r} onPick={setDetail}>{body}</UnhandledRowButton>;
   };
   // 작은 칸 — 종류 8칸(누르면 목록 거르기) + 재계약 확인 지남(합계 밖, 점선)
   const cell = (key: string, label: string, value: number | null, on: boolean, onClick?: () => void, note?: string) => (
@@ -95,7 +119,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
       <div className="flex flex-wrap items-center gap-2">
         <span className="flex items-center gap-1.5 text-[10.5px] font-black tracking-[0.18em] text-slate-400"><CalendarClock size={13} className={total ? "text-rose-300" : "text-emerald-300"} />미처리</span>
         <span className={`font-mono text-[13px] font-black ${total ? "text-rose-200" : "text-emerald-300"}`}>{rows === null ? "…" : `${total}건`}</span>
-        {rows !== null && tab !== "전체" && <span className="text-[10.5px] font-bold text-slate-500">{tab} {tabRows.length}건</span>}
+        {rows !== null && tab !== "전체" && <span className="text-[10.5px] font-bold text-slate-500">{tc(tab)?.label ?? tab} {tabRows.length}건</span>}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1">
         {TAB_GROUPS.map((group, gi) => {
@@ -108,8 +132,9 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
                 const n = counts[t];
                 const on = tab === t;
                 return (
-                  <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${on ? "bg-white text-slate-950" : n ? "bg-white/[0.06] text-rose-200 hover:text-white" : "bg-white/[0.06] text-slate-500 hover:text-slate-300"}`}>
-                    {t}{n ? <span className={`ml-1 font-mono ${on ? "text-rose-600" : ""}`}>{n}</span> : ""}
+                  <button key={t} type="button" onClick={() => setTab(t)} aria-pressed={on} className={`inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[11px] font-black transition ${on ? "bg-white text-slate-950" : n ? "bg-white/[0.06] text-rose-200 hover:text-white" : "bg-white/[0.06] text-slate-500 hover:text-slate-300"}`}>
+                    {tc(t) && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: tc(t)?.hex }} />}
+                    {tc(t)?.label ?? t}{n ? <span className={`font-mono ${on ? "text-rose-600" : ""}`}>{n}</span> : ""}
                   </button>
                 );
               })}
@@ -117,10 +142,13 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
           );
         })}
       </div>
-      <div className="mt-2.5 grid grid-cols-3 gap-1.5 sm:grid-cols-5 lg:grid-cols-9">
-        {UNHANDLED_KINDS.map((k) => cell(k, UNHANDLED_KIND_LABEL[k], rows === null ? null : kinds[k], kind === k, () => setKind(kind === k ? null : k)))}
-        {cell("recontract", "재계약 확인 지남", recontract, false, undefined, recState ? `${recState} · 합계 밖(업체 단위)` : "합계 밖(업체 단위) — 다음확인일이 지난 재계약")}
-      </div>
+      {/* 칸이 하나뿐이면(경영·운영·영업 탭) 칸 띠는 숨기고 목록 바로 */}
+      {(shownKinds.kinds.length + (shownKinds.recontract ? 1 : 0)) > 1 && (
+        <div className={`mt-2.5 grid grid-cols-3 gap-1.5 ${shownKinds.recontract ? "sm:grid-cols-5 lg:grid-cols-9" : "sm:grid-cols-5"}`}>
+          {shownKinds.kinds.map((k) => cell(k, UNHANDLED_KIND_LABEL[k], rows === null ? null : kinds[k], activeKind === k, () => setKind(activeKind === k ? null : k)))}
+          {shownKinds.recontract && cell("recontract", "재계약 확인 지남", recontract, false, undefined, recState ? `${recState} · 합계 밖(업체 단위)` : "합계 밖(업체 단위) — 다음확인일이 지난 재계약")}
+        </div>
+      )}
       {rows !== null && oldest && (
         <p className="mt-2 truncate text-[11px] font-bold text-slate-400">
           가장 오래된 건 · <span className="text-slate-200">{vendorOf(oldest) || oldest.title || "업체 미정"}</span> ({oldest.ageDays}일 · {UNHANDLED_BADGE[oldest.kind]})
@@ -140,7 +168,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
       )}
       <div className="mt-3 max-h-[320px] overflow-y-auto rounded-xl border border-white/[0.06]">
         {rows === null && <ul>{Array.from({ length: 3 }).map((_, i) => <li key={i} className="px-3 py-2.5"><div className="h-3.5 animate-pulse rounded bg-white/[0.06]" /></li>)}</ul>}
-        {rows !== null && !list.length && <p className="px-3 py-5 text-center text-[12px] font-bold text-emerald-300">{tab === "전체" ? "" : `${tab} `}{kind ? `${UNHANDLED_KIND_LABEL[kind]} ` : ""}미처리 없음</p>}
+        {rows !== null && !list.length && <p className="px-3 py-5 text-center text-[12px] font-bold text-emerald-300">{tab === "전체" ? "" : `${tc(tab)?.label ?? tab} `}{activeKind ? `${UNHANDLED_KIND_LABEL[activeKind]} ` : ""}미처리 없음</p>}
         {rows !== null && groups.work.length > 0 && (
           <section>
             <h4 className="sticky top-0 bg-slate-900/95 px-3 py-1.5 text-[10.5px] font-black tracking-wide text-slate-300">접수·AS <span className="font-mono text-rose-200">{groups.work.length}건</span></h4>
@@ -158,6 +186,55 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
         <button type="button" onClick={openReception} className="text-[11px] font-black text-blue-300 transition hover:text-white">접수 미처리 현황 →</button>
         <button type="button" onClick={onOpenOverdue} className="text-[11px] font-black text-blue-300 transition hover:text-white">AS 일정리스트 →</button>
       </div>
+      {detail && typeof document !== "undefined" && createPortal(
+        <UnhandledDetail row={detail} onClose={closeDetail} onOpen={detail.kind === "물류" ? undefined : () => { setDetail(null); if (detail.source === "reception") openReception(); else onOpenOverdue(); }} />,
+        document.body,
+      )}
     </div>
+  );
+}
+
+/** 목록 한 줄 단추 — 누르면 상세 팝업(onPick)만. 화면 이동 콜백은 받지 않는다(이동은 팝업 안 [열기]) */
+export function UnhandledRowButton({ row, onPick, children }: { row: UnhandledRow; onPick: (r: UnhandledRow) => void; children: ReactNode }) {
+  return (
+    <button type="button" onClick={() => onPick(row)} aria-haspopup="dialog" className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-white/[0.05] ${row.kind === "물류" ? "opacity-80" : ""}`}>
+      {children}
+    </button>
+  );
+}
+
+/**
+ * 미처리 상세 팝업(FormModal — 폰은 아래서 올라오는 시트). 이미 받은 행 값만(새 조회 없음), 글은 평문(HTML 해석 안 함).
+ * onOpen 없으면(물류) 열기 단추 없음 — 물류는 네이버 캘린더에서 완료 처리.
+ */
+export function UnhandledDetail({ row, onClose, onOpen }: { row: UnhandledRow; onClose: () => void; onOpen?: () => void }) {
+  const vendor = vendorOf(row);
+  const c = tc(row.team);
+  const field = (label: string, value: ReactNode) => (
+    <div className="flex gap-3 text-[13px]"><dt className="w-16 shrink-0 font-bold text-slate-500">{label}</dt><dd className="min-w-0 flex-1 break-words font-semibold text-slate-800">{value}</dd></div>
+  );
+  return (
+    <FormModal
+      title={vendor || row.title || "(업체 없음)"}
+      subtitle={`${UNHANDLED_KIND_LABEL[row.kind]} 미처리 · ${row.source === "reception" ? "서비스접수" : "AS 일정"}`}
+      onClose={onClose}
+      footer={<>
+        <button type="button" onClick={onClose} className="min-h-11 rounded-xl bg-white px-4 text-[13px] font-black text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-100">닫기</button>
+        {onOpen && <button type="button" onClick={onOpen} className="min-h-11 rounded-xl bg-blue-600 px-4 text-[13px] font-black text-white transition hover:bg-blue-500">{row.source === "reception" ? "서비스접수에서 열기" : "AS 일정리스트에서 열기"}</button>}
+      </>}
+    >
+      <dl className="space-y-2">
+        {field("종류", UNHANDLED_KIND_LABEL[row.kind])}
+        {field("팀", c ? <span className="rounded px-1.5 py-0.5 text-[12px] font-black text-slate-900" style={{ backgroundColor: c.hex }}>{c.label}</span> : row.team || "없음")}
+        {field("접수일", `${row.date || "—"} · ${row.ageDays ? `${row.ageDays}일 지남` : "오늘"}`)}
+        {field("담당자", formatAssignees(row.assignee) || <span className="text-rose-600">미배정</span>)}
+        {field("상태", row.status || "—")}
+      </dl>
+      <div>
+        <div className="mb-1 text-[12px] font-bold text-slate-500">내용</div>
+        <p className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-slate-800">{row.title || "(내용 없음)"}</p>
+      </div>
+      {row.kind === "물류" && <p className="text-[12px] font-bold text-slate-500">물류는 네이버 캘린더에서 완료 처리하면 사라집니다.</p>}
+    </FormModal>
   );
 }

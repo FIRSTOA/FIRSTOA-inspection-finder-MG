@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { isMobileDevice } from "./navApp";
 import { dirFromKey, moveCellFocus, nextCell, type CellDir } from "./cellNav";
 import { beginDrag, clearCells, clearRange, copyText, dragOver, extendTo, hasRange, pasteText, rangeAnchor, rangeFocus, redo, rememberCells, setAnchor, undo } from "./cellRange";
-import { RICH_COLORS, richToText, sanitizeRich, textToHtml, type RichColorKey } from "./richText";
+import { RICH_COLORS, richToText, sanitizeRich, shouldRepaint, textToHtml, type RichColorKey } from "./richText";
 
 type Mode = "idle" | "selected" | "editing";
 
@@ -36,10 +36,11 @@ export default function RichCell({ text, html, onChange, placeholder = "", class
     // 읽기전용(팀원 칸)으로 그리는 동안엔 편집 상자가 없다 — 파트 종합으로 돌아와 상자가 새로 생기면 글이 같아도 다시 그린다
     // (같은 글이라 건너뛰어서 목표·달성기준 칸이 빈 채로 보였다, 2026-09-29)
     if (!el) { lastRef.current = null; return; }
-    if (wanted === lastRef.current) return;
+    // 편집 중엔 다시 그리지 않는다 — 돌아온 값이 trim·NBSP 로 달라 보여도 innerHTML 을 바꾸면 커서가 맨 앞으로 튄다(shouldRepaint, 2026-10-25)
+    if (!shouldRepaint(wanted, lastRef.current, mode === "editing")) return;
     el.innerHTML = wanted;
     lastRef.current = wanted;
-  }, [wanted, readOnly]);
+  }, [wanted, readOnly, mode]);
   // 다른 칸에서 붙여넣기·지우기로 넘어온 글(cell-set, cellRange.ts) — 평문으로 넣고 저장
   const onChangeRef = useRef(onChange);
   useEffect(() => { onChangeRef.current = onChange; });

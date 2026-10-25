@@ -2,14 +2,19 @@
  * 홈 "미처리" 칸의 순수 로직 — 접수(6종) 미처리 + 일정(as_tickets) 미처리를 한 목록으로 (2026-10-19).
  * 중복 규칙: AS 일정 중 receptionId 가 열린 접수에 이미 있으면 접수 행으로만 센다. 물류 일정은 전부 넣는다.
  * 2026-10-24: 홈의 모든 미처리 숫자(머리 합계·팀 탭·종류 칸·물류·가장 오래된 건)는 이 파일의 mergeUnhandled 결과 한 벌에서만 센다.
- *  · 물류 = overdueLogic.isLogisticsSchedule(현황판 물류 칸과 같은 정의). 익일AS 는 AS일정.
+ *  · 물류 = overdueLogic.isLogisticsSchedule(현황판 물류 칸과 같은 정의). 익일AS 는 CS접수(2026-10-25 전엔 AS일정).
  *  · 팀이 없는 일정(일정 팀 "기타" 등)은 "기타" 탭 — 탭 합 = 전체.
+ * 2026-10-25(사용자 "복합기 AS 는 캘린더 기준"): CS접수 칸 = 일정(as_tickets) 미처리(overdueLogic.isOverdueTicket, 일정리스트 [미처리]와 같은 판정).
+ *  · 복합기 AS 접수(service_receptions)는 미처리로 세지 않는다 — 일정 미등록·네이버에서만 완료한 접수가 영영 열린 채 남아
+ *    "일정리스트엔 없는데 홈엔 있음"(실측 C팀 8건)이 됐다. 옛 "복합기 AS"·"AS일정" 칸은 "CS접수" 한 칸으로 합쳤다.
+ *  · 원격·IT·경영·운영·영업 접수는 그대로 접수(시트/DB) 기준.
  */
 import { isStaleRemote, normalizeRegion } from "./deptReception";
-import { isLogisticsSchedule } from "./overdueLogic";
+import { isLogisticsSchedule, isOverdueTicket } from "./overdueLogic";
 import type { SheetOpenRow } from "./receptionSheetOpen";
 
-export type UnhandledKind = "복합기 AS" | "원격이관" | "IT" | "경영지원" | "운영지원" | "영업팀" | "AS일정" | "물류";
+/** CS접수 = 일정(as_tickets) 미처리 중 물류 아닌 것(2026-10-25, 옛 "복합기 AS" 접수 칸 + "AS일정" 칸을 합침 — 사용자 "우리한테 접수된 것들이니") */
+export type UnhandledKind = "CS접수" | "원격이관" | "IT" | "경영지원" | "운영지원" | "영업팀" | "물류";
 export type UnhandledTeam = "A" | "B" | "C" | "D" | "E" | "경영" | "운영" | "영업" | "";
 export type UnhandledRow = {
   key: string;
@@ -37,6 +42,8 @@ export type TicketInput = {
 };
 
 const FIELD_TYPES = new Set(["복합기 AS", "원격이관", "IT"]);
+/** 홈 미처리에 접수 행으로 세는 종류 — 복합기 AS 는 빠짐(일정 기준, 2026-10-25) */
+const RECEPTION_KINDS = new Set<string>(["원격이관", "IT", "경영지원", "운영지원", "영업팀"]);
 const DEPT_TEAM: Record<string, UnhandledTeam> = { 경영지원: "경영", 운영지원: "운영", 영업팀: "영업" };
 const LETTERS = new Set(["A", "B", "C", "D", "E"]);
 
@@ -84,8 +91,10 @@ export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInpu
   }
   for (const r of receptions) {
     if (isStaleRemote(r, today)) continue; // 7일 지난 원격대기 = 원격팀 처리로 봄
+    // 복합기 AS(와 종류 모르는 접수)는 일정(as_tickets) 기준 — 접수 행은 세지 않고, 연결 일정도 중복으로 빼지 않는다
+    if (!RECEPTION_KINDS.has(r.type)) continue;
+    const kind = r.type as UnhandledKind;
     openIds.add(String(r.id));
-    const kind = (FIELD_TYPES.has(r.type) || DEPT_TEAM[r.type] ? r.type : "복합기 AS") as UnhandledKind;
     const date = String(r.receipt_date || r.created_at || "").slice(0, 10);
     out.push({
       key: `r:${r.id}`, source: "reception", kind, team: receptionTeam(r.type, r.region), date,
@@ -95,12 +104,13 @@ export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInpu
     });
   }
   for (const t of tickets) {
+    if (!isOverdueTicket(t, today)) continue; // 일정리스트 [미처리]와 같은 판정(부르는 쪽 조회 조건과 같지만 정의를 한 곳에)
     const logistics = isLogisticsSchedule(t.scheduleType);
     const rid = String(t.receptionId || "");
     if (!logistics && rid && openIds.has(rid)) continue; // 접수 행과 중복
     const date = String(t.date || "").slice(0, 10);
     out.push({
-      key: `t:${t.id}`, source: "ticket", kind: logistics ? "물류" : "AS일정", team: ticketTeam(t.team), date,
+      key: `t:${t.id}`, source: "ticket", kind: logistics ? "물류" : "CS접수", team: ticketTeam(t.team), date,
       vendor: String(t.vendor || ""), title: String(t.issue || ""), assignee: String(t.assignee || ""),
       status: String(t.status || ""), ageDays: ageDaysOf(date, today), ...(rid ? { receptionId: rid } : {}),
     });
@@ -142,10 +152,10 @@ export function countUnhandledTabs(rows: UnhandledRow[]): Record<UnhandledTab, n
   return out;
 }
 
-/** 종류 칸 순서(홈 미처리 칸) — 이 8칸의 합 = 전체 */
-export const UNHANDLED_KINDS: UnhandledKind[] = ["복합기 AS", "원격이관", "IT", "경영지원", "운영지원", "영업팀", "AS일정", "물류"];
+/** 종류 칸 순서(홈 미처리 칸) — 이 7칸의 합 = 전체 */
+export const UNHANDLED_KINDS: UnhandledKind[] = ["CS접수", "원격이관", "IT", "경영지원", "운영지원", "영업팀", "물류"];
 export const UNHANDLED_KIND_LABEL: Record<UnhandledKind, string> = {
-  "복합기 AS": "복합기 AS", 원격이관: "원격", IT: "IT", 경영지원: "경영", 운영지원: "운영", 영업팀: "영업", AS일정: "AS 일정", 물류: "물류",
+  CS접수: "CS 접수", 원격이관: "원격", IT: "IT", 경영지원: "경영", 운영지원: "운영", 영업팀: "영업", 물류: "물류",
 };
 
 /** 종류별 건수(UNHANDLED_KINDS 전부, 없으면 0) */
@@ -164,5 +174,5 @@ export function oldestUnhandled(rows: UnhandledRow[]): UnhandledRow | null {
 
 /** 행 배지 글자 */
 export const UNHANDLED_BADGE: Record<UnhandledKind, string> = {
-  "복합기 AS": "복합기", 원격이관: "원격", IT: "IT", 경영지원: "경영", 운영지원: "운영", 영업팀: "영업", AS일정: "AS", 물류: "납품·물류",
+  CS접수: "CS", 원격이관: "원격", IT: "IT", 경영지원: "경영", 운영지원: "운영", 영업팀: "영업", 물류: "납품·물류",
 };

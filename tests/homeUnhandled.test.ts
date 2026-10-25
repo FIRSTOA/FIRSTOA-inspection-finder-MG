@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { countUnhandledTabs, filterUnhandled, mergeUnhandled, receptionTeam, rowsForTab, splitByGroup, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
+import { countUnhandledKinds, countUnhandledTabs, filterUnhandled, mergeUnhandled, receptionTeam, rowsForTab, splitByGroup, UNHANDLED_KINDS, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
+import { isOverdueTicket } from "../src/overdueLogic";
 
 const today = "2026-10-19";
 const rec = (id: string, type: string, region: string, date: string, handler = ""): ReceptionInput => ({
@@ -16,7 +17,7 @@ const receptions = [
   rec("r4", "영업팀", "", "2026-10-18"),
 ];
 const tickets = [
-  tic("t1", "AS", "A", "2026-10-11", "r1"),       // 열린 접수 r1 과 중복 → 제외
+  tic("t1", "AS", "A", "2026-10-11", "r1"),       // 복합기 AS 접수 r1 은 세지 않으므로 일정으로 센다(2026-10-25)
   tic("t2", "AS", "C", "2026-10-05", "gone"),     // 접수가 닫혔거나 90일 밖 → AS일정
   tic("t3", "AS", "D", "2026-10-16"),             // 접수 연결 없음 → AS일정
   tic("t4", "납품철수교체휴가교육", "B", "2026-10-01", "r3"), // 물류는 연결 있어도 포함
@@ -26,12 +27,12 @@ const tickets = [
 describe("홈 미처리 토탈", () => {
   const rows = mergeUnhandled(receptions, tickets, today);
 
-  it("AS 일정은 열린 접수와 겹치면 빼고, 아니면 AS일정으로 넣는다", () => {
-    expect(rows.find((r) => r.key === "t:t1")).toBeUndefined();
-    expect(rows.find((r) => r.key === "t:t2")?.kind).toBe("AS일정");
-    expect(rows.find((r) => r.key === "t:t3")?.kind).toBe("AS일정");
-    expect(rows.filter((r) => r.source === "reception")).toHaveLength(4);
+  it("복합기 AS 는 일정 기준: 복합기 접수 행은 빼고, AS 일정은 전부 CS접수 칸", () => {
+    expect(rows.find((r) => r.key === "r:r1")).toBeUndefined();
+    for (const k of ["t:t1", "t:t2", "t:t3"]) expect(rows.find((r) => r.key === k)?.kind).toBe("CS접수");
+    expect(rows.filter((r) => r.source === "reception").map((r) => r.receptionId).sort()).toEqual(["r2", "r3", "r4"]);
     expect(rows).toHaveLength(8);
+    expect(UNHANDLED_KINDS as string[]).toEqual(["CS접수", "원격이관", "IT", "경영지원", "운영지원", "영업팀", "물류"]); // 옛 복합기 AS·AS일정 칸 없음
   });
 
   it("물류(납품철수교체휴가교육·물류)는 전부 들어가고 팀은 일정 팀", () => {
@@ -82,5 +83,50 @@ describe("mergeUnhandled 원격대기 7일 규칙", () => {
       rec("s3", "원격이관", "A", "2026-09-01"),
     ], [], today);
     expect(rows.map((r) => r.receptionId).sort()).toEqual(["s2", "s3"]);
+  });
+});
+
+// 재현(2026-10-25 사용자 스크린샷): C팀 "접수·AS 8건" — 복합기 AS 접수(service_receptions 접수/진행중)가 일정 없이(6건) 또는
+// 다음 날 일정(2건)만 있어서 일정리스트 [미처리]엔 없는데 홈 미처리엔 남았다.
+describe("홈 CS접수 = 일정리스트 [미처리]와 같은 판정(2026-10-25)", () => {
+  const t = "2026-10-25";
+  const copier = (id: string, date: string, status = "접수"): ReceptionInput => ({ ...rec(id, "복합기 AS", "수도권C", date), status });
+  const rs = [
+    copier("c1", "2026-08-18", "진행중"), // 20SS선도전기 — 네이버에서만 완료, 연결 일정 없음
+    copier("c2", "2026-09-03"),           // 에이준재활의학과 — 일정 없음
+    copier("c3", "2026-10-23"),           // 와이즈조인 — 일정 10-26(익일)
+    rec("x1", "원격이관", "수도권C", "2026-10-20"),
+  ];
+  const ts: TicketInput[] = [
+    { ...tic("k1", "익일AS", "C", "2026-10-26", "c3"), status: "익일" }, // 아직 날짜 안 지남
+    tic("k2", "AS", "C", "2026-10-24"),                                   // 지난 날짜·미완료 → 미처리
+    { ...tic("k3", "AS", "C", "2026-10-20"), status: "완료" },
+    tic("k4", "매월점검", "C", "2026-10-10"),
+    tic("k5", "익일AS", "C", "2026-10-22"),
+    tic("k6", "납품철수교체휴가교육", "C", "2026-10-21"),
+    tic("k7", "AS", "C", t),                                              // 오늘 = 아직 미처리 아님
+    tic("k8", "AS", "C", "2026-10-19", "x1"),                             // 열린 원격 접수와 이어진 일정 → 접수 행으로만
+  ];
+  const rows = mergeUnhandled(rs, ts, t);
+
+  it("일정 없는·날짜 안 지난 복합기 접수는 홈 미처리에 없다", () => {
+    for (const id of ["c1", "c2", "c3"]) expect(rows.find((r) => r.receptionId === id)).toBeUndefined();
+    expect(rows.find((r) => r.key === "t:k1")).toBeUndefined();
+  });
+
+  it("CS접수 칸 + 물류 칸 = 일정리스트 [미처리] 건수(같은 함수) − 열린 원격·IT 접수와 이어진 일정", () => {
+    const kinds = countUnhandledKinds(rows);
+    const listOverdue = ts.filter((x) => isOverdueTicket(x, t)); // CsAsWorkspace overdueCount 와 같은 조건
+    expect(listOverdue.map((x) => x.id).sort()).toEqual(["k2", "k5", "k6", "k8"]);
+    expect(kinds["CS접수"] + kinds["물류"]).toBe(listOverdue.length - 1); // k8 은 원격 접수 x1 행으로 센다
+    expect(rows.filter((r) => r.kind === "CS접수").map((r) => r.key).sort()).toEqual(["t:k2", "t:k5"]);
+    expect(rows.find((r) => r.receptionId === "x1" && r.source === "reception")?.kind).toBe("원격이관");
+  });
+
+  it("isOverdueTicket: 지난 날짜·완료 아님·매월점검 아님", () => {
+    expect(isOverdueTicket({ date: "2026-10-24", status: "배정", scheduleType: "AS" }, t)).toBe(true);
+    expect(isOverdueTicket({ date: t, status: "배정", scheduleType: "AS" }, t)).toBe(false);
+    expect(isOverdueTicket({ date: "2026-10-24", status: "완료", scheduleType: "AS" }, t)).toBe(false);
+    expect(isOverdueTicket({ date: "2026-10-24", status: "배정", scheduleType: "매월점검" }, t)).toBe(false);
   });
 });

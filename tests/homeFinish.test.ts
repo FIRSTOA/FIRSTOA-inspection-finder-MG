@@ -109,7 +109,7 @@ describe("마지막 값 캐시 v2 — 미처리 합계", () => {
     expect(u.kinds.reduce((n, k) => n + k.value, 0)).toBe(Object.values(kinds).reduce((n, v) => n + v, 0));
     expect(u.tabs.find((t) => t.label === "CSS")?.value).toBe(tabs.E); // E 는 CSS 로
     expect(u.recontract).toBe(3);
-    expect(u.oldest).toMatch(/가 \(13일/);
+    expect(u.oldest).toMatch(/나 \(11일/); // 복합기 AS 접수 "가"는 일정 기준이라 미처리 밖(2026-10-25)
   });
   it("캐시에 들어가고(원본 ok 일 때만), 키·버전은 v2", () => {
     expect(HOME_KPI_SNAPSHOT_KEY).toBe("home_kpi_snapshot_v2");
