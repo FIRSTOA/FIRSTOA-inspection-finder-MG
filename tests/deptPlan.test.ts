@@ -7,6 +7,7 @@ import { DEPT_RIGHT_VIEWS, parseDeptRightView } from "../src/receptionRightView"
 import { deptMonthGrid, shiftDeptMonth } from "../src/deptCalendarView";
 import { invalidateConfigCaches } from "../src/supabase";
 import type { DeptCalEvent } from "../src/deptCalendarView";
+import { rowsForTab, type UnhandledRow } from "../src/homeUnhandled";
 
 const TODAY = "2026-10-23"; // 금요일 → 다음 영업일 10-26(월)
 const r = (id: string, schedule: string, over: Partial<PlanRow> = {}): PlanRow => ({
@@ -16,23 +17,38 @@ const ev = (id: string, date: string, over: Partial<DeptCalEvent> = {}): DeptCal
   id, team: "영업팀", date, time: "", title: `일정${id}`, memo: "", author: "", receptionId: "", done: false, ...over,
 });
 
+const un = (key: string, date: string, over: Partial<UnhandledRow> = {}): UnhandledRow => ({
+  key, source: "reception", kind: "영업팀", team: "영업", date, vendor: `업체${key}`, title: "", assignee: "", status: "접수", ageDays: 5, ...over,
+});
+
 describe("deptPlanBuckets", () => {
-  it("금일·익일(주말 포함 ~ 월요일)·예정·미처리(지남+없음)로 나눈다", () => {
+  it("금일·익일(주말 포함 ~ 월요일)·예정으로 나눈다(지남·없음은 미처리 묶음 아님)", () => {
     const rows = [r("a", TODAY), r("b", "2026-10-24"), r("c", "2026-10-26"), r("d", "2026-10-27"), r("e", "2026-10-20"), r("f", "")];
     const b = deptPlanBuckets("영업팀", rows, [], TODAY);
     expect(b.today.map((x) => x.key)).toEqual(["r:a"]);
     expect(b.next.map((x) => x.key)).toEqual(["r:b", "r:c"]);
     expect(b.later.map((x) => x.key)).toEqual(["r:d"]);
-    expect(b.overdue.map((x) => x.key).sort()).toEqual(["r:e", "r:f"]);
+    // 예정일 지남(e)·없음(f)은 더 이상 [미처리]로 가지 않는다 — 미처리는 미처리현황 행(unhandled)만(2026-10-25)
+    expect(b.overdue).toHaveLength(0);
   });
 
-  it("다른 부서·완료·취소는 빼고, 미처리는 접수일 오래된 순", () => {
-    const rows = [
-      r("x", "", { type: "경영지원" }), r("y", "", { status: "완료" }), r("z", "", { status: "취소" }),
-      r("new", "", { receipt_date: "2026-10-20" }), r("old", "", { receipt_date: "2026-09-01" }), r("hold", "2026-10-01", { status: "보류", receipt_date: "2026-10-05" }),
+  it("다른 부서·완료·취소는 날짜 묶음에서 빼고, 미처리는 미처리현황 행을 접수일 오래된 순으로", () => {
+    // 사유: 예전엔 DB 열린 접수 중 예정일 지남·없음을 미처리로 셌지만, 사용자 결정(2026-10-25)으로 미처리 = 미처리현황(시트 이력 포함)과 동일
+    const rows = [r("x", TODAY, { type: "경영지원" }), r("y", TODAY, { status: "완료" }), r("z", TODAY, { status: "취소" })];
+    const b = deptPlanBuckets("영업팀", rows, [], TODAY, [un("s:sales:9", "2026-10-20"), un("s:sales:2", "2026-09-01"), un("a1", "2026-10-05")]);
+    expect(b.today).toHaveLength(0);
+    expect(b.overdue.map((x) => x.key)).toEqual(["u:s:sales:2", "u:a1", "u:s:sales:9"]);
+  });
+
+  it("일정리스트 미처리 수 = 미처리현황(rowsForTab 부서) 수", () => {
+    const all = [
+      un("s:sales:2", "2026-09-01"), un("a1", "2026-10-05"),
+      un("s:mgmt:7", "2026-10-01", { team: "경영", kind: "경영지원" }),
     ];
-    const b = deptPlanBuckets("영업팀", rows, [], TODAY);
-    expect(b.overdue.map((x) => x.key)).toEqual(["r:old", "r:hold", "r:new"]);
+    const board = rowsForTab(all, "영업");
+    const b = deptPlanBuckets("영업팀", [], [], TODAY, board);
+    expect(board.length).toBeGreaterThan(0);
+    expect(b.overdue.length).toBe(board.length);
   });
 
   it("부서 일정: 접수와 연결된 것·지난 날·다른 부서는 빼고 날짜 묶음에만", () => {
@@ -47,7 +63,7 @@ describe("deptPlanBuckets", () => {
     const b = deptPlanBuckets("영업팀", [r("a", TODAY)], [ev("1", TODAY, { done: true }), ev("2", TODAY)], TODAY);
     expect(defaultPlanBucket(b)).toBe("today");
     expect(planTodoCount(b)).toBe(2);
-    const b2 = deptPlanBuckets("영업팀", [r("a", "")], [], TODAY);
+    const b2 = deptPlanBuckets("영업팀", [], [], TODAY, [un("s:sales:2", "2026-09-01")]);
     expect(defaultPlanBucket(b2)).toBe("overdue");
     expect(planTodoCount(b2)).toBe(1);
   });

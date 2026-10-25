@@ -3,7 +3,8 @@
  * 설계: docs/tasks/dept-mini-workspace.md. 접수리스트는 ServiceReception 의 기존 목록(부서 필터)을 그대로 쓴다.
  *
  * 데이터
- * - 일정리스트 = fetchOpenReceptions(90) 중 이 부서 + team_calendar_events 중 접수와 연결 안 된 부서 일정(오늘~90일) → deptPlanBuckets.
+ * - 일정리스트 [금일/익일/예정] = fetchOpenReceptions(90) 중 이 부서 + team_calendar_events 중 접수와 연결 안 된 부서 일정(오늘~90일) → deptPlanBuckets.
+ *   [미처리] = 아래 미처리현황과 같은 행(boardRows, 시트 이력 포함 — 사용자 2026-10-25 "동일해야지"). 숫자·목록이 같고 조회는 load() 한 번.
  * - 달력(2026-10-25) = DeptCalendarPanel compact(그 부서 달력 추가·수정·삭제). 일정·캘린더 탭의 부서 칩은 없어졌다.
  * - 미처리현황 = 홈과 같은 kpi/kpiData.loadUnhandledRows() → homeUnhandled.rowsForTab(부서 탭). 숫자가 홈 "경영/운영/영업" 탭과 같다.
  *   시트 행(시트 기준 스위치 켬)은 FIELD 에서 처리할 수 없어 [시트에서 열기]만 붙인다.
@@ -17,7 +18,9 @@ import { fetchOpenReceptions, type OpenReceptionRow } from "./deptReceptionApi";
 import { deptCalEditPatch, deptCalFormOf, deptCalQuery, deptMonthGrid, emptyDeptCalForm, shiftDeptMonth, toDeptCalEvent, type DeptCalEvent, type DeptCalForm } from "./deptCalendarView";
 import { resolveActor, runDeptAction, saveDeptCalEdit, warnTone, type DeptRowLike } from "./deptReceptionFlow";
 import { DEPT_UNHANDLED_TAB, deptMemberNames, deptPlanBuckets, defaultPlanBucket, planTodoCount, sheetKeyOf, type PlanBucket } from "./deptPlan";
+import { createPortal } from "react-dom";
 import { rowsForTab, UNHANDLED_BADGE, type UnhandledRow } from "./homeUnhandled";
+import { UnhandledDetail } from "./HomeUnhandledPanel";
 import { deptSheetUrl, sheetRowUrl } from "./receptionSheetOpen";
 import { DEPT_RIGHT_VIEWS, type DeptRightView } from "./receptionRightView";
 import type { DeptType } from "./deptReception";
@@ -92,6 +95,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   const [rows, setRows] = useState<OpenReceptionRow[]>([]);
   const [events, setEvents] = useState<DeptCalEvent[]>([]);
   const [unhandled, setUnhandled] = useState<UnhandledRow[]>([]);
+  const [detail, setDetail] = useState<UnhandledRow | null>(null);
   const [unNote, setUnNote] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,10 +152,11 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   };
   const patchRow = (next: DeptRowLike) => setRows((cur) => cur.map((r) => (r.id === next.id ? ({ ...r, ...next } as OpenReceptionRow) : r)));
 
-  const buckets = useMemo(() => deptPlanBuckets(dept, rows, events, today), [dept, rows, events, today]);
-  const shownBucket = bucket ?? defaultPlanBucket(buckets);
   const closedIds = useMemo(() => new Set(rows.filter((r) => r.status === "완료" || r.status === "취소").map((r) => r.id)), [rows]);
+  // 미처리현황 줄 = 일정리스트 [미처리] 줄(배열 하나를 두 탭이 공유, 조회도 load() 한 번)
   const boardRows = useMemo(() => unhandled.filter((u) => !(u.receptionId && closedIds.has(u.receptionId) && !sheetKeyOf(u.key))), [unhandled, closedIds]);
+  const buckets = useMemo(() => deptPlanBuckets(dept, rows, events, today, boardRows), [dept, rows, events, today, boardRows]);
+  const shownBucket = bucket ?? defaultPlanBucket(buckets);
   const sheetCount = boardRows.filter((u) => sheetKeyOf(u.key)).length;
   const planCount = planTodoCount(buckets);
   useEffect(() => { if (!loading) onCounts?.({ plan: planCount, board: boardRows.length }); }, [planCount, boardRows.length, loading, onCounts]);
@@ -194,6 +199,18 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
 
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const actions = (row: DeptRowLike) => <DeptActionBar row={row} compact author={author} onChanged={(next) => { patchRow(next); settle(); }} />;
+  // 미처리 줄 아래 단추 — 일정리스트 [미처리]와 미처리현황이 같이 쓴다
+  const unhandledActions = (u: UnhandledRow) => {
+    const sk = sheetKeyOf(u.key);
+    if (sk) return (
+      <a href={sheetRowUrl(sk.source, sk.row)} target="_blank" rel="noopener noreferrer"
+        className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-[12px] font-black text-emerald-800 hover:bg-emerald-100 sm:min-h-8">
+        <ExternalLink size={12} aria-hidden />시트에서 열기 ({sk.row}행)
+      </a>
+    );
+    const src = u.receptionId ? rowById.get(u.receptionId) : undefined;
+    return u.receptionId ? actions(src || { id: u.receptionId, type: dept, vendor: u.vendor, author: "", status: u.status }) : null;
+  };
 
   // 달력에서 고치고 일정리스트로 돌아오면 다시 읽는다(달력은 자기 조회를 따로 한다)
   const prevView = useRef(view);
@@ -216,7 +233,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
               className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full bg-blue-600 px-3 text-[11px] font-black text-white hover:bg-blue-700 sm:min-h-8"><Plus size={12} aria-hidden />일정 추가</button>
           </div>
           <DeptPlanList buckets={buckets} active={shownBucket} onActive={setBucket} loading={loading} assigningId={assigningId}
-            onAssign={openAssign} onOpenEvent={(ev) => setEdit({ ev, form: deptCalFormOf(ev) })} renderActions={actions} />
+            renderUnhandled={unhandledActions} onOpenUnhandled={setDetail} onAssign={openAssign} onOpenEvent={(ev) => setEdit({ ev, form: deptCalFormOf(ev) })} renderActions={actions} />
         </>
       ) : view === "cal" ? (
         <DeptCalendarPanel key={dept} team={dept} month={calMonth} days={calDays} today={today} mode="calendar" compact
@@ -233,9 +250,9 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
             {!loading && !boardRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">미처리가 없습니다.</div>}
             {boardRows.map((u) => {
               const sk = sheetKeyOf(u.key);
-              const src = u.receptionId ? rowById.get(u.receptionId) : undefined;
               return (
                 <div key={u.key} className="space-y-1.5 px-3 py-2.5">
+                  <button type="button" onClick={() => setDetail(u)} aria-haspopup="dialog" className="block min-h-11 w-full space-y-1.5 text-left">
                   <div className="flex items-center gap-1.5">
                     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${sk ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{sk ? "시트" : UNHANDLED_BADGE[u.kind]}</span>
                     <span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{u.vendor || "업체 미정"}</span>
@@ -243,18 +260,16 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
                   </div>
                   <div className="truncate text-[12px] font-semibold text-slate-500">{u.title || "-"}</div>
                   <div className="text-[11px] font-bold text-slate-400">처리 {u.assignee || <span className="text-rose-500">미배정</span>} · {u.status || "접수"}</div>
-                  {sk ? (
-                    <a href={sheetRowUrl(sk.source, sk.row)} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-[12px] font-black text-emerald-800 hover:bg-emerald-100 sm:min-h-8">
-                      <ExternalLink size={12} aria-hidden />시트에서 열기 ({sk.row}행)
-                    </a>
-                  ) : u.receptionId ? actions(src || { id: u.receptionId, type: dept, vendor: u.vendor, author: "", status: u.status }) : null}
+                  </button>
+                  {unhandledActions(u)}
                 </div>
               );
             })}
           </div>
         </div>
       )}
+
+      {detail && typeof document !== "undefined" && createPortal(<UnhandledDetail row={detail} onClose={() => setDetail(null)} />, document.body)}
 
       {assignRow && (names.length ? (
         <AssigneePicker names={names} value={String(assignRow.remote_meta?.handler || "")} max={1} title="처리자 배정"

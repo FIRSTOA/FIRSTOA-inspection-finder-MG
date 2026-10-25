@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "01c1469eb4",
+    "agent": "developer",
+    "summary": "서비스접수 올인원: 일정·캘린더 탭 부서 칩 제거 + 부서 미니 업무공간 [달력]·[＋ 일정 추가] + 시트 행 복구(엣지 37초>20초) + OKR 파트 탭 행 추가·삭제·확인창"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "01c1469eb4",
+    "agent": "debugger",
+    "summary": "서비스접수 올인원: 일정·캘린더 탭 부서 칩 제거 + 부서 미니 업무공간 [달력]·[＋ 일정 추가] + 시트 행 복구(엣지 37초>20초) + OKR 파트 탭 행 추가·삭제·확인창"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "01c1469eb4",
+    "agent": "qa-checker",
+    "summary": "서비스접수 올인원: 일정·캘린더 탭 부서 칩 제거 + 부서 미니 업무공간 [달력]·[＋ 일정 추가] + 시트 행 복구(엣지 37초>20초) + OKR 파트 탭 행 추가·삭제·확인창"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "906b0b7019",
     "agent": "feature-planner",
     "summary": "OKR 표 행 추가·삭제·보관(분기·월, 재번호 없이 max+1, 기록 있으면 보관) + 칸 Ctrl+Z 를 칸별 기록으로"

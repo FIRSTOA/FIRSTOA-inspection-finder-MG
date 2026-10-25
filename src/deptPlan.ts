@@ -6,6 +6,7 @@
 import { defaultHandler, type DeptType } from "./deptReception";
 import { nextWeekday } from "./deptReceptionFlow";
 import type { DeptCalEvent } from "./deptCalendarView";
+import type { UnhandledRow } from "./homeUnhandled";
 
 export type PlanBucket = "today" | "next" | "later" | "overdue";
 export const PLAN_BUCKETS: PlanBucket[] = ["today", "next", "later", "overdue"];
@@ -18,18 +19,21 @@ export type PlanRow = {
 };
 export type PlanItem<R extends PlanRow = PlanRow> =
   | { kind: "reception"; key: string; date: string; row: R }
-  | { kind: "event"; key: string; date: string; ev: DeptCalEvent };
+  | { kind: "event"; key: string; date: string; ev: DeptCalEvent }
+  /** [미처리] 묶음 전용 — 미처리현황과 같은 행(시트 행 포함). date = 접수일 */
+  | { kind: "unhandled"; key: string; date: string; u: UnhandledRow };
 
 const CLOSED = new Set(["완료", "취소"]);
 const isYmd = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
-const receiptOf = (r: PlanRow) => String(r.receipt_date || r.created_at || "").slice(0, 10);
 
 /**
  * rows: 그 부서의 열린 접수(DB). 완료·취소·다른 종류는 걸러 낸다(낙관 갱신 뒤 다시 불러도 같은 결과).
  * events: 그 부서 달력 일정 — 접수와 연결 안 된 것(receptionId 없음)만 날짜 묶음에 넣고, 오늘 전 날짜는 뺀다.
- * 익일 = 오늘 뒤 ~ 다음 영업일(금요일이면 토·일·월). 예정 = 그 뒤. 미처리 = 예정일이 지났거나 비어 있는 접수(접수일 오래된 순).
+ * 익일 = 오늘 뒤 ~ 다음 영업일(금요일이면 토·일·월). 예정 = 그 뒤. 날짜 칩은 부서 일정 기준.
+ * 미처리 = 사용자 결정(2026-10-25) "미처리현황과 동일": unhandled(= rowsForTab(loadUnhandledRows, 부서 탭), 시트 이력 행 포함)를
+ * 그대로 접수일 오래된 순으로 담는다. 예정일로 따로 세지 않는다.
  */
-export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], events: DeptCalEvent[], today: string): Record<PlanBucket, PlanItem<R>[]> {
+export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], events: DeptCalEvent[], today: string, unhandled: UnhandledRow[] = []): Record<PlanBucket, PlanItem<R>[]> {
   const out: Record<PlanBucket, PlanItem<R>[]> = { today: [], next: [], later: [], overdue: [] };
   const next = nextWeekday(today);
   const place = (date: string): PlanBucket | null => (date === today ? "today" : date > today && date <= next ? "next" : date > next ? "later" : null);
@@ -37,20 +41,16 @@ export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], ev
     if (row.type !== dept || CLOSED.has(String(row.status || ""))) continue;
     const date = String(row.remote_meta?.schedule_date || "").slice(0, 10);
     const b = isYmd(date) ? place(date) : null;
-    out[b || "overdue"].push({ kind: "reception", key: `r:${row.id}`, date: isYmd(date) ? date : "", row });
+    if (b) out[b].push({ kind: "reception", key: `r:${row.id}`, date, row });
   }
   for (const ev of events) {
     if (ev.team !== dept || ev.receptionId) continue;
     const b = place(ev.date);
     if (b) out[b].push({ kind: "event", key: `e:${ev.id}`, date: ev.date, ev });
   }
+  for (const u of unhandled) out.overdue.push({ kind: "unhandled", key: `u:${u.key}`, date: u.date, u });
   const byDate = (a: PlanItem<R>, b: PlanItem<R>) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-  for (const k of ["today", "next", "later"] as const) out[k].sort(byDate);
-  out.overdue.sort((a, b) => {
-    const ra = a.kind === "reception" ? receiptOf(a.row) : a.date;
-    const rb = b.kind === "reception" ? receiptOf(b.row) : b.date;
-    return ra < rb ? -1 : ra > rb ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
-  });
+  for (const k of ["today", "next", "later", "overdue"] as const) out[k].sort(byDate);
   return out;
 }
 
@@ -61,7 +61,7 @@ export function defaultPlanBucket(b: Record<PlanBucket, unknown[]>): PlanBucket 
 
 /** 전환 막대 "일정리스트 n" = 오늘 손댈 것(금일 접수·일정 중 안 끝난 것 + 미처리) */
 export function planTodoCount(b: Record<PlanBucket, PlanItem[]>): number {
-  return b.overdue.length + b.today.filter((it) => it.kind === "reception" || !it.ev.done).length;
+  return b.overdue.length + b.today.filter((it) => it.kind !== "event" || !it.ev.done).length;
 }
 
 // ── 배정 후보(Q3) ─────────────────────────────────────
