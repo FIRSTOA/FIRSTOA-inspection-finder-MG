@@ -28,6 +28,8 @@ export type UnhandledRow = {
   status: string;
   ageDays: number;
   receptionId?: string;
+  /** 상세 팝업 본문 — 일정은 네이버 메모(note)·주소·시각까지(네이버에서 들어온 일정은 issue 가 비고 calendarTitle·note 에 내용이 있다, 2026-10-25) */
+  detail?: string;
 };
 
 /** fetchOpenReceptions 행 중 쓰는 칸만 */
@@ -38,8 +40,22 @@ export type ReceptionInput = {
 /** as_tickets 지난 날짜·미완료 행 */
 export type TicketInput = {
   id: string; team: string; date: string; vendor: string; assignee: string; status: string; scheduleType: string;
-  receptionId?: string | null; issue?: string;
+  receptionId?: string | null; issue?: string; calendarTitle?: string; note?: string; address?: string; time?: string;
 };
+
+/** 일정 행의 팝업 본문: 제목(calendarTitle) · 시각 · 주소 · 네이버 메모(note) 를 줄로 — 전부 평문, 없으면 "" */
+export function ticketDetail(t: Pick<TicketInput, "issue" | "calendarTitle" | "note" | "address" | "time">): string {
+  const lines: string[] = [];
+  const title = String(t.calendarTitle || "").trim();
+  const issue = String(t.issue || "").trim();
+  if (title && title !== issue) lines.push(title);
+  if (issue) lines.push(issue);
+  if (String(t.time || "").trim()) lines.push(`시각 ${String(t.time).trim()}`);
+  if (String(t.address || "").trim()) lines.push(`주소 ${String(t.address).trim()}`);
+  const note = String(t.note || "").trim();
+  if (note && note !== issue && note !== title) lines.push(note);
+  return lines.join("\n");
+}
 
 const FIELD_TYPES = new Set(["복합기 AS", "원격이관", "IT"]);
 /** 홈 미처리에 접수 행으로 세는 종류 — 복합기 AS 는 빠짐(일정 기준, 2026-10-25) */
@@ -111,8 +127,9 @@ export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInpu
     const date = String(t.date || "").slice(0, 10);
     out.push({
       key: `t:${t.id}`, source: "ticket", kind: logistics ? "물류" : "CS접수", team: ticketTeam(t.team), date,
-      vendor: String(t.vendor || ""), title: String(t.issue || ""), assignee: String(t.assignee || ""),
+      vendor: String(t.vendor || ""), title: String(t.issue || t.calendarTitle || ""), assignee: String(t.assignee || ""),
       status: String(t.status || ""), ageDays: ageDaysOf(date, today), ...(rid ? { receptionId: rid } : {}),
+      ...(ticketDetail(t) ? { detail: ticketDetail(t) } : {}),
     });
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0));

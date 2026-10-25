@@ -60,10 +60,12 @@ describe("팀 보드 — 카드 조합", () => {
     const e2 = teamBoardFromParts({ rows, unhandled: [], roster: [], okrWeek, okrMissing: { E: 3 } as never }).find((c) => c.team === "E")!;
     expect(e2.alerts.some((x) => x.includes("OKR"))).toBe(false);
   });
-  it("미니 타일 4개(블로그·오버홀·재계약·IT 퀴즈) — 지표 id 는 이름으로 찾음, 원본 없으면 준비 중", () => {
-    expect(TEAM_MINI_KPIS.map((t) => t.short)).toEqual(["블로그", "오버홀", "재계약", "IT 퀴즈"]);
+  it("미니 타일 4개(블로그·PC확장·오버홀·IT실습) — 지표 id 는 이름으로 찾음, 원본 없으면 준비 중", () => {
+    expect(TEAM_MINI_KPIS.map((t) => t.short)).toEqual(["블로그", "PC확장", "오버홀", "IT실습"]);
     expect(A.tiles[0]).toMatchObject({ label: "블로그", status: "behind", pct: 25 });
-    expect(A.tiles[2].status).toBe("pending");
+    expect(A.tiles[1]).toMatchObject({ label: "PC확장", status: "pending" }); // 표에 K7 행이 없으면 준비 중
+    expect(A.tiles[2]).toMatchObject({ label: "오버홀", status: "behind" });
+    expect(A.tiles[3]).toMatchObject({ label: "IT실습", status: "pending" });
   });
   it("묶음이 없으면 숫자는 null(0 으로 그리지 않음)", () => {
     const empty = teamBoardFromParts({ rows: null, unhandled: null, roster: null, okrWeek: null });

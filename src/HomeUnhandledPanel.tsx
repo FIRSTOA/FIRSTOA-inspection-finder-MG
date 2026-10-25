@@ -232,7 +232,7 @@ export function UnhandledDetail({ row, onClose, onOpen }: { row: UnhandledRow; o
       </dl>
       <div>
         <div className="mb-1 text-[12px] font-bold text-slate-500">내용</div>
-        <p className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-slate-800">{row.title || "(내용 없음)"}</p>
+        <p className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-slate-800">{row.detail || row.title || "(내용 없음)"}</p>
       </div>
       {row.kind === "물류" && <p className="text-[12px] font-bold text-slate-500">물류는 네이버 캘린더에서 완료 처리하면 사라집니다.</p>}
     </FormModal>

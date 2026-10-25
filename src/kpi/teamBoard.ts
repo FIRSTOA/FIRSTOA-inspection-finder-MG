@@ -19,10 +19,10 @@ import { TEAM_ORDER, type TeamKey } from "./teamColors";
 /** 팀 카드 미니 타일 4개 — 지표 이름으로 찾는다(정의 id 가 바뀌어도 이름이 같으면 그대로). 없는 이름은 빠진다 */
 const MINI_KPI_NAMES: Array<{ name: string; short: string }> = [
   { name: "블로그 답글", short: "블로그" },
+  { name: "PC확장성", short: "PC확장" },
   { name: "오버홀", short: "오버홀" },
-  { name: "재계약 진행", short: "재계약" },
-  { name: "IT 퀴즈", short: "IT 퀴즈" },
-];
+  { name: "IT 실습(기술력)", short: "IT실습" },
+]; // 2026-10-25 사용자: "재계약·IT 퀴즈 빼고 블로그·PC확장성·오버홀·IT실습"
 export const TEAM_MINI_KPIS: Array<{ id: KpiId; short: string }> = MINI_KPI_NAMES.flatMap(({ name, short }) => {
   const d = KPI_DEFS.find((x) => x.name === name);
   return d ? [{ id: d.id, short }] : [];

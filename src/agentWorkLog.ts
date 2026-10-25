@@ -3,6 +3,36 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-25",
+    "hash": "e7679a617a",
+    "agent": "ui-designer",
+    "summary": "홈 3차 \"팀 보드\"(팀 카드 5장·상태 타일 달성표·OKR 팀 칩→팀원 목록·여백 제거) + 미처리 CS 접수 통합·상세 팝업·탭별 종류 칸 + 일정리스트 검색·캘린더 2년 검색 + OKR 칸 커서 버그"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "e7679a617a",
+    "agent": "developer",
+    "summary": "홈 3차 \"팀 보드\"(팀 카드 5장·상태 타일 달성표·OKR 팀 칩→팀원 목록·여백 제거) + 미처리 CS 접수 통합·상세 팝업·탭별 종류 칸 + 일정리스트 검색·캘린더 2년 검색 + OKR 칸 커서 버그"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "e7679a617a",
+    "agent": "debugger",
+    "summary": "홈 3차 \"팀 보드\"(팀 카드 5장·상태 타일 달성표·OKR 팀 칩→팀원 목록·여백 제거) + 미처리 CS 접수 통합·상세 팝업·탭별 종류 칸 + 일정리스트 검색·캘린더 2년 검색 + OKR 칸 커서 버그"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "e7679a617a",
+    "agent": "qa-checker",
+    "summary": "홈 3차 \"팀 보드\"(팀 카드 5장·상태 타일 달성표·OKR 팀 칩→팀원 목록·여백 제거) + 미처리 CS 접수 통합·상세 팝업·탭별 종류 칸 + 일정리스트 검색·캘린더 2년 검색 + OKR 칸 커서 버그"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "e7679a617a",
+    "agent": "field-deploy-check",
+    "summary": "홈 3차 \"팀 보드\"(팀 카드 5장·상태 타일 달성표·OKR 팀 칩→팀원 목록·여백 제거) + 미처리 CS 접수 통합·상세 팝업·탭별 종류 칸 + 일정리스트 검색·캘린더 2년 검색 + OKR 칸 커서 버그"
+  },
+  {
     "date": "2026-10-24",
     "hash": "b6e7ea20d6",
     "agent": "ui-designer",

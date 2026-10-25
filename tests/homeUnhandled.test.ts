@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countUnhandledKinds, countUnhandledTabs, filterUnhandled, mergeUnhandled, receptionTeam, rowsForTab, splitByGroup, UNHANDLED_KINDS, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
+import { countUnhandledKinds, countUnhandledTabs, filterUnhandled, mergeUnhandled, receptionTeam, rowsForTab, splitByGroup, ticketDetail, UNHANDLED_KINDS, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
 import { isOverdueTicket } from "../src/overdueLogic";
 
 const today = "2026-10-19";
@@ -128,5 +128,25 @@ describe("홈 CS접수 = 일정리스트 [미처리]와 같은 판정(2026-10-25
     expect(isOverdueTicket({ date: t, status: "배정", scheduleType: "AS" }, t)).toBe(false);
     expect(isOverdueTicket({ date: "2026-10-24", status: "완료", scheduleType: "AS" }, t)).toBe(false);
     expect(isOverdueTicket({ date: "2026-10-24", status: "배정", scheduleType: "매월점검" }, t)).toBe(false);
+  });
+});
+
+describe("일정 행 상세 본문 — 네이버에서 온 일정은 issue 가 비고 calendarTitle·note 에 내용(2026-10-25 사용자 \"물류 일정 내용이 왜 없음\")", () => {
+  const today = "2026-10-25";
+  const naverLogi: TicketInput = {
+    id: "nv-1", team: "C", date: "2026-10-23", time: "15:00", vendor: "튜링", assignee: "김담우", status: "접수", scheduleType: "납품철수교체휴가교육",
+    issue: "", calendarTitle: "기존 기기 구매전환-판매납품/퍼스트/튜링/X4220RX(리퍼)/확인서서명필수", note: "주소 서울 강남구 …\n담당 010-0000-0000", address: "서울 강남구 테헤란로 1",
+  };
+  it("제목은 issue 가 비면 calendarTitle, 본문은 제목·시각·주소·메모를 줄로", () => {
+    const rows = mergeUnhandled([], [naverLogi], today);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe("물류");
+    expect(rows[0].title).toBe(naverLogi.calendarTitle);
+    expect(rows[0].detail).toBe(`${naverLogi.calendarTitle}\n시각 15:00\n주소 서울 강남구 테헤란로 1\n${naverLogi.note}`);
+  });
+  it("issue 가 있으면 제목은 issue, 본문에 제목·issue 둘 다(같으면 한 번)", () => {
+    expect(ticketDetail({ issue: "토너 교체", calendarTitle: "토너 교체", note: "", address: "", time: "" })).toBe("토너 교체");
+    expect(ticketDetail({ issue: "토너 교체", calendarTitle: "강남C 토너", note: "메모", address: "", time: "" })).toBe("강남C 토너\n토너 교체\n메모");
+    expect(ticketDetail({})).toBe("");
   });
 });

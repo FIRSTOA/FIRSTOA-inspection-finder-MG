@@ -10,7 +10,7 @@ const cell = (scope: "CS" | "A" | "B" | "C" | "D" | "E", value: number | null, t
 const base = { basis: "기준", pace: 0.5, main: true, teamBars: [], people: [], cellState: "ready" as const };
 const rows: KpiTableRow[] = [
   { ...base, id: "a", name: "달성지표", unit: "건", targetLabel: "인당 주 2", status: "done", cells: [cell("CS", 10, 10, "done"), cell("A", 5, 5, "done"), cell("B", null, null, "none"), cell("C", 3, 5, "behind"), cell("D", 1, 5, "onTrack"), cell("E", 2, 5, "behind")],
-    teamBars: [{ team: "E", value: 2, target: 5, pct: 40 }], people: [{ name: "엄재현", team: "CSS", value: 2, target: 5, done: false }] },
+    teamBars: [{ team: "E", value: 2, target: 5, pct: 40, status: "behind" as const }], people: [{ name: "엄재현", team: "CSS", value: 2, target: 5, done: false }] },
   { ...base, id: "b", name: "순항지표", unit: "건", targetLabel: "", status: "onTrack", cells: [cell("CS", 6, 10, "onTrack"), ...["A", "B", "C", "D", "E"].map((s) => cell(s as "A", null, null, "none"))] },
   { ...base, id: "c", name: "부족지표", unit: "건", targetLabel: "", status: "behind", cells: [cell("CS", 1, 10, "behind"), ...["A", "B", "C", "D", "E"].map((s) => cell(s as "A", null, null, "none"))] },
   { ...base, id: "d", name: "목표없음지표", unit: "건", targetLabel: "", status: "none", pace: null, trend: { delta: 3, label: "지난주 대비" }, cells: [cell("CS", 7, null, "none"), ...["A", "B", "C", "D", "E"].map((s) => cell(s as "A", null, null, "none"))] },

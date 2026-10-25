@@ -480,11 +480,15 @@ export function tableRows(b: KpiBundle, ctx: ModelCtx, basis: "end" | "early" = 
         return t ? { scope, value: t.actual, target: t.target, status: statusOf(t.actual, t.target) } : { scope, value: null, target: null, status: "none" as KpiRowStatus };
       }),
     ];
-    const teamBars = teamRows.map((t) => ({ team: teamLabelOf(t.team), value: t.actual ?? 0, target: t.target, pct: t.actual === null || !t.target ? null : pct(t.actual, t.target) }));
+    // 막대 색도 팀 칸과 같은 판정(kpiRowStatus) — 화면에서 따로 비교하지 않는다
+    const teamBars = teamRows.map((t) => ({ team: teamLabelOf(t.team), value: t.actual ?? 0, target: t.target, pct: t.actual === null || !t.target ? null : pct(t.actual, t.target), status: statusOf(t.actual, t.target) }));
     const order = (team: string) => KPI_TEAMS.indexOf(team);
     const people: KpiPersonCell[] = rows.filter((r) => r.scope === "person")
       .sort((a, z) => order(a.team) - order(z.team) || (z.actual ?? 0) - (a.actual ?? 0) || a.label.localeCompare(z.label, "ko"))
-      .map((r) => ({ name: r.label, team: teamLabelOf(r.team), value: r.actual ?? 0, target: r.target, done: statusOf(r.actual, r.target) === "done" }));
+      .map((r): KpiPersonCell => ({
+        name: r.label, team: teamLabelOf(r.team), value: r.actual ?? 0, target: r.target, done: statusOf(r.actual, r.target) === "done",
+        ...(r.rest ? { sub: "명단 밖·다른 팀 작성" } : {}),
+      }));
     if (def.id === "K20" && blogTotals) for (const person of people) person.total = blogTotals.get(person.name) ?? 0;
     if (def.id === "K33" && b.facts.overhaul) {
       const by = new Map(overhaulByPerson(b.facts.overhaul, b.facts.roster, ctx.teamOf, rangeOfPeriod(b.ranges, p)).byPerson.map((x) => [x.name, x]));

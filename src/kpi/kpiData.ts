@@ -73,7 +73,7 @@ export async function loadUnhandledRows(today: string = kstDate()): Promise<{ ro
   const from = shiftYmd(today, -180);
   const [rec, tic, sheetRes] = await Promise.allSettled([
     fetchOpenReceptions(90),
-    selectRows<TicketInput>("as_tickets", `select=id,team,date,time,vendor,assignee,status,scheduleType,receptionId,issue&date=lt.${today}&date=gte.${from}&status=neq.${encodeURIComponent("완료")}&scheduleType=neq.${encodeURIComponent("매월점검")}&order=date.desc,time.asc&limit=3000`),
+    selectRows<TicketInput>("as_tickets", `select=id,team,date,time,vendor,assignee,status,scheduleType,receptionId,issue,calendarTitle,note,address&date=lt.${today}&date=gte.${from}&status=neq.${encodeURIComponent("완료")}&scheduleType=neq.${encodeURIComponent("매월점검")}&order=date.desc,time.asc&limit=3000`),
     loadSheetOpen(),
   ]);
   if (rec.status === "rejected" && tic.status === "rejected") throw new Error(`접수·일정 미처리를 불러오지 못했습니다: ${msg(rec.reason)}`);

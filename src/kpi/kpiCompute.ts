@@ -449,7 +449,11 @@ export type KpiProgressRow = {
   rateToDate: number | null;
   /** 남은 수량(목표 - 실적, 0 아래면 0) */
   remaining: number | null;
+  /** 개인 줄 중 "그 외" — 팀 칸에는 들었지만 그 팀 명단 사람이 아닌 기록(명단 밖·팀장 아닌 미지정·다른 팀 사람이 이 팀 지역으로 쓴 것) */
+  rest?: true;
 };
+/** 팀 칸 − 그 팀 명단 개인 합 = "그 외" 칩 이름 */
+export const KPI_REST_LABEL = "그 외";
 
 export type KpiSettingsLite = { targets: Partial<Record<KpiId, KpiTarget>>; holidays: readonly string[] };
 
@@ -509,8 +513,10 @@ export function kpiProgress(id: KpiId, f: KpiFacts, opts: { ranges: KpiRanges; p
   const teams = def.teams === "A~D" ? [...OKR_TEAMS] as string[] : def.teams === "없음" ? [] : [...KPI_TEAMS];
   const total = teams.reduce((a, t) => a + (heads[t] || 0), 0);
   const ratio = def.targetBasis === "ratio" || def.targetBasis === "workin";
+  const counts = new Map<string, KpiCount | null>();
   const make = (scope: KpiScopeKind, key: string, label: string, team: string, headcount: number, s: KpiScope): KpiProgressRow => {
     const c = kpiCount(id, f, s, range, ctx);
+    counts.set(`${scope}|${key}`, c);
     const tg = ratio ? { full: c?.d ?? null, toDate: null } : kpiTargetFor(id, opts.settings.targets[id], { range, period: opts.period, today: ctx.today, scope, headcount, teamCount: teams.length, holidays: opts.settings.holidays });
     const actual = c ? c.n : null;
     const rate = actual === null || !tg.full ? null : pct(actual, tg.full);
@@ -524,7 +530,17 @@ export function kpiProgress(id: KpiId, f: KpiFacts, opts: { ranges: KpiRanges; p
   if (def.scopes.includes("all")) rows.push(make("all", "전체", "CS 전체", "", total, {}));
   if (def.scopes.includes("team")) for (const t of teams) rows.push(make("team", t, t === "E" ? "CSS(E)" : `${t}팀`, t, heads[t] || 0, { team: t }));
   if (def.scopes.includes("person")) {
-    for (const t of teams) for (const m of (roster || []).filter((x) => x.team === t)) rows.push(make("person", m.name, m.name, t, 1, { author: m.name }));
+    // 개인 = 그 팀 칸과 같은 행 집합 안에서 그 사람 몫({team, author}). 예전엔 {author}만 줘서 팀 칸(지역 칸 판정)과 개인 칩(명단 작성자)이
+    // 다른 행을 셌다 — 명단 밖·다른 팀 사람이 이 팀 지역으로 쓴 기록은 팀 칸에만, 이 팀 사람이 다른 지역으로 쓴 기록은 개인 칩에만 들어 합이 어긋났다(2026-10-25 C팀 19 vs 17).
+    // 더할 수 있는 셈(분모 없음)이면 남는 몫을 "그 외" 줄로 보여 팀 칸 = 개인 합이 되게 한다.
+    for (const t of teams) {
+      const people = (roster || []).filter((x) => x.team === t).map((m) => make("person", m.name, m.name, t, 1, { team: t, author: m.name }));
+      rows.push(...people);
+      const teamCount = counts.get(`team|${t}`);
+      if (!teamCount || teamCount.d !== undefined || people.some((p) => p.actual === null)) continue;
+      const rest = round1(teamCount.n - people.reduce((a, p) => a + (p.actual ?? 0), 0));
+      if (rest > 0) rows.push({ scope: "person", key: `${t}|${KPI_REST_LABEL}`, label: KPI_REST_LABEL, team: t, headcount: 0, actual: rest, target: null, targetToDate: null, rate: null, rateToDate: null, remaining: null, rest: true });
+    }
   }
   return rows;
 }
@@ -794,8 +810,10 @@ export type KpiRowStatus = "done" | "onTrack" | "behind" | "none" | "pending";
  * 행·칸 상태. actual null = 원본 없음(pending), 목표 없음 = none.
  *  · 작을수록 좋은 지표(zero): 실적 ≤ 목표 = done, 아니면 behind
  *  · 비율 지표(ratio): rate = 분자/분모 % 를 목표 %(goalPct) 와 비교 — 누적이 아니라 경과 비율은 안 본다. 목표 % 없거나 분모 0 이면 none
- *  · 그 밖(누적 — 인당 목표·워킨맵): 실적 ≥ 목표 = done, 실적/목표 % ≥ 경과 % = onTrack, 그 미만 behind. 경과 % 를 모르면(오늘) 100 으로 본다
+ *  · 그 밖(누적 — 인당 목표·워킨맵): 실적 ≥ 목표 = done, 실적/목표 % ≥ 경과 % − 여유(ON_TRACK_SLACK) = onTrack, 그 미만 behind. 경과 % 를 모르면(오늘) 100 으로 본다
  */
+/** 순항 여유(%포인트) — 경과율보다 이만큼 뒤져도 순항(2026-10-25 팀장 결정: 토요일 이번 주 경과 100% 에 C팀 95% 가 빨강이던 것) */
+export const ON_TRACK_SLACK = 5;
 export function kpiRowStatus(
   o: { actual: number | null; target: number | null; elapsed: number | null; basis: KpiTargetBasis; better?: "up" | "down"; goalPct?: number | null },
 ): KpiRowStatus {
@@ -807,7 +825,7 @@ export function kpiRowStatus(
   }
   if (o.target === null || o.basis === "none") return "none";
   if (o.target <= 0 || o.actual >= o.target) return "done";
-  return (o.actual / o.target) * 100 >= (o.elapsed ?? 100) ? "onTrack" : "behind";
+  return (o.actual / o.target) * 100 >= (o.elapsed ?? 100) - ON_TRACK_SLACK ? "onTrack" : "behind";
 }
 
 /* ───────────── 인사말 줄 "내 이번 주" (Q9) ───────────── */

@@ -108,7 +108,8 @@ export type KpiTableRow = {
   id: string; name: string; unit: string; targetLabel: string; basis: string;
   status: KpiStatus; pace: number | null; // 기간 경과 0~1 (막대 점선)
   cells: Array<{ scope: KpiScope; value: number | null; target: number | null; status: KpiStatus }>;
-  teamBars: Array<{ team: string; value: number; target: number | null; pct: number | null }>;
+  /** status = 팀 칸과 같은 판정(homeKpiModel 이 kpiRowStatus 로 채움) */
+  teamBars: Array<{ team: string; value: number; target: number | null; pct: number | null; status: KpiStatus }>;
   people: KpiPersonCell[];
   trend?: { delta: number | null; label: string }; // 목표 없는 지표용
   cellState: "ready" | "pending" | "error"; pendingText?: string; main: boolean;
@@ -725,7 +726,7 @@ export function RowDetail({ r, theme, disabled }: { r: KpiTableRow; theme: KpiTh
         <ul className="space-y-1.5" aria-label="팀별 실적">
           {r.teamBars.map((b) => {
             const pct = b.pct ?? (b.target ? Math.round((b.value / b.target) * 100) : null);
-            const st: KpiStatus = pct === null ? "none" : pct >= 100 ? "done" : paceFrac !== null && pct >= paceFrac * 100 ? "onTrack" : "behind";
+            const st: KpiStatus = b.status;
             return (
               <li key={b.team} className="flex items-center gap-2.5" title={`${teamName(b.team)} ${fmt(b.value)}${b.target ? ` / 목표 ${fmt(b.target)}` : ""}`}>
                 <span className={`w-11 shrink-0 text-[12px] font-black ${t.sub}`}>{teamName(b.team)}</span>
