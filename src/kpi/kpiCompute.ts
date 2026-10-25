@@ -810,10 +810,12 @@ export type KpiRowStatus = "done" | "onTrack" | "behind" | "none" | "pending";
  * 행·칸 상태. actual null = 원본 없음(pending), 목표 없음 = none.
  *  · 작을수록 좋은 지표(zero): 실적 ≤ 목표 = done, 아니면 behind
  *  · 비율 지표(ratio): rate = 분자/분모 % 를 목표 %(goalPct) 와 비교 — 누적이 아니라 경과 비율은 안 본다. 목표 % 없거나 분모 0 이면 none
- *  · 그 밖(누적 — 인당 목표·워킨맵): 실적 ≥ 목표 = done, 실적/목표 % ≥ 경과 % − 여유(ON_TRACK_SLACK) = onTrack, 그 미만 behind. 경과 % 를 모르면(오늘) 100 으로 본다
+ *  · 그 밖(누적 — 인당 목표·워킨맵): 실적 ≥ 목표 = done(초록), 실적/목표 % ≥ ON_TRACK_MIN_PCT(50) = onTrack(파랑), 그 미만 behind(빨강).
+ *    2026-10-25 사용자 결정 "50% 미만은 빨강, 그 이후는 파랑, 100% 는 초록" — 기간 경과율(페이스)은 판정에 안 쓴다(막대의 점선은 참고용).
+ *    (그 전: 경과율 − 5포인트 기준 → 토요일에 75% 가 빨강이라 "기준이 뭐야" 지적)
  */
-/** 순항 여유(%포인트) — 경과율보다 이만큼 뒤져도 순항(2026-10-25 팀장 결정: 토요일 이번 주 경과 100% 에 C팀 95% 가 빨강이던 것) */
-export const ON_TRACK_SLACK = 5;
+/** 순항 최소 달성률(%) — 이 이상이면 파랑, 미만이면 빨강 */
+export const ON_TRACK_MIN_PCT = 50;
 export function kpiRowStatus(
   o: { actual: number | null; target: number | null; elapsed: number | null; basis: KpiTargetBasis; better?: "up" | "down"; goalPct?: number | null },
 ): KpiRowStatus {
@@ -825,7 +827,7 @@ export function kpiRowStatus(
   }
   if (o.target === null || o.basis === "none") return "none";
   if (o.target <= 0 || o.actual >= o.target) return "done";
-  return (o.actual / o.target) * 100 >= (o.elapsed ?? 100) - ON_TRACK_SLACK ? "onTrack" : "behind";
+  return (o.actual / o.target) * 100 >= ON_TRACK_MIN_PCT ? "onTrack" : "behind";
 }
 
 /* ───────────── 인사말 줄 "내 이번 주" (Q9) ───────────── */

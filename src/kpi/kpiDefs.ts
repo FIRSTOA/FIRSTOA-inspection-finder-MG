@@ -250,8 +250,8 @@ export const KPI_DEFS: KpiDef[] = [
   },
   {
     id: "K21", name: "IT 실습(기술력)", unit: "회", group: "성장·OKR", period: "week", periods: ["week", "month", "quarter"], scopes: ATP, widget: "goal", sizes: ["1x1"],
-    basis: "IT 학습 › [실습 기록](it_practice_logs) 한 행 = 1회 · 작성자 = 기기에서 고른 작성자 · 날짜 = KST · 팀장 제외 · 목표 = 인원 × 주 1회",
-    source: "itLogs.loadItPracticeLogs(it_practice_logs, 2026-10-24) — 표가 없으면 준비 중", loads: ["itPractice", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 1, from: `사용자 2026-10-23 'IT 실습 기술력 주 1회'(${OKR_Q4} 7번)` },
+    basis: "IT 학습 [실습 기록] 1행 = 1회 + 주간 현황판 배운 점 중 브랜드 IT 1줄 = 1회(같은 날 같은 글 1회) · 작성자 = 기기에서 고른 작성자(배운 점은 글쓴이) · 날짜 = KST(배운 점은 줄의 날짜 — 연도 없는 10/20 은 그 주 연도, 못 읽으면 그 주 월요일) · 팀장 제외 · 목표 = 인원 × 주 1회",
+    source: "itLogs.loadItPracticeLogs(it_practice_logs, 2026-10-24) + visits.getWeeklyNotes → learningLines.itLearningRowsFromNotes(배운 점 브랜드 IT, 2026-10-25) — 둘 다 없을 때만 준비 중", loads: ["itPractice", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 1, from: `사용자 2026-10-23 'IT 실습 기술력 주 1회'(${OKR_Q4} 7번)` },
     main: true, better: "up", teams: "A~E", screen: { screen: "itHistory", tab: "IT 학습 › 실습 기록" }, today: false,
   },
   {

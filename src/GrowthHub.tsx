@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AUTHOR_TEAMS, useAuthorBook } from "./authors";
 import PortalSelect from "./PortalSelect";
 import RichCell from "./RichCell";
+import { parseLearningLine, parseLearningText, type LearningParsed } from "./learningLines";
 import { inputCellKeyDown, tableCellClick } from "./cellNav";
 import { SUPABASE_ANON, SUPABASE_URL } from "./supabase";
 import {
@@ -95,7 +96,6 @@ const fieldLabels: Record<Exclude<RecordType, "all">, string[]> = {
   special: ["내용"],
 };
 const hasRecordContent = (note: WeeklyNoteRow) => recordTypes.some(([key]) => String(note[key] || "").trim());
-type LearningParsed = { 날짜: string; 브랜드: string; 기종: string; "배운 점": string; 교육자: string; 소요시간: string };
 const statusText: Record<AutoSaveStatus, string> = {
   idle: "자동저장 대기",
   saving: "자동저장 중...",
@@ -195,38 +195,6 @@ function parseStructured(text: string, labels: string[]) {
     result[labels[0]] = text.trim();
   }
   return result;
-}
-
-function parseLearningLine(line: string): LearningParsed {
-  if (line.includes("\t")) {
-    const [날짜 = "", 브랜드 = "", 기종 = "", 배운점 = "", 교육자 = "", 소요시간 = ""] = line.trim().split("\t");
-    return { 날짜, 브랜드, 기종, "배운 점": 배운점, 교육자, 소요시간 };
-  }
-  const parts = line.trim().split(/\s+/).filter(Boolean);
-  const durationIndex = parts.findIndex((part, index) => index >= 3 && /^\d+\s*(?:분|시간)?$/.test(part));
-  if (durationIndex >= 0) {
-    return {
-      날짜: parts[0] || "",
-      브랜드: parts[1] || "",
-      기종: parts[2] || "",
-      "배운 점": parts.slice(3, durationIndex).join(" "),
-      소요시간: parts[durationIndex] || "",
-      교육자: parts.slice(durationIndex + 1).join(" "),
-    };
-  }
-  return {
-    날짜: parts[0] || "",
-    브랜드: parts[1] || "",
-    기종: parts[2] || "",
-    "배운 점": parts.slice(3, -2).join(" ") || parts.slice(3).join(" "),
-    소요시간: parts.length >= 5 ? parts.at(-2) || "" : "",
-    교육자: parts.length >= 6 ? parts.at(-1) || "" : "",
-  };
-}
-
-function parseLearningText(text: string): LearningParsed {
-  const first = text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
-  return parseLearningLine(first);
 }
 
 function weekLabelOnly(weekStart: string) {

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a02209b46d",
+    "date": "2026-10-25",
+    "note": "달성표 팀 칸 = 개인 칩 합(\"그 외\" 칩) + 순항 판정 여유 5p + 미처리 일정 팝업에 네이버 제목·메모 + 팀 카드 타일 블로그·PC확장·오버홀·IT실습"
+  },
+  {
     "hash": "6d29bbacfe",
     "date": "2026-10-25",
     "note": "홈 가장자리 여백 아주 조금(8px) 되살림 + 둥근 모서리 — 사용자 \"여백 조금 있는 게 낫겠다\""
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "e2d5675e07",
     "date": "2026-09-29",
     "note": "OKR: 종합판정 제안 \"미흡로\" → \"미흡\"(조사 제거), 팀원 집계 조치 필요 인원 빨강 → 파랑"
-  },
-  {
-    "hash": "aae2c82d88",
-    "date": "2026-09-29",
-    "note": "카톡봇 스크립트: 폴링 스레드 충돌(GraalJS join 스택 크래시 → 봇 꺼짐) 수리 + 세션 없는 방 10분 재시도·하루 지난 심박 폐기"
   }
 ];

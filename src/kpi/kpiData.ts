@@ -8,7 +8,7 @@
  * Supabase 접근은 supabase.ts 래퍼만.
  */
 import { getConfig, selectAllRows, selectAllRowsFast, selectRows } from "../supabase";
-import { kstDate, getTeamVisits } from "../visits";
+import { kstDate, getTeamVisits, getWeeklyNotes, weekRange } from "../visits";
 import { fetchMembers } from "../authors";
 import { getActivityEvents, teamForAuthor } from "../operations";
 import { loadExpansionRows, loadFieldRows, loadFormRaw } from "../expansionSource";
@@ -20,13 +20,14 @@ import { loadSheetOpen, mergeSheetAndDb } from "../receptionSheetOpen";
 import { mergeUnhandled, type TicketInput, type UnhandledRow } from "../homeUnhandled";
 import { currentWeekOf, getOkrCycle, getOkrReports, getOkrReportsIn, isLegacyMonthId, monthCycleId, monthScreenGoals, quarterIdOfMonth, weekCycleId, weeksOfMonth } from "../okr";
 import { loadItPracticeLogs, loadItQuizAttempts } from "../itLogs";
+import { combineItPractice, itLearningRowsFromNotes } from "../learningLines";
 import { fetchBlogRows } from "../blogSheet";
 import { loadMisuVisits, isTableMissingError } from "../misuVisitHistoryData";
 import { loadOverhaulRows, overhaulTabFrom } from "../overhaulSheet";
 import { KPI_BY_ID, KPI_DEFS, KPI_TARGETS_CONFIG_KEY, parseKpiTargets, type KpiId, type KpiSettings, type KpiSource } from "./kpiDefs";
 import {
   kpiLoadFrom, kpiRanges, RECONTRACT_COLUMNS, rosterFromMembers, shiftYmd, toFormRows,
-  type CustomerPraiseRow, type FormRaw, type KeymanRow, type KpiFacts, type KpiRanges, type OkrFacts,
+  type CustomerPraiseRow, type FormRaw, type ItLogLite, type KeymanRow, type KpiFacts, type KpiRanges, type OkrFacts,
   type PraiseRow, type ReceptionWeekRow, type VisitLite,
 } from "./kpiCompute";
 
@@ -89,6 +90,26 @@ export async function loadUnhandledRows(today: string = kstDate()): Promise<{ ro
     return { rows: mergeUnhandled(merged.db, tickets, today, merged.sheet), info: { sheetMode: merged.sheetKinds.length > 0, notice: merged.notice, over90: merged.over90.length }, partialError };
   }
   return { rows: mergeUnhandled(dbRows, tickets, today), info: { sheetMode: false, notice: "", over90: 0 }, partialError };
+}
+
+/**
+ * K21 원본 두 개를 함께 읽는다. 실습 기록 표 없음(ItLogsMissingError)이면 배운 점만, 배운 점을 못 읽으면 실습 기록만 세고 notice 로 알린다.
+ * 둘 다 못 읽으면 실습 기록 쪽 오류를 던진다(표 없음이면 "준비 중", 아니면 오류).
+ */
+async function loadItPracticeBoth(from: string, to: string): Promise<{ rows: ItLogLite[]; notice: string }> {
+  const [practice, notes] = await Promise.allSettled([
+    loadItPracticeLogs(from, to),
+    // 줄 날짜가 from 주의 월요일 주차 글에 있을 수 있어 week_start 는 그 주 월요일부터
+    getWeeklyNotes(weekRange(from).start, to).then((rows) => itLearningRowsFromNotes(rows, { from, to })),
+  ]);
+  const practiceMissing = practice.status === "rejected" && practice.reason instanceof Error && practice.reason.name === "ItLogsMissingError";
+  if (practice.status === "rejected" && !practiceMissing) throw practice.reason;
+  if (notes.status === "rejected" && practice.status === "rejected") throw practice.reason;
+  const rows = combineItPractice(practice.status === "fulfilled" ? practice.value : null, notes.status === "fulfilled" ? notes.value : null) || [];
+  const notice = practiceMissing
+    ? "실습 기록 표가 아직 없어 주간 현황판 배운 점(브랜드 IT)만 셉니다"
+    : notes.status === "rejected" ? `배운 점을 못 읽어 실습 기록만 셉니다(${msg(notes.reason)})` : "";
+  return { rows, notice };
 }
 
 /**
@@ -182,7 +203,8 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     run("customerPraise", () => selectAllRows<CustomerPraiseRow>("field_sheet_sync_jobs", `select=author,created_at&category=eq.praise&created_at=gte.${kstStartIso(from)}&order=created_at.asc`), (v) => { facts.customerPraise = v; }),
     run("visits", () => getTeamVisits(from, to, { columns: "id,work_date,author,vendor,visited,status" }), (v) => { facts.visits = v.map<VisitLite>((x) => ({ workDate: x.workDate, author: x.author, vendor: x.vendor, visited: x.visited })); }),
     run("itQuiz", () => loadItQuizAttempts(from, to), (v) => { facts.itQuiz = v; }),
-    run("itPractice", () => loadItPracticeLogs(from, to), (v) => { facts.itPractice = v; }),
+    // K21 IT 실습(2026-10-25) = 실습 기록(it_practice_logs) + 주간 현황판 배운 점 중 브랜드 IT 줄. 실습 표가 없어도 배운 점은 센다
+    run("itPractice", () => loadItPracticeBoth(from, to), (v) => { facts.itPractice = v.rows; if (v.notice) ok("itPractice", v.notice); }),
     // 오버홀(K33, 2026-10-24 사무실 일지 대신): 탭 = 설정 OVERHAUL_SHEET_TAB(못 읽으면 기본 "리스트(26년)") — 실패는 overhaul 원본 상태로
     run("overhaul", async () => loadOverhaulRows(overhaulTabFrom(await configP.catch(() => null))), (v) => { facts.overhaul = v; }),
     rosterReady,

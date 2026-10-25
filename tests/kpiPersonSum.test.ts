@@ -5,7 +5,7 @@
  * 순항 여유(2026-10-25 팀장 결정): 경과율 − 5포인트 이상이면 순항.
  */
 import { describe, expect, it } from "vitest";
-import { KPI_REST_LABEL, kpiProgress, kpiRanges, kpiRowStatus, ON_TRACK_SLACK, type RosterMember } from "../src/kpi/kpiCompute";
+import { KPI_REST_LABEL, kpiProgress, kpiRanges, kpiRowStatus, ON_TRACK_MIN_PCT, type RosterMember } from "../src/kpi/kpiCompute";
 import { parseKpiTargets } from "../src/kpi/kpiDefs";
 import { toExpansionRows } from "../src/workCount";
 
@@ -46,19 +46,18 @@ describe("팀 칸 = 개인 칩 합(같은 행 집합)", () => {
   });
 });
 
-describe("순항 여유 5포인트(kpiRowStatus)", () => {
-  const st = (actual: number, elapsed: number) => kpiRowStatus({ actual, target: 100, elapsed, basis: "perPersonBizDay" });
-  it("경과 100%: 95 순항 · 94 부족 · 100 달성", () => {
-    expect(ON_TRACK_SLACK).toBe(5);
-    expect(st(95, 100)).toBe("onTrack");
-    expect(st(94, 100)).toBe("behind");
+describe("고정 기준(kpiRowStatus, 2026-10-25 사용자: 50% 미만 빨강 · 그 이후 파랑 · 100% 초록) — 경과율은 안 본다", () => {
+  const st = (actual: number, elapsed: number | null) => kpiRowStatus({ actual, target: 100, elapsed, basis: "perPersonBizDay" });
+  it("경과율과 무관: 50 순항 · 49 부족 · 100 달성", () => {
+    expect(ON_TRACK_MIN_PCT).toBe(50);
+    expect(st(50, 100)).toBe("onTrack");
+    expect(st(49, 100)).toBe("behind");
     expect(st(100, 100)).toBe("done");
+    expect(st(50, 10)).toBe("onTrack");
+    expect(st(49, 10)).toBe("behind");
+    expect(st(75, 86)).toBe("onTrack"); // 토요일 블로그 A팀 75% — 전엔 빨강
   });
-  it("경과 50%: 45 순항 · 44 부족", () => {
-    expect(st(45, 50)).toBe("onTrack");
-    expect(st(44, 50)).toBe("behind");
-  });
-  it("C팀 실측 19/20(이번 주, 토요일 경과 100%) = 순항", () => {
+  it("C팀 실측 19/20 = 순항", () => {
     expect(kpiRowStatus({ actual: 19, target: 20, elapsed: 100, basis: "perPersonBizDay" })).toBe("onTrack");
   });
 });

@@ -4,6 +4,18 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "a02209b46d",
+    "agent": "debugger",
+    "summary": "달성표 팀 칸 = 개인 칩 합(\"그 외\" 칩) + 순항 판정 여유 5p + 미처리 일정 팝업에 네이버 제목·메모 + 팀 카드 타일 블로그·PC확장·오버홀·IT실습"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "a02209b46d",
+    "agent": "qa-checker",
+    "summary": "달성표 팀 칸 = 개인 칩 합(\"그 외\" 칩) + 순항 판정 여유 5p + 미처리 일정 팝업에 네이버 제목·메모 + 팀 카드 타일 블로그·PC확장·오버홀·IT실습"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "e7679a617a",
     "agent": "ui-designer",
     "summary": "홈 3차 \"팀 보드\"(팀 카드 5장·상태 타일 달성표·OKR 팀 칩→팀원 목록·여백 제거) + 미처리 CS 접수 통합·상세 팝업·탭별 종류 칸 + 일정리스트 검색·캘린더 2년 검색 + OKR 칸 커서 버그"

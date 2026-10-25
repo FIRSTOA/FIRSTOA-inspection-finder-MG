@@ -360,10 +360,11 @@ describe("달성표 행 상태(2026-10-24) — 달성·순항·부족·목표 �
     expect(st(5, null, 50, "none")).toBe("none");
     expect(st(10, 10, 50, "perPersonWeek")).toBe("done"); // 실적 ≥ 목표
     expect(st(12, 10, 50, "perPersonWeek")).toBe("done");
-    expect(st(5, 10, 50, "perPersonWeek")).toBe("onTrack"); // 50% ≥ 경과 50%
-    expect(st(4, 10, 50, "perPersonWeek")).toBe("behind");
-    expect(st(4, 10, null, "perPersonWeek")).toBe("behind"); // 경과 모름 = 100
-    expect(st(400, 1000, 30, "workin")).toBe("onTrack"); // 분기 점검 40% ≥ 경과 30%
+    expect(st(5, 10, 50, "perPersonWeek")).toBe("onTrack"); // 50% 이상 = 순항(고정 기준, 2026-10-25)
+    expect(st(4, 10, 50, "perPersonWeek")).toBe("behind"); // 40% 미만
+    expect(st(4, 10, null, "perPersonWeek")).toBe("behind");
+    expect(st(400, 1000, 30, "workin")).toBe("behind"); // 분기 점검 40% — 경과율과 무관하게 50% 미만은 부족
+    expect(st(500, 1000, 30, "workin")).toBe("onTrack");
     expect(st(0, 0, 50, "zero", { better: "down" })).toBe("done"); // 미처리 0 = 정상
     expect(st(2, 0, null, "zero", { better: "down" })).toBe("behind");
     expect(st(9, 10, 10, "ratio", { goalPct: 100 })).toBe("behind"); // 비율은 경과를 안 본다
