@@ -1,6 +1,6 @@
 // 부서 접수 저장 6단계·처리 단추 흐름 — fetch 모킹으로 호출 순서와 분기를 확인한다(src/deptReceptionFlow.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deleteDeptReception, formatPhone, memoLine, nextWeekday, pickVendorAlias, prependMemo, resolveReceiver, runDeptAction, runDeptSave, saveDeptReceptionEdit } from "../src/deptReceptionFlow";
+import { deleteDeptReception, formatPhone, memoLine, nextWeekday, pickVendorAlias, prependMemo, resolveReceiver, retryDeptSheetAppend, runDeptAction, runDeptSave, saveDeptReceptionEdit } from "../src/deptReceptionFlow";
 import { isCheckConstraintError } from "../src/deptReceptionApi";
 import { invalidateConfigCaches } from "../src/supabase";
 import type { DeptReceptionInput } from "../src/deptReception";
@@ -134,6 +134,49 @@ describe("처리 단추 (runDeptAction)", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2} 이정현: 견적 보냄$/);
     expect(lines[1]).toBe("10/18 10:00 박민: 첫 메모");
+  });
+});
+
+// 2026-10-25 실사고: 영업 접수 1건(10/20)이 엣지 기입 37초 > 화면 제한 20초라 "대기"로 끝나 접수 sheet_row 가 비었고,
+// 10/21 [완료] 때 "시트 행이 아직 없어 시트 갱신은 건너뜁니다"로 시트 G열이 '진행중'에 남았다(잡은 synced·5847행).
+describe("시트 행 되찾기 (잡이 synced 인데 접수 sheet_row 가 빈 경우)", () => {
+  const stuck = { id: "r7", type: "영업팀", status: "진행중", vendor: "세안", author: "손영근", lease_no: "23058", field: "신규/추가 렌탈", symptom: "데스크탑", sheet_row: null,
+    remote_meta: { sheet_state: "queued", sheet_seq: "", handler: "김수인" } };
+  const syncedJob: Handler = (c) => {
+    if (c.method === "GET" && c.table === "service_receptions") return { body: [stuck] };
+    if (c.method === "GET" && c.table === "field_sheet_sync_jobs" && c.url.includes("select=sheet_status")) return { body: [{ sheet_status: "synced", sheet_row: 5847 }] };
+    return undefined;
+  };
+
+  it("완료: 잡에서 5847행을 찾아 접수에 적고, 그 행으로 갱신 잡을 쌓는다", async () => {
+    mockFetch(standard([], syncedJob));
+    const res = await runDeptAction({ id: "r7", type: "영업팀", vendor: "세안", author: "손영근" }, "done", { by: "김수인" });
+    expect(res.warnings.some((w) => w.includes("건너뜁니다"))).toBe(false);
+    const lookup = calls.find((c) => c.table === "field_sheet_sync_jobs" && c.url.includes("select=sheet_status"))!;
+    expect(decodeURIComponent(lookup.url)).toContain("_dupKey=eq.dept:r7:append");
+    const rowPatch = calls.find((c) => c.method === "PATCH" && c.table === "service_receptions" && (c.body as Record<string, unknown>).sheet_row !== undefined);
+    expect((rowPatch!.body as Record<string, unknown>).sheet_row).toBe(5847);
+    const job = calls.filter((c) => c.method === "POST" && c.table === "field_sheet_sync_jobs").pop()!.body as { payload: { data: Record<string, string> } };
+    expect(job.payload.data._updateOnly).toBe("1");
+    expect(job.payload.data._updateRow).toBe("5847");
+  });
+
+  it("[다시 보내기]: append 잡이 이미 있고 synced 면 대기 대신 그 행을 접수에 적는다", async () => {
+    mockFetch(standard([], (c) => {
+      if (c.method === "GET" && c.table === "field_sheet_sync_jobs" && c.url.includes("select=_dupKey")) return { body: [{ _dupKey: "dept:r7:append" }] };
+      return syncedJob(c);
+    }));
+    const res = await retryDeptSheetAppend({ id: "r7", type: "영업팀", vendor: "세안", author: "손영근" });
+    expect(res.row.sheet_row).toBe(5847);
+    expect(res.row.remote_meta?.sheet_state).toBe("synced");
+    expect(calls.some((c) => c.method === "POST" && c.table === "field_sheet_sync_jobs")).toBe(false);
+  });
+
+  it("잡도 아직 synced 가 아니면 예전처럼 건너뛴다는 경고", async () => {
+    mockFetch(standard([], (c) => (c.method === "GET" && c.table === "service_receptions" ? { body: [stuck] } : undefined)));
+    const res = await runDeptAction({ id: "r7", type: "영업팀", vendor: "세안", author: "손영근" }, "done", { by: "김수인" });
+    expect(res.warnings).toContain("시트 행이 아직 없어 시트 갱신은 건너뜁니다");
+    expect(calls.some((c) => c.method === "POST" && c.table === "field_sheet_sync_jobs")).toBe(false);
   });
 });
 

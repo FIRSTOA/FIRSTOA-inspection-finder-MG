@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "906b0b7019",
+    "date": "2026-10-25",
+    "note": "OKR 표 행 추가·삭제·보관(분기·월, 재번호 없이 max+1, 기록 있으면 보관) + 칸 Ctrl+Z 를 칸별 기록으로"
+  },
+  {
     "hash": "97cd47f95f",
     "date": "2026-10-25",
     "note": "홈 OKR 박스: [주][월] 대신 주차 칩 [1주]~[4주](5주면 5) — 고른 주차 기준으로 링·팀 %·팀원 목록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cf729ba82b",
     "date": "2026-09-30",
     "note": "해피콜 탭에 [점검 리포트] 모드 — 점검 양식을 고객용 리포트 이미지로 만들어 키맨에게 MMS 발송(직전 점검 대비 사용량, 토너 25%·폐토너통 75% 기준, 현장사진 QR, 발송 기록)"
-  },
-  {
-    "hash": "dbe9122569",
-    "date": "2026-09-29",
-    "note": "봇 모의 검증 파일을 .cjs로(저장소가 ESM이라 require 불가)"
   }
 ];

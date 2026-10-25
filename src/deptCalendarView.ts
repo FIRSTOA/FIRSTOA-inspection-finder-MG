@@ -35,6 +35,21 @@ export function deptCalQuery(team: DeptCalTeam, from: string, to: string): strin
   return `select=id,team,date,time,title,memo,author,reception_id&team=eq.${encodeURIComponent(team)}&date=gte.${from}&date=lte.${to}&order=date.asc,time.asc,created_at.asc`;
 }
 
+/** 달력 격자 42칸(그 달 1일이 든 주의 일요일부터). month 는 그 달 아무 날(YYYY-MM-DD) */
+export function deptMonthGrid(month: string): string[] {
+  const y = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7)) - 1;
+  const first = Date.UTC(y, m, 1);
+  const start = first - new Date(first).getUTCDay() * 86_400_000;
+  return Array.from({ length: 42 }, (_, i) => new Date(start + i * 86_400_000).toISOString().slice(0, 10));
+}
+
+/** 달 이동 → 그 달 1일(YYYY-MM-01) */
+export function shiftDeptMonth(month: string, delta: number): string {
+  const d = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + delta, 1));
+  return d.toISOString().slice(0, 10);
+}
+
 /** 날짜별 묶음(입력 순서 유지). */
 export function groupDeptEventsByDate(events: DeptCalEvent[]): Map<string, DeptCalEvent[]> {
   const map = new Map<string, DeptCalEvent[]>();

@@ -18,9 +18,13 @@ export function unhandledTotal(counts: Record<ReceptionType, number> | null, sch
   return n + (scheduleCount > 0 ? scheduleCount : 0);
 }
 
-/** 부서 화면(경영·운영·영업) 오른쪽 3칸 — 일정리스트(기본) / 접수리스트 / 미처리현황. 현장 3종과 기억 키를 따로 둔다. */
-export type DeptRightView = "plan" | "list" | "board";
+/**
+ * 부서 화면(경영·운영·영업) 오른쪽 4칸 — 일정리스트(기본) / 달력 / 접수리스트 / 미처리현황. 현장 3종과 기억 키를 따로 둔다.
+ * 달력(2026-10-25): 일정·캘린더 탭의 부서 칩이 없어져(사용자 "서비스접수 탭에서 올인원") 부서 달력(추가·수정·삭제)을 여기서 연다.
+ */
+export type DeptRightView = "plan" | "cal" | "list" | "board";
+export const DEPT_RIGHT_VIEWS: ReadonlyArray<readonly [DeptRightView, string]> = [["plan", "일정리스트"], ["cal", "달력"], ["list", "접수리스트"], ["board", "미처리현황"]];
 export const RECEPTION_RIGHT_DEPT_KEY = "reception_right_dept_v1";
 export function parseDeptRightView(v: string | null | undefined): DeptRightView {
-  return v === "list" || v === "board" ? v : "plan";
+  return v === "cal" || v === "list" || v === "board" ? v : "plan";
 }

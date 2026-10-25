@@ -1,5 +1,5 @@
 /**
- * 캘린더 탭·일정리스트 팀 칩 — 부서 달력(경영·운영·영업). 원본은 team_calendar_events(네이버 미러 없음).
+ * 부서 달력(경영·운영·영업) — 서비스접수 › 부서 화면 [달력] 보기(2026-10-25부터, 그 전엔 캘린더 탭·일정리스트 팀 칩). 원본은 team_calendar_events(네이버 미러 없음).
  * 서비스접수의 예정일이 이 표에 1건씩 올라온다(deptReceptionApi.upsertDeptCalendar).
  * 2026-10-19: 상세에서 제목·메모·날짜 수정(시간 칸 없음)·삭제, 빈 칸 더블클릭/[이 날에 추가]로 새 부서 일정(reception_id 없음).
  * 접수에서 온 일정은 날짜를 바꾸면 접수 예정일도, 지우면 접수 예정일이 비워진다(deptReceptionFlow.saveDeptCalEdit/deleteDeptCalEdit).
@@ -22,7 +22,7 @@ import { openNativePicker } from "./datePicker";
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const dayLabel = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))} (${WEEK[new Date(`${ymd}T12:00:00`).getDay()]})`;
 
-export default function DeptCalendarPanel({ team, month, days, today, mode, reloadTick, onMonth }: {
+export default function DeptCalendarPanel({ team, month, days, today, mode, reloadTick, onMonth, compact = false }: {
   team: DeptCalTeam;
   month: string;          // yyyy-MM-01 (화면 달)
   days: string[];         // 달력 격자 42칸(앞뒤 달 포함) — 조회 범위도 이것과 같게
@@ -30,6 +30,7 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
   mode: "calendar" | "list";
   reloadTick: number;     // 바깥 달력 폴링(45초·창 복귀)에 묶는다
   onMonth?: (delta: number) => void; // 있으면 머리에 ‹ 달 › 이동(달 이동이 없는 일정리스트 화면용)
+  compact?: boolean;      // 좁은 기둥(서비스접수 부서 업무공간): 화면 폭과 상관없이 점 격자 + 고른 날 목록
 }) {
   const meta = RECEPTION_TYPE_META[team];
   const label = DEPT_CAL_LABEL[team];
@@ -148,7 +149,7 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
       ) : (
         <>
           {/* 모바일: 점 격자 + 고른 날 목록 */}
-          <div className="md:hidden">
+          <div className={compact ? "" : "md:hidden"}>
             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
               {WEEK.map((d, i) => <div key={d} className={`py-2 text-center text-[11px] font-black ${i === 0 ? "text-rose-500" : i === 6 ? "text-blue-500" : "text-slate-500"}`}>{d}</div>)}
             </div>
@@ -179,7 +180,7 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
             </div>
           </div>
           {/* PC: 칸 안에 칩 */}
-          <div className="hidden overflow-x-auto md:block">
+          <div className={compact ? "hidden" : "hidden overflow-x-auto md:block"}>
             <div className="min-w-[760px]">
               <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
                 {WEEK.map((d, i) => <div key={d} className={`px-2 py-2.5 text-center text-[11px] font-black ${i === 0 ? "text-rose-500" : i === 6 ? "text-blue-500" : "text-slate-500"}`}>{d}</div>)}

@@ -4,21 +4,22 @@
  *
  * 데이터
  * - 일정리스트 = fetchOpenReceptions(90) 중 이 부서 + team_calendar_events 중 접수와 연결 안 된 부서 일정(오늘~90일) → deptPlanBuckets.
+ * - 달력(2026-10-25) = DeptCalendarPanel compact(그 부서 달력 추가·수정·삭제). 일정·캘린더 탭의 부서 칩은 없어졌다.
  * - 미처리현황 = 홈과 같은 kpi/kpiData.loadUnhandledRows() → homeUnhandled.rowsForTab(부서 탭). 숫자가 홈 "경영/운영/영업" 탭과 같다.
  *   시트 행(시트 기준 스위치 켬)은 FIELD 에서 처리할 수 없어 [시트에서 열기]만 붙인다.
  * - 60초마다·창 복귀 때 다시 읽는다. 화면이 숨어 있으면(useScreenActive) 쉰다. 실패는 빨간 줄로 보이고 이전 값은 둔다.
  * 배정 = remote_meta.handler 1명(runDeptAction "assign" → 시트 처리자 칸 갱신). 알림은 보내지 않는다(Q6).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, ExternalLink, Loader2 } from "lucide-react";
+import { CalendarDays, ExternalLink, Loader2, Plus } from "lucide-react";
 import { selectRows } from "./supabase";
 import { fetchOpenReceptions, type OpenReceptionRow } from "./deptReceptionApi";
-import { deptCalEditPatch, deptCalFormOf, deptCalQuery, toDeptCalEvent, type DeptCalEvent, type DeptCalForm } from "./deptCalendarView";
+import { deptCalEditPatch, deptCalFormOf, deptCalQuery, deptMonthGrid, emptyDeptCalForm, shiftDeptMonth, toDeptCalEvent, type DeptCalEvent, type DeptCalForm } from "./deptCalendarView";
 import { resolveActor, runDeptAction, saveDeptCalEdit, warnTone, type DeptRowLike } from "./deptReceptionFlow";
 import { DEPT_UNHANDLED_TAB, deptMemberNames, deptPlanBuckets, defaultPlanBucket, planTodoCount, sheetKeyOf, type PlanBucket } from "./deptPlan";
 import { rowsForTab, UNHANDLED_BADGE, type UnhandledRow } from "./homeUnhandled";
 import { deptSheetUrl, sheetRowUrl } from "./receptionSheetOpen";
-import type { DeptRightView } from "./receptionRightView";
+import { DEPT_RIGHT_VIEWS, type DeptRightView } from "./receptionRightView";
 import type { DeptType } from "./deptReception";
 import { useMembers } from "./authors";
 import { useScreenActive } from "./screenActive";
@@ -26,6 +27,7 @@ import { kstDate } from "./visits";
 import { notify } from "./toast";
 import { openNativePicker } from "./datePicker";
 import DeptPlanList from "./DeptPlanList.view";
+import DeptCalendarPanel from "./DeptCalendarPanel";
 import DeptActionBar from "./DeptActionBar";
 import AssigneePicker from "./AssigneePicker";
 import FormModal from "./FormModal";
@@ -40,11 +42,12 @@ const addDays = (ymd: string, n: number) => {
 
 export type DeptCounts = { plan: number; board: number };
 
-/** 부서 화면 전환 막대 [일정리스트 n | 접수리스트 | 미처리현황 n] */
+/** 부서 화면 전환 막대 [일정리스트 n | 달력 | 접수리스트 | 미처리현황 n] */
 export function DeptRightTabs({ value, onChange, counts }: { value: DeptRightView; onChange: (v: DeptRightView) => void; counts: DeptCounts | null }) {
-  const items: Array<[DeptRightView, string, number | null]> = [["plan", "일정리스트", counts ? counts.plan : null], ["list", "접수리스트", null], ["board", "미처리현황", counts ? counts.board : null]];
+  const countOf = (v: DeptRightView) => (!counts ? null : v === "plan" ? counts.plan : v === "board" ? counts.board : null);
+  const items: Array<[DeptRightView, string, number | null]> = DEPT_RIGHT_VIEWS.map(([v, label]) => [v, label, countOf(v)]);
   return (
-    <div className="grid min-h-11 grid-cols-3 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:min-h-9" role="tablist" aria-label="오른쪽 보기">
+    <div className="grid min-h-11 grid-cols-4 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:min-h-9" role="tablist" aria-label="오른쪽 보기">
       {items.map(([v, label, n]) => {
         const on = value === v;
         return (
@@ -96,7 +99,10 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   const [assignRow, setAssignRow] = useState<OpenReceptionRow | null>(null);
   const [freeName, setFreeName] = useState("");
   const [assigningId, setAssigningId] = useState("");
-  const [edit, setEdit] = useState<{ ev: DeptCalEvent; form: DeptCalForm } | null>(null);
+  // ev 가 null 이면 새 부서 일정(일정리스트 [＋ 일정 추가])
+  const [edit, setEdit] = useState<{ ev: DeptCalEvent | null; form: DeptCalForm } | null>(null);
+  const [calMonth, setCalMonth] = useState(() => `${kstDate().slice(0, 7)}-01`);
+  const [calTick, setCalTick] = useState(0);
   const [saving, setSaving] = useState(false);
   const seq = useRef(0);
 
@@ -171,14 +177,15 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
 
   const saveEvent = async () => {
     if (!edit || saving) return;
-    const checked = deptCalEditPatch({ ...edit.form, time: edit.ev.time });
+    const checked = deptCalEditPatch({ ...edit.form, time: edit.ev?.time || "" });
     if (!checked.ok) { notify(checked.error, "error"); return; }
     setSaving(true);
     try {
       const res = await saveDeptCalEdit(dept, edit.ev, checked.patch, resolveActor(author));
       res.warnings.forEach((w) => notify(w, warnTone(w)));
-      if (!res.warnings.length) notify("일정을 수정했습니다.", "success");
+      if (!res.warnings.length) notify(edit.ev ? "일정을 수정했습니다." : "부서 달력에 일정을 추가했습니다.", "success");
       setEdit(null);
+      setCalTick((n) => n + 1);
       void load();
     } catch (e) {
       notify(`일정 저장 실패: ${msg(e)}`, "error");
@@ -188,6 +195,14 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   const rowById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const actions = (row: DeptRowLike) => <DeptActionBar row={row} compact author={author} onChanged={(next) => { patchRow(next); settle(); }} />;
 
+  // 달력에서 고치고 일정리스트로 돌아오면 다시 읽는다(달력은 자기 조회를 따로 한다)
+  const prevView = useRef(view);
+  useEffect(() => {
+    if (prevView.current === "cal" && view === "plan") void load();
+    prevView.current = view;
+  }, [view, load]);
+  const calDays = useMemo(() => deptMonthGrid(calMonth), [calMonth]);
+
   if (view === "list") return null;
   return (
     <div className="pb-2">
@@ -195,10 +210,17 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
 
       {view === "plan" ? (
         <>
-          <div className="px-3 pt-2 text-[11px] font-bold text-slate-400">처리자 알약을 눌러 배정 · 단추로 완료·미루기. 달력으로 보기는 일정 탭 › 부서 칩.</div>
+          <div className="flex items-center gap-2 px-3 pt-2">
+            <span className="min-w-0 flex-1 text-[11px] font-bold text-slate-400">처리자 알약을 눌러 배정 · 단추로 완료·미루기. 달력으로 보기·삭제는 [달력].</span>
+            <button type="button" onClick={() => setEdit({ ev: null, form: emptyDeptCalForm(today) })}
+              className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full bg-blue-600 px-3 text-[11px] font-black text-white hover:bg-blue-700 sm:min-h-8"><Plus size={12} aria-hidden />일정 추가</button>
+          </div>
           <DeptPlanList buckets={buckets} active={shownBucket} onActive={setBucket} loading={loading} assigningId={assigningId}
             onAssign={openAssign} onOpenEvent={(ev) => setEdit({ ev, form: deptCalFormOf(ev) })} renderActions={actions} />
         </>
+      ) : view === "cal" ? (
+        <DeptCalendarPanel key={dept} team={dept} month={calMonth} days={calDays} today={today} mode="calendar" compact
+          reloadTick={calTick + reloadKey} onMonth={(d) => setCalMonth((m) => shiftDeptMonth(m, d))} />
       ) : (
         <div>
           <div className="px-3 pt-2 text-[11px] font-bold text-slate-500">
@@ -253,7 +275,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
       ))}
 
       {edit && (
-        <FormModal title={edit.ev.title || "(제목 없음)"} subtitle={`부서 일정 · 수정${edit.ev.author ? ` · 작성 ${edit.ev.author}` : ""}`} icon={<CalendarDays size={17} />}
+        <FormModal title={edit.ev ? (edit.ev.title || "(제목 없음)") : "부서 일정 추가"} subtitle={edit.ev ? `부서 일정 · 수정${edit.ev.author ? ` · 작성 ${edit.ev.author}` : ""}` : "부서 달력 · 새 일정"} icon={<CalendarDays size={17} />}
           onClose={() => { if (!saving) setEdit(null); }}
           footer={(
             <div className="flex w-full justify-end gap-2">
@@ -271,7 +293,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
             <label className="block"><span className="text-[11px] font-bold text-slate-500">메모</span>
               <textarea value={edit.form.memo} rows={3} onChange={(e) => setEdit({ ...edit, form: { ...edit.form, memo: e.target.value } })} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500" />
             </label>
-            <div className="text-[11px] font-semibold text-slate-400">삭제·새 일정 추가는 일정 탭 › 부서 칩(부서 달력)에서 합니다.</div>
+            {edit.ev && <div className="text-[11px] font-semibold text-slate-400">삭제·새 일정 추가는 [달력]에서 합니다.</div>}
           </div>
         </FormModal>
       )}

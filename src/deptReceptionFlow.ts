@@ -11,7 +11,7 @@ import {
   type DeptReceptionInput, type DeptType,
 } from "./deptReception";
 import {
-  completeDeptCalendar, deleteDeptCalEvent, deleteDeptCalendar, deptSheetCategoryOf, enqueueDeptSheetJob, insertDeptCalEvent,
+  completeDeptCalendar, deleteDeptCalEvent, deleteDeptCalendar, deptSheetCategoryOf, enqueueDeptSheetJob, findDeptAppendJobRow, insertDeptCalEvent,
   saveDeptReception, sendDeptReceptionKakao, setDeptSheetRow, softDeleteDeptReception, updateDeptCalEvent,
   updateDeptHandling, updateDeptReceptionFields, upsertDeptCalendar,
 } from "./deptReceptionApi";
@@ -199,7 +199,18 @@ async function pushSheetUpdate(row: DeptRowLike, warnings: string[]): Promise<vo
   const cat = deptSheetCategoryOf(row.type);
   if (!cat) return;
   const meta = row.remote_meta || {};
-  if (!row.sheet_row && !meta.sheet_seq) { warnings.push("시트 행이 아직 없어 시트 갱신은 건너뜁니다"); return; }
+  if (!row.sheet_row && !meta.sheet_seq) {
+    // 접수 저장 때 시트 기입이 늦게 끝나 행 번호를 못 받은 경우 — 잡에서 행을 되찾아 접수에도 적는다
+    let found: number | null = null;
+    try { found = await findDeptAppendJobRow(row.id); } catch (e) { warnings.push(`시트 행 조회 실패: ${(e as Error).message}`); return; }
+    if (!found) { warnings.push("시트 행이 아직 없어 시트 갱신은 건너뜁니다"); return; }
+    row.sheet_row = found;
+    try {
+      await setDeptSheetRow(row.id, found);
+      await updateDeptHandling(row.id, { sheet_state: "synced" });
+      row.remote_meta = { ...meta, sheet_state: "synced" };
+    } catch (e) { warnings.push(`시트 행 번호 기록 실패: ${(e as Error).message}`); }
+  }
   try {
     const payload = buildDeptSheetPayload({
       type: row.type, author: row.author, route: (row.route || "전화") as DeptReceptionInput["route"], vendor: row.vendor,

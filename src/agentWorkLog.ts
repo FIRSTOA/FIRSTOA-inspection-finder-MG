@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "906b0b7019",
+    "agent": "feature-planner",
+    "summary": "OKR 표 행 추가·삭제·보관(분기·월, 재번호 없이 max+1, 기록 있으면 보관) + 칸 Ctrl+Z 를 칸별 기록으로"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "906b0b7019",
+    "agent": "developer",
+    "summary": "OKR 표 행 추가·삭제·보관(분기·월, 재번호 없이 max+1, 기록 있으면 보관) + 칸 Ctrl+Z 를 칸별 기록으로"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "906b0b7019",
+    "agent": "debugger",
+    "summary": "OKR 표 행 추가·삭제·보관(분기·월, 재번호 없이 max+1, 기록 있으면 보관) + 칸 Ctrl+Z 를 칸별 기록으로"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "906b0b7019",
+    "agent": "qa-checker",
+    "summary": "OKR 표 행 추가·삭제·보관(분기·월, 재번호 없이 max+1, 기록 있으면 보관) + 칸 Ctrl+Z 를 칸별 기록으로"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "97cd47f95f",
     "agent": "developer",
     "summary": "홈 OKR 박스: [주][월] 대신 주차 칩 [1주]~[4주](5주면 5) — 고른 주차 기준으로 링·팀 %·팀원 목록"

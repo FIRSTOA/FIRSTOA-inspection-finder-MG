@@ -1,11 +1,16 @@
 // OKR 행(병목·목표 줄) 추가·삭제·보관(2026-10-25, docs/tasks/okr-rows-add-remove-2026-10-25.md 6절 ①~⑥)
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   OKR_PILLARS, addGoalRow, archivedGoals, blankGoalsLike, bottleneckLabel, emptyReport, goalHasRecords, goalRemoveKind, isLegacyMonthId, monthScreenGoals,
   monthlyRollup, nextGoalNo, normalizeGoals, quarterRollup, remapReports, removeGoalRow, renumberGoals, restoreGoalRow, visibleGoals,
   type OkrCycle, type OkrGoal, type OkrReport,
 } from "../src/okr";
 import { okrWeekResult, type OkrWeekFacts } from "../src/kpi/kpiCompute";
+import { askConfirm } from "../src/confirmModal";
+import { ADD_GOAL_MESSAGE, ADD_QUARTER_GOAL_MESSAGE, confirmAddGoalRow, confirmRemoveGoalRow, goalEditTarget } from "../src/okrGoalConfirm";
+
+vi.mock("../src/confirmModal", () => ({ askConfirm: vi.fn() }));
+const ask = vi.mocked(askConfirm);
 
 // Pillar 3 × 병목 3 = 9줄(no 1~9) — 실측 2026-Q4 와 같은 모양
 const nine = (): OkrGoal[] => OKR_PILLARS.flatMap((p, pi) => [1, 2, 3].map((n) => ({ no: pi * 3 + n, pillar: p.full, bottleneck: `병목 ${pi + 1}-${n}`, objective: `목표 ${pi * 3 + n}`, criteria: "" })));
@@ -126,5 +131,64 @@ describe("⑥ 옛 구조(2026-09 이하) 경로 무변경", () => {
     expect(goals.map((g) => g.no)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     const moved = remapReports([rep("2026-09", "A", "", [[3, "", "완료"]])], new Map([[1, 1], [3, 2]]))[0];
     expect(moved.rows.map((r) => r.no)).toEqual([2]);
+  });
+});
+
+// 2026-10-25 사용자 "생성·삭제할 때 확인 문구" — 확인창이 먼저, 취소하면 아무 변화 없음
+describe("⑦ 확인창 — 추가·삭제 모두 askConfirm 뒤에만 바뀐다", () => {
+  beforeEach(() => { ask.mockReset(); });
+  it("추가: 확인창을 먼저 띄우고, 취소하면 null(행 그대로) · 확인하면 그 Pillar 끝에 새 행", async () => {
+    const goals = nine();
+    const before = JSON.stringify(goals);
+    ask.mockResolvedValueOnce(false);
+    expect(await confirmAddGoalRow(goals, OKR_PILLARS[0].full)).toBeNull();
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(ask.mock.calls[0][0]).toBe(ADD_GOAL_MESSAGE);
+    expect(ask.mock.calls[0][0]).toContain("모든 파트(A~D)");
+    expect(JSON.stringify(goals)).toBe(before); // 원본 불변
+    ask.mockResolvedValueOnce(true);
+    const added = await confirmAddGoalRow(goals, OKR_PILLARS[0].full);
+    expect(added?.no).toBe(10);
+    expect(added?.goals.map((g) => g.no)).toEqual([1, 2, 3, 10, 4, 5, 6, 7, 8, 9]);
+  });
+  it("삭제: 빈 행도 확인(\"비어 있습니다\"), 글만 있으면 \"되돌릴 수 없습니다\", 기록 있으면 보관 — 취소하면 null", async () => {
+    const goals = [...nine(), { no: 10, pillar: OKR_PILLARS[0].full, bottleneck: "", objective: "", criteria: "" }];
+    const before = JSON.stringify(goals);
+    ask.mockResolvedValue(false);
+    expect(await confirmRemoveGoalRow(goals, 10, false, "빈 행")).toBeNull();
+    expect(ask.mock.calls[0][0]).toContain("비어 있습니다");
+    expect(await confirmRemoveGoalRow(goals, 1, false, "글 행")).toBeNull();
+    expect(ask.mock.calls[1][0]).toContain("글이 있습니다. 삭제하면 되돌릴 수 없습니다");
+    expect(await confirmRemoveGoalRow(goals, 1, true, "기록 행")).toBeNull();
+    expect(ask.mock.calls[2][0]).toContain("보관");
+    expect(JSON.stringify(goals)).toBe(before); // 세 번 모두 취소 → 아무 변화 없음
+    ask.mockResolvedValue(true);
+    expect((await confirmRemoveGoalRow(goals, 10, false, "빈 행"))?.goals.some((g) => g.no === 10)).toBe(false);
+    const archived = await confirmRemoveGoalRow(goals, 1, true, "기록 행");
+    expect(archived?.kind).toBe("archive");
+    expect(archived?.goals.find((g) => g.no === 1)?.hidden).toBe(true);
+    expect(await confirmRemoveGoalRow(goals, 99, false, "없는 행")).toBeNull(); // 없는 번호는 묻지도 않음
+    expect(ask).toHaveBeenCalledTimes(5);
+  });
+});
+
+// 2026-10-25 팀장: 파트 탭에서 공통 칸이 비어 있으면 공통 행에, 있으면 그 층에
+describe("⑧ 파트 탭 병목현상·목표 저장 위치", () => {
+  const blank: OkrGoal = { no: 10, pillar: OKR_PILLARS[0].full, bottleneck: "", objective: "", criteria: "" };
+  it("공통 칸이 비면 common(이어 치는 글도 sticky 로 common), 글이 있거나 층이 덮어쓴 칸이면 layer", () => {
+    expect(goalEditTarget(blank, "bottleneck", [undefined, undefined], false)).toBe("common");
+    expect(goalEditTarget(blank, "objective", [[]], false)).toBe("common");
+    expect(goalEditTarget({ ...blank, bottleneck: "첫 글자" }, "bottleneck", [], true)).toBe("common"); // 이미 공통으로 쓰기 시작한 칸
+    expect(goalEditTarget(nine()[0], "bottleneck", [], false)).toBe("layer");
+    expect(goalEditTarget(nine()[0], "objective", [], false)).toBe("layer");
+    const layer: OkrGoal[] = [{ ...blank, html: { bottleneckSet: "1" } }];
+    expect(goalEditTarget(blank, "bottleneck", [layer], false)).toBe("layer"); // 그 층이 이미 덮어쓴 칸
+    expect(goalEditTarget(blank, "objective", [layer], false)).toBe("common"); // 다른 칸은 상관없음
+    expect(goalEditTarget(undefined, "objective", [], false)).toBe("layer");
+  });
+  it("분기 표 추가 문구는 따로", async () => {
+    ask.mockReset(); ask.mockResolvedValueOnce(false);
+    expect(await confirmAddGoalRow(nine(), OKR_PILLARS[0].full, [], true)).toBeNull();
+    expect(ask.mock.calls[0][0]).toBe(ADD_QUARTER_GOAL_MESSAGE);
   });
 });

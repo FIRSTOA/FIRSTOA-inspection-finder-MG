@@ -28,8 +28,6 @@ const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
 import { notify } from "./toast";
 import MyPlan from "./MyPlan";
 import TeamCalendar from "./TeamCalendar";
-import DeptCalendarPanel from "./DeptCalendarPanel";
-import { DEPT_CAL_LABEL, DEPT_CAL_TEAMS, isDeptCalTeam, splitTeamPick, type DeptCalTeam } from "./deptCalendarView";
 import { regionLetter } from "./region";
 import { saveVisit } from "./visits";
 import type { ManualScheduleEntry } from "./manualSchedule";
@@ -539,14 +537,9 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   useEffect(() => { try { localStorage.setItem("cs_as_team_filter_v1", JSON.stringify([team])); } catch { /* 저장 실패 무시 */ } }, [team]);
   useEffect(() => { try { localStorage.setItem("cs_calendar_types_v2", JSON.stringify(visibleScheduleTypes)); } catch { /* 저장 실패 무시 */ } }, [visibleScheduleTypes]);
   useEffect(() => { try { localStorage.setItem("cs_calendar_teams_v1", JSON.stringify(visibleTeams)); } catch { /* 저장 실패 무시 */ } }, [visibleTeams]);
-  // 캘린더 탭 부서 달력(경영·운영·영업, team_calendar_events 읽기 전용) — 고르면 현장 일정 대신 그 부서만. 전체 보기에는 섞지 않는다
-  const [deptCal, setDeptCal] = useState<DeptCalTeam | null>(() => { try { const v: unknown = JSON.parse(localStorage.getItem("cs_calendar_dept_v1") || "null"); return isDeptCalTeam(v) ? v : null; } catch { return null; } });
-  useEffect(() => { try { localStorage.setItem("cs_calendar_dept_v1", JSON.stringify(deptCal)); } catch { /* 저장 실패 무시 */ } }, [deptCal]);
-  // 일정리스트 팀 칩의 부서 칸(경영·운영·영업) — team 상태와 따로. 고르면 as_tickets 목록 대신 부서 달력 목록(읽기 전용)
-  const [listDept, setListDept] = useState<DeptCalTeam | null>(null); // 세션 안에서만 — 다음 접속엔 늘 내 일정(as_tickets)부터 보이게(2026-10-19 검수 메모)
   // 일정리스트 검색칸 — 업체·제목·주소·내용·담당자(2자 이상). 팀·일정 구분·상태 칩과 AND, 비우면 원래 목록(2026-10-25)
   const [listSearch, setListSearch] = useState("");
-  const pickListTeam = (value: string) => { const pick = splitTeamPick(value); setListDept(pick.dept); if (pick.team !== null) setTeam(pick.team as typeof team); };
+  const pickListTeam = (value: string) => setTeam(value as typeof team);
   const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const [myPlanOpen, setMyPlanOpen] = useState(false); // 일정리스트 탭의 내 일정(지도+동선) 보기
   const [photoView, setPhotoView] = useState<{ urls: string[]; idx: number } | null>(null);   // 증상 사진 확대 보기
@@ -1682,10 +1675,10 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 return (<>
                   {/* 모바일: [팀 ▾][검색][＋] 한 줄 / PC: 세로 스택 */}
                   <div className="flex items-center gap-1.5 lg:block">
-                    {!deptCal && <button type="button" onClick={() => openSimpleAdd(todayYmd)} aria-label="일정 추가"
+                    <button type="button" onClick={() => openSimpleAdd(todayYmd)} aria-label="일정 추가"
                       className="order-3 flex h-9 shrink-0 items-center justify-center gap-1 rounded-xl bg-blue-600 px-2.5 text-[12px] font-black text-white shadow-[0_3px_10px_rgba(37,99,235,0.35)] transition hover:bg-blue-700 lg:order-none lg:h-auto lg:w-full lg:gap-1.5 lg:rounded-full lg:px-4 lg:py-2.5 lg:text-sm">
                       <span className="text-base leading-none">＋</span><span className="lg:hidden">추가</span><span className="hidden lg:inline">일정 추가</span>
-                    </button>}
+                    </button>
                     <div className="relative order-2 min-w-0 flex-1 lg:mt-2.5">
                       <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input value={calSearch} onChange={(e) => setCalSearch(e.target.value)} placeholder="업체·제목 검색"
@@ -1712,7 +1705,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       {(() => {
                         // 단일 선택: 전체 / 특정 팀(+종일은 팀 무관 정보라 함께) / E팀 / 종일만
                         const pickValue = (() => {
-                          if (deptCal) return deptCal;
                           const allOn = teams.every((t) => visibleTeams.includes(t)) && ["E", "종일", "기타"].every((x) => visibleExtra.includes(x));
                           if (allOn) return "전체";
                           if (visibleTeams.length === 1 && !visibleExtra.length) return visibleTeams[0];
@@ -1724,8 +1716,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                           <PortalSelect tone="dark" direction="down" className="w-[8.75rem] py-1.5 font-semibold lg:w-full lg:py-2" width={200}
                             value={pickValue}
                             onChange={(v) => {
-                              if (isDeptCalTeam(v)) { setDeptCal(v); return; } // 부서 달력 — 현장 필터(visibleTeams)는 그대로 둔다
-                              setDeptCal(null);
                               if (v === "전체") { setVisibleTeams([...teams]); setVisibleExtra(["E", "종일", "기타"]); }
                               else if (v === "종일") { setVisibleTeams([]); setVisibleExtra(["종일"]); }
                               else if (v === "E") { setVisibleTeams([]); setVisibleExtra(["E"]); }
@@ -1736,7 +1726,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                               { value: "전체", label: "전체 팀" },
                               ...teams.map((tm) => ({ value: tm, label: `${teamLabel(tm)} · ${TEAM_SLOT_LABEL[tm]}` })),
                               { value: "E", label: "CSS팀(E지역) · 오후 9시" },
-                              ...DEPT_CAL_TEAMS.map((d) => ({ value: d, label: DEPT_CAL_LABEL[d] })),
                               { value: "기타", label: "기타 시간 (11시 등)" },
                               { value: "종일", label: "종일만 (연차 등)" },
                             ]} />
@@ -1744,7 +1733,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       })()}
                     </div>
                   </div>
-                  {!deptCal && <>
+                  <>
                   <div className="mb-1.5 hidden text-[11px] font-black uppercase tracking-wider text-slate-500 lg:mt-4 lg:block">업무</div>
                   <div className="mt-2 flex flex-wrap gap-1 lg:mt-0 lg:flex-col">
                     <button type="button" onClick={() => setVisibleScheduleTypes([...displayFilters])} className={pill(allTypesOn)}><span>전체</span></button>
@@ -1754,7 +1743,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                       </button>
                     ))}
                   </div>
-                  </>}
+                  </>
                 </>);
               })()}
             </aside>
@@ -1773,9 +1762,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 </div>
               </div>
 
-              {deptCal && viewMode !== "team" ? (
-                <DeptCalendarPanel key={deptCal} team={deptCal} month={currentMonth} days={calendarDays} today={todayYmd} mode={viewMode === "list" ? "list" : "calendar"} reloadTick={naverReloadTick} />
-              ) : viewMode === "list" ? (
+              {viewMode === "list" ? (
                 <div className="space-y-4 p-3 sm:p-4">
                   {(() => {
                     const groups = monthTickets.sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
@@ -1910,14 +1897,14 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
           <div className="space-y-2 rounded-xl bg-[#1E252F] px-3 py-2.5">
             {/* ① 팀 — 팝업 없이 한 줄, 좁으면 가로 스크롤 */}
             <div className="flex gap-0.5 overflow-x-auto rounded-full bg-white/[0.07] p-0.5 sm:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, t === "E" ? "CSS" : t] as const), ...DEPT_CAL_TEAMS.map((d) => [d, DEPT_CAL_LABEL[d]] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
+              {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, t === "E" ? "CSS" : t] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
                 <button key={value} type="button" onClick={() => pickListTeam(value)}
-                  className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-[12px] font-black transition ${(listDept ? listDept === value : team === value) ? "bg-white text-slate-950" : "text-slate-400"}`}>{label}</button>
+                  className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-3 text-[12px] font-black transition ${team === value ? "bg-white text-slate-950" : "text-slate-400"}`}>{label}</button>
               ))}
             </div>
             {/* ② 일정 구분 + 대상 건수 */}
             <div className="flex items-center gap-2">
-              {!listDept && <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-full bg-white/[0.07] p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-none">
+              <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto rounded-full bg-white/[0.07] p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-none">
                 {([["today", "금일"], ["tomorrow", "익일"], ["scheduled", "예정"], ["overdue", "미처리"]] as [DayFilter, string][]).map(([key, label]) => (
                   <button key={key} type="button" onClick={() => { setMyPlanOpen(false); setDayFilter(key); }}
                     className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[12.5px] font-black transition sm:px-4 lg:min-h-9 ${!myPlanOpen && dayFilter === key ? "bg-white text-slate-950" : key === "overdue" && overdueCount ? "text-rose-300 hover:text-white" : "text-slate-400 hover:text-white"}`}>
@@ -1927,18 +1914,18 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 ))}
                 <button type="button" onClick={() => setMyPlanOpen(true)}
                   className={`inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[12.5px] font-black transition sm:px-4 lg:min-h-9 ${myPlanOpen ? "bg-blue-600 text-white" : "text-blue-400 hover:text-blue-300"}`}>내 일정</button>
-              </div>}
+              </div>
               {/* 넓은 화면은 팀 칩을 여기 나란히 (모바일은 위 줄) */}
               <div className="ml-auto hidden gap-0.5 rounded-full bg-white/[0.07] p-0.5 sm:flex">
-                {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, teamLabel(t)] as const), ...DEPT_CAL_TEAMS.map((d) => [d, DEPT_CAL_LABEL[d]] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
+                {([["ALL", "전체"], ...([...teams, "E"] as Team[]).map((t) => [t, teamLabel(t)] as const), ["기타", "기타"], ["종일", "종일"]] as Array<[string, string]>).map(([value, label]) => (
                   <button key={value} type="button" onClick={() => pickListTeam(value)}
-                    className={`inline-flex min-h-9 items-center rounded-full px-3 text-xs font-black transition ${(listDept ? listDept === value : team === value) ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{label}</button>
+                    className={`inline-flex min-h-9 items-center rounded-full px-3 text-xs font-black transition ${team === value ? "bg-white text-slate-950" : "text-slate-400 hover:text-white"}`}>{label}</button>
                 ))}
               </div>
             </div>
             {/* ③ 상태 ④ 유형 — 한 줄에 몰면 가로 스크롤해야 해서 불편하다는 피드백(2026-08-19) → 두 줄로 나누고
                 줄바꿈 허용(스크롤 없음). 칩 높이는 그대로 얇게 유지. */}
-            {!myPlanOpen && !listDept && (
+            {!myPlanOpen && (
               <>
               {/* 검색 — 폰에서도 한 줄 */}
               <div className="relative">
@@ -1988,13 +1975,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             )}
           </div>
 
-          {listDept && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800 sm:px-4">배정·완료는 서비스접수 › {DEPT_CAL_LABEL[listDept]} › 일정리스트에서 합니다. 여기는 달 단위로 보기.</div>
-              <DeptCalendarPanel key={listDept} team={listDept} month={currentMonth} days={calendarDays} today={todayYmd} mode="list" reloadTick={naverReloadTick} onMonth={(d) => setCurrentMonth(addMonths(currentMonth, d))} />
-            </div>
-          )}
-          {myPlanOpen && !listDept && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm} onAddManual={addManualSchedules}
+          {myPlanOpen && <MyPlan tickets={tickets} author={author} onSelfRequest={onSelfRequest} onUseField={onUseField} onLoadForm={onLoadForm} onAddManual={addManualSchedules}
             onDefer={(t, newDate) => { update(t.id, { date: newDate }); notify(`${t.vendor} — ${Number(newDate.slice(5, 7))}/${Number(newDate.slice(8, 10))}로 옮겼습니다 ✓`, "success"); }}
             onAddress={(t, address) => update(t.id, { address })}
             onAssign={(t, name) => { const ticket = tickets.find((x) => x.id === t.id); if (ticket) applyAssign(ticket, name); }}
@@ -2012,7 +1993,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
               if (raw && onLoadForm) onLoadForm(raw, link); else onUseField?.(buildFieldAsText(ticket, author), link);
             }}
             onRemove={(t) => { const target = tickets.find((x) => x.id === t.id); if (target) removeTicket(target); }} />}
-          <div className={`space-y-3 lg:hidden ${myPlanOpen || listDept ? "!hidden" : ""}`}>
+          <div className={`space-y-3 lg:hidden ${myPlanOpen ? "!hidden" : ""}`}>
             {/* 한 구조로 통일(2026-08-19) — 예정 일정은 익일로 넘어올 때까지 배정을 거의 하지 않아
                 사실상 '미배정' 한 박스이고, 그 안에서 날짜로 끊는 게 자연스럽다는 판단.
                 위계: 사람(얇은 색 띠) > 날짜(흰 라벨, 스크롤에 붙음). */}
@@ -2091,7 +2072,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
             {!scheduleRows.length && !listNaver.length && <StateBox kind="empty" message={normalizeScheduleQuery(listSearch) ? `"${listSearch.trim()}" 검색 결과가 없습니다 — 팀·금일/익일/예정 칩도 확인해 보세요.` : "등록된 일정이 없습니다."} />}
           </div>
 
-          <div className={`hidden space-y-4 ${myPlanOpen || listDept ? "" : "lg:block"}`}>
+          <div className={`hidden space-y-4 ${myPlanOpen ? "" : "lg:block"}`}>
             {(() => {
               // 배정자별 박스 — 미배정(로즈)과 배정자(에메랄드)를 확실히 구분. 네이버 종일·연차 일정도 미배정 박스에 한 몸으로 흡수
               const doneRows = scheduleRows.filter((t) => t.status === "완료");

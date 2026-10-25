@@ -137,11 +137,17 @@ export async function enqueueDeptSheetJob(
     kakao_status: "disabled",
     "_dupKey": isUpdate ? jobId : deptAppendDupKey(row.id),
   });
-  if (inserted === "dup") return { state: "queued", row: null, seq: "", message: "이미 쌓인 시트 잡" };
+  if (inserted === "dup") {
+    // 이미 쌓인 append 잡이 그 사이 시트에 들어갔으면(첫 호출이 20초 제한에 걸린 뒤 엣지가 끝까지 기입, 또는 재시도 크론) 그 행을 돌려준다
+    const done = await findDeptAppendJobRow(row.id);
+    if (done) return { state: "synced", row: done, seq: "", message: `시트 ${done}행 (이미 기입됨)` };
+    return { state: "queued", row: null, seq: "", message: "이미 쌓인 시트 잡" };
+  }
   const cfg = await getConfig().catch(() => ({} as Record<string, string>));
   if (!isOn(cfg.FIELD_SHEET_SYNC_ENABLED)) return { state: "disabled", row: null, seq: "", message: "시트 동기화 설정 꺼짐(대기)" };
   try {
-    const result = await invokeEdgeFunction<{ status?: string; row?: number; seq?: string | number }>("field-sheet-sync", { jobId });
+    // 부서 시트 기입 엣지는 실측 37초(2026-10-20 영업 1건)라 기본 20초면 화면이 "대기"로 끝나고 행 번호를 못 받는다 → 60초(2026-10-25). 그래도 넘기면 pushSheetUpdate 가 잡에서 행을 되찾는다.
+    const result = await invokeEdgeFunction<{ status?: string; row?: number; seq?: string | number }>("field-sheet-sync", { jobId }, 60_000);
     if (result.status !== "synced") return { state: "queued", row: null, seq: "", message: "시트 반영 대기" };
     return { state: "synced", row: result.row ?? null, seq: result.seq == null ? "" : String(result.seq), message: `시트 ${result.row ? `${result.row}행 ` : ""}${isUpdate ? "갱신" : "기입"}` };
   } catch {
@@ -149,6 +155,19 @@ export async function enqueueDeptSheetJob(
   }
 }
 export const deptSheetCategoryOf = (dept: DeptType) => DEPT_SHEET_CATEGORY[dept];
+
+/**
+ * 접수의 append 잡(dupKey dept:<id>:append)이 시트에 기입됐으면 그 행 번호, 아니면 null. 조회 실패는 throw.
+ * 왜: 엣지 기입이 클라이언트 제한(20초)보다 오래 걸리면(2026-10-20 실측 37초) 화면은 "대기"로 끝나고
+ * 잡만 synced·sheet_row 를 갖는다. 접수 행 sheet_row 가 비면 처리 저장(완료·배정)이 시트 갱신을 건너뛰어
+ * 시트 G열이 '진행중'으로 남는다 — 그때 잡에서 행을 되찾는다.
+ */
+export async function findDeptAppendJobRow(receptionId: string): Promise<number | null> {
+  const rows = await selectRows<{ sheet_status: string; sheet_row: number | null }>("field_sheet_sync_jobs",
+    `select=sheet_status,sheet_row&_dupKey=eq.${enc(deptAppendDupKey(receptionId))}&limit=1`);
+  const job = rows[0];
+  return job && job.sheet_status === "synced" && Number(job.sheet_row) > 0 ? Number(job.sheet_row) : null;
+}
 
 // ── 부서 달력(team_calendar_events, 네이버 미러 없음) ─────
 type CalRow = { id: string; type: string; vendor: string; field: string; symptom: string; author: string; remote_meta?: Partial<DeptMeta> | Record<string, string> };

@@ -34,11 +34,13 @@ export function PillarBar({ idx, colSpan, editable, onPillar, onAdd }: { idx: nu
 }
 
 // [＋ 병목 추가] 줄(2026-10-25) — Pillar 묶음 맨 아래, 표 폭 전체 점선. 누르면 그 Pillar 끝에 빈 행.
-export function AddGoalRow({ colSpan, pillarIdx, onAdd }: { colSpan: number; pillarIdx: number; onAdd: () => void }) {
+// note(2026-10-25 파트 탭): 단추 오른쪽 작은 글 — 예) "모든 파트 공통"
+export function AddGoalRow({ colSpan, pillarIdx, onAdd, note }: { colSpan: number; pillarIdx: number; onAdd: () => void; note?: string }) {
   const name = pillarIdx >= 0 ? `Pillar ${pillarIdx + 1} · ${OKR_PILLARS[pillarIdx].label}` : "Pillar 미정";
   return <tr><td colSpan={colSpan} className="border border-slate-200 bg-white p-1">
     <button type="button" onClick={onAdd} title={`${name} 묶음 끝에 병목 한 줄 추가`} className="flex min-h-11 w-full items-center justify-center gap-1 rounded-lg border-2 border-dashed border-slate-300 text-[12px] font-black text-slate-500 transition hover:border-slate-500 hover:bg-slate-50 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-sky-500">
       <span aria-hidden className="text-base leading-none">＋</span>병목 추가<span className="font-semibold text-slate-400"> · {name}</span>
+      {note && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{note}</span>}
     </button>
   </td></tr>;
 }

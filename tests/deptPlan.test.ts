@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultPlanBucket, deptMemberNames, deptPlanBuckets, planTodoCount, sheetKeyOf, type PlanRow } from "../src/deptPlan";
 import { deptSheetUrl, RECEPTION_SPREADSHEET_ID } from "../src/receptionSheetOpen";
 import { runDeptAction } from "../src/deptReceptionFlow";
-import { parseDeptRightView } from "../src/receptionRightView";
+import { DEPT_RIGHT_VIEWS, parseDeptRightView } from "../src/receptionRightView";
+import { deptMonthGrid, shiftDeptMonth } from "../src/deptCalendarView";
 import { invalidateConfigCaches } from "../src/supabase";
 import type { DeptCalEvent } from "../src/deptCalendarView";
 
@@ -128,5 +129,23 @@ describe("runDeptAction assign", () => {
     const res = await runDeptAction({ id: "r9", type: "운영지원", vendor: "가나", author: "a" }, "assign", { by: "x", handler: "이운영" });
     expect(calls.some((c) => c.table.startsWith("rpc/"))).toBe(false);
     expect(res.warnings).toEqual([]);
+  });
+});
+
+// ── 부서 업무공간 [달력] 보기(2026-10-25: 일정·캘린더 탭 부서 칩 삭제 → 서비스접수에서 올인원) ──
+describe("부서 오른쪽 보기에 달력", () => {
+  it("탭 4개 순서 = 일정리스트·달력·접수리스트·미처리현황, 'cal' 기억값 복원", () => {
+    expect(DEPT_RIGHT_VIEWS.map(([v]) => v)).toEqual(["plan", "cal", "list", "board"]);
+    expect(DEPT_RIGHT_VIEWS.find(([v]) => v === "cal")?.[1]).toBe("달력");
+    expect(parseDeptRightView("cal")).toBe("cal");
+  });
+  it("달력 격자 42칸은 1일이 든 주 일요일부터, 달 이동은 1일로", () => {
+    const g = deptMonthGrid("2026-10-01"); // 2026-10-01 = 목요일
+    expect(g).toHaveLength(42);
+    expect(g[0]).toBe("2026-09-27");
+    expect(g[4]).toBe("2026-10-01");
+    expect(g[41]).toBe("2026-11-07");
+    expect(shiftDeptMonth("2026-10-01", 1)).toBe("2026-11-01");
+    expect(shiftDeptMonth("2026-01-01", -1)).toBe("2025-12-01");
   });
 });
