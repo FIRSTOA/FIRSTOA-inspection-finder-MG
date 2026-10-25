@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "55c09a19b2",
+    "agent": "developer",
+    "summary": "미처리 정렬 토글을 탭 줄 오른쪽 끝으로(서비스접수 [미처리 현황] 탭 줄·홈 팀 탭 줄) — 사용자 요청"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "2f988c80f4",
     "agent": "developer",
     "summary": "미처리 = 시트 열린 행 ∪ 시트에 짝 없는 앱 접수(\"시트에 없음\", 저장 직후 빈 틈 해소) + 정렬 토글 [오래된 순|최근 순] + 부서 접수 예정일 비우면 접수일로 달력 자동"

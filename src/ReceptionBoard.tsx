@@ -11,6 +11,7 @@ import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import { sheetStateLabel } from "./receptionSheetState";
 import { formatAssignees } from "./assignees";
 import { SHEET_MISSING_HINT } from "./receptionSheetOpen";
+import UnhandledSortToggle from "./UnhandledSortToggle";
 import { sortUnhandled } from "./homeUnhandled";
 import { useUnhandledSort } from "./unhandledSort";
 
@@ -116,7 +117,7 @@ function SheetBadge({ sheet, compact }: { sheet: SheetRowInfo; compact: boolean 
 
 export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, onOpenRow, onWarmRow }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [sortOrder] = useUnhandledSort(); // 오래된 순(기본)·최근 순 — 토글은 서비스접수 탭 줄·홈 탭 줄에 있고 선택은 공유
+  const [sortOrder, setSortOrder] = useUnhandledSort(); // 오래된 순(기본)·최근 순 — 토글은 종류·물류·90일 묶음 머리 오른쪽(값은 하나, 홈과 공유)
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
   const open = rows.filter((r) => (OPEN as readonly string[]).includes(r.status));
   const [scheduleOnly, setScheduleOnly] = useState(false); // 물류 미처리 열만 넓게 보기(내부 상태)
@@ -241,9 +242,12 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     const shown = expanded[key] ? old : old.slice(0, PAGE);
     return (
       <div className={compact ? "border-t border-slate-100 px-3 py-1.5" : ""}>
+        <div className="flex items-center justify-between gap-2">
         <button type="button" aria-expanded={isOpen} onClick={() => setFolded((f) => ({ ...f, [key]: !isOpen }))} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-black text-slate-600 transition hover:border-slate-400">
           {isOpen ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}90일 넘음 <span className="tabular-nums">{old.length}</span>
         </button>
+        <span className="shrink-0"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} /></span>
+        </div>
         {isOpen && (
           <>
             <p className="mt-1 text-[11px] font-bold text-slate-500">칸 숫자에 넣지 않은 오래된 시트 건입니다. 처리했으면 시트 상태를 바꿔 주세요.</p>
@@ -372,6 +376,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
               <span className="text-[11px] font-black tabular-nums text-slate-400">{count}건</span>
               {count === 0 && <span className="ml-auto text-[12px] font-black text-emerald-600">없음 ✓</span>}
             </button>
+            {count > 0 && <span className="ml-auto mr-1 shrink-0"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} /></span>}
             {onTitle && <button type="button" onClick={onTitle} className="mr-1 min-h-11 shrink-0 px-2 text-[11px] font-black text-slate-500 hover:text-slate-800">이 종류만</button>}
           </div>
           {extra}
@@ -400,7 +405,8 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
           <div className="h-1 bg-slate-500" />
           <div className="flex min-h-11 items-center justify-between px-3">
             <span className="text-[13px] font-black text-slate-800">물류 미처리</span>
-            <span className="text-[11px] font-black tabular-nums text-slate-400">{schedAll.length}건</span>
+            <span className="ml-auto mr-2 text-[11px] font-black tabular-nums text-slate-400">{schedAll.length}건</span>
+            <UnhandledSortToggle order={sortOrder} onChange={setSortOrder} />
           </div>
           <div className="px-3 pb-2">{scheduleNote}</div>
           {schedAll.length === 0 ? <div className="px-3 pb-3 text-[12px] font-black text-emerald-600">없음 ✓</div> : scheduleList(schedShown, schedHidden)}
@@ -419,10 +425,13 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
               <div className={selectedType ? "md:w-full" : "md:w-72 md:shrink-0"}>
                 <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                   <div className={`h-1 ${m.bar}`} />
-                  <button type="button" onClick={() => selectType(m.type)} className="flex min-h-11 w-full items-center justify-between px-3 text-left">
-                    <span className="text-[13px] font-black text-slate-800">{m.label}</span>
-                    <span className="text-[11px] font-black tabular-nums text-slate-400">{all.length}건</span>
-                  </button>
+                  <div className="flex items-center pr-2">
+                    <button type="button" onClick={() => selectType(m.type)} className="flex min-h-11 min-w-0 flex-1 items-center justify-between px-3 text-left">
+                      <span className="text-[13px] font-black text-slate-800">{m.label}</span>
+                      <span className="text-[11px] font-black tabular-nums text-slate-400">{all.length}건</span>
+                    </button>
+                    {all.length > 0 && <span className="ml-1 shrink-0"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} /></span>}
+                  </div>
                   {all.length === 0 ? <div className="space-y-2 px-3 pb-3"><div className="text-[12px] font-black text-emerald-600">없음 ✓</div>{oldBody(m.type)}</div> : typeBody(m.type)}
                 </div>
               </div>

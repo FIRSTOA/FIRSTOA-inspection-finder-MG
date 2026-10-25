@@ -28,8 +28,6 @@ import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./Rece
 import { receptionTypeLabel } from "./receptionTypeLabel";
 import ReceptionBoardPanel from "./ReceptionBoardPanel";
 import { requestOpenOverdue } from "./receptionBoardData";
-import UnhandledSortToggle from "./UnhandledSortToggle";
-import { useUnhandledSort } from "./unhandledSort";
 import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT, effectiveRightView, parseRightView, rightViewTabs, unhandledTotal, type ReceptionRightView } from "./receptionRightView";
 import DeptWorkspacePanel, { type DeptCounts } from "./DeptWorkspacePanel";
 import DeptReception from "./DeptReceptionScreen";
@@ -698,7 +696,6 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   }, [listDate, listPeriod, loadList, loadRemoteQueue]);
   const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT", mgmt: "경영지원", ops: "운영지원", sales: "영업팀" } as const;
   const deptPage = deptEnabled && isDeptType(PAGE_TYPE[page]);
-  const [sortOrder, setSortOrder] = useUnhandledSort();
   const shownView = effectiveRightView(rightView, deptPage); // 부서 아닌 화면에 일정리스트·달력이 기억돼 있으면 접수리스트
   const goPage = (next: keyof typeof PAGE_TYPE) => {
     setPage(next);
@@ -2018,8 +2015,8 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
 
         {/* ==== 우: 접수 리스트 / 미처리 현황 (상시) ==== */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 pt-3">
-          <div className={`grid min-w-0 flex-1 basis-60 min-h-11 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:min-h-9 ${deptPage ? "grid-cols-4" : "grid-cols-2"}`} role="tablist" aria-label="오른쪽 보기">
+          <div className="px-3 pt-3">
+          <div className={`grid min-h-11 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:min-h-9 ${deptPage ? "grid-cols-4" : "grid-cols-2"}`} role="tablist" aria-label="오른쪽 보기">
             {rightViewTabs(deptPage).map(([v, label]) => {
               const on = shownView === v;
               const n = v === "board" ? unhandledTotal(boardCounts, scheduleCount, deptEnabled) : v === "plan" && deptCounts ? deptCounts.plan : null;
@@ -2031,8 +2028,6 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
               );
             })}
           </div>
-          {/* 미처리 정렬 토글 — 미처리 현황 보기일 때만, 탭 줄 오른쪽 끝(좁으면 아래 줄 오른쪽). 홈·부서 업무공간과 같은 선택 */}
-          {shownView === "board" && <span className="ml-auto"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} /></span>}
           </div>
           {/* 부서만: [일정리스트]·[달력] 본체. 다른 보기일 때는 숨은 채 탭 숫자만 읽는다 */}
           {deptPage && <DeptWorkspacePanel dept={PAGE_TYPE[page] as DeptType} view={shownView} author={author} reloadKey={boardReload} onCounts={setDeptCounts} onChanged={() => void loadList(listDate, listPeriod, true)} />}
