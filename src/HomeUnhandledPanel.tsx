@@ -7,6 +7,8 @@
  * 탭(팀)·종류 칸(누르면 목록 거르기) → 목록은 "접수·AS" 묶음 + "물류" 묶음. 접수 행 → 서비스접수 미처리 현황, CS접수(일정) 행 → 일정리스트 미처리.
  * 갱신은 HomeKpiBoard 가 한다(unhandled 는 60초 가벼운 원본, 숨은 화면·탭에서 쉼).
  * 홈 3차(2026-10-25): 팀 탭 A~E 에 팀 색 점(min-h-11), 목록 줄 팀 글자는 팀 색 배지, team prop(홈 팀 카드 선택)이 오면 그 팀 탭으로. 숫자 로직 불변.
+ * 미처리 단추(2026-10-25): 상세 팝업 아래 [완료][보류][배정](UnhandledActionBar — 부서 미니 업무공간·현황판 시트 카드와 같은 부품).
+ *  누르면 unhandledPending 에 적혀 이 칸(머리·탭·종류 칸·목록)에서 바로 빠지고, 다음 묶음 읽기(60초)부터 다른 칸도 같이 맞는다.
  */
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -21,6 +23,8 @@ import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
 import type { KpiBundle } from "./kpi/kpiData";
 import { unhandledParts } from "./kpi/homeKpiModel";
+import UnhandledActionBar, { SheetRowLink } from "./UnhandledActionBar.view";
+import { applyPending, usePendingVersion } from "./unhandledPending";
 import {
   countUnhandledKinds, countUnhandledTabs, oldestUnhandled, rowsForTab, splitByGroup, UNHANDLED_BADGE, UNHANDLED_KIND_LABEL,
   type UnhandledKind, type UnhandledRow, type UnhandledTab,
@@ -60,7 +64,10 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
   const [kind, setKind] = useState<UnhandledKind | null>(null);
   const [detail, setDetail] = useState<UnhandledRow | null>(null);
   const closeDetail = useCallback(() => setDetail(null), []);
-  const rows = bundle?.facts.unhandled ?? null;
+  // 방금 처리한 줄은 묶음을 다시 읽기 전에도 이 칸에서 먼저 반영(로더도 같은 pending 을 입힌다 — 두 번 입혀도 같다)
+  const pendingVer = usePendingVersion();
+  const rawRows = bundle?.facts.unhandled ?? null;
+  const rows = useMemo(() => (rawRows && pendingVer >= 0 ? applyPending(rawRows) : rawRows), [rawRows, pendingVer]);
   const src = bundle?.sources.unhandled;
   const srcError = src && src.status !== "ok" ? src.error : "";
   const recSrc = bundle?.sources.recontract;
@@ -177,7 +184,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
         )}
         {rows !== null && groups.logistics.length > 0 && (
           <section>
-            <h4 className="sticky top-0 bg-slate-900/95 px-3 py-1.5 text-[10.5px] font-black tracking-wide text-slate-300">물류 <span className="font-mono text-rose-200">{groups.logistics.length}건</span> <span className="ml-1 text-[10px] font-bold text-slate-500">네이버 캘린더에서 완료 처리하면 사라집니다</span></h4>
+            <h4 className="sticky top-0 bg-slate-900/95 px-3 py-1.5 text-[10.5px] font-black tracking-wide text-slate-300">물류 <span className="font-mono text-rose-200">{groups.logistics.length}건</span> <span className="ml-1 text-[10px] font-bold text-slate-500">줄을 눌러 [완료] — 네이버 일정에도 완료 체크</span></h4>
             <ul className="divide-y divide-white/[0.06]">{groups.logistics.map((r) => <li key={r.key}>{renderRow(r)}</li>)}</ul>
           </section>
         )}
@@ -187,7 +194,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
         <button type="button" onClick={onOpenOverdue} className="text-[11px] font-black text-blue-300 transition hover:text-white">AS 일정리스트 →</button>
       </div>
       {detail && typeof document !== "undefined" && createPortal(
-        <UnhandledDetail row={detail} onClose={closeDetail} onOpen={detail.kind === "물류" ? undefined : () => { setDetail(null); if (detail.source === "reception") openReception(); else onOpenOverdue(); }} />,
+        <UnhandledDetail row={detail} onClose={closeDetail} actions onOpen={detail.kind === "물류" ? undefined : () => { setDetail(null); if (detail.source === "reception") openReception(); else onOpenOverdue(); }} />,
         document.body,
       )}
     </div>
@@ -205,23 +212,28 @@ export function UnhandledRowButton({ row, onPick, children }: { row: UnhandledRo
 
 /**
  * 미처리 상세 팝업(FormModal — 폰은 아래서 올라오는 시트). 이미 받은 행 값만(새 조회 없음), 글은 평문(HTML 해석 안 함).
- * onOpen 없으면(물류) 열기 단추 없음 — 물류는 네이버 캘린더에서 완료 처리.
+ * actions 면 아래에 [완료][보류][배정](UnhandledActionBar). onOpen 은 보조 단추(접수 = 서비스접수에서 열기, CS접수 = 일정리스트에서 열기), 물류는 없음.
+ * 단추를 누르면(처리 시작) 팝업을 닫는다 — 줄은 목록에서 바로 빠지거나 상태가 바뀐다.
  */
-export function UnhandledDetail({ row, onClose, onOpen }: { row: UnhandledRow; onClose: () => void; onOpen?: () => void }) {
+export function UnhandledDetail({ row, onClose, onOpen, actions = false, author }: { row: UnhandledRow; onClose: () => void; onOpen?: () => void; actions?: boolean; author?: string }) {
   const vendor = vendorOf(row);
   const c = tc(row.team);
   const field = (label: string, value: ReactNode) => (
     <div className="flex gap-3 text-[13px]"><dt className="w-16 shrink-0 font-bold text-slate-500">{label}</dt><dd className="min-w-0 flex-1 break-words font-semibold text-slate-800">{value}</dd></div>
   );
+  const ticketOpen = actions && row.source === "ticket"; // 일정 줄은 열기를 단추 줄 안의 보조 단추로
   return (
     <FormModal
       title={vendor || row.title || "(업체 없음)"}
       subtitle={`${UNHANDLED_KIND_LABEL[row.kind]} 미처리 · ${row.source === "reception" ? "서비스접수" : "AS 일정"}`}
       onClose={onClose}
-      footer={<>
-        <button type="button" onClick={onClose} className="min-h-11 rounded-xl bg-white px-4 text-[13px] font-black text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-100">닫기</button>
-        {onOpen && <button type="button" onClick={onOpen} className="min-h-11 rounded-xl bg-blue-600 px-4 text-[13px] font-black text-white transition hover:bg-blue-500">{row.source === "reception" ? "서비스접수에서 열기" : "AS 일정리스트에서 열기"}</button>}
-      </>}
+      footer={<div className="flex w-full flex-col gap-2">
+        {actions && <UnhandledActionBar row={row} author={author} onStarted={onClose} onOpenSchedule={ticketOpen ? onOpen : undefined} />}
+        <div className="flex items-center justify-end gap-2">
+          {onOpen && !ticketOpen && <button type="button" onClick={onOpen} className={`min-h-11 rounded-xl px-4 text-[13px] font-black transition ${actions ? "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100" : "bg-blue-600 text-white hover:bg-blue-500"}`}>{row.source === "reception" ? "서비스접수에서 열기" : "AS 일정리스트에서 열기"}</button>}
+          <button type="button" onClick={onClose} className="min-h-11 rounded-xl bg-white px-4 text-[13px] font-black text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-100">닫기</button>
+        </div>
+      </div>}
     >
       <dl className="space-y-2">
         {field("종류", UNHANDLED_KIND_LABEL[row.kind])}
@@ -231,10 +243,10 @@ export function UnhandledDetail({ row, onClose, onOpen }: { row: UnhandledRow; o
         {field("상태", row.status || "—")}
       </dl>
       <div>
-        <div className="mb-1 text-[12px] font-bold text-slate-500">내용</div>
+        <div className="mb-1 flex items-center gap-2 text-[12px] font-bold text-slate-500">내용<span className="ml-auto"><SheetRowLink row={row} /></span></div>
         <p className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-slate-800">{row.detail || row.title || "(내용 없음)"}</p>
       </div>
-      {row.kind === "물류" && <p className="text-[12px] font-bold text-slate-500">물류는 네이버 캘린더에서 완료 처리하면 사라집니다.</p>}
+      {row.kind === "물류" && <p className="text-[12px] font-bold text-slate-500">[완료]를 누르면 일정리스트에서 완료되고 네이버 캘린더 일정에도 완료 체크됩니다(이동 없음).</p>}
     </FormModal>
   );
 }

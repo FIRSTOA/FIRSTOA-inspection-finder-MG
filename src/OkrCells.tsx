@@ -2,12 +2,14 @@
 import { useState, type ReactNode } from "react";
 import { JUDGMENT_INFO, OKR_PILLARS, bottleneckText, normalizeJudgment, pillarLabel, type OkrGoal, type OkrTeamCard } from "./okr";
 import { TD_READ, shortBottleneck, teamName } from "./okrUi";
+import type { LayerFold, LayerFoldGroup } from "./okrLayerView";
 
 // 파트 카드(월·분기 통합집계 공용, 2026-10-21 OkrMonthRollup 에서 옮김) — 파트 이름 · 판정 n/총 · 달성 % · 미흡·미착수 · 파트장. onClick 이 있으면 단추
-export function TeamCard({ card, onClick }: { card: OkrTeamCard; onClick?: () => void }) {
+// note(2026-10-25 저녁): 판정 칸 아래 작은 글 — 예) "(전용 2행 포함)"(카드 분모 = 공통 + 그 파트 전용 + 파트원 개인 전용, 표는 공통만)
+export function TeamCard({ card, onClick, note }: { card: OkrTeamCard; onClick?: () => void; note?: string }) {
   const { team, total, judged, alerts, rate, leader } = card;
   const body = <>
-    <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">{teamName(team)}</div><div className="text-[11px] font-bold tabular-nums text-slate-400">{judged >= total && total ? "제출 완료" : `판정 ${judged}/${total}`}</div></div>
+    <div className="flex items-center justify-between"><div className="text-sm font-black text-slate-900">{teamName(team)}</div><div className="text-right text-[11px] font-bold tabular-nums text-slate-400">{judged >= total && total ? "제출 완료" : `판정 ${judged}/${total}`}{note && <div className="text-[10px] font-semibold text-slate-400">{note}</div>}</div></div>
     <div className="mt-1 flex items-end justify-between"><div className="text-2xl font-black tabular-nums text-slate-950">{rate === null ? "—" : `${rate}%`}<span className="ml-1 text-xs font-semibold text-slate-400">달성</span></div><div className="text-right text-[11px] font-bold">{alerts > 0 ? <span className="text-rose-600">미흡·미착수 {alerts}</span> : <span className="text-slate-300">미흡 없음</span>}</div></div>
     <div className="mt-2 border-t border-slate-100 pt-2 text-[10px] font-semibold text-slate-400">{leader ? `파트장 ${leader}` : "파트장 미기재"}</div>
   </>;
@@ -43,6 +45,41 @@ export function AddGoalRow({ colSpan, pillarIdx, onAdd, note }: { colSpan: numbe
       {note && <span className="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{note}</span>}
     </button>
   </td></tr>;
+}
+
+// 행 주인 칩(2026-10-25 저녁) — 병목현상 칸 위 작은 글 "A파트 전용" · "내 전용" · "홍길동 전용". 공통 행은 label 이 빈 글이라 안 그린다.
+export function LayerChip({ label }: { label: string }) {
+  if (!label) return null;
+  return <span className="mb-0.5 inline-flex rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold leading-none text-violet-700">{label}</span>;
+}
+
+// 아래 층 행 접힘(2026-10-25 저녁) — 그 화면 표에는 없는 전용 행 목록(읽기). 줄을 누르면 그 파트 종합/그 사람 주차로.
+//   kind rollup = 통합집계("파트 전용 n행 · 개인 전용 m행") · part = 파트 종합("개인 전용 m행(홍길동 2·김철수 1)")
+//   orphan(명단에 없는 이름) 묶음은 "주인 없음"으로 드러내고 onArchive 가 있으면 줄마다 [정리](삭제·보관 확인창은 부모가)
+export function LayerRowsFold({ fold, kind, onOpen, onArchive }: { fold: LayerFold; kind: "rollup" | "part"; onOpen?: (g: LayerFoldGroup) => void; onArchive?: (goal: OkrGoal) => void }) {
+  const [open, setOpen] = useState(false);
+  if (!fold.groups.length) return null;
+  const people = fold.groups.filter((g) => g.member).map((g) => `${g.member} ${g.goals.length}`).join("·");
+  const head = kind === "rollup" ? `파트 전용 ${fold.teamRows}행 · 개인 전용 ${fold.memberRows}행` : `개인 전용 ${fold.memberRows}행${people ? `(${people})` : ""}`;
+  return <div className="border-t border-slate-200 bg-slate-50 px-3 py-1">
+    <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-11 w-full items-center gap-1 text-left text-[12px] font-black text-slate-600 hover:text-slate-900">
+      <span aria-hidden className="w-3">{open ? "▾" : "▸"}</span>{head}<span className="font-semibold text-slate-400"> — {kind === "rollup" ? "표에는 공통 행만, 판정은 파트 카드 % 에 들어갑니다" : "표에는 없고 판정은 % 에 들어갑니다"}</span>
+    </button>
+    {open && <ul className="space-y-1.5 pb-2">
+      {fold.groups.map((grp) => <li key={`${grp.team}|${grp.member || ""}`} className="rounded-lg border border-slate-200 bg-white px-2 py-1">
+        <button type="button" disabled={!onOpen} onClick={() => onOpen?.(grp)} className="flex min-h-9 w-full items-center gap-1.5 text-left text-[11px] font-black text-slate-700 enabled:hover:underline">
+          {grp.member ? `${teamName(grp.team)} · ${grp.member}` : `${teamName(grp.team)} 전용`}
+          {grp.orphan && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">주인 없음(명단에 없는 이름)</span>}
+          <span className="font-semibold text-slate-400">{grp.goals.length}행</span>
+        </button>
+        <ul className="space-y-0.5">{grp.goals.map((g) => <li key={g.no} className="flex items-center gap-2 text-[12px] leading-snug">
+          <span className="w-20 shrink-0 truncate text-[10px] font-bold text-slate-400">{pillarLabel(g.pillar) || "Pillar 미정"}</span>
+          <span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{bottleneckText(g.bottleneck) || g.objective.trim() || "(빈 병목)"}</span>
+          {grp.orphan && onArchive && <button type="button" onClick={() => onArchive(g)} className="min-h-9 shrink-0 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-black text-slate-600 hover:bg-slate-100">정리</button>}
+        </li>)}</ul>
+      </li>)}
+    </ul>}
+  </div>;
 }
 
 // 보관된 병목(2026-10-25) — 표 아래 접힘. 기록(실제결과·판정)이 있어 지우는 대신 숨긴 행. [되살리기] = 같은 자리·같은 번호로.

@@ -1,15 +1,21 @@
-// 시트 행 읽기 전용 카드(C3 시트 기준) — 현황판 카드의 단추 자리에 들어간다. [시트 내용] 을 누르면 펼쳐서
-// 접수일·업체·분야·처리자·상태·내용 요약과 [시트에서 열기] 링크를 보여 준다. 처리는 시트에서(D6: 앱은 시트 상태를 바꾸지 않음).
+// 시트 행 카드(C3 시트 기준) — 현황판 카드의 단추 자리에 들어간다. [시트 내용] 을 누르면 펼쳐서
+// 접수일·업체·분야·처리자·상태·내용 요약과 [완료][보류][배정](UnhandledActionBar — 홈 미처리 팝업과 같은 부품, 2026-10-25).
+// 단추는 시트 상태·처리자 칸만 적는다(field-sheet-sync statusOnly). 시트 링크는 확인용 작은 글자.
 import { useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import type { ReceptionRow } from "./ReceptionBoard";
 import { sheetStateLabel } from "./receptionSheetState";
+import { boardSheetToUnhandled } from "./unhandledActions";
+import UnhandledActionBar from "./UnhandledActionBar.view";
+
 
 const SOURCE_LABEL: Record<string, string> = { sales: "해지방어접수(영업)", mgmt: "경영지원접수", remote: "원격" };
 
 export default function SheetRowCard({ row }: { row: ReceptionRow }) {
   const [open, setOpen] = useState(false);
+  const [after, setAfter] = useState("");
   const sheet = row.sheet;
+  const urow = boardSheetToUnhandled(row);
   if (!sheet) return null;
   const items: Array<[string, string]> = [
     ["접수일", row.receipt_date || "날짜 모름"],
@@ -22,7 +28,7 @@ export default function SheetRowCard({ row }: { row: ReceptionRow }) {
   return (
     <div className="w-full">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-[11px] font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900">
-        {open ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}시트 내용 · 시트에서 처리
+        {open ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}시트 내용 · 처리
       </button>
       {open && (
         <div className="mt-1.5 rounded-lg border border-emerald-200 bg-emerald-50/40 p-2.5">
@@ -36,11 +42,12 @@ export default function SheetRowCard({ row }: { row: ReceptionRow }) {
             ))}
           </dl>
           {sheet.summary && <p className="mt-1.5 wrap-break-word rounded bg-white px-2 py-1 text-[12px] font-semibold text-slate-700">{sheet.summary}</p>}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <a href={sheet.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-emerald-700 px-3 text-[12px] font-black text-white transition hover:bg-emerald-800">
-              <ExternalLink size={13} aria-hidden />시트에서 열기
+          <div className="mt-2 space-y-1.5">
+            {after ? <div role="status" className="text-[12px] font-bold text-emerald-700">{after}</div>
+              : urow && <UnhandledActionBar row={urow} onFinished={(action, ok) => { if (ok) setAfter(action === "done" ? "처리완료로 보냈습니다 — 1~2분 뒤 목록에서 사라집니다" : action === "hold" ? "보류 상태를 보냈습니다 — 1~2분 뒤 반영" : "처리자를 보냈습니다 — 1~2분 뒤 반영"); }} />}
+            <a href={sheet.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-700 underline-offset-2 hover:underline">
+              시트 {sheet.sheetRow}행 확인<ExternalLink size={11} aria-hidden />
             </a>
-            <span className="text-[11px] font-bold leading-snug text-slate-500">시트 상태 열을 처리완료로 바꾸면 1~2분 뒤 여기서 사라집니다</span>
           </div>
         </div>
       )}

@@ -2,7 +2,8 @@
 // props: dept(경영/운영/영업팀) · mode(기기/업체) · 검색 입력 · 후보 슬롯 · 자동 채움 미리보기 · 사람 입력 값들 · required · onSave/saving/result.
 // 처리자 select 와 사내 요청자 이름 고르기는 슬롯(ReactNode)으로 받아 로직 쪽에서 PortalSelect 등을 꽂는다.
 import type { ReactNode } from "react";
-import { AlertCircle, Building2, ChevronRight, Loader2, Save, Search } from "lucide-react";
+import { AlertCircle, Building2, ChevronRight, ExternalLink, Loader2, Save, Search } from "lucide-react";
+import { deptSheetUrl } from "./receptionSheetOpen";
 import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 import { openNativePicker } from "./datePicker";
 import LeaseDeptPill from "./LeaseDeptPill";
@@ -114,6 +115,7 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
   const picked = !!sum || (custKind === "신규" && !!p.newVendorName?.trim());
   const readyCount = p.required.filter(([, ok]) => ok).length;
   const isReady = readyCount === p.required.length;
+  const sheetUrl = deptSheetUrl(p.dept);
   return (
     // 한 장의 종이: 거래처 선택 + 접수 내용 입력 — 어두운 머리띠 없이 작은 섹션 라벨과 구분선으로만 나눈다
     <section className="rounded-xl border border-slate-200 bg-white" aria-label={`${p.dept} 접수`}>
@@ -251,9 +253,18 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
             {p.required.map(([name, ok]) => (
               <span key={name} className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-500"}`}>{ok ? "✓" : "•"} {name}</span>
             ))}
-            <button type="button" onClick={p.onSave} disabled={p.saving || !isReady} className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-[13px] font-bold text-white transition hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-40">
-              {p.saving ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Save size={15} aria-hidden />}{p.saving ? "저장 중…" : "접수 저장"}
-            </button>
+            <span className="ml-auto flex items-center gap-2">
+              {/* [시트 열기 ↗] — 경영·영업만(운영지원은 시트 없음). 2026-10-25 머리에서 [접수 저장] 왼쪽으로 옮김 */}
+              {sheetUrl && (
+                <a href={sheetUrl} target="_blank" rel="noopener noreferrer" title={`${p.dept} 접수 시트를 새 창으로 엽니다`}
+                  className="inline-flex h-10 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-[12px] font-bold text-slate-500 transition hover:border-slate-300 hover:bg-slate-50">
+                  <ExternalLink size={13} aria-hidden />시트 열기
+                </a>
+              )}
+              <button type="button" onClick={p.onSave} disabled={p.saving || !isReady} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-[13px] font-bold text-white transition hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-40">
+                {p.saving ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Save size={15} aria-hidden />}{p.saving ? "저장 중…" : "접수 저장"}
+              </button>
+            </span>
           </div>
           {p.result && <div role={p.result.tone === "error" ? "alert" : "status"} className={`mt-1.5 text-[12px] font-bold ${p.result.tone === "error" ? "text-red-600" : p.result.tone === "warn" ? "text-amber-700" : "text-emerald-600"}`}>{p.result.text}</div>}
         </div>

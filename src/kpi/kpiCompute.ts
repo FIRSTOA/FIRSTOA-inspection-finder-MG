@@ -24,7 +24,7 @@ import {
 import { teamWorkinProgress, type WorkinPlaceLite } from "../workinProgress";
 import { countUnhandledTabs, rowsForTab, UNHANDLED_TABS, type UnhandledRow, type UnhandledTab } from "../homeUnhandled";
 import {
-  OKR_TEAMS, achievementRate, emptyResultRow, findReport, isAlert, isLegacyMonthId, judgmentCounts, monthScreenGoals, normalizeJudgment, resultRowFor, worstOfJudgments,
+  OKR_TEAMS, achievementRate, emptyResultRow, findReport, goalsForTeamTotal, goalsForView, isAlert, isLegacyMonthId, judgmentCounts, monthScreenGoals, normalizeJudgment, resultRowFor, worstOfJudgments,
   type OkrCycle, type OkrGoal, type OkrJudgment, type OkrReport, type OkrResultRow,
 } from "../okr";
 import { blogTeamOf, countBlog, type BlogRow } from "../blogSheet";
@@ -710,7 +710,7 @@ export function okrTeamRows(cycle: OkrCycle | null, quarter: OkrCycle | null, re
   if (!cycle) return [];
   const goals = isLegacyMonthId(cycle.id) ? cycle.goals : monthScreenGoals(cycle, quarter).goals;
   const rep = findReport(reports.filter((x) => !x.member), team, "");
-  return goals.map((g) => resultRowFor(rep, g.no));
+  return goalsForTeamTotal(goals, team).map((g) => resultRowFor(rep, g.no));
 }
 
 export function okrKpi(okr: OkrFacts, r: KpiRanges, target?: KpiTarget): KpiValue {
@@ -742,7 +742,7 @@ export function okrWeekTeamRows(goals: OkrGoal[], reports: OkrReport[], weekId: 
   const inWeek = reports.filter((r) => r.cycle_id === weekId && r.team === team);
   const summary = findReport(inWeek.filter((r) => !r.member), team, "");
   const members = inWeek.filter((r) => r.member);
-  return goals.map((g) => {
+  return goalsForTeamTotal(goals, team).map((g) => {
     const own = resultRowFor(summary, g.no);
     if (normalizeJudgment(own.judgment)) return own;
     return { ...emptyResultRow(g.no), judgment: worstOfJudgments(members.map((m) => resultRowFor(m, g.no).judgment)) };
@@ -764,7 +764,9 @@ export type OkrScope = { team: OkrScopeTeam; member?: string };
 /** 그 주 그 사람(member 행)의 목표별 판정 — 팀을 주면 그 팀 행만. 기록이 없으면 빈 판정 행 */
 export function okrWeekMemberRows(goals: OkrGoal[], reports: OkrReport[], weekId: string, member: string, team?: string): OkrResultRow[] {
   const rep = reports.find((r) => r.cycle_id === weekId && r.member === member && (!team || team === "ALL" || r.team === team));
-  return goals.map((g) => resultRowFor(rep, g.no));
+  // 보이는 행 = 공통 + 그 파트 전용 + 본인 전용 (파트는 기록의 team, 없으면 넘겨받은 team)
+  const t = rep?.team ?? (team && team !== "ALL" ? team : undefined);
+  return goalsForView(goals, { team: t, member }).map((g) => resultRowFor(rep, g.no));
 }
 
 /** 개인 고르기 목록 — 그 달 주차 기록(w.reports)에 member 행이 있는 사람(이름순). team ALL 이면 A~D 전부 */

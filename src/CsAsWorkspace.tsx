@@ -22,6 +22,8 @@ import { useAuthorBook, teamLabel } from "./authors";
 import { escapeRegExp, extractCategory, extractIssue, groupReportTickets, hasReportMember, reportHeadOf } from "./reportAssignee";
 import { addedAssignees, formatAssignees, MAX_ASSIGNEES } from "./assignees";
 import AssigneePicker from "./AssigneePicker";
+import DoneReasonModal from "./DoneReasonModal";
+import { copierDoneKind, copierDoneText, isDeliveryTicket, naverCompleteAction, NAVER_DELIVERY_CAL_ID, receptionStatusFromSiblings, TICKETS_CHANGED_EVENT } from "./ticketCompletion";
 
 // 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
 const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
@@ -455,8 +457,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // 창 복귀 — 이 화면이 보일 때만 + 15초 안 중복 차단(2026-10-24 숨은 화면 조회)
     const onFocus = gatedHandler(() => screenActiveRef.current, ticketFocusGate, refreshTickets);
     window.addEventListener("focus", onFocus);
+    // 홈 미처리 [완료] 등 이 화면 밖에서 일정을 완료하면(ticketCompletion) 다시 읽는다
+    const onChanged = () => { void refreshTickets(); };
+    window.addEventListener(TICKETS_CHANGED_EVENT, onChanged);
     const timer = window.setInterval(() => { if (document.visibilityState === "visible" && screenActiveRef.current) void refreshTickets(); }, 60_000); // 숨은 탭은 쉰다(2026-10-10 속도)
-    return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
+    return () => { window.removeEventListener("focus", onFocus); window.removeEventListener(TICKETS_CHANGED_EVENT, onChanged); window.clearInterval(timer); };
   }, [refreshTickets, ticketFocusGate]);
 
   const [vendorFlags, setVendorFlags] = useState<Map<string, VendorWorkFlags>>(new Map());
@@ -995,15 +1000,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const completedNow = changed.status === "완료" && before.status !== "완료";
       const rescheduled = changed.date !== before.date || changed.time !== before.time;
       const uncompletedNow = before.status === "완료" && changed.status !== "완료";
-      const isDelivery = changed.scheduleType === "납품철수교체휴가교육" || changed.scheduleType === "물류";
-      if ((completedNow || uncompletedNow) && isDelivery) {
-        // 납품·철수·교체 캘린더는 영업부 소관 — 웹앱에서 완료/취소해도 네이버는 건드리지 않는다(2026-08-26 결정; 예전엔 제자리 체크를 했다)
-        if (completedNow) notify("물류 일정은 웹앱에서만 완료 처리됩니다 — 네이버 캘린더(납품철수교체)는 영업부가 관리", "success");
-      } else if ((completedNow || uncompletedNow) && changed.source === "it") {
-        // IT 접수 일정은 IT 캘린더에서 제자리 완료 체크만 — 팀 완료 캘린더로 옮기지 않는다(2026-09-17). 완료 취소도 제자리에서 해제
-        void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, done: completedNow, ...(itCalId ? { calId: itCalId } : {}) })
-          .then((r) => notify(r.status === "checked" ? "네이버: IT 캘린더에서 완료 체크 ✓" : "네이버: IT 캘린더 완료 체크 해제 ✓", "success"))
-          .catch((e) => notify(`네이버 IT 완료 체크 실패: ${(e as Error).message}`, "error"));
+      // 완료 방식 판정은 ticketCompletion 한 곳(홈 미처리 [완료]와 같은 규칙)
+      const plan = naverCompleteAction(changed, { itCalId });
+      if ((completedNow || uncompletedNow) && plan.kind === "check") {
+        // IT 접수 일정은 IT 캘린더(2026-09-17), 물류는 납품철수교체 캘린더(2026-10-25 사용자 결정 — 2026-08-26 "안 건드림"을 뒤집음)에서
+        // 제자리 완료 체크만 — 옮기거나 지우지 않는다. 완료 취소도 제자리에서 해제
+        const where = plan.target === "it" ? "IT" : "납품철수교체";
+        void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, done: completedNow, ...(plan.calId ? { calId: plan.calId } : {}) })
+          .then((r) => notify(r.status === "checked" ? `네이버: ${where} 캘린더에서 완료 체크 ✓` : `네이버: ${where} 캘린더 완료 체크 해제 ✓`, "success"))
+          .catch((e) => notify(`네이버 ${where} 완료 체크 실패: ${(e as Error).message}`, "error"));
       } else if (completedNow) {
         void invokeEdgeFunction<{ status?: string; toCalendarId?: string }>("naver-calendar-push", { action: "caldav_move", uid: changed.naverUid, team: changed.team })
           // 팀 완료 캘린더가 아직 설정되지 않으면 함수가 제자리에서 완료 체크만 한다 — 그때 "이동"이라 알리면 거짓이다
@@ -1028,10 +1033,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     if (changed && before && changed.receptionId && changed.status !== before.status) {
       // 같은 접수에 티켓이 여러 개면(재방문 등) 최고 단계로 집계 —
       // B 티켓의 배정 해제가 A 티켓의 완료를 "접수"로 되돌리는 사고 방지
-      const mappedOf = (st: string) => (st === "완료" ? "완료" : st === "배정" ? "진행중" : "접수");
-      const rank: Record<string, number> = { 완료: 2, 진행중: 1, 접수: 0 };
       const siblings = next.filter((t) => t.receptionId === changed.receptionId);
-      const mapped = siblings.map((t) => mappedOf(t.status)).reduce((a, b) => (rank[a] >= rank[b] ? a : b), "접수");
+      const mapped = receptionStatusFromSiblings(siblings.map((t) => t.status));
       // 완료면 처리 시각·처리자(완료시킨 티켓의 담당)도 접수 리스트에 남긴다 — 원격의 처리완료 열과 대칭
       const doneTicket = siblings.find((t) => t.status === "완료") || changed;
       const done = mapped === "완료"
@@ -1040,15 +1043,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       void setServiceReceptionStatus(changed.receptionId, mapped, done).catch(() => { /* 접수 동기화 실패는 일정 기능에 영향 없음 */ });
       // 접수 시트 BD열(처리완료) 기입 — 완료/익일은 표기, 완료·익일에서 되돌리면 "-"
       // 행번호가 있으면 그 행, 없으면(과거 접수) 퍼스트순으로 최신 행을 찾아 갱신
-      const bdText = changed.status === "완료" ? "완료" : changed.status === "익일" ? "익일" : (before.status === "완료" || before.status === "익일") ? "-" : "";
+      const bdText = copierDoneKind(changed.status, before.status);
       if (bdText) {
         void (async () => {
           try {
             const reception = await getServiceReceptionById(changed.receptionId!);
             if (reception && reception.type === "복합기 AS" && reception.lease_no) {
-              const now = new Date();
-              const stamp = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-              const doneText = bdText === "-" ? "-" : `${bdText} ${stamp}${bdText === "완료" && done.by ? ` ${done.by}` : ""}`;
+              const doneText = copierDoneText(bdText, new Date(), done.by);
               await sendReceptionCopierCompleteJob({ author: reception.author, vendor: reception.vendor, firstNo: reception.lease_no, sheetRow: reception.sheet_row ?? null, doneText });
             }
           } catch { /* 시트 반영 실패는 DB 상태에 영향 없음 */ }
@@ -1199,23 +1200,31 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // FIELD 탭 전송 뒤 완료(finishTicket)와 같은 순서.
   const syncNaverAfterAction = async (ticket: AsTicket, opts: { block?: string; date?: string; complete?: boolean }) => {
     if (!ticket.naverUid) return;
-    const isDelivery = ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류";
-    if (isDelivery && opts.complete) {
-      // 납품·철수·교체 캘린더는 영업부 소관 — 웹앱에서 완료해도 네이버는 건드리지 않는다(2026-08-26 결정)
-      notify("물류 일정은 웹앱에서만 완료 처리됩니다 — 네이버 캘린더(납품철수교체)는 영업부가 관리", "success");
+    // 완료 방식 판정은 ticketCompletion 한 곳(홈 미처리 [완료]와 같은 규칙)
+    const plan = naverCompleteAction(ticket, { itCalId });
+    if (isDeliveryTicket(ticket) && opts.complete) {
+      // 물류: 납품철수교체 캘린더 그 자리에서 완료 체크만 — 내용 덧붙이기·이동·삭제 없음
+      // (2026-10-25 사용자 결정 — 2026-08-26 "영업부 소관이라 안 건드림"을 뒤집음)
+      try {
+        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: ticket.naverUid, done: true, calId: NAVER_DELIVERY_CAL_ID });
+        notify("네이버: 납품철수교체 캘린더에서 완료 체크 ✓ (이동 없음)", "success");
+      } catch (e) {
+        notify(`네이버 물류 완료 체크 실패: ${(e as Error).message}`, "error");
+      }
       return;
     }
     try {
-      const patch: Record<string, unknown> = { action: "caldav_update", uid: ticket.naverUid, ...(ticket.source === "it" && itCalId ? { calId: itCalId } : {}) };
+      const itCal = plan.kind === "check" && plan.calId ? { calId: plan.calId } : {};
+      const patch: Record<string, unknown> = { action: "caldav_update", uid: ticket.naverUid, ...itCal };
       if (opts.block?.trim()) {
-        const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid });
+        const cur = await invokeEdgeFunction<{ description?: string }>("naver-calendar-push", { action: "caldav_get", uid: ticket.naverUid, ...itCal });
         patch.description = `${cur.description || ""}\n\n${opts.block}`;
       }
       if (opts.date) patch.date = opts.date;
       if (patch.description !== undefined || patch.date) await invokeEdgeFunction("naver-calendar-push", patch);
-      if (opts.complete && ticket.source === "it") {
+      if (opts.complete && plan.kind === "check") {
         // IT 접수 일정 — IT 캘린더 제자리 완료 체크 (팀 완료 캘린더로 옮기지 않음)
-        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: ticket.naverUid, done: true, ...(itCalId ? { calId: itCalId } : {}) });
+        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: ticket.naverUid, done: true, ...itCal });
         notify(`네이버: IT 캘린더에서 완료 체크 ✓${opts.block?.trim() ? " (내용 기록됨)" : ""}`, "success");
       } else if (opts.complete) {
         const r = await invokeEdgeFunction<{ status?: string; toCalendarId?: string }>("naver-calendar-push", { action: "caldav_move", uid: ticket.naverUid, team: ticket.team });
@@ -2668,46 +2677,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
 // 네이버 캘린더 미러 일정 조회·수정 — CalDAV 경유 (실험적: 네이버 비공식 통로)
 
-
-// 완료 사유 입력 — 적으면 팀 AS방 카톡 + 네이버 일정 내용에 남고, 비우면 조용히 완료만
-function DoneReasonModal({ ticket, onClose, onApply }: { ticket: AsTicket; onClose: () => void; onApply: (reason: string, mode?: "visit" | "phone") => void }) {
-  const [reason, setReason] = useState("");
-  // 방문해서 처리했는지, 전화·원격으로 끝냈는지 — 주간현황판의 AS·방문 건수가 여기서 갈린다(2026-09-24)
-  const [mode, setMode] = useState<"visit" | "phone">("visit");
-  const isDelivery = ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류";
-  return (
-    <div className="fixed inset-0 z-[130] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
-      <div className="w-full max-w-md rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="text-lg font-black text-slate-950">✓ 완료 처리하시겠습니까?</div>
-        <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
-        {isDelivery
-          ? <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">물류(납품·철수·교체) 일정은 <b>일정리스트에서만 완료</b>됩니다.<br />카톡도, 네이버 캘린더도 건드리지 않습니다 — 물류방 보고는 FIELD 물류 양식 [보내기]가 이미 했습니다.</div>
-          : !!ticket.naverUid && <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">네이버 캘린더 일정에 완료 체크됩니다. {ticket.team}팀 완료 캘린더로 이동합니다.</div>}
-        {!isDelivery && (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setMode("visit")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "visit" ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
-              <span className="block text-sm font-black text-slate-900">🚗 방문 처리</span>
-              <span className="block text-[11px] font-bold text-slate-500">방문해서 처리한 건 — 방문 거래처 1·AS 1건으로 집계</span>
-            </button>
-            <button type="button" onClick={() => setMode("phone")} className={`rounded-xl border-2 px-3 py-2.5 text-left transition ${mode === "phone" ? "border-amber-500 bg-amber-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
-              <span className="block text-sm font-black text-slate-900">📞 전화·원격 처리</span>
-              <span className="block text-[11px] font-bold text-slate-500">전화·원격으로 처리한 건 — 기록만 남고 집계에는 안 들어감</span>
-            </button>
-          </div>
-        )}
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} autoFocus
-          placeholder={isDelivery
-            ? "처리 내용 (선택) — 일정리스트 기록에만 남습니다. 비워도 완료됩니다"
-            : "처리 내용 (필수) — 팀 AS방으로 전송되고 네이버 일정에도 기록됩니다"}
-          className="mt-4 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" />
-        <div className="mt-3 flex gap-2">
-          <button type="button" onClick={onClose} className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">취소</button>
-          <button type="button" disabled={!isDelivery && !reason.trim()} onClick={() => onApply(reason, isDelivery ? undefined : mode)} className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-40">완료</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function DeferModal({ ticket, customDate, onCustomDate, onClose, onApply }: { ticket: AsTicket; customDate: string; onCustomDate: (date: string) => void; onClose: () => void; onApply: (date: string, reason?: string) => void }) {
   const [reason, setReason] = useState("");

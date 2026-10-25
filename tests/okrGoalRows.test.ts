@@ -144,7 +144,7 @@ describe("⑦ 확인창 — 추가·삭제 모두 askConfirm 뒤에만 바뀐다
     expect(await confirmAddGoalRow(goals, OKR_PILLARS[0].full)).toBeNull();
     expect(ask).toHaveBeenCalledTimes(1);
     expect(ask.mock.calls[0][0]).toBe(ADD_GOAL_MESSAGE);
-    expect(ask.mock.calls[0][0]).toContain("모든 파트(A~D)");
+    expect(ask.mock.calls[0][0]).toContain("A~D 모든 파트"); // 2026-10-25 저녁: 공통 행 문구
     expect(JSON.stringify(goals)).toBe(before); // 원본 불변
     ask.mockResolvedValueOnce(true);
     const added = await confirmAddGoalRow(goals, OKR_PILLARS[0].full);
@@ -172,19 +172,15 @@ describe("⑦ 확인창 — 추가·삭제 모두 askConfirm 뒤에만 바뀐다
   });
 });
 
-// 2026-10-25 팀장: 파트 탭에서 공통 칸이 비어 있으면 공통 행에, 있으면 그 층에
+// 2026-10-25 저녁(okr-rows-per-layer 7절): 오후 규칙("공통 칸이 비면 공통 저장") 폐기 — 그 층 소유 행이면 own, 위 층 행이면 layer
 describe("⑧ 파트 탭 병목현상·목표 저장 위치", () => {
   const blank: OkrGoal = { no: 10, pillar: OKR_PILLARS[0].full, bottleneck: "", objective: "", criteria: "" };
-  it("공통 칸이 비면 common(이어 치는 글도 sticky 로 common), 글이 있거나 층이 덮어쓴 칸이면 layer", () => {
-    expect(goalEditTarget(blank, "bottleneck", [undefined, undefined], false)).toBe("common");
-    expect(goalEditTarget(blank, "objective", [[]], false)).toBe("common");
-    expect(goalEditTarget({ ...blank, bottleneck: "첫 글자" }, "bottleneck", [], true)).toBe("common"); // 이미 공통으로 쓰기 시작한 칸
-    expect(goalEditTarget(nine()[0], "bottleneck", [], false)).toBe("layer");
-    expect(goalEditTarget(nine()[0], "objective", [], false)).toBe("layer");
-    const layer: OkrGoal[] = [{ ...blank, html: { bottleneckSet: "1" } }];
-    expect(goalEditTarget(blank, "bottleneck", [layer], false)).toBe("layer"); // 그 층이 이미 덮어쓴 칸
-    expect(goalEditTarget(blank, "objective", [layer], false)).toBe("common"); // 다른 칸은 상관없음
-    expect(goalEditTarget(undefined, "objective", [], false)).toBe("layer");
+  it("공통 칸이 비어도 파트 탭에선 layer(공통에 쓰지 않음), 그 층 전용 행이면 own", () => {
+    expect(goalEditTarget(blank, { team: "A" })).toBe("layer");
+    expect(goalEditTarget(nine()[0], { team: "A", member: "홍길동" })).toBe("layer");
+    expect(goalEditTarget({ ...blank, no: 101, scope: { team: "A" } }, { team: "A" })).toBe("own");
+    expect(goalEditTarget({ ...blank, no: 101, scope: { team: "A" } }, { team: "A", member: "홍길동" })).toBe("layer");
+    expect(goalEditTarget(undefined, { team: "A" })).toBe("layer");
   });
   it("분기 표 추가 문구는 따로", async () => {
     ask.mockReset(); ask.mockResolvedValueOnce(false);

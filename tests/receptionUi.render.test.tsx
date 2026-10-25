@@ -21,7 +21,7 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     const off = renderToString(createElement(ReceptionTypePicker, { value: "IT", onChange: noop, counts, deptEnabled: false }));
     expect(on).toContain("영업팀");
     expect(off).not.toContain("영업팀");
-    expect(off).toContain("복합기 AS");
+    expect(off).toContain("CS 접수"); // 2026-10-25 표시 이름만 CS 접수(값은 복합기 AS 그대로)
   });
 
   it("현황판: 경과일·빈 열·상태 3종", () => {

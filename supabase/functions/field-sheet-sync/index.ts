@@ -2,6 +2,8 @@ import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
 import { appendViaSheetsApi, peekSheet, sheetsApiConfigured } from "./sheets-api.ts";
 import { appendDeptRow } from "./dept-sheets.ts";
 import { isDeptSheetCategory } from "./dept-sheet-spec.ts";
+import { writeSheetStatus } from "./sheet-status.ts";
+import { isStatusOnlyPayload, parseStatusOnly, StatusJobError } from "../_shared/sheet-status.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -247,12 +249,13 @@ Deno.serve(async (req) => {
     const outcome = await processJob_(job, env);
     return Response.json({ ok: true, ...outcome }, { headers: jsonHeaders });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
+    const status = error instanceof StatusJobError ? error.httpStatus : 500;
+    return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status, headers: jsonHeaders });
   }
 });
 
 // 단일 잡 처리 — 성공 시 synced 마킹, 실패 시 last_error/attempts 기록(+한도 도달 시 failed 마킹) 후 throw
-async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promise<{ status: string; row?: number | null; sheet?: string; seq?: number | null; duplicate?: boolean }> {
+async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promise<{ status: string; row?: number | null; sheet?: string; seq?: number | null; duplicate?: boolean; unchanged?: boolean; moved?: boolean }> {
   const { rest, headers, webhookUrl, webhookSecret, openAiKey } = env;
   // 실패 시 last_error/attempts를 job에 남긴다 — 예전엔 실패가 어디에도 기록되지 않아 영구 pending으로 방치됐다.
   const recordFailure = async (message: string) => {
@@ -269,12 +272,27 @@ async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promis
   };
 
   try {
+    // 상태만 갱신(statusOnly, 2026-10-25): 허용 값 검사는 스위치보다 먼저(틀린 요청은 400 으로 바로 끝)
+    const statusReq = isStatusOnlyPayload(job.payload) ? parseStatusOnly(String(job.category), job.payload) : null;
 
     const configRes = await fetch(`${rest}/app_config?select=key,value`, { headers });
     const configRows = await configRes.json();
     const config = Object.fromEntries((configRows || []).map((row: { key: string; value: string }) => [row.key, row.value]));
     if (!enabled(config.FIELD_SHEET_SYNC_ENABLED)) {
       return { status: "held" };
+    }
+    // 상태만 갱신: 상태 열·처리자 열만. 부서·원격 기존 기입 분기보다 먼저 탄다(새 행·다른 칸 금지)
+    if (statusReq) {
+      if (enabled(config.FIELD_SHEET_TEST_MODE)) return { status: "held" };
+      if (!sheetsApiConfigured()) throw new Error("GOOGLE_SERVICE_ACCOUNT 설정이 없어 시트 상태를 쓸 수 없습니다");
+      const out = await writeSheetStatus(statusReq, { rest, headers });
+      const markStatus = await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { ...headers, Prefer: "return=minimal" },
+        body: JSON.stringify({ sheet_status: "synced", sheet_row: out.row, synced_at: new Date().toISOString(), last_error: null, attempts: Number(job.attempts || 0) + 1 }),
+      });
+      if (!markStatus.ok) throw new Error(`synced 마킹 실패(${markStatus.status}) — 시트에는 기록됨(행 ${out.row})`);
+      return { status: "synced", row: out.row, sheet: out.sheet, unchanged: out.unchanged, moved: out.moved };
     }
     // 지원 부서 시트(영업·경영): 시트 API 직행만. GAS 폴백 없음 — 실패는 throw → recordFailure → retry_pending 재시도
     if (isDeptSheetCategory(job.category)) {
@@ -382,7 +400,14 @@ async function processJob_(job: JobRow, env: ReturnType<typeof makeEnv>): Promis
     return { status: "synced", row: sheetData.row || null, sheet: sheetData.sheet || "" };
   } catch (innerError) {
     const message = innerError instanceof Error ? innerError.message : String(innerError);
-    await recordFailure(message);
+    if (innerError instanceof StatusJobError) {
+      // 최종 실패(허용 값 밖·머리 변경·행 대조 실패) — 재시도해도 같으므로 바로 failed
+      await fetch(`${rest}/field_sheet_sync_jobs?id=eq.${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { ...headers, Prefer: "return=minimal" },
+        body: JSON.stringify({ sheet_status: "failed", last_error: message.slice(0, 500), attempts: Number(job.attempts || 0) + 1 }),
+      }).catch(() => {});
+    } else await recordFailure(message);
     throw innerError;
   }
 }

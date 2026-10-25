@@ -41,7 +41,12 @@ export const pillarLabel = (pillar: string) => { const i = pillarIndex(pillar); 
 // html.bottleneckSet === "1"(2026-10-21 3차): 같은 규칙으로 주차 덮어쓰기 칸의 bottleneck(병목현상 글)을 사람이 고쳤다는 표시.
 // 4차(2026-10-21): 층별 독립 — 표시가 있으면 빈 글이어도 그 값(비우면 빈 채 유지). 달성기준은 예외(7차): 빈 글이면 위 층이 보인다. html.bottleneck = 병목현상 글자색(RichCell).
 // hidden(2026-10-25): 보관한 행 — 실제결과·판정 기록이 있는 행을 지우면 지우는 대신 숨긴다(표에서 안 보임, 홈 지난 주차 % 는 그대로 셈). docs/tasks/okr-rows-add-remove-2026-10-25.md
-export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; hidden?: boolean; html?: { objective?: string; criteria?: string; bottleneck?: string; objectiveSet?: "1"; bottleneckSet?: "1"; criteriaSet?: "1" } };
+// scope(2026-10-25 저녁): 행의 주인 층 — 없음 = 공통(팀장, A~D 전부) · {team} = 그 파트 전용 · {team, member} = 그 사람 전용. 월 행에만(분기 행엔 없음).
+//   층 행 번호는 101부터(전역 유일). docs/tasks/okr-rows-per-layer-2026-10-25.md
+export type OkrGoalScope = { team: OkrTeam; member?: string };
+export type OkrGoalLayer = "common" | "team" | "member";
+export type OkrGoalView = { team?: OkrTeam | string; member?: string };
+export type OkrGoal = { no: number; pillar: string; bottleneck: string; objective: string; criteria: string; hidden?: boolean; scope?: OkrGoalScope; html?: { objective?: string; criteria?: string; bottleneck?: string; objectiveSet?: "1"; bottleneckSet?: "1"; criteriaSet?: "1" } };
 // 글자색(엑셀처럼 검정·빨강·파랑) — 색이 들어간 칸만 html을 함께 둔다. AI·합치기가 평문으로 바꾸면 html은 지운다.
 export type RichField = "actual" | "reason" | "plan" | "evidence";
 // judgment(2026-10-20): 월 행이면 CS 종합, 분기 행이면 분기 종합을 사람이 고른 값(자동값 덮어쓰기)
@@ -334,7 +339,16 @@ export const isAlert = (judgment: string) => { const j = normalizeJudgment(judgm
 
 // ── Supabase ──
 export function normalizeGoals(raw: unknown[]): OkrGoal[] {
-  return raw.map((g, i) => { const x = (g || {}) as Partial<OkrGoal>; return { no: Number(x.no) || i + 1, pillar: String(x.pillar || ""), bottleneck: String(x.bottleneck || ""), objective: String(x.objective || ""), criteria: String(x.criteria || ""), ...(x.hidden === true ? { hidden: true } : {}), ...(x.html && typeof x.html === "object" ? { html: x.html } : {}) }; });
+  return raw.map((g, i) => { const x = (g || {}) as Partial<OkrGoal>; return { no: Number(x.no) || i + 1, pillar: String(x.pillar || ""), bottleneck: String(x.bottleneck || ""), objective: String(x.objective || ""), criteria: String(x.criteria || ""), ...(x.hidden === true ? { hidden: true } : {}), ...scopeField(x.scope), ...(x.html && typeof x.html === "object" ? { html: x.html } : {}) }; });
+}
+// scope 는 팀이 A~D 일 때만 통과(이상한 값은 공통으로 읽는다). member 는 빈 글이면 뺀다(= 파트 전용).
+function scopeField(raw: unknown): { scope?: OkrGoalScope } {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as { team?: unknown; member?: unknown };
+  const team = String(r.team || "") as OkrTeam;
+  if (!(OKR_TEAMS as readonly string[]).includes(team)) return {};
+  const member = typeof r.member === "string" ? r.member.trim() : "";
+  return { scope: member ? { team, member } : { team } };
 }
 type CycleRow = Partial<OkrCycle> & { id: string };
 function toCycle(r: CycleRow): OkrCycle {
@@ -409,12 +423,38 @@ export async function getOkrReport(cycleId: string, team: string, member: string
 // 여러 사람이 같은 달·주차를 동시에 적는다(팀원은 자기 행, 파트장은 종합·목표). 통째로 덮어쓰면 남이 적은 칸이 사라지므로
 // 내가 base에서 고친 칸만 내 것으로 쓰고, 안 고친 칸은 서버 것을 따른다.
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-export function mergeGoals(base: OkrGoal[], local: OkrGoal[], server: OkrGoal[]): OkrGoal[] {
+// 2026-10-25 저녁(R1): 번호 단위 합집합 — 파트장·파트원이 동시에 행을 추가해도 남의 새 행이 사라지지 않는다.
+//   번호마다: 둘 다 있으면 내가 고쳤으면 내 것·아니면 서버 것 · 한쪽에서만 새로 생겼으면 넣음 · 내가 지웠으면 뺌 · 서버가 지웠으면 내가 고친 경우만 남김.
+//   같은 번호로 서로 다른 새 행(동시 추가)이면 서버 것은 그 번호, 내 것은 새 번호(층 행은 101+). 새 행은 아직 기록이 없어 번호를 바꿔도 안전.
+//   otherNos = 같은 번호로 맞물리는 다른 사이클 번호(분기·세 달) — 새 번호가 그것과도 겹치지 않게(모르면 생략).
+export function mergeGoals(base: OkrGoal[], local: OkrGoal[], server: OkrGoal[], otherNos: number[] = []): OkrGoal[] {
   if (same(local, base)) return server;
   if (same(server, base)) return local;
-  const nos = (gs: OkrGoal[]) => gs.map((g) => g.no).join(",");
-  if (nos(local) !== nos(base) || nos(server) !== nos(base)) return local; // 번호 구조가 어긋나면(삽입·삭제) 합칠 수 없다 — 내 것
-  return local.map((g, i) => (same(g, base[i]) ? server[i] : g));
+  const B = new Map(base.map((g) => [g.no, g]));
+  const S = new Map(server.map((g) => [g.no, g]));
+  const taken = [...base, ...local, ...server].map((g) => g.no).concat(otherNos);
+  const out: OkrGoal[] = [];
+  const serverPlaced = new Set<number>(); // 서버 행을 그 번호 그대로 이미 넣은 번호
+  for (const l of local) {
+    const b = B.get(l.no); const sv = S.get(l.no);
+    if (b && sv) { out.push(same(l, b) ? sv : l); serverPlaced.add(l.no); continue; }
+    if (b) { if (!same(l, b)) out.push(l); continue; } // 서버가 지웠다 — 내가 고친 행만 남김
+    if (!sv) { out.push(l); continue; } // 내가 새로 만든 행
+    serverPlaced.add(l.no);
+    if (same(l, sv)) { out.push(l); continue; } // 둘이 똑같이 만든 행
+    const no = nextGoalNo([], taken, !!l.scope); // 동시 추가 — 서버 것은 그 번호, 내 것은 새 번호
+    taken.push(no);
+    out.push({ ...l, no });
+    serverPlaced.delete(l.no); // 서버 행은 아래에서 서버 순서 자리에 끼운다
+  }
+  // 서버에만 있는 행: 서버가 새로 만든 것만(base 에 있었는데 내가 지운 행은 뺌). 서버 순서에서 앞 행 바로 뒤에 끼운다.
+  server.forEach((sv, i) => {
+    if (serverPlaced.has(sv.no) || B.has(sv.no)) return;
+    let at = 0;
+    for (let k = i - 1; k >= 0; k--) { const idx = out.findIndex((g) => g.no === server[k].no); if (idx >= 0) { at = idx + 1; break; } }
+    out.splice(at, 0, sv);
+  });
+  return out;
 }
 // 번호 안에서는 칸(memo·memoHtml·judgment·action) 단위로 합친다(2026-10-20): 팀장이 CS 종합을 고르는 사이 남이 같은 번호 메모를 고쳐도 둘 다 남게.
 // 한쪽에 번호 자체가 없으면(지움·새로 생김) 예전처럼 번호 통째로 고른다.
@@ -540,7 +580,9 @@ export function monthDraftFromQuarter(year: number, month: number, quarter?: Okr
   };
 }
 // 같은 번호·Pillar에 글만 비운 틀(없으면 3×3)
+// 층 행(scope)은 보지 않는다 — 공통 행만으로 틀을 만든다(층 행은 replaceCommonGoals 가 따로 지킨다, 2026-10-25 저녁).
 export function blankGoalsLike(goals: OkrGoal[]): OkrGoal[] {
+  goals = commonGoalsOf(goals);
   if (!goals.length) return defaultGoalTemplate().map((g) => ({ ...g, bottleneck: "" }));
   return goals.map((g) => ({ no: g.no, pillar: g.pillar, bottleneck: "", objective: "", criteria: "", ...(g.hidden ? { hidden: true } : {}) })); // 보관 행은 복사본에서도 숨김
 }
@@ -556,16 +598,24 @@ const goalHasText = (g: OkrGoal) => !!(bottleneckText(g.bottleneck) || g.objecti
 export const visibleGoals = (goals: OkrGoal[]): OkrGoal[] => goals.filter((g) => !g.hidden);
 export const archivedGoals = (goals: OkrGoal[]): OkrGoal[] => goals.filter((g) => g.hidden);
 // 새 번호 = 그 사이클 최대 번호 + 1. otherNos = 같은 번호로 맞물리는 사이클(분기 ↔ 그 분기 달)의 번호 — 겹치면 분기 표에 남의 판정이 붙는다.
-export function nextGoalNo(goals: OkrGoal[], otherNos: number[] = []): number {
-  return Math.max(0, ...goals.map((g) => g.no), ...otherNos.filter((n) => Number.isFinite(n))) + 1;
+// 2026-10-25 저녁: 번호 띠 — 공통 행은 1~100 안에서 max+1, 층 행(layer=true)은 101부터 전역 max+1.
+//   팀장 문서 붙여넣기는 늘 1~9 번호라 층 행과 부딪히지 않는다. 공통 띠가 꽉 차면(100) 전역 max+1.
+export const LAYER_GOAL_NO_FROM = 101;
+export function nextGoalNo(goals: OkrGoal[], otherNos: number[] = [], layer = false): number {
+  const all = [...goals.map((g) => g.no), ...otherNos].filter((n) => Number.isFinite(n));
+  const top = Math.max(0, ...all);
+  if (layer) return Math.max(LAYER_GOAL_NO_FROM - 1, top) + 1;
+  const low = Math.max(0, ...all.filter((n) => n < LAYER_GOAL_NO_FROM)) + 1;
+  return low < LAYER_GOAL_NO_FROM ? low : top + 1;
 }
 // 그 Pillar 묶음 끝(배열에서 같은 Pillar 마지막 행 뒤)에 빈 행. 그 Pillar 행이 없으면 맨 끝.
-export function addGoalRow(goals: OkrGoal[], pillar: string, otherNos: number[] = []): { goals: OkrGoal[]; no: number } {
-  const no = nextGoalNo(goals, otherNos);
+// scope 를 주면 그 층 전용 행(번호 101+). otherNos 는 달이면 분기 + 그 분기 세 달 goals 번호 전부(층 행 포함).
+export function addGoalRow(goals: OkrGoal[], pillar: string, otherNos: number[] = [], scope?: OkrGoalScope): { goals: OkrGoal[]; no: number } {
+  const no = nextGoalNo(goals, otherNos, !!scope);
   const idx = pillarIndex(pillar);
   let at = -1;
   goals.forEach((g, i) => { if (pillarIndex(g.pillar) === idx) at = i; });
-  const row: OkrGoal = { ...emptyGoal(no), pillar };
+  const row: OkrGoal = { ...emptyGoal(no), pillar, ...(scope ? { scope: scope.member ? { team: scope.team, member: scope.member } : { team: scope.team } } : {}) };
   return { goals: at < 0 ? [...goals, row] : [...goals.slice(0, at + 1), row, ...goals.slice(at + 1)], no };
 }
 // 그 번호에 실제결과·판정이 어디든 있는지 — 보고서(월 파트·주차 팀원 등) rows + 사이클 feedback 의 사람 판정(CS·분기 종합)
@@ -580,29 +630,86 @@ export function goalRemoveKind(goal: OkrGoal, hasRecords: boolean): GoalRemoveKi
   return goalHasText(goal) ? "text" : "empty";
 }
 // 행 빼기 — 기록이 있으면 hidden 으로 보관(판정 데이터는 보고서에 그대로), 없으면 배열에서 뺀다. 다른 행 번호는 그대로.
-export function removeGoalRow(goals: OkrGoal[], no: number, hasRecords: boolean): { goals: OkrGoal[]; kind: GoalRemoveKind } {
+// view 를 주면 그 화면 층이 주인인 행만 뺀다(아니면 goals 그대로 + blocked). view 생략 = 예전처럼 검사 없음.
+export function removeGoalRow(goals: OkrGoal[], no: number, hasRecords: boolean, view?: OkrGoalView): { goals: OkrGoal[]; kind: GoalRemoveKind; blocked?: true } {
   const goal = goals.find((g) => g.no === no);
   if (!goal) return { goals, kind: "empty" };
+  if (view && !ownsGoal(goal, view)) return { goals, kind: goalRemoveKind(goal, hasRecords), blocked: true };
   const kind = goalRemoveKind(goal, hasRecords);
   return { goals: kind === "archive" ? goals.map((g) => (g.no === no ? { ...g, hidden: true } : g)) : goals.filter((g) => g.no !== no), kind };
 }
 // 보관 행 되살리기 — 같은 자리·같은 번호로(지난 판정이 다시 붙는다)
-export function restoreGoalRow(goals: OkrGoal[], no: number): OkrGoal[] {
-  return goals.map((g) => { if (g.no !== no || !g.hidden) return g; const rest = { ...g }; delete rest.hidden; return rest; });
+export function restoreGoalRow(goals: OkrGoal[], no: number, view?: OkrGoalView): OkrGoal[] {
+  return goals.map((g) => { if (g.no !== no || !g.hidden || (view && !ownsGoal(g, view))) return g; const rest = { ...g }; delete rest.hidden; return rest; });
+}
+
+// ── 행의 주인 층(2026-10-25 저녁, docs/tasks/okr-rows-per-layer-2026-10-25.md 3-1) ──
+export function goalLayer(g: Pick<OkrGoal, "scope">): OkrGoalLayer {
+  if (!g.scope) return "common";
+  return g.scope.member ? "member" : "team";
+}
+export const isLayerGoal = (g: Pick<OkrGoal, "scope">): boolean => !!g.scope;
+export const isCommonGoal = (g: Pick<OkrGoal, "scope">): boolean => !g.scope;
+export const commonGoalsOf = (goals: OkrGoal[]): OkrGoal[] => goals.filter(isCommonGoal);
+// 통째 교체 때 지킬 행(scope 있는 행)
+export const layerRowsOf = (goals: OkrGoal[]): OkrGoal[] => goals.filter(isLayerGoal);
+// 그 화면이 이 행의 주인인지 — 통합집계·분기({}) = 공통 · 파트 종합({team}) = 그 파트 전용 · 파트원({team, member}) = 본인 전용
+export function ownsGoal(g: Pick<OkrGoal, "scope">, view: OkrGoalView): boolean {
+  if (!view.team) return !g.scope;
+  if (!g.scope || g.scope.team !== view.team) return false;
+  return view.member ? g.scope.member === view.member : !g.scope.member;
+}
+// 화면에 보일 행 — 통합집계(둘 다 없음) = 공통만 / 파트 종합(team) = 공통 + 그 파트 전용 / 파트원(team, member) = 공통 + 그 파트 전용 + 본인 전용.
+// 보관 행(hidden)은 거르지 않는다(visibleGoals 는 따로). 순서 그대로.
+export function goalsForView(goals: OkrGoal[], view: OkrGoalView = {}): OkrGoal[] {
+  return goals.filter((g) => {
+    if (!g.scope) return true;
+    if (!view.team || g.scope.team !== view.team) return false;
+    return !g.scope.member || (!!view.member && g.scope.member === view.member);
+  });
+}
+// 파트 % 집계·팀원 집계용 — 공통 + 그 파트 전용 + 그 파트 사람들의 개인 전용 전부
+export function goalsForTeamTotal(goals: OkrGoal[], team: OkrTeam | string): OkrGoal[] {
+  return goals.filter((g) => !g.scope || g.scope.team === team);
+}
+// 공통 행 통째 교체(붙여넣기·빈 틀·분기로 시작·다른 달 가져오기) = nextCommon 의 공통 행 + current 의 층 행(번호 그대로).
+// nextCommon 에 섞여 온 층 행은 버린다(다른 달의 전용 행을 가져오지 않음). 층 행 번호와 겹친 공통 행은 새 번호(1~100 띠).
+// 층 행은 같은 Pillar 묶음 끝에 다시 끼운다(그 Pillar 가 없으면 맨 끝).
+export function replaceCommonGoals(current: OkrGoal[], nextCommon: OkrGoal[]): OkrGoal[] {
+  const layers = layerRowsOf(current);
+  const layerNos = new Set(layers.map((g) => g.no));
+  const common = commonGoalsOf(nextCommon);
+  const taken = [...layers, ...common].map((g) => g.no);
+  let out: OkrGoal[] = common.map((g) => {
+    if (!layerNos.has(g.no)) return g;
+    const no = nextGoalNo([], taken); taken.push(no);
+    return { ...g, no };
+  });
+  for (const l of layers) {
+    const idx = pillarIndex(l.pillar);
+    let at = -1;
+    out.forEach((g, i) => { if (pillarIndex(g.pillar) === idx) at = i; });
+    out = at < 0 ? [...out, l] : [...out.slice(0, at + 1), l, ...out.slice(at + 1)];
+  }
+  return out;
 }
 
 // 이 기간 goals가 팀장이 정한 것인지(= 그대로 보여 줄지). 복사본('copy')이거나 글이 하나도 없으면 false.
 export function isLeaderGoals(cycle: Pick<OkrCycle, "goals" | "goals_origin"> | null | undefined): boolean {
   if (!cycle) return false;
   if (cycle.goals_origin === "copy") return false;
-  return cycle.goals.some(goalHasText);
+  return commonGoalsOf(cycle.goals).some(goalHasText); // 층 행 글만 있으면 팀장 월 OKR 아님(2026-10-25 저녁)
 }
 // 화면에 쓸 goals — 달이 팀장 월 OKR이면 그 달 것, 아니면 분기 goals(읽기 전용). 분기도 비면 달 것 그대로(복사본이라도).
 // 주차는 부모 달을 cycle로 넘긴다. 분기 행 자체를 넘기면 그 goals 그대로.
 export function effectiveGoals(cycle: OkrCycle | null | undefined, quarter?: OkrCycle | null): OkrGoal[] {
   if (cycle?.kind === "quarter") return cycle.goals;
   if (cycle && isLeaderGoals(cycle)) return cycle.goals;
-  if (quarter && quarter.goals.some(goalHasText)) return quarter.goals;
+  if (quarter && commonGoalsOf(quarter.goals).some(goalHasText)) { // 분기 글을 대신 보여도 그 달 층 행은 뒤에(2026-10-25 저녁)
+    const layers = layerRowsOf(cycle?.goals || []);
+    const qCommon = commonGoalsOf(quarter.goals);
+    return layers.length || qCommon.length !== quarter.goals.length ? [...qCommon, ...layers] : quarter.goals;
+  }
   return cycle?.goals || [];
 }
 // "팀장 n월 OKR 대기, 아래는 분기 OKR(읽기 전용)" 띠를 띄울지 — 달인데 팀장 goals가 아니고 분기 것을 대신 보여 줄 때
@@ -612,11 +719,11 @@ export function effectiveGoals(cycle: OkrCycle | null | undefined, quarter?: Okr
 export function monthScreenGoals(cycle: OkrCycle | null | undefined, quarter?: OkrCycle | null): { goals: OkrGoal[]; pending: boolean } {
   if (!cycle) return { goals: [], pending: false };
   if (cycle.kind === "quarter" || isLeaderGoals(cycle)) return { goals: cycle.goals, pending: false };
-  if (cycle.goals_origin !== "copy" && cycle.goals.length) return { goals: cycle.goals, pending: true };
-  return { goals: blankGoalsLike(quarter?.goals || []), pending: true };
+  if (cycle.goals_origin !== "copy" && commonGoalsOf(cycle.goals).length) return { goals: cycle.goals, pending: true };
+  return { goals: [...blankGoalsLike(quarter?.goals || []), ...layerRowsOf(cycle.goals)], pending: true }; // 빈 틀이어도 그 달 층 행은 남긴다
 }
 export function goalsAreFromQuarter(cycle: OkrCycle | null | undefined, quarter?: OkrCycle | null): boolean {
-  return !!cycle && cycle.kind !== "quarter" && !isLeaderGoals(cycle) && !!quarter && quarter.goals.some(goalHasText);
+  return !!cycle && cycle.kind !== "quarter" && !isLeaderGoals(cycle) && !!quarter && commonGoalsOf(quarter.goals).some(goalHasText);
 }
 
 // ── 붙여넣기 파서: 팀장 문서 글 또는 엑셀 표 복사 → direction + 9묶음 ──
@@ -753,13 +860,14 @@ function parseTablePaste(src: string): OkrPasteResult {
 }
 // 붙여넣은 goals를 지금 goals에 덮는다 — 같은 번호 묶음만 바꾸고(결과 행·feedback이 번호로 이어짐), 붙여넣은 달성기준이 비면 지금 것을 둔다.
 export function applyPastedGoals(current: OkrGoal[], pasted: OkrGoal[]): OkrGoal[] {
-  const out = current.map((g) => {
+  const out = commonGoalsOf(current).map((g) => { // 층 행은 건드리지 않는다 — 공통 행만 덮고 층 행은 replaceCommonGoals 로 제자리에(2026-10-25 저녁)
     const p = pasted.find((x) => x.no === g.no);
     if (!p) return g;
     return { no: g.no, pillar: p.pillar || g.pillar, bottleneck: p.bottleneck, objective: p.objective, criteria: p.criteria.trim() ? p.criteria : g.criteria };
   });
   for (const p of pasted) if (!out.some((g) => g.no === p.no)) out.push({ ...p });
-  return out.sort((a, b) => a.no - b.no);
+  const common = out.sort((a, b) => a.no - b.no);
+  return layerRowsOf(current).length ? replaceCommonGoals(current, common) : common;
 }
 
 // ── 상단 필터: [4분기] [10월] [11월] [12월] ──
@@ -804,7 +912,7 @@ export type OkrRollupRow = { no: number; pillar: string; bottleneck: string; obj
 export function monthlyRollup(cycle: OkrCycle, reports: OkrReport[], quarter?: OkrCycle | null, weekReports?: OkrReport[]): OkrRollupRow[] {
   const summary = reports.filter((r) => !r.member && (!r.cycle_id || r.cycle_id === cycle.id));
   const weeks = weekReports || [];
-  return visibleGoals(effectiveGoals(cycle, quarter)).map((g) => { // 보관 행 제외(2026-10-25)
+  return visibleGoals(commonGoalsOf(effectiveGoals(cycle, quarter))).map((g) => { // 보관 행 제외(2026-10-25) · 공통 행만(층 행은 통합집계 표에 없음, 2026-10-25 저녁)
     const byTeam = emptyTeamJudgments();
     for (const t of OKR_TEAMS) byTeam[t] = normalizeJudgment(resultRowFor(findReport(summary, t), g.no).judgment);
     const dots = Object.fromEntries(OKR_TEAMS.map((t) => [t, partMonthJudgment(summary, weeks, t, g.no)])) as Record<OkrTeam, OkrJudgedCell>;
@@ -822,7 +930,7 @@ export function quarterProgress(monthCycles: OkrCycle[], reportsByCycle: Record<
   let base: OkrGoal[] = quarter?.goals || [];
   if (!base.length) {
     const byNo = new Map<number, OkrGoal>();
-    for (const m of months) for (const g of m.goals) if (!byNo.has(g.no)) byNo.set(g.no, g);
+    for (const m of months) for (const g of commonGoalsOf(m.goals)) if (!byNo.has(g.no)) byNo.set(g.no, g);
     base = [...byNo.values()].sort((a, b) => a.no - b.no);
   }
   const rollups = new Map(months.map((m) => [m.id, monthlyRollup(m, reportsByCycle[m.id] || [], quarter)]));
@@ -939,7 +1047,7 @@ export function quarterRollup(quarter: OkrCycle | null, monthCycles: OkrCycle[],
   let base: OkrGoal[] = visibleGoals(quarter?.goals || []); // 보관 행 제외(2026-10-25) — 나머지 행은 같은 번호로 달 판정과 맞물린다
   if (!quarter?.goals.length) {
     const byNo = new Map<number, OkrGoal>();
-    for (const m of months) for (const g of visibleGoals(m.goals)) if (!byNo.has(g.no)) byNo.set(g.no, g);
+    for (const m of months) for (const g of visibleGoals(commonGoalsOf(m.goals))) if (!byNo.has(g.no)) byNo.set(g.no, g);
     base = [...byNo.values()].sort((a, b) => a.no - b.no);
   }
   const rollups = new Map(months.map((m) => [m.id, monthlyRollup(m, monthReports[m.id] || [], quarter, weekReportsByMonth[m.id] || [])]));

@@ -7,7 +7,8 @@
  *   [미처리] = 아래 미처리현황과 같은 행(boardRows, 시트 이력 포함 — 사용자 2026-10-25 "동일해야지"). 숫자·목록이 같고 조회는 load() 한 번.
  * - 달력(2026-10-25) = DeptCalendarPanel compact(그 부서 달력 추가·수정·삭제). 일정·캘린더 탭의 부서 칩은 없어졌다.
  * - 미처리현황 = 홈과 같은 kpi/kpiData.loadUnhandledRows() → homeUnhandled.rowsForTab(부서 탭). 숫자가 홈 "경영/운영/영업" 탭과 같다.
- *   시트 행(시트 기준 스위치 켬)은 FIELD 에서 처리할 수 없어 [시트에서 열기]만 붙인다.
+ *   시트 행(시트 기준 스위치 켬)도 [완료][보류][배정](UnhandledActionBar — 홈 팝업과 같은 부품, 2026-10-25) → 시트 상태·처리자 칸만 적는다(statusOnly).
+ *   앱 접수 줄은 기존 DeptActionBar(완료·미루기·보류·메모). 누른 줄은 unhandledPending 으로 바로 빠지고 1.5초 뒤 다시 읽는다.
  * - 60초마다·창 복귀 때 다시 읽는다. 화면이 숨어 있으면(useScreenActive) 쉰다. 실패는 빨간 줄로 보이고 이전 값은 둔다.
  * 배정 = remote_meta.handler 1명(runDeptAction "assign" → 시트 처리자 칸 갱신). 알림은 보내지 않는다(Q6).
  */
@@ -21,7 +22,9 @@ import { DEPT_UNHANDLED_TAB, deptMemberNames, deptPlanBuckets, defaultPlanBucket
 import { createPortal } from "react-dom";
 import { rowsForTab, UNHANDLED_BADGE, type UnhandledRow } from "./homeUnhandled";
 import { UnhandledDetail } from "./HomeUnhandledPanel";
-import { deptSheetUrl, sheetRowUrl } from "./receptionSheetOpen";
+import { deptSheetUrl } from "./receptionSheetOpen";
+import UnhandledActionBar from "./UnhandledActionBar.view";
+import { applyPending, usePendingVersion } from "./unhandledPending";
 import { DEPT_RIGHT_VIEWS, type DeptRightView } from "./receptionRightView";
 import type { DeptType } from "./deptReception";
 import { useMembers } from "./authors";
@@ -154,7 +157,8 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
 
   const closedIds = useMemo(() => new Set(rows.filter((r) => r.status === "완료" || r.status === "취소").map((r) => r.id)), [rows]);
   // 미처리현황 줄 = 일정리스트 [미처리] 줄(배열 하나를 두 탭이 공유, 조회도 load() 한 번)
-  const boardRows = useMemo(() => unhandled.filter((u) => !(u.receptionId && closedIds.has(u.receptionId) && !sheetKeyOf(u.key))), [unhandled, closedIds]);
+  const pendingVer = usePendingVersion(); // 방금 누른 줄은 다시 읽기 전에도 먼저 반영(prune 은 로더만 — 여기는 부서 탭 일부라 지우지 않는다)
+  const boardRows = useMemo(() => (pendingVer >= 0 ? applyPending(unhandled) : unhandled).filter((u) => !(u.receptionId && closedIds.has(u.receptionId) && !sheetKeyOf(u.key))), [unhandled, closedIds, pendingVer]);
   const buckets = useMemo(() => deptPlanBuckets(dept, rows, events, today, boardRows), [dept, rows, events, today, boardRows]);
   const shownBucket = bucket ?? defaultPlanBucket(buckets);
   const sheetCount = boardRows.filter((u) => sheetKeyOf(u.key)).length;
@@ -202,12 +206,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   // 미처리 줄 아래 단추 — 일정리스트 [미처리]와 미처리현황이 같이 쓴다
   const unhandledActions = (u: UnhandledRow) => {
     const sk = sheetKeyOf(u.key);
-    if (sk) return (
-      <a href={sheetRowUrl(sk.source, sk.row)} target="_blank" rel="noopener noreferrer"
-        className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-[12px] font-black text-emerald-800 hover:bg-emerald-100 sm:min-h-8">
-        <ExternalLink size={12} aria-hidden />시트에서 열기 ({sk.row}행)
-      </a>
-    );
+    if (sk) return <UnhandledActionBar row={u} author={author} onFinished={() => settle()} />;
     const src = u.receptionId ? rowById.get(u.receptionId) : undefined;
     return u.receptionId ? actions(src || { id: u.receptionId, type: dept, vendor: u.vendor, author: "", status: u.status }) : null;
   };
@@ -242,7 +241,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
         <div>
           <div className="px-3 pt-2 text-[11px] font-bold text-slate-500">
             홈 미처리 "{DEPT_UNHANDLED_TAB[dept]}" 탭과 같은 숫자 · <b className="tabular-nums text-slate-900">{boardRows.length}</b>건
-            {sheetCount > 0 && <> · <span className="text-emerald-700">시트 건 {sheetCount}은 시트에서 처리</span></>}
+            {sheetCount > 0 && <> · <span className="text-emerald-700">시트 건 {sheetCount} — [완료]·[보류]는 시트 상태 칸에 적힘</span></>}
           </div>
           {!!unNote && <div className="mx-3 mt-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-800">{unNote}</div>}
           <div className="mt-2 max-h-[70vh] divide-y divide-slate-100 overflow-y-auto border-t border-slate-100">
@@ -269,7 +268,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
         </div>
       )}
 
-      {detail && typeof document !== "undefined" && createPortal(<UnhandledDetail row={detail} onClose={() => setDetail(null)} />, document.body)}
+      {detail && typeof document !== "undefined" && createPortal(<UnhandledDetail row={detail} onClose={() => setDetail(null)} actions author={author} />, document.body)}
 
       {assignRow && (names.length ? (
         <AssigneePicker names={names} value={String(assignRow.remote_meta?.handler || "")} max={1} title="처리자 배정"

@@ -25,10 +25,11 @@ import UnifiedHistory from "./UnifiedHistory";
 import { notify } from "./toast";
 import { authorLocked } from "./sso";
 import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
+import { receptionTypeLabel } from "./receptionTypeLabel";
 import ReceptionBoardPanel from "./ReceptionBoardPanel";
 import { requestOpenOverdue } from "./receptionBoardData";
 import { RECEPTION_RIGHT_KEY, RECEPTION_RIGHT_DEPT_KEY, SHOW_BOARD_EVENT, parseDeptRightView, parseRightView, unhandledTotal, type DeptRightView, type ReceptionRightView } from "./receptionRightView";
-import DeptWorkspacePanel, { DeptRightTabs, DeptSheetLink, type DeptCounts } from "./DeptWorkspacePanel";
+import DeptWorkspacePanel, { DeptRightTabs, type DeptCounts } from "./DeptWorkspacePanel";
 import DeptReception from "./DeptReceptionScreen";
 import DeptReceptionDetail from "./DeptReceptionDetail";
 import DeptActionBar from "./DeptActionBar";
@@ -587,7 +588,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     } else if (row.vendor) {
       setManualVendor(row.vendor);
     }
-    notify(`${row.vendor || "접수"} 내용을 복합기 접수 폼으로 불러왔어요 — 확인 후 [접수] 또는 [⚡ 전체]를 눌러야 접수·시트 기입이 됩니다.`);
+    notify(`${row.vendor || "접수"} 내용을 CS 접수 폼으로 불러왔어요 — 확인 후 [접수] 또는 [⚡ 전체]를 눌러야 접수·시트 기입이 됩니다.`);
   };
 
   // 복합기 → 원격/IT 방향도 동일하게 "내용 넘기기"만
@@ -607,7 +608,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     } else if (row.vendor) {
       setManualVendor(row.vendor);
     }
-    notify(`${row.vendor || "접수"} 내용을 ${next} 접수 폼으로 불러왔어요 — [접수]를 눌러야 접수·시트 기입이 됩니다.`);
+    notify(`${row.vendor || "접수"} 내용을 ${receptionTypeLabel(next)} 접수 폼으로 불러왔어요 — [접수]를 눌러야 접수·시트 기입이 됩니다.`);
   };
 
   const [handoffConfirm, setHandoffConfirm] = useState<{ row: ServiceReceptionRow; next: string } | null>(null);
@@ -637,7 +638,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
       setHandoffConfirm({ row, next });
       return;
     }
-    const lines = [`${row.vendor || "이 접수"}를 ${next}(으)로 바꿀까요?`];
+    const lines = [`${row.vendor || "이 접수"}를 ${receptionTypeLabel(next)}(으)로 바꿀까요?`];
     if (next === "원격이관") lines.push("· 연결된 방문 일정(미완료)은 삭제됩니다.");
     if (!await askConfirm(lines.join("\n"))) return;
     setTypeBusyId(row.id);
@@ -1496,7 +1497,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                   <span className="w-12 shrink-0 text-center">
                     <span className="block text-[13px] font-black tabular-nums leading-tight text-slate-900">{kstTime(row.created_at)}</span>
                     {listPeriod !== "day" && <span className="block text-[10px] font-bold tabular-nums text-slate-400">{row.receipt_date.slice(5).replace("-", "/")}</span>}
-                    <span className={`mt-1 inline-flex items-center justify-center gap-1 whitespace-nowrap text-[10px] font-bold ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"} bg-transparent!`}><span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{isDeptType(row.type) ? deptShort(row.type) : row.type === "복합기 AS" ? "복합기" : row.type === "IT" ? "IT" : "원격"}</span>
+                    <span className={`mt-1 inline-flex items-center justify-center gap-1 whitespace-nowrap text-[10px] font-bold ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"} bg-transparent!`}><span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{isDeptType(row.type) ? deptShort(row.type) : row.type === "복합기 AS" ? "CS" : row.type === "IT" ? "IT" : "원격"}</span>
                   </span>
                   <span className="min-w-0">
                     <b className="block truncate text-[15px] font-black leading-snug text-slate-950">{row.vendor || "업체 미기재"}</b>
@@ -1590,7 +1591,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                       <span className="text-[10px] font-black text-slate-400">구분</span>
                       {(["복합기 AS", "원격이관", "IT"] as const).map((t) => (
                         <button key={t} type="button" disabled={typeBusyId === row.id || row.type === t} onClick={() => void changeType(row, t)}
-                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black transition ${row.type === t ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{t === "복합기 AS" ? "복합기" : t === "원격이관" ? "원격" : "IT"}</button>
+                          className={`rounded-full border px-2.5 py-1 text-[10px] font-black transition ${row.type === t ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-700"}`}>{t === "복합기 AS" ? "CS 접수" : t === "원격이관" ? "원격" : "IT"}</button>
                       ))}
                     </span>
                   </div>
@@ -1618,7 +1619,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
           </span>
           {counts.addr > 0 && <span className="rounded bg-amber-400/15 px-2 py-0.5 text-[11px] font-black text-amber-300">📍 주소확인 {counts.addr}</span>}
           <span className="ml-auto flex items-center gap-2">
-            {deptEnabled && <DeptSheetLink dept={PAGE_TYPE[page]} />}
+            {/* [시트 열기]는 경영·영업 접수 폼 [접수 저장] 왼쪽으로 옮김(2026-10-25 사용자 "시트 열기는 접수 저장 단추 옆에") */}
             {authorLocked() ? <span className="px-1 text-[11px] font-black text-white">{author}</span> /* 그룹웨어 로그인 고정 — 고르기 없이 이름만(2026-10-19) */ : <select value={author} onChange={(e) => setAuthor(e.target.value)} title="접수 작성자 (원격팀)"
               className="rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-[11px] font-black text-white outline-none">
               {!(book.IT || []).includes(author) && <option value={author} className="text-slate-900">{author || "미지정"}</option>}
@@ -2097,7 +2098,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
               {byAuthor.map(([name, stat]) => (
                 <div key={name} className="flex items-center justify-between text-xs">
                   <span className="font-black text-slate-700">{name}</span>
-                  <span className="font-bold text-slate-500">총 {stat.total} <span className="text-blue-600">복합기 {stat.copier}</span> · <span className="text-cyan-600">IT {stat.it}</span> · <span className="text-violet-600">원격 {stat.remote}</span>{stat.dept > 0 && <> · <span className="text-fuchsia-600">지원 {stat.dept}</span></>}</span>
+                  <span className="font-bold text-slate-500">총 {stat.total} <span className="text-blue-600">CS {stat.copier}</span> · <span className="text-cyan-600">IT {stat.it}</span> · <span className="text-violet-600">원격 {stat.remote}</span>{stat.dept > 0 && <> · <span className="text-fuchsia-600">지원 {stat.dept}</span></>}</span>
                 </div>
               ))}
             </div>
@@ -2137,19 +2138,19 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
           <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/45 p-5" onMouseDown={() => setHandoffConfirm(null)}>
             <div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
               <div className="bg-[#1E252F] px-5 py-4">
-                <div className="text-[11px] font-black text-slate-400">{row.type} → {next}</div>
+                <div className="text-[11px] font-black text-slate-400">{receptionTypeLabel(row.type)} → {receptionTypeLabel(next)}</div>
                 <div className="mt-0.5 truncate text-[15px] font-black text-white">{row.vendor || "이 접수"} 내용 넘기기</div>
               </div>
               <div className="space-y-2 px-5 py-4">
                 {(toCopier ? [
                   ["✅", `원격 접수는 'AS이관'으로 완료 처리됩니다 (처리자: ${(row.remote_meta || {}).handler || author})`],
                   ["📄", "원격 시트에도 처리여부가 기입돼 정리됩니다"],
-                  ["📋", "접수 내용이 복합기 AS 폼으로 넘어옵니다"],
-                  ["👆", "확인 후 [접수]를 눌러야 복합기 접수·시트 기입이 됩니다"],
+                  ["📋", "접수 내용이 CS 접수 폼으로 넘어옵니다"],
+                  ["👆", "확인 후 [접수]를 눌러야 CS 접수·시트 기입이 됩니다"],
                 ] : [
-                  ["📋", `접수 내용이 ${next} 폼으로 넘어옵니다`],
-                  ["✅", `기존 ${row.type} 접수는 그대로 남습니다`],
-                  ["👆", `확인 후 [접수]를 눌러야 ${next} 접수·시트 기입이 됩니다`],
+                  ["📋", `접수 내용이 ${receptionTypeLabel(next)} 폼으로 넘어옵니다`],
+                  ["✅", `기존 ${receptionTypeLabel(row.type)} 접수는 그대로 남습니다`],
+                  ["👆", `확인 후 [접수]를 눌러야 ${receptionTypeLabel(next)} 접수·시트 기입이 됩니다`],
                 ]).map(([icon, text], i) => (
                   <div key={i} className="flex items-start gap-2 text-[12.5px] font-bold leading-5 text-slate-600">
                     <span className="shrink-0">{icon}</span><span>{text}</span>

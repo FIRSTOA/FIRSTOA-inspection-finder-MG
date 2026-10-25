@@ -55,6 +55,9 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 - 카톡을 만드는 함수(공유·포스터)는 KST 10시 전 보류 가드를 지킨다.
 - naver-calendar-sync 가 수입하는 일정의 업체명(`as_tickets.vendor`)은 2026-10-24부터 제목에서 뽑은 **고객사만**(`_shared/ticket-title.ts` 의 `importedTicketVendor`, 웹앱 `src/ids.ts` 와 같은 파서), 전체 제목은 `calendarTitle`(200자) — 제목 파서를 고치면 이 함수도 다시 배포한다. 그 전에 들어온 일정은 vendor 에 제목 앞 80자가 남아 있다.
 
+## field-sheet-sync — 상태만 갱신(statusOnly, 2026-10-25)
+미처리 행의 [완료]·[보류]·[배정]이 접수 시트(해지방어접수=영업팀·경영지원접수·원격)에 상태를 적는 경로다(설계 docs/tasks/unhandled-actions-2026-10-25.md 3-2). 잡은 `field_sheet_sync_jobs` 에 기존 category(reception_sales·reception_mgmt·reception_remote) 그대로, payload 는 `{statusOnly:true, sheetRow, seq, vendorHead, status?, handler?}`(최상위 또는 payload.data). 엣지(`field-sheet-sync/sheet-status.ts`, 순수 규칙 `_shared/sheet-status.ts`, 열 위치는 `reception-sheet-open/state.ts` SHEET_LAYOUTS)는 잠금을 잡고 G열 머리를 확인한 뒤, 그 행의 **순번(A)과 상호(영업·경영 P, 원격 R) 앞 6자가 둘 다 맞을 때만** 상태 G열과 처리자 칸(영업·경영 F, 원격 K)을 쓴다. 행 번호가 밀렸으면 순번으로 아래→위 검색, 그래도 못 찾으면 쓰지 않고 잡을 바로 failed(HTTP 409, last_error 에 기대/실제 순번·상호). 이미 같은 값이면 쓰지 않고 synced. 허용 값은 영업·경영 진행중·처리완료·보류·취소, 원격 처리완료·접수취소·재접수·자체해결·AS이관·중복접수·방문이관(원격에는 보류 없음 — 앱이 보류 단추를 숨긴다); 그 밖의 값은 잡 failed + HTTP 400. 접수일·접수·접수자를 비롯한 다른 칸, 새 행은 절대 쓰지 않는다(기존 원격 갱신 경로는 접수일을 오늘로 덮으므로 이 잡에서는 쓰지 않음). FIELD_SHEET_SYNC_ENABLED 가 꺼져 있거나 FIELD_SHEET_TEST_MODE 가 켜져 있으면 held. 잠금 대기·API 오류 같은 일시 실패만 기존처럼 재시도 크론이 이어 받는다. 테스트: tests/sheetStatusWrite.test.ts.
+
 ## 카톡 원문 보관 — kakao-ingest · kakao-search (2026-10-24)
 설계: docs/tasks/kakao-collect-expand.md 3-5, docs/tasks/tab-search-kakao-history.md 3-2. 표: supabase/kakao-messages-20261024.sql(kakao_messages·kakao_import_log), supabase/kakao-collect-rooms-20261024.sql(수집 방). 공용 파서: `_shared/kakao-parse.ts`(테스트 tests/kakaoParse.test.ts).
 

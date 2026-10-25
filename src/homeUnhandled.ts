@@ -30,6 +30,8 @@ export type UnhandledRow = {
   receptionId?: string;
   /** 상세 팝업 본문 — 일정은 네이버 메모(note)·주소·시각까지(네이버에서 들어온 일정은 issue 가 비고 calendarTitle·note 에 내용이 있다, 2026-10-25) */
   detail?: string;
+  /** 시트 출처 행의 확인 재료(2026-10-25 미처리 단추 — statusOnly 잡이 순번·상호로 행을 다시 확인한다) */
+  sheet?: { source: "sales" | "mgmt" | "remote"; row: number; seq: string; author: string; vendor: string };
 };
 
 /** fetchOpenReceptions 행 중 쓰는 칸만 */
@@ -86,7 +88,8 @@ const ticketTeam = (team: string): UnhandledTeam => {
 };
 
 /** 시트 미처리 행(C3 시트 기준) 중 쓰는 칸만 — 부르는 쪽이 mergeSheetAndDb 로 90일 안 행만 넘긴다 */
-export type SheetUnhandledInput = Pick<SheetOpenRow, "source" | "kind" | "sheetRow" | "date" | "vendor" | "field" | "summary" | "handler" | "state" | "region" | "receptionId">;
+export type SheetUnhandledInput = Pick<SheetOpenRow, "source" | "kind" | "sheetRow" | "date" | "vendor" | "field" | "summary" | "handler" | "state" | "region" | "receptionId">
+  & Partial<Pick<SheetOpenRow, "seq" | "author">>;
 
 /**
  * sheetRows(기본 [])는 시트 기준 모드에서만 넘어온다. 팀은 영업→영업, 경영→경영, 원격·IT→지역 A~E(지방 E) — "팀 합 = 전체" 규칙 유지.
@@ -103,6 +106,7 @@ export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInpu
       key: `s:${s.source}:${s.sheetRow}`, source: "reception", kind: s.kind, team: receptionTeam(s.kind, s.region), date,
       vendor: String(s.vendor || ""), title: String(s.summary || s.field || ""), assignee: String(s.handler || ""),
       status: String(s.state || ""), ageDays: date ? ageDaysOf(date, today) : 0, ...(rid ? { receptionId: rid } : {}),
+      sheet: { source: s.source, row: s.sheetRow, seq: String(s.seq || ""), author: String(s.author || ""), vendor: String(s.vendor || "") },
     });
   }
   for (const r of receptions) {

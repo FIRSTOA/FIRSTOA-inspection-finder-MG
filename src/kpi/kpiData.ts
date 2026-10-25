@@ -18,6 +18,7 @@ import { workinProgressQuery, type WorkinPlaceLite } from "../workinProgress";
 import { fetchOpenReceptions } from "../deptReceptionApi";
 import { loadSheetOpen, mergeSheetAndDb } from "../receptionSheetOpen";
 import { mergeUnhandled, type TicketInput, type UnhandledRow } from "../homeUnhandled";
+import { applyPending } from "../unhandledPending";
 import { currentWeekOf, getOkrCycle, getOkrReports, getOkrReportsIn, isLegacyMonthId, monthCycleId, monthScreenGoals, quarterIdOfMonth, weekCycleId, weeksOfMonth } from "../okr";
 import { loadItPracticeLogs, loadItQuizAttempts } from "../itLogs";
 import { combineItPractice, itLearningRowsFromNotes } from "../learningLines";
@@ -87,9 +88,10 @@ export async function loadUnhandledRows(today: string = kstDate()): Promise<{ ro
   const tickets = tic.status === "fulfilled" ? tic.value : [];
   if (sheet.enabled) {
     const merged = mergeSheetAndDb(dbRows, sheet.data, today, sheet.error);
-    return { rows: mergeUnhandled(merged.db, tickets, today, merged.sheet), info: { sheetMode: merged.sheetKinds.length > 0, notice: merged.notice, over90: merged.over90.length }, partialError };
+    // 방금 [완료]·[보류]·[배정]한 줄(unhandledPending, 5분) — 원본(시트 60초 캐시·기입 37초)이 따라올 때까지 내 화면에서 먼저 반영. 전부 읽었을 때만 정리(prune)
+    return { rows: applyPending(mergeUnhandled(merged.db, tickets, today, merged.sheet), { prune: !partialError && !merged.notice }), info: { sheetMode: merged.sheetKinds.length > 0, notice: merged.notice, over90: merged.over90.length }, partialError };
   }
-  return { rows: mergeUnhandled(dbRows, tickets, today), info: { sheetMode: false, notice: "", over90: 0 }, partialError };
+  return { rows: applyPending(mergeUnhandled(dbRows, tickets, today), { prune: !partialError }), info: { sheetMode: false, notice: "", over90: 0 }, partialError };
 }
 
 /**

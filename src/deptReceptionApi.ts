@@ -156,6 +156,90 @@ export async function enqueueDeptSheetJob(
 }
 export const deptSheetCategoryOf = (dept: DeptType) => DEPT_SHEET_CATEGORY[dept];
 
+// ── 시트 상태만 갱신(statusOnly, 2026-10-25 미처리 [완료]·[보류]·[배정]) ─────
+/** 엣지 계약(field-sheet-sync · _shared/sheet-status.ts parseStatusOnly): category 기존 값, payload 최상위 키 */
+export const SHEET_STATUS_CATEGORY = { sales: "reception_sales", mgmt: "reception_mgmt", remote: "reception_remote" } as const;
+export type SheetStatusInput = {
+  source: keyof typeof SHEET_STATUS_CATEGORY;
+  sheetRow: number;
+  /** 시트 A열 순번(표시값). 비면 엣지가 받은 행만 확인한다 */
+  seq: string;
+  /** 시트 상호 원문 — 앞 6자로 행을 확인한다 */
+  vendor: string;
+  /** 처리완료·보류·진행중(원격은 처리완료만) — 비우면 상태 열을 안 쓴다 */
+  status?: string;
+  /** 처리자 칸 — 비우면 안 쓴다 */
+  handler?: string;
+  /** 누른 사람(잡 author) */
+  by: string;
+};
+export type SheetStatusResult = { state: "synced" | "queued" | "failed" | "held"; row: number | null; message: string };
+
+/** 엣지 확인용 상호 앞 6자 — 공백·㈜·(주)·주식회사 제거 뒤 앞 6자(엣지 vendorKey 와 같은 쪽으로 정규화) */
+export function sheetVendorHead(vendor: string): string {
+  return String(vendor || "").replace(/㈜|\(주\)|（주）|주식회사/g, "").replace(/\s+/g, "").slice(0, 6);
+}
+
+/** payload 만들기(순수) — 테스트가 계약 모양을 고정한다(최상위 키: statusOnly·sheetRow·seq·vendorHead·status?·handler?) */
+export function buildSheetStatusPayload(input: SheetStatusInput): Record<string, unknown> {
+  const status = String(input.status || "").trim();
+  const handler = String(input.handler || "").trim();
+  return {
+    statusOnly: true,
+    sheetRow: input.sheetRow,
+    seq: String(input.seq || "").trim(),
+    vendorHead: sheetVendorHead(input.vendor),
+    ...(status ? { status } : {}),
+    ...(handler ? { handler } : {}),
+  };
+}
+
+/**
+ * statusOnly 잡 1건을 쌓고 엣지를 즉시 부른다(60초 — 부서 시트 기입 실측 37초).
+ * - synced: 시트에 적힘(같은 값이면 안 쓰고 성공).  - held: 동기화 스위치 꺼짐·테스트 모드(시트에 안 적힘).
+ * - failed: 행 확인 실패·허용 값 밖·머리 변경 — 엣지가 잡을 바로 failed 로 둔다(재시도해도 같음).
+ * - queued: 응답 시간 초과·일시 오류 — 잡은 남아 재시도 크론이 이어 받는다.
+ * 잡 insert 자체가 실패하면 throw.
+ */
+export async function enqueueSheetStatusJob(input: SheetStatusInput): Promise<SheetStatusResult> {
+  if (!input.sheetRow) return { state: "failed", row: null, message: "시트 행 번호가 없습니다" };
+  const jobId = crypto.randomUUID();
+  const inserted = await insertRow("field_sheet_sync_jobs", {
+    id: jobId,
+    category: SHEET_STATUS_CATEGORY[input.source],
+    author: String(input.by || "").trim(),
+    vendor: String(input.vendor || "").trim().slice(0, 100),
+    region: "",
+    room: "",
+    source_text: "",
+    payload: buildSheetStatusPayload(input),
+    sheet_status: "pending",
+    kakao_status: "disabled",
+    "_dupKey": jobId,
+  });
+  if (inserted === "dup") throw new Error("시트 잡을 쌓지 못했습니다(같은 키가 이미 있음)");
+  try {
+    const result = await invokeEdgeFunction<{ status?: string; row?: number | null; unchanged?: boolean }>("field-sheet-sync", { jobId }, 60_000);
+    // 옛 엣지(statusOnly 모름)는 unchanged 키 없이 synced 를 돌려준다 — 그 경우 부서 기입 경로로 빈 행을 덧붙였을 수 있어 성공으로 보지 않는다(검수아 2026-10-25)
+    if ((result.status === "synced" || result.status === "already_synced") && result.unchanged === undefined && result.status !== "already_synced") {
+      return { state: "failed", row: null, message: "시트 엣지가 옛 버전입니다(상태만 갱신 미지원) — 배포 뒤 다시 시도. 시트에 빈 줄이 생겼는지 확인" };
+    }
+    if (result.status === "synced" || result.status === "already_synced") return { state: "synced", row: result.row ?? input.sheetRow, message: `시트 ${result.row ?? input.sheetRow}행 반영${result.unchanged ? "(이미 같은 값)" : ""}` };
+    if (result.status === "held") return { state: "held", row: null, message: "시트 동기화가 꺼져 있거나 테스트 모드라 시트에 적지 않았습니다" };
+    return { state: "queued", row: null, message: "시트 반영 대기" };
+  } catch (e) {
+    // 엣지가 400·409(최종 실패)면 잡이 failed — 잡 상태로 가른다
+    const why = e instanceof Error ? e.message : String(e);
+    let job: { sheet_status?: string; last_error?: string | null } | undefined;
+    try {
+      job = (await selectRows<{ sheet_status: string; last_error: string | null }>("field_sheet_sync_jobs", `select=sheet_status,last_error&id=eq.${enc(jobId)}&limit=1`))[0];
+    } catch { job = undefined; }
+    if (job?.sheet_status === "failed") return { state: "failed", row: null, message: String(job.last_error || why) };
+    if (job?.sheet_status === "synced") return { state: "synced", row: input.sheetRow, message: `시트 ${input.sheetRow}행 반영` };
+    return { state: "queued", row: null, message: `시트 반영 재시도 대기(${why})` };
+  }
+}
+
 /**
  * 접수의 append 잡(dupKey dept:<id>:append)이 시트에 기입됐으면 그 행 번호, 아니면 null. 조회 실패는 throw.
  * 왜: 엣지 기입이 클라이언트 제한(20초)보다 오래 걸리면(2026-10-20 실측 37초) 화면은 "대기"로 끝나고
