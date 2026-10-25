@@ -50,24 +50,25 @@ describe("번호 — 층 행은 101+, 공통 행은 1~100 띠, 분기·세 달 �
   });
 });
 
-// 2026-10-25 밤 사용자 정정("그 사람만의 병목을 다른 사람도 보이게 — 구글시트처럼"): 예전 "다른 층엔 안 보임" 기대를
-//   "어느 화면이든 모두 보임(goalsForView) + 판정 대상은 따로(goalAppliesTo — 남의 전용 행은 판정 칸 잠김)" 로 고쳐 씀.
-describe("goalsForView(모두 보임)·goalAppliesTo(판정 대상)·goalsForTeamTotal — 3층", () => {
+// 2026-10-25 밤 재정정(사용자 "내 행은 내 탭에만 추가되어야 하고, 다른 사람이 내 탭을 눌렀을 때 모두가 볼 수 있는 것"):
+//   보임은 저녁 규칙 그대로(goalsForView = goalAppliesTo 거르기), 수정 권한만 "그 탭을 연 누구나"(editsRowDirectly·goalEditTarget).
+describe("goalsForView(그 탭에 보이는 행 = 판정할 행)·goalsForTeamTotal — 3층", () => {
   const g = layered();
-  it("어느 화면이든 공통 + 모든 파트 전용 + 모든 개인 전용", () => {
-    expect(nos(goalsForView(g))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 101, 102, 103, 104]);
-    expect(nos(commonGoalsOf(g))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  it("통합집계 = 공통만", () => {
+    expect(nos(goalsForView(g, {}))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(nos(goalsForView(g))).toEqual(nos(commonGoalsOf(g)));
   });
-  it("순서 — Pillar 묶음 안에서 공통 → 파트 전용(A→D) → 개인 전용(팀 → 이름)", () => {
-    // 저장 순서를 일부러 흩뜨려도(B 전용이 A 전용보다 앞, 개인 전용이 공통 사이) 같은 결과
+  it("다른 사람 주차·파트 종합에 개인 전용 행 안 보임", () => {
+    expect(nos(goalsForView(g, { team: "A" }))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 101]); // 파트 종합엔 102·103 없음
+    expect(nos(goalsForView(g, { team: "A", member: "홍길동" }))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 101, 102]); // 김철수 것(103) 없음
+    expect(nos(goalsForView(g, { team: "A", member: "김철수" }))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 101, 103]);
+    expect(nos(goalsForView(g, { team: "B" }))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 104]); // 다른 파트 전용 없음
+  });
+  it("순서 — Pillar 묶음 안에서 공통 → 전용(저장 순서가 흩어져도)", () => {
     const by = (no: number) => g.find((x) => x.no === no)!;
-    const shuffled = [by(104), by(1), by(102), by(2), by(101), by(3), by(103), ...g.filter((x) => x.no >= 4 && x.no <= 9)];
-    const p1 = goalsForView(shuffled).filter((x) => x.pillar === P1).map((x) => x.no);
-    expect(p1).toEqual([1, 2, 3, 101, 104]);
-    const p2 = goalsForView(shuffled).filter((x) => x.pillar === P2).map((x) => x.no);
-    expect(p2).toEqual([4, 5, 6, 103, 102]); // 김철수 < 홍길동(가나다)
-    // Pillar 묶음은 끊기지 않는다
-    const pillars = goalsForView(shuffled).map((x) => x.pillar);
+    const shuffled = [by(101), by(1), by(2), by(3), by(102), ...g.filter((x) => x.no >= 4 && x.no <= 9)];
+    expect(goalsForView(shuffled, { team: "A", member: "홍길동" }).filter((x) => x.pillar === P1).map((x) => x.no)).toEqual([1, 2, 3, 101]);
+    const pillars = goalsForView(shuffled, { team: "A", member: "홍길동" }).map((x) => x.pillar);
     expect(pillars.filter((p, i) => i === 0 || pillars[i - 1] !== p)).toEqual([P1, P2, OKR_PILLARS[2].full]);
   });
   it("판정 대상 — 통합집계({}) = 공통만, A파트 종합 = 공통 + A 전용, B파트 종합엔 A 전용이 대상 아님(보이되 잠김)", () => {
@@ -97,7 +98,7 @@ describe("goalsForView(모두 보임)·goalAppliesTo(판정 대상)·goalsForTea
   });
 });
 
-// 2026-10-25 밤: 전용 행은 누구나 지우고 되살린다(확인창에 주인), 공통 행은 통합집계·분기에서만(팀장 문서 보호)
+// 2026-10-25 밤(재정정 후에도 유지): 전용 행은 그 탭을 연 누구나 지우고 되살린다(확인창에 주인), 공통 행은 통합집계·분기에서만(팀장 문서 보호)
 describe("삭제·보관·되살리기 — 전용 행은 누구나, 공통 행은 통합집계에서만", () => {
   it("editsRowDirectly", () => {
     const g = layered();
@@ -240,7 +241,8 @@ describe("확인창·저장 위치(okrGoalConfirm)", () => {
     const added = await confirmAddGoalRow(nine(), P1, [], false, { team: "A", member: "홍길동" }, 10);
     expect(ask.mock.calls.map((c) => c[0])).toEqual([ADD_GOAL_MESSAGE, addGoalMessage("team", "A"), addGoalMessage("member", "홍길동", 10)]);
     expect(ask.mock.calls[1][0]).toContain("A파트 전용");
-    expect(ask.mock.calls[2][0]).toContain("홍길동 님의 10월 모든 주차");
+    expect(ask.mock.calls[2][0]).toContain("홍길동 님 탭(10월 모든 주차)에만");
+    expect(ask.mock.calls[2][0]).toContain("다른 사람도 홍길동 님 탭을 열면 보고 고칠 수 있습니다");
     expect(added?.no).toBe(101);
     expect(added?.goals.find((x) => x.no === 101)?.scope).toEqual({ team: "A", member: "홍길동" });
   });

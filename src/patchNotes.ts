@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "496c6c08af",
+    "date": "2026-10-25",
+    "note": "OKR 전용 행은 모두에게 보이고 누구나 수정(판정만 주인) + 서비스접수 현황판 모든 카드에 [완료][보류][배정]·확인창 + 부서 일정리스트 [미처리] 제거"
+  },
+  {
     "hash": "74827222ef",
     "date": "2026-10-25",
     "note": "OKR 행 주인 층(공통·파트 전용·개인 전용) + 미처리 [완료][보류][배정]·시트 상태만 되쓰기 + CS 접수·물류 완료 공용 모듈 + \"CS 접수\" 표시"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "7cc53346d8",
     "date": "2026-09-30",
     "note": "점검 리포트 문자 끝맺음: 퍼스트전산 CS팀 담당이름 / 대표번호 / 카카오톡 채널 링크(설정 KAKAO_CHANNEL_URL, 비면 생략)"
-  },
-  {
-    "hash": "e5ade39656",
-    "date": "2026-09-30",
-    "note": "점검 리포트: 하단을 안내 패널 + 대표번호 띠로 다시 디자인, 키맨 이름 보내기 전 수정 가능"
   }
 ];

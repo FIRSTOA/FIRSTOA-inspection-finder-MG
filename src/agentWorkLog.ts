@@ -4,6 +4,18 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "496c6c08af",
+    "agent": "developer",
+    "summary": "OKR 전용 행은 모두에게 보이고 누구나 수정(판정만 주인) + 서비스접수 현황판 모든 카드에 [완료][보류][배정]·확인창 + 부서 일정리스트 [미처리] 제거"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "496c6c08af",
+    "agent": "qa-checker",
+    "summary": "OKR 전용 행은 모두에게 보이고 누구나 수정(판정만 주인) + 서비스접수 현황판 모든 카드에 [완료][보류][배정]·확인창 + 부서 일정리스트 [미처리] 제거"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "74827222ef",
     "agent": "feature-planner",
     "summary": "OKR 행 주인 층(공통·파트 전용·개인 전용) + 미처리 [완료][보류][배정]·시트 상태만 되쓰기 + CS 접수·물류 완료 공용 모듈 + \"CS 접수\" 표시"

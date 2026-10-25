@@ -669,12 +669,15 @@ export function goalAppliesTo(g: Pick<OkrGoal, "scope">, view: OkrGoalView = {})
   return !g.scope.member || (!!view.member && g.scope.member === view.member);
 }
 export const goalsApplyingTo = (goals: OkrGoal[], view: OkrGoalView = {}): OkrGoal[] => goals.filter((g) => goalAppliesTo(g, view));
-// 화면에 보일 행(2026-10-25 밤 사용자 "그 사람만의 병목을 다른 사람도 보이게 — 구글시트처럼"):
-//   어느 화면이든 공통 + 모든 파트 전용 + 모든 개인 전용 전부. 주인(scope)은 칩으로 표시만 한다.
-//   순서: 같은 Pillar 묶음 안에서 공통(원래 순서) → 파트 전용(A→D) → 개인 전용(팀 → 이름 순). Pillar 묶음 순서는 처음 나온 순서.
-//   보관 행(hidden)은 거르지 않는다(visibleGoals 는 따로).
+// 화면에 보일 행(2026-10-25 밤 재정정 — 사용자 "내 행은 내 탭에만, 다른 사람이 내 탭을 눌렀을 때 모두가 볼 수 있는 것"):
+//   통합집계({}) = 공통만 / 파트 종합({team}) = 공통 + 그 파트 전용 / 파트원 탭({team, member}) = 공통 + 그 파트 전용 + 그 사람 전용.
+//   = goalAppliesTo 와 같은 거르기(보이는 행 = 그 탭에서 판정할 행). 누가 그 탭을 열었는지는 따지지 않는다 — 남의 탭을 열면 그 사람 행이 보이고 고칠 수 있다.
+//   순서: 같은 Pillar 묶음 안에서 공통(원래 순서) → 파트 전용 → 개인 전용. 보관 행(hidden)은 거르지 않는다(visibleGoals 는 따로).
 const layerRank = (g: OkrGoal): string => (!g.scope ? "0" : g.scope.member ? `2|${g.scope.team}|${g.scope.member}` : `1|${g.scope.team}`);
-export function goalsForView(goals: OkrGoal[]): OkrGoal[] {
+export function goalsForView(goals: OkrGoal[], view: OkrGoalView = {}): OkrGoal[] {
+  return orderByLayer(goalsApplyingTo(goals, view));
+}
+function orderByLayer(goals: OkrGoal[]): OkrGoal[] {
   const pillarAt = new Map<string, number>();
   goals.forEach((g) => { if (!pillarAt.has(g.pillar)) pillarAt.set(g.pillar, pillarAt.size); });
   return goals.map((g, i) => ({ g, i })).sort((a, b) => {
@@ -685,7 +688,7 @@ export function goalsForView(goals: OkrGoal[]): OkrGoal[] {
     return a.i - b.i;
   }).map((x) => x.g);
 }
-// 그 화면에서 행 자체(okr_cycles.goals)를 고치는지 — 전용 행(scope)은 어디서든 행 자체(구글시트처럼 한 벌),
+// 그 화면에서 행 자체(okr_cycles.goals)를 고치는지 — 전용 행(scope)은 그 행이 보이는 화면이면 누가 열었든 행 자체(한 벌),
 //   공통 행은 통합집계·분기({})에서만 행 자체, 파트 탭에선 그 층 덮어쓰기(팀장 문서 보호, 4차 그대로). 삭제·보관 × 도 같은 기준.
 export function editsRowDirectly(g: Pick<OkrGoal, "scope">, view: OkrGoalView = {}): boolean { return !!g.scope || !view.team; }
 // 파트 % 집계·팀원 집계용 — 공통 + 그 파트 전용 + 그 파트 사람들의 개인 전용 전부

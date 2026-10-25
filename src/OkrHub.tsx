@@ -40,7 +40,7 @@ import { createPortal } from "react-dom";
 import { tableCellClick } from "./cellNav";
 import { askConfirm } from "./confirmModal";
 import { confirmAddGoalRow, confirmRemoveGoalRow, goalEditTarget } from "./okrGoalConfirm";
-import { addNoteOf, canEditRow, judgmentLockOf, layerChipLabel, scopeForView, viewOf, type OkrView } from "./okrLayerView";
+import { addNoteOf, canEditRow, judgmentLockOf, layerChipLabel, layerFoldOf, ownerViewOf, scopeForView, viewOf, type OkrView } from "./okrLayerView";
 import { useAuthorBook } from "./authors";
 import { teamForAuthor } from "./operations";
 import { notify } from "./toast";
@@ -55,7 +55,7 @@ import {
   archivedGoals, commonGoalsOf, goalAppliesTo, goalsForTeamTotal, goalsForView, replaceCommonGoals,
   type OkrCycle, type OkrJudgment, type OkrGoal, type OkrPasteResult, type OkrReport, type OkrResultRow, type OkrTeam, type RichField,
 } from "./okr";
-import { AddGoalRow, ArchivedGoals, BottleneckCell, FragmentRows, JudgmentBadge, JudgmentLockCell, LayerChip, PillarBar, ResizeHandle } from "./OkrCells";
+import { AddGoalRow, ArchivedGoals, BottleneckCell, FragmentRows, JudgmentBadge, JudgmentLockCell, LayerChip, LayerRowsFold, PillarBar, ResizeHandle } from "./OkrCells";
 import { LINK, TD, TD_EDIT, TD_FIXED, TD_FIXED_EDIT, TD_LEADER, TD_LEADER_EDIT, TD_READ, TD_WRITE, TH_LEADER, TH_READ, TH_WRITE, clearHtml, focusGoalCell, goalHtml, okrCrumbs, pillarRuns, shortBottleneck, showsWeekChips, teamName, useColWidths, withHtml } from "./okrUi";
 import OkrQuarterView from "./OkrQuarterView";
 import OkrMonthRollup, { MonthTeamSummary, type FreshGoalOps } from "./OkrMonthRollup";
@@ -475,14 +475,14 @@ export default function OkrHub({ author }: { author: string }) {
   // 8차(2026-10-21 사용자 "파트 종합 달성기준은 파트 종합에만"): 주차 바탕에서 그 달 파트 종합 층을 뺀다.
   //   새 구조 주차 = 월 공통(팀장) → 그 주 파트 행 → 본인. 파트 종합(월 report)은 자기 층에서만 쓰인다(monthParts 는 이제 바탕에 안 들어감).
   // 보관 행(hidden, 2026-10-25)은 파트·주차 화면에서 숨긴다 — 목표 편집(goalOps)만 commonGoals 전체를 쓴다
-  // 행의 주인(2026-10-25 밤 사용자 정정 "구글시트처럼 누가 수정하면 다 보이는 거"): 어느 화면이든 공통 + 모든 파트 전용 + 모든 개인 전용(goalsForView),
-  //   주인은 칩으로 표시만 하고 판정 칸은 대상(goalAppliesTo)이 아니면 잠근다. 전용 행은 한 벌 — 층 덮어쓰기를 얹지 않고 행 자체를 보인다(selfRows).
+  // 행의 주인(2026-10-25 밤 재정정 "내 행은 내 탭에만, 남이 내 탭을 열면 보이고 고칠 수 있음"): 파트 종합 = 공통 + 그 파트 전용,
+  //   파트원 탭 = 공통 + 그 파트 전용 + 그 사람 전용(goalsForView). 전용 행은 한 벌 — 층 덮어쓰기를 얹지 않고 행 자체를 보인다(selfRows).
   //   teamTotalOf = 공통 + 그 파트 전용 + 그 파트 사람들의 개인 전용 전부(goalsForTeamTotal) — 파트 카드·탭 n/총(홈 % 와 같은 분모, 불변).
   const selfRows = (shown: OkrGoal[]): OkrGoal[] => shown.map((g) => (g.scope ? commonGoals.find((b) => b.no === g.no) || g : g));
-  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => selfRows(overlay(visibleGoals(goalsForView(commonGoals)), partOf(team)?.goals));
+  const teamGoalsOf = (team: OkrTeam): OkrGoal[] => selfRows(overlay(visibleGoals(goalsForView(commonGoals, { team })), partOf(team)?.goals));
   const teamTotalOf = (team: OkrTeam): OkrGoal[] => overlay(visibleGoals(goalsForTeamTotal(commonGoals, team)), partOf(team)?.goals);
   const personGoalsOf = (team: OkrTeam, who: string): OkrGoal[] => (!who || who === "__sum__" ? teamGoalsOf(team)
-    : selfRows(overlay(overlay(visibleGoals(goalsForView(commonGoals)), partOf(team)?.goals), findReport(reports, team, who)?.goals)));
+    : selfRows(overlay(overlay(visibleGoals(goalsForView(commonGoals, { team, member: who })), partOf(team)?.goals), findReport(reports, team, who)?.goals)));
   const updateCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
   // 목표 쪽 편집은 달에 — 주차를 열어 두었으면 goalSrc(달)로 간다
   const updateGoalCycle = (patch: Partial<OkrCycle>) => { setSaveStatus("saving"); if (goalSrc) setGoalSrc((cur) => (cur ? { ...cur, cycle: { ...cur.cycle, ...patch } } : cur)); else setCycle((cur) => (cur ? { ...cur, ...patch } : cur)); };
@@ -681,7 +681,7 @@ export default function OkrHub({ author }: { author: string }) {
         let has: boolean;
         try { const rec = await recordsOf(); has = goalHasRecords(goal.no, rec.reports, rec.feedbacks); }
         catch (e) { notify(`기록을 확인하지 못해 지우지 않았어요: ${(e as Error).message}`, "error"); return; }
-        const name = `${pillarLabel(goal.pillar) || "Pillar 미정"} ${shortBottleneck(visibleGoals(goalsForView(current)), goal.no)}`;
+        const name = `${pillarLabel(goal.pillar) || "Pillar 미정"} ${shortBottleneck(visibleGoals(goalsForView(current, view)), goal.no)}`;
         const done = await confirmRemoveGoalRow(current, goal.no, has, name, view); // 빈 행·글만·기록 있음(보관) 모두 확인 · 전용 행은 누구나(주인 표시), 공통 행은 통합집계에서만
         if (!done) return;
         const { kind } = done;
@@ -922,13 +922,16 @@ export default function OkrHub({ author }: { author: string }) {
       lockOf: (g: OkrGoal) => judgmentLockOf(g, view), // 판정 대상이 아니면 실제결과~근거자료 빗금(2026-10-25 밤)
       appliesTo: (g: OkrGoal, name: string) => goalAppliesTo(g, name ? { team, member: name } : { team }), // 알약 n/총 분모
       addNote: addNoteOf(view, author),
-      // 표 아래: 보관된 전용 병목(누구 것이든 — 공통 행 보관은 통합집계에서 되살린다)
-      foot: <ArchivedGoals goals={archivedGoals(commonGoals).filter((g) => canEditRow(g, view))} onRestore={(no) => goalOpsFor(view).onRestore(no)} />,
+      // 표 아래: 파트 종합이면 그 파트 사람들의 개인 전용 행 접힘(누르면 그 사람 탭) + 이 탭에 보이는 보관된 전용 병목(공통 행 보관은 통합집계에서)
+      foot: <>
+        <LayerRowsFold fold={layerFoldOf(commonGoals, view, rosterOf)} kind="part" onOpen={(g) => { if (g.member) pickMember(g.member); }} />
+        <ArchivedGoals goals={archivedGoals(goalsForView(commonGoals, view)).filter((g) => canEditRow(g, view))} onRestore={(no) => goalOpsFor(view).onRestore(no)} />
+      </>,
       suggestOf: (no: number) => lastJudgmentInMonth(monthWeekRows, team, no), // 파트 종합 판정 제안 = 마지막 기록 주차(팀원 집계와 같은 기준)
       // 4차: 위 층 행은 그 층 header.goals 덮어쓰기, 이 층이 주인인 행은 행 자체(writeTeamGoal, 2026-10-25 저녁)
       onObjective: (no: number, text: string, html?: string) => writeTeamGoal(team, no, "objective", text, html),
       onBottleneck: (no: number, text: string, html?: string) => writeTeamGoal(team, no, "bottleneck", text, html),
-      summary: <MonthTeamSummary team={team} goals={teamGoalsOf(team)} names={[...new Set([...rosterOf(team), ...monthWeekRows.filter((r) => r.team === team && r.member).map((r) => r.member)])]} weeks={weeksOfMonth(year, month)} weekRows={monthWeekRows} partReport={findReport(reports, team, "") || emptyReport(cycleId, team, "")}
+      summary: <MonthTeamSummary team={team} goals={teamTotalOf(team)} names={[...new Set([...rosterOf(team), ...monthWeekRows.filter((r) => r.team === team && r.member).map((r) => r.member)])]} weeks={weeksOfMonth(year, month)} weekRows={monthWeekRows} partReport={findReport(reports, team, "") || emptyReport(cycleId, team, "")}
         onPick={(name, w) => { setMember(name); openCycle(year, month, w); }} onFeedback={(no, memo, memoHtml) => setTeamFeedback(team, no, memo, memoHtml)} />,
     };
   };
@@ -956,7 +959,7 @@ export default function OkrHub({ author }: { author: string }) {
                   otherMonths={cycles.filter((c) => c.kind === "month" && c.id !== goalCycle.id && c.goals.some((g) => g.objective.trim()))}
                   onDirection={(t) => updateCycle({ direction: t })} onFeedback={setFeedback} onPaste={() => setPasteOpen(true)} onStartFromQuarter={quarterCycle && quarterCycle.goals.length ? () => void startFromQuarter() : null}
                   onCopyGoals={(id) => void copyGoalsFrom(id)} onRestore={() => void restoreGoals()} onTemplate={() => updateGoalCycle({ goals: replaceCommonGoals(goalCycle.goals, blankGoalsLike([])) })} ops={freshGoalOps}
-                  onCsJudgment={setCycleJudgment} onPickTeam={openPartSummary} />
+                  onCsJudgment={setCycleJudgment} onPickTeam={openPartSummary} rosterOf={rosterOf} onOpenLayer={(t, who) => openMonthView(year, month, t, who || "")} onArchiveLayer={(g) => goalOpsFor(ownerViewOf(g)).onRemove(g)} />
               : <SummaryView cycle={cycle} goals={commonGoals} goalsOf={teamGoalsOf} goalCycleId={goalCycle.id} cycles={cycles} reports={reports} aiBusy={aiBusy} prevSource={prevGoalSource} onFeedback={setFeedback} onAiFeedback={(no) => void aiFeedback(no)} onCopyGoals={(id) => void copyGoalsFrom(id)} onTemplate={() => updateGoalCycle({ goals: defaultGoalTemplate() })} {...goalOps} />
             : <TeamView key={newMonth ? "fresh" : "legacy"} fresh={newMonth ? freshTeam(tab) : undefined} team={tab} cycle={cycle} goals={personGoalsOf(tab, member)} reports={reports} member={member} onMember={newMonth ? pickMember : setMember} onRemoveMember={(name) => void removeMember(tab, name)} roster={rosterOf(tab)} author={author} aiBusy={aiBusy}
                 onHeader={(patch) => patchReport(tab, "", (r) => ({ ...r, header: { ...r.header, ...patch } }))}

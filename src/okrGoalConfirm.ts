@@ -6,8 +6,8 @@ import { addGoalRow, editsRowDirectly, goalLayer, goalRemoveKind, removeGoalRow,
 
 // 추가 확인 문구 — layer: 어느 층 행인지, who: 파트 글자("A") 또는 사람 이름, month: 개인 전용일 때 "10월 모든 주차"
 export function addGoalMessage(layer: OkrGoalLayer, who = "", month?: number): string {
-  if (layer === "team") return `${who}파트 전용 병목 행을 추가할까요?\n${who}파트 종합과 ${who}파트원 주차 화면에만 생깁니다. 다른 파트·통합집계 표에는 보이지 않습니다.`;
-  if (layer === "member") return `${who} 님 전용 병목 행을 추가할까요?\n${who} 님의 ${month ? `${month}월` : "이번 달"} 모든 주차에만 생깁니다. 다른 사람 화면엔 없고, 파트 종합에는 접혀 보입니다.`;
+  if (layer === "team") return `${who}파트 전용 병목 행을 추가할까요?\n${who}파트 종합과 ${who}파트원 주차 화면에만 생깁니다(통합집계 표엔 접혀 보임). ${who}파트 탭을 연 사람은 누구나 보고 고칠 수 있습니다.`;
+  if (layer === "member") return `${who} 님 전용 병목 행을 추가할까요?\n${who} 님 탭(${month ? `${month}월` : "이번 달"} 모든 주차)에만 생깁니다. 파트 종합·다른 사람 탭엔 없고, 다른 사람도 ${who} 님 탭을 열면 보고 고칠 수 있습니다.`;
   return "새 공통 병목 행을 추가할까요?\nA~D 모든 파트와 파트원 주차 화면에 같은 행이 생깁니다.";
 }
 export const ADD_GOAL_MESSAGE = addGoalMessage("common");
