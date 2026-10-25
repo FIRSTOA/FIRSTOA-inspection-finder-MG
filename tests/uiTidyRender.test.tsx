@@ -11,7 +11,7 @@ import OperationsDashboard from "../src/OperationsDashboard";
 import TeamRanking from "../src/TeamRanking";
 import ItLearningHistory from "../src/ItLearningHistory";
 import CounterSms from "../src/CounterSms";
-import DeptWorkspacePanel, { DeptRightTabs, DeptSheetLink } from "../src/DeptWorkspacePanel";
+import DeptWorkspacePanel, { DeptSheetLink } from "../src/DeptWorkspacePanel";
 import StateBox from "../src/ui/StateBox";
 
 const render = (el: Parameters<typeof renderToString>[0]) => renderToString(el).replace(/<!-- -->/g, "");
@@ -35,8 +35,7 @@ describe("UI 정돈 화면 렌더 스모크", () => {
     ["ItLearningHistory", () => createElement(ItLearningHistory, { author: "홍길동" })],
     ["CounterSms", () => createElement(CounterSms, { author: "홍길동" })],
     ["DeptWorkspacePanel(plan)", () => createElement(DeptWorkspacePanel, { dept: "영업팀", view: "plan", author: "홍길동" } as never)],
-    ["DeptWorkspacePanel(board)", () => createElement(DeptWorkspacePanel, { dept: "경영지원", view: "board", author: "홍길동" } as never)],
-    ["DeptRightTabs", () => createElement(DeptRightTabs, { value: "plan", onChange: () => {}, counts: { plan: 3, board: 2 } as never })],
+    ["DeptWorkspacePanel(cal)", () => createElement(DeptWorkspacePanel, { dept: "경영지원", view: "cal", author: "홍길동" } as never)],
     ["DeptSheetLink", () => createElement(DeptSheetLink, { dept: "영업팀" })],
   ];
   for (const [name, el] of cases) {

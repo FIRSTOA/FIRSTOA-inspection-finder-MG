@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deptMemberNames, deptPlanBuckets, PLAN_BUCKETS, planTodoCount, sheetKeyOf, type PlanRow } from "../src/deptPlan";
 import { deptSheetUrl, RECEPTION_SPREADSHEET_ID } from "../src/receptionSheetOpen";
 import { runDeptAction } from "../src/deptReceptionFlow";
-import { DEPT_RIGHT_VIEWS, parseDeptRightView } from "../src/receptionRightView";
+import { effectiveRightView, parseRightView, rightViewTabs } from "../src/receptionRightView";
 import { deptMonthGrid, shiftDeptMonth } from "../src/deptCalendarView";
 import { invalidateConfigCaches } from "../src/supabase";
 import type { DeptCalEvent } from "../src/deptCalendarView";
@@ -80,9 +80,9 @@ describe("배정 후보·시트 링크·보기 키", () => {
   it("시트 행 key 풀기·보기 키 기본값", () => {
     expect(sheetKeyOf("s:sales:123")).toEqual({ source: "sales", row: 123 });
     expect(sheetKeyOf("r:abc")).toBeNull();
-    expect(parseDeptRightView(null)).toBe("plan");
-    expect(parseDeptRightView("board")).toBe("board");
-    expect(parseDeptRightView("weird")).toBe("plan");
+    expect(parseRightView(null)).toBe("list"); // 2026-10-25 밤: 부서도 기본 보기 = 접수리스트
+    expect(parseRightView("board")).toBe("board");
+    expect(parseRightView("weird")).toBe("list");
   });
 });
 
@@ -134,10 +134,19 @@ describe("runDeptAction assign", () => {
 
 // ── 부서 업무공간 [달력] 보기(2026-10-25: 일정·캘린더 탭 부서 칩 삭제 → 서비스접수에서 올인원) ──
 describe("부서 오른쪽 보기에 달력", () => {
-  it("탭 4개 순서 = 일정리스트·달력·접수리스트·미처리현황, 'cal' 기억값 복원", () => {
-    expect(DEPT_RIGHT_VIEWS.map(([v]) => v)).toEqual(["plan", "cal", "list", "board"]);
-    expect(DEPT_RIGHT_VIEWS.find(([v]) => v === "cal")?.[1]).toBe("달력");
-    expect(parseDeptRightView("cal")).toBe("cal");
+  it("6종 같은 뼈대: 부서만 [일정리스트][달력] 두 탭이 뒤에 더 붙는다, 'cal' 기억값 복원", () => {
+    expect(rightViewTabs(true).map(([v]) => v)).toEqual(["list", "board", "plan", "cal"]);
+    expect(rightViewTabs(false).map(([v]) => v)).toEqual(["list", "board"]);
+    expect(rightViewTabs(true).find(([v]) => v === "cal")?.[1]).toBe("달력");
+    expect(parseRightView("cal")).toBe("cal");
+    expect(parseRightView("plan")).toBe("plan");
+  });
+  it("부서 아닌 화면에 일정리스트·달력이 기억돼 있으면 접수리스트로 그린다", () => {
+    expect(effectiveRightView("plan", false)).toBe("list");
+    expect(effectiveRightView("cal", false)).toBe("list");
+    expect(effectiveRightView("board", false)).toBe("board");
+    expect(effectiveRightView("cal", true)).toBe("cal");
+    expect(effectiveRightView("list", true)).toBe("list");
   });
   it("달력 격자 42칸은 1일이 든 주 일요일부터, 달 이동은 1일로", () => {
     const g = deptMonthGrid("2026-10-01"); // 2026-10-01 = 목요일

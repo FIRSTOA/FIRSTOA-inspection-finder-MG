@@ -8,6 +8,7 @@ import { selectAllRows, selectRows, updateRows } from "./supabase";
 import { fieldTicketVendor } from "./ids";
 import { kstDate } from "./visits";
 import { LOGISTICS_SCHEDULE_TYPES } from "./overdueLogic";
+import type { UnhandledRow } from "./homeUnhandled";
 import { mergeSheetAndDb, sheetRowStatus, sheetRowUrl, type SheetOpenResult, type SheetOpenRow } from "./receptionSheetOpen";
 
 const KNOWN_TYPES = new Set<string>(RECEPTION_TYPES.map((m) => m.type));
@@ -214,6 +215,32 @@ export function applySheetToBoard(data: BoardData, sheet: SheetOpenResult, today
     sheetNotice: merge.notice,
     over90: merge.over90.map(sheetToBoardRow),
     sheetHealed: sheet.data?.healed || 0,
+  };
+}
+
+/**
+ * 현황판 CS 접수 칸 = 홈 미처리 "CS 접수"와 같은 행 집합(2026-10-25 밤, 팀장 숫자 통일 원칙).
+ * 홈은 지난 날짜·미완료 일정(as_tickets, homeUnhandled.mergeUnhandled 의 kind "CS접수")을 센다 — 현황판도 그 줄을 그대로 받는다.
+ * 카드 id = 미처리 key("t:<일정 id>"). 틀(ReceptionBoard)은 접수·진행중·보류·원격대기만 그리므로 일정 상태는 그 셋 중 하나로 맞춘다
+ * (진짜 상태는 상세 팝업이 UnhandledRow 로 보여 준다). 예정일은 비운다 — 날짜가 이미 지난 일정이라 전부 빨간 테가 되는 걸 막는다.
+ */
+export function csTicketToBoardRow(u: UnhandledRow): BoardRow {
+  const st = String(u.status || "").replace(/\s+/g, "");
+  return {
+    id: u.key, type: TICKET_LINKED_TYPE, vendor: u.vendor || "", field: u.title || "", author: "", handler: u.assignee || "",
+    status: st === "보류" || st === "진행중" ? st : "접수", receipt_date: String(u.date || "").slice(0, 10), scheduled_date: null, postponeCount: 0,
+  };
+}
+
+/**
+ * 현황판 행에서 복합기 AS 접수(앱 접수) 줄을 빼고 CS 접수 일정 줄로 바꾼다(순수).
+ * copierOpen = 빠진 접수 중 연결 일정이 하나도 없는 건(noTicket) — "일정 없이 열린 접수 n건 → 접수리스트" 안내용. 접수리스트에는 그대로 있다.
+ */
+export function replaceCopierWithTickets(rows: BoardRow[], cs: UnhandledRow[]): { rows: BoardRow[]; copierOpen: number } {
+  const copier = rows.filter((r) => r.type === TICKET_LINKED_TYPE && !r.sheet);
+  return {
+    rows: [...rows.filter((r) => !(r.type === TICKET_LINKED_TYPE && !r.sheet)), ...cs.filter((u) => u.kind === "CS접수").map(csTicketToBoardRow)],
+    copierOpen: copier.filter((r) => r.noTicket).length,
   };
 }
 

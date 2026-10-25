@@ -69,6 +69,8 @@ type Props = {
   sheetNotice?: string;
   /** 90일 넘은 시트 미처리 — 열마다 "90일 넘음 n" 칩으로 접어 둔다 */
   over90Rows?: ReceptionRow[];
+  /** 카드 윗줄(업체·분야)을 누르면 — 상세 팝업 열기(2026-10-25 밤, 홈 미처리와 같은 UnhandledDetail). 없으면 누를 수 없는 글 */
+  onOpenRow?: (row: ReceptionRow) => void;
 };
 
 const OPEN = ["접수", "진행중", "보류", "원격대기"] as const;
@@ -104,7 +106,7 @@ function SheetBadge({ sheet, compact }: { sheet: SheetRowInfo; compact: boolean 
   );
 }
 
-export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows }: Props) {
+export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, onOpenRow }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
   const open = rows.filter((r) => (OPEN as readonly string[]).includes(r.status));
@@ -136,6 +138,12 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   if (loading && !hasData) return <div role="status" className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-8 text-sm font-bold text-slate-500"><Loader2 size={16} className="animate-spin" />미처리 접수를 불러오는 중입니다.</div>;
   if (error && !hasData) return <div role="alert" className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700"><AlertCircle size={18} className="mt-0.5 shrink-0" /><span>미처리 접수를 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요. ({error})</span></div>;
 
+  // 윗줄 누르기 = 상세 팝업(키보드 Enter·Space 도). 안쪽에 다른 단추가 없는 줄이라 role=button 으로 충분
+  const openProps = (r: ReceptionRow) => (onOpenRow ? {
+    role: "button" as const, tabIndex: 0, "aria-haspopup": "dialog" as const, title: "눌러서 상세 보기",
+    onClick: () => onOpenRow(r),
+    onKeyDown: (e: { key: string; preventDefault: () => void }) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenRow(r); } },
+  } : {});
   const renderCard = (r: ReceptionRow) => {
     const age = daysBetween(r.receipt_date, today);
     const late = isLate(r);
@@ -143,7 +151,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     if (compact) {
       return (
         <li key={r.id} className={`px-3 py-2 ${late ? "border-l-2 border-l-red-500 bg-red-50/40" : ""}`}>
-          <div className="flex items-center gap-1.5 text-[12px]">
+          <div {...openProps(r)} className={`flex w-full items-center gap-1.5 text-left text-[12px] ${onOpenRow ? "min-h-11 cursor-pointer rounded hover:bg-slate-50 sm:min-h-8" : ""}`}>
             <span className="min-w-0 truncate font-black text-slate-900">{r.vendor || "업체 미정"}</span>
             <span className="min-w-0 shrink truncate font-bold text-slate-500">· {r.field || "분야 미입력"}</span>
             {r.noTicket && <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] font-black text-slate-500">일정 없음</span>}
@@ -160,7 +168,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     }
     return (
       <li key={r.id} className={`rounded-lg border bg-white p-2.5 ${late ? "border-red-400 ring-1 ring-red-200" : "border-slate-200"}`}>
-        <div className="flex items-start justify-between gap-2">
+        <div {...openProps(r)} className={`flex w-full items-start justify-between gap-2 text-left ${onOpenRow ? "cursor-pointer rounded hover:bg-slate-50" : ""}`}>
           <div className="min-w-0 wrap-break-word text-[13px] font-black text-slate-900">{r.vendor || "업체 미정"}</div>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums ${ageBadge(age)}`}>{ageText}</span>
         </div>

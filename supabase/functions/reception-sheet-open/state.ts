@@ -78,6 +78,8 @@ export type SheetLayout = {
   headerRow: number;
   dataStart: number;
   lastCol: string;
+  /** 상세 팝업(한 행 읽기)의 마지막 열 — 목록은 lastCol 까지만 읽고(속도), 팝업은 이 열까지 전부(2026-10-25) */
+  detailLastCol: string;
   statusCol: number;
   statusHeader: string;
   hanjoCol?: number;
@@ -98,17 +100,17 @@ export const SPREADSHEET_ID = "1QRlW8IXoPjCyS1A4sIx0E4C1Z64Pa0hMmOWbfAOpn9g";
 
 export const SHEET_LAYOUTS: Record<SheetSource, SheetLayout> = {
   sales: {
-    source: "sales", gid: 174566767, firstRow: 5, headerRow: 5, dataStart: 7, lastCol: "W",
+    source: "sales", gid: 174566767, firstRow: 5, headerRow: 5, dataStart: 7, lastCol: "W", detailLastCol: "AG",
     statusCol: 7, statusHeader: "진행중/처리완료/보류/취소", markerCols: [2, 4, 5],
     seqCol: 1, dateCol: 2, yymmCol: 3, authorCol: 5, handlerCol: 6, regionCol: 15, vendorCol: 16, fieldCol: 18, summaryCol: 23,
   },
   mgmt: {
-    source: "mgmt", gid: 899183889, firstRow: 5, headerRow: 5, dataStart: 7, lastCol: "Z",
+    source: "mgmt", gid: 899183889, firstRow: 5, headerRow: 5, dataStart: 7, lastCol: "Z", detailLastCol: "BE",
     statusCol: 7, statusHeader: "진행중/처리완료/보류/취소", markerCols: [2, 4, 5],
     seqCol: 1, dateCol: 2, yymmCol: 3, authorCol: 5, handlerCol: 6, regionCol: 15, vendorCol: 16, fieldCol: 18, summaryCol: 25,
   },
   remote: {
-    source: "remote", gid: 916322987, firstRow: 1, headerRow: 1, dataStart: 5, lastCol: "W",
+    source: "remote", gid: 916322987, firstRow: 1, headerRow: 1, dataStart: 5, lastCol: "W", detailLastCol: "AF",
     statusCol: 7, statusHeader: "처리여부", hanjoCol: 12, hanjoHeader: "한조처리", markerCols: [2, 4, 10],
     seqCol: 1, dateCol: 2, yymmCol: 3, handlerCol: 11, regionCol: 17, vendorCol: 18, summaryCol: 23,
   },
@@ -142,19 +144,26 @@ const clip = (v: string, n: number) => {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 };
 
+/** 머리행 검증(상태 G열·원격 L열) — 다르면 오류 문구, 같으면 "" */
+export function headerError(layout: SheetLayout, header: string[]): string {
+  const statusHead = cell(header, layout.statusCol);
+  if (squeeze(statusHead) !== squeeze(layout.statusHeader)) {
+    return `시트 머리 변경: ${SOURCE_LABEL[layout.source]} G열 머리가 "${clip(statusHead, 30)}"(기대 "${layout.statusHeader}")`;
+  }
+  if (layout.hanjoCol && layout.hanjoHeader && !squeeze(cell(header, layout.hanjoCol)).includes(squeeze(layout.hanjoHeader))) {
+    return `시트 머리 변경: ${SOURCE_LABEL[layout.source]} L열 머리가 "${clip(cell(header, layout.hanjoCol), 30)}"(기대 "${layout.hanjoHeader}")`;
+  }
+  return "";
+}
+
 /**
  * 읽은 값(범위 첫 행 = layout.firstRow) → 행 목록. 머리가 다르면 error 를 주고 행은 비운다(그 탭만 빠짐 — 조용히 틀리지 않게).
  * 마커 열이 모두 비면 행이 아니다(맨 끝 순번만 있는 빈 줄 제외).
  */
 export function parseSheetRows(layout: SheetLayout, values: string[][]): { rows: ParsedSheetRow[]; error: string } {
   const header = values[layout.headerRow - layout.firstRow] || [];
-  const statusHead = cell(header, layout.statusCol);
-  if (squeeze(statusHead) !== squeeze(layout.statusHeader)) {
-    return { rows: [], error: `시트 머리 변경: ${SOURCE_LABEL[layout.source]} G열 머리가 "${clip(statusHead, 30)}"(기대 "${layout.statusHeader}")` };
-  }
-  if (layout.hanjoCol && layout.hanjoHeader && !squeeze(cell(header, layout.hanjoCol)).includes(squeeze(layout.hanjoHeader))) {
-    return { rows: [], error: `시트 머리 변경: ${SOURCE_LABEL[layout.source]} L열 머리가 "${clip(cell(header, layout.hanjoCol), 30)}"(기대 "${layout.hanjoHeader}")` };
-  }
+  const headErr = headerError(layout, header);
+  if (headErr) return { rows: [], error: headErr };
   const rows: ParsedSheetRow[] = [];
   for (let i = layout.dataStart - layout.firstRow; i < values.length; i++) {
     const row = values[i] || [];
@@ -254,4 +263,58 @@ export function openRowsOf(rows: ParsedSheetRow[], links: Map<string, string>): 
 /** KST 이번 달(YYYY-MM) */
 export function kstMonth(now: Date = new Date()): string {
   return new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 7);
+}
+
+// ── 상세 팝업: 한 행의 열 전부(2026-10-25 사용자 "시트면 시트에 있는 내용이 나와야지 — 잘린 듯") ──
+// 목록 응답의 summary 는 40자(clip)라 팝업이 잘려 보였다. 목록 응답은 그대로 두고(60초마다 홈이 읽는 묶음 — 열 전부를 실으면
+// 수백 KB 늘어난다), 팝업을 열 때 그 한 행만 머리행과 같이 읽어 돌려준다.
+
+/** 칸 하나 최대 글자(접수내용·처리내용 포함) */
+export const DETAIL_TEXT_MAX = 4000;
+/** 돌려주지 않는 열(고객 전화번호 — 이 엣지는 공개 호출) */
+const PRIVATE_HEADER = /전화|연락처|휴대|핸드폰|폰번호|팩스|phone|tel/i;
+
+export type SheetCell = { label: string; value: string };
+export type SheetRowDetail = {
+  source: SheetSource;
+  sheetRow: number;
+  seq: string;
+  state: string;
+  cls: SheetClass;
+  /** 내용 열을 뺀 나머지 열(시트 순서, 빈 칸·전화번호 열·머리 없는 열 생략) */
+  cells: SheetCell[];
+  /** 내용 열 머리(접수내용·증상 등)와 값 — 줄바꿈 그대로, 최대 DETAIL_TEXT_MAX 자 */
+  contentLabel: string;
+  content: string;
+};
+
+const headLabel = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim();
+/** 줄바꿈은 살리고 앞뒤 공백만 — 넘치면 자르고 … */
+export const keepText = (v: unknown, n = DETAIL_TEXT_MAX) => {
+  const s = String(v ?? "").replace(/\r\n?/g, "\n").trim();
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+};
+
+/** 머리행 + 한 행 → 상세(순수). 상태 열 머리(영업·경영 "진행중/처리완료/보류/취소")는 "상태"로 줄인다. 같은 머리·같은 값이 두 번(경영 자산번호 T·BB)이면 한 번만 */
+export function sheetRowDetail(layout: SheetLayout, header: string[], row: string[], sheetRow: number): SheetRowDetail {
+  const cells: SheetCell[] = [];
+  const seen = new Set<string>();
+  const width = Math.max(header.length, row.length);
+  for (let c = 1; c <= width; c++) {
+    if (c === layout.summaryCol) continue;
+    let label = headLabel(header[c - 1]);
+    if (!label || PRIVATE_HEADER.test(label.replace(/\s/g, ""))) continue;
+    if (c === layout.statusCol && layout.source !== "remote") label = "상태";
+    const value = keepText(row[c - 1]);
+    if (!value) continue;
+    const k = `${label}|${value}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    cells.push({ label, value });
+  }
+  const state = cell(row, layout.statusCol);
+  return {
+    source: layout.source, sheetRow, seq: cell(row, layout.seqCol), state, cls: sheetStateClass(state), cells,
+    contentLabel: headLabel(header[layout.summaryCol - 1]) || "내용", content: keepText(row[layout.summaryCol - 1]),
+  };
 }

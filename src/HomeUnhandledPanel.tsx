@@ -10,12 +10,13 @@
  * 미처리 단추(2026-10-25): 상세 팝업 아래 [완료][보류][배정](UnhandledActionBar — 부서 미니 업무공간·현황판 시트 카드와 같은 부품).
  *  누르면 unhandledPending 에 적혀 이 칸(머리·탭·종류 칸·목록)에서 바로 빠지고, 다음 묶음 읽기(60초)부터 다른 칸도 같이 맞는다.
  */
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import FormModal from "./FormModal";
 import { teamColor, type TeamKey } from "./kpi/teamColors";
 import { kindsForTab } from "./kpi/teamBoard";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, ExternalLink } from "lucide-react";
+import { detailSourceOf, loadUnhandledDetail, type UnhandledDetailBody } from "./unhandledDetail";
 import { fieldTicketVendor } from "./ids";
 import { formatAssignees } from "./assignees";
 import { overdueAgeTone } from "./overdueLogic";
@@ -33,6 +34,8 @@ import {
 const card = "rounded-2xl border border-white/[0.08] bg-white/[0.03]";
 const TAB_GROUPS: UnhandledTab[][] = [["전체"], ["A", "B", "C", "D", "E"], ["경영", "운영", "영업"], ["기타"]];
 const DEPT_TEAMS = new Set(["경영", "운영", "영업"]);
+/** 네이버 캘린더 첫 화면(일정 하나로 바로 가는 주소는 없다 — as_tickets 에 이벤트 링크가 없음) */
+const NAVER_CALENDAR_URL = "https://calendar.naver.com/";
 
 const dotOf = (k: UnhandledKind): string =>
   k === "CS접수" ? RECEPTION_TYPE_META["복합기 AS"].dot : k === "물류" ? "bg-slate-400" : RECEPTION_TYPE_META[k as ReceptionType]?.dot || "bg-slate-400";
@@ -218,8 +221,26 @@ export function UnhandledRowButton({ row, onPick, children }: { row: UnhandledRo
 export function UnhandledDetail({ row, onClose, onOpen, actions = false, author }: { row: UnhandledRow; onClose: () => void; onOpen?: () => void; actions?: boolean; author?: string }) {
   const vendor = vendorOf(row);
   const c = tc(row.team);
-  const field = (label: string, value: ReactNode) => (
-    <div className="flex gap-3 text-[13px]"><dt className="w-16 shrink-0 font-bold text-slate-500">{label}</dt><dd className="min-w-0 flex-1 break-words font-semibold text-slate-800">{value}</dd></div>
+  // 2026-10-25 밤: 시트 행·앱 접수 행은 팝업을 열 때 전체 열·전체 내용을 읽는다(목록 값은 40자로 잘려 있음). 일정은 받은 값 그대로
+  const needsLoad = detailSourceOf(row) !== null;
+  const [loaded, setLoaded] = useState<{ key: string; body: UnhandledDetailBody | null; error: string } | null>(null);
+  useEffect(() => {
+    if (!needsLoad) return;
+    let alive = true;
+    loadUnhandledDetail(row).then(
+      (body) => { if (alive) setLoaded({ key: row.key, body, error: "" }); },
+      (e: unknown) => { if (alive) setLoaded({ key: row.key, body: null, error: e instanceof Error ? e.message : String(e) }); },
+    );
+    return () => { alive = false; };
+  }, [row, needsLoad]);
+  const got = loaded && loaded.key === row.key ? loaded : null;
+  const loading = needsLoad && !got;
+  const body = got?.body ?? null;
+  const extra = body ? body.fields : row.fields || [];
+  const contentLabel = body?.contentLabel || row.contentLabel || "내용";
+  const content = body ? body.content : row.detail || row.title;
+  const field = (label: string, value: ReactNode, key?: string) => (
+    <div key={key} className="flex gap-3 text-[13px]"><dt className="w-20 shrink-0 break-keep font-bold text-slate-500">{label}</dt><dd className="min-w-0 flex-1 whitespace-pre-wrap break-words font-semibold text-slate-800">{value}</dd></div>
   );
   const ticketOpen = actions && row.source === "ticket"; // 일정 줄은 열기를 단추 줄 안의 보조 단추로
   return (
@@ -242,10 +263,23 @@ export function UnhandledDetail({ row, onClose, onOpen, actions = false, author 
         {field("담당자", formatAssignees(row.assignee) || <span className="text-rose-600">미배정</span>)}
         {field("상태", row.status || "—")}
       </dl>
+      {extra.length > 0 && (
+        <div>
+          <div className="mb-1 text-[12px] font-bold text-slate-500">{row.sheet ? `시트 ${row.sheet.row}행 전체 열` : row.source === "ticket" ? "일정" : "접수 정보"}</div>
+          <dl className="space-y-1.5 rounded-xl border border-slate-100 px-3 py-2.5">{extra.map((f, i) => field(f.label, f.value, `${i}:${f.label}`))}</dl>
+        </div>
+      )}
+      {loading && <p className="text-[12px] font-bold text-slate-500">{row.sheet ? "시트에서 그 행 전체를 읽는 중…" : "접수 전체 내용을 읽는 중…"}</p>}
+      {got?.error && <p className="text-[12px] font-bold text-amber-700">전체 내용을 읽지 못했습니다 — 목록 값(일부)만 보입니다 · {got.error}</p>}
       <div>
-        <div className="mb-1 flex items-center gap-2 text-[12px] font-bold text-slate-500">내용<span className="ml-auto"><SheetRowLink row={row} /></span></div>
-        <p className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-slate-800">{row.detail || row.title || "(내용 없음)"}</p>
+        <div className="mb-1 flex items-center gap-2 text-[12px] font-bold text-slate-500">{contentLabel}<span className="ml-auto"><SheetRowLink row={row} /></span></div>
+        <p className="whitespace-pre-wrap break-words rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] font-semibold leading-relaxed text-slate-800">{content || "(내용 없음)"}</p>
       </div>
+      {row.source === "ticket" && (
+        <a href={NAVER_CALENDAR_URL} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 text-[12px] font-bold text-emerald-700 underline-offset-2 hover:underline">
+          네이버 캘린더 열기<ExternalLink size={12} aria-hidden />
+        </a>
+      )}
       {row.kind === "물류" && <p className="text-[12px] font-bold text-slate-500">[완료]를 누르면 일정리스트에서 완료되고 네이버 캘린더 일정에도 완료 체크됩니다(이동 없음).</p>}
     </FormModal>
   );

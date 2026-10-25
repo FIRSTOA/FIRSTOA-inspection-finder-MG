@@ -137,12 +137,18 @@ describe("일정 행 상세 본문 — 네이버에서 온 일정은 issue 가 �
     id: "nv-1", team: "C", date: "2026-10-23", time: "15:00", vendor: "튜링", assignee: "김담우", status: "접수", scheduleType: "납품철수교체휴가교육",
     issue: "", calendarTitle: "기존 기기 구매전환-판매납품/퍼스트/튜링/X4220RX(리퍼)/확인서서명필수", note: "주소 서울 강남구 …\n담당 010-0000-0000", address: "서울 강남구 테헤란로 1",
   };
-  it("제목은 issue 가 비면 calendarTitle, 본문은 제목·시각·주소·메모를 줄로", () => {
+  it("제목은 issue 가 비면 calendarTitle, 팝업 정보 표 = 제목·시각·주소, 내용 칸 = 메모(2026-10-25 밤 팝업 틀)", () => {
     const rows = mergeUnhandled([], [naverLogi], today);
     expect(rows).toHaveLength(1);
     expect(rows[0].kind).toBe("물류");
     expect(rows[0].title).toBe(naverLogi.calendarTitle);
-    expect(rows[0].detail).toBe(`${naverLogi.calendarTitle}\n시각 15:00\n주소 서울 강남구 테헤란로 1\n${naverLogi.note}`);
+    expect(rows[0].fields).toEqual([
+      { label: "제목", value: naverLogi.calendarTitle },
+      { label: "시각", value: "15:00" },
+      { label: "주소", value: "서울 강남구 테헤란로 1" },
+    ]);
+    expect(rows[0].detail).toBe(naverLogi.note);
+    expect(rows[0].contentLabel).toBe("메모");
   });
   it("issue 가 있으면 제목은 issue, 본문에 제목·issue 둘 다(같으면 한 번)", () => {
     expect(ticketDetail({ issue: "토너 교체", calendarTitle: "토너 교체", note: "", address: "", time: "" })).toBe("토너 교체");

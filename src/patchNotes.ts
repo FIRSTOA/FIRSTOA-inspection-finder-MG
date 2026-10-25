@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "35f57aa2f1",
+    "date": "2026-10-25",
+    "note": "OKR 전용 행: 내 탭에만 보이고(저녁 규칙), 그 탭을 연 사람은 누구나 수정·판정·삭제(밤 규칙) — 사용자 재정정"
+  },
+  {
     "hash": "496c6c08af",
     "date": "2026-10-25",
     "note": "OKR 전용 행은 모두에게 보이고 누구나 수정(판정만 주인) + 서비스접수 현황판 모든 카드에 [완료][보류][배정]·확인창 + 부서 일정리스트 [미처리] 제거"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "00db5ed752",
     "date": "2026-09-30",
     "note": "점검 리포트: 카톡 플러스친구 링크·문자 끝 형식, 고객용 문구(조치·접수) 편집, 업체명 편집, 사진 줄 삭제, 여러 대는 두 열 가로형 카드 + 원본 크기 PNG 링크"
-  },
-  {
-    "hash": "7cc53346d8",
-    "date": "2026-09-30",
-    "note": "점검 리포트 문자 끝맺음: 퍼스트전산 CS팀 담당이름 / 대표번호 / 카카오톡 채널 링크(설정 KAKAO_CHANNEL_URL, 비면 생략)"
   }
 ];

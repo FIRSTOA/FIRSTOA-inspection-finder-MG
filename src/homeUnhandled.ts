@@ -28,10 +28,13 @@ export type UnhandledRow = {
   status: string;
   ageDays: number;
   receptionId?: string;
-  /** 상세 팝업 본문 — 일정은 네이버 메모(note)·주소·시각까지(네이버에서 들어온 일정은 issue 가 비고 calendarTitle·note 에 내용이 있다, 2026-10-25) */
+  /** 상세 팝업 내용 칸 — 일정은 요청 내용 + 네이버 메모(note) 전체(ticketContent). 제목·시각·주소는 fields(2026-10-25 밤) */
   detail?: string;
   /** 시트 출처 행의 확인 재료(2026-10-25 미처리 단추 — statusOnly 잡이 순번·상호로 행을 다시 확인한다) */
   sheet?: { source: "sales" | "mgmt" | "remote"; row: number; seq: string; author: string; vendor: string };
+  /** 상세 팝업 정보 표에 더할 줄(일정: 제목·시각·주소, 2026-10-25 밤). 내용 칸 머리는 contentLabel */
+  fields?: Array<{ label: string; value: string }>;
+  contentLabel?: string;
 };
 
 /** fetchOpenReceptions 행 중 쓰는 칸만 */
@@ -57,6 +60,24 @@ export function ticketDetail(t: Pick<TicketInput, "issue" | "calendarTitle" | "n
   const note = String(t.note || "").trim();
   if (note && note !== issue && note !== title) lines.push(note);
   return lines.join("\n");
+}
+
+/** 일정 팝업 정보 표 줄: 제목(네이버 전체 제목) · 시각 · 주소 — 빈 칸 생략, 자르지 않음 */
+export function ticketFields(t: Pick<TicketInput, "issue" | "calendarTitle" | "address" | "time">): Array<{ label: string; value: string }> {
+  const title = String(t.calendarTitle || "").trim() || String(t.issue || "").trim();
+  return ([["제목", title], ["시각", String(t.time || "").trim()], ["주소", String(t.address || "").trim()]] as Array<[string, string]>)
+    .filter(([, v]) => v).map(([label, value]) => ({ label, value }));
+}
+
+/** 일정 팝업 내용 칸: 요청 내용(issue, 제목과 다를 때) + 네이버 메모(note) 전체 — 줄바꿈 그대로 */
+export function ticketContent(t: Pick<TicketInput, "issue" | "calendarTitle" | "note">): string {
+  const title = String(t.calendarTitle || "").trim();
+  const issue = String(t.issue || "").trim();
+  const note = String(t.note || "").replace(/\r\n?/g, "\n").trim();
+  const parts: string[] = [];
+  if (issue && issue !== title) parts.push(issue);
+  if (note && note !== issue && note !== title) parts.push(note);
+  return parts.join("\n\n");
 }
 
 const FIELD_TYPES = new Set(["복합기 AS", "원격이관", "IT"]);
@@ -133,7 +154,8 @@ export function mergeUnhandled(receptions: ReceptionInput[], tickets: TicketInpu
       key: `t:${t.id}`, source: "ticket", kind: logistics ? "물류" : "CS접수", team: ticketTeam(t.team), date,
       vendor: String(t.vendor || ""), title: String(t.issue || t.calendarTitle || ""), assignee: String(t.assignee || ""),
       status: String(t.status || ""), ageDays: ageDaysOf(date, today), ...(rid ? { receptionId: rid } : {}),
-      ...(ticketDetail(t) ? { detail: ticketDetail(t) } : {}),
+      ...(ticketContent(t) ? { detail: ticketContent(t) } : {}),
+      ...(ticketFields(t).length ? { fields: ticketFields(t) } : {}), contentLabel: "메모",
     });
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0));

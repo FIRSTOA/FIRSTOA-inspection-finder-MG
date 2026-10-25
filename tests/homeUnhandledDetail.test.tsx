@@ -26,6 +26,23 @@ describe("미처리 상세 팝업", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
+  it("일정 행: 정보 표(제목·시각·주소) + 메모 전체(줄바꿈) + 네이버 캘린더 열기 링크", () => {
+    const note = `상호 : 튜링\n${"메".repeat(3000)}`;
+    const html = renderToString(createElement(UnhandledDetail, {
+      row: { ...row, key: "t:1", source: "ticket", kind: "CS접수", fields: [{ label: "제목", value: "강남C 토너" }, { label: "시각", value: "15:00" }], detail: note, contentLabel: "메모" },
+      onClose: () => {},
+    })).replace(/<!-- -->/g, "");
+    for (const t of ["제목", "강남C 토너", "15:00", "메모", "네이버 캘린더 열기", "https://calendar.naver.com/"]) expect(html).toContain(t);
+    expect(html).toContain(note); // 자르지 않음
+  });
+
+  it("시트 행은 열 때 전체를 읽는 중 안내(서버 렌더 = 첫 화면)", () => {
+    const html = renderToString(createElement(UnhandledDetail, {
+      row: { ...row, key: "s:sales:7", sheet: { source: "sales", row: 7, seq: "1", author: "", vendor: "" } }, onClose: () => {},
+    }));
+    expect(html).toContain("시트에서 그 행 전체를 읽는 중");
+  });
+
   it("물류는 열기 단추 없음(onOpen 없음)", () => {
     const html = renderToString(createElement(UnhandledDetail, { row: { ...row, kind: "물류", source: "ticket" }, onClose: () => {} }));
     expect(html).not.toContain("에서 열기");

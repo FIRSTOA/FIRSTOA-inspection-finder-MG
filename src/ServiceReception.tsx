@@ -28,8 +28,8 @@ import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./Rece
 import { receptionTypeLabel } from "./receptionTypeLabel";
 import ReceptionBoardPanel from "./ReceptionBoardPanel";
 import { requestOpenOverdue } from "./receptionBoardData";
-import { RECEPTION_RIGHT_KEY, RECEPTION_RIGHT_DEPT_KEY, SHOW_BOARD_EVENT, parseDeptRightView, parseRightView, unhandledTotal, type DeptRightView, type ReceptionRightView } from "./receptionRightView";
-import DeptWorkspacePanel, { DeptRightTabs, type DeptCounts } from "./DeptWorkspacePanel";
+import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT, effectiveRightView, parseRightView, rightViewTabs, unhandledTotal, type ReceptionRightView } from "./receptionRightView";
+import DeptWorkspacePanel, { type DeptCounts } from "./DeptWorkspacePanel";
 import DeptReception from "./DeptReceptionScreen";
 import DeptReceptionDetail from "./DeptReceptionDetail";
 import { deptListState, deptShort, isDeptType, type DeptType } from "./deptReception";
@@ -459,12 +459,11 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   useEffect(() => { try { localStorage.setItem("reception_page_v1", page); } catch { /* 무시 */ } }, [page]);
   const [boardFocus, setBoardFocus] = useState<ReceptionType | null>(null); const [boardReload, setBoardReload] = useState(0); const [boardCounts, setBoardCounts] = useState<Record<ReceptionType, number> | null>(null); // 현황판 포커스·다시 읽기(지원 접수 저장 뒤)
   // 오른쪽 기둥 보기: 접수리스트(기본) ↔ 미처리 현황(접수 + 일정). 홈 카드에서 들어오면 board 로 열린다.
+  // 2026-10-25 밤: 6종 같은 뼈대 — 경영·운영·영업만 [일정리스트][달력] 탭이 뒤에 더 붙는다(같은 기억 키, 옛 부서 4탭 키는 안 읽음).
   const [rightView, setRightView] = useState<ReceptionRightView>(() => { try { return parseRightView(localStorage.getItem(RECEPTION_RIGHT_KEY)); } catch { return "list"; } });
   useEffect(() => { try { localStorage.setItem(RECEPTION_RIGHT_KEY, rightView); } catch { /* 무시 */ } }, [rightView]);
-  // 부서 화면(경영·운영·영업)은 3칸 [일정리스트|접수리스트|미처리현황] — 기억 키 따로(dept-mini-workspace, 2026-10-24)
-  const [deptRight, setDeptRight] = useState<DeptRightView>(() => { try { return parseDeptRightView(localStorage.getItem(RECEPTION_RIGHT_DEPT_KEY)); } catch { return "plan"; } }); const [deptCounts, setDeptCounts] = useState<DeptCounts | null>(null);
-  useEffect(() => { try { localStorage.setItem(RECEPTION_RIGHT_DEPT_KEY, deptRight); } catch { /* 무시 */ } }, [deptRight]);
-  useEffect(() => { const show = () => { setRightView("board"); setDeptRight("board"); }; window.addEventListener(SHOW_BOARD_EVENT, show); return () => window.removeEventListener(SHOW_BOARD_EVENT, show); }, []);
+  const [deptCounts, setDeptCounts] = useState<DeptCounts | null>(null);
+  useEffect(() => { const show = () => { setRightView("board"); }; window.addEventListener(SHOW_BOARD_EVENT, show); return () => window.removeEventListener(SHOW_BOARD_EVENT, show); }, []);
   const [scheduleCount, setScheduleCount] = useState(0);
   const [deptEnabled, setDeptEnabled] = useState(false); useEffect(() => { getConfig().then((c) => { const on = String(c.DEPT_RECEPTION_ENABLED || "").toLowerCase() === "true"; setDeptEnabled(on); if (!on && isDeptType(PAGE_TYPE[page])) goPage("copier"); }).catch(() => { setDeptEnabled(false); if (isDeptType(PAGE_TYPE[page])) goPage("copier"); }); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 마운트 때 한 번만. 설정을 못 읽으면 지원 줄을 숨긴 채(안전한 쪽) 둔다
   // 원격·IT 작업 보드는 기간과 무관하게 최근 30일 건을 모아 본다 (어제 미완료 건이 사라지면 안 된다)
@@ -697,6 +696,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   }, [listDate, listPeriod, loadList, loadRemoteQueue]);
   const PAGE_TYPE = { copier: "복합기 AS", remote: "원격이관", it: "IT", mgmt: "경영지원", ops: "운영지원", sales: "영업팀" } as const;
   const deptPage = deptEnabled && isDeptType(PAGE_TYPE[page]);
+  const shownView = effectiveRightView(rightView, deptPage); // 부서 아닌 화면에 일정리스트·달력이 기억돼 있으면 접수리스트
   const goPage = (next: keyof typeof PAGE_TYPE) => {
     setPage(next);
     setActionResult("");
@@ -2016,28 +2016,30 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
         {/* ==== 우: 접수 리스트 / 미처리 현황 (상시) ==== */}
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="px-3 pt-3">
-          {deptPage ? <DeptRightTabs value={deptRight} onChange={setDeptRight} counts={deptCounts} /> : <div className="grid h-9 grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white" role="tablist" aria-label="오른쪽 보기">
-            {([["list", "접수리스트"], ["board", "미처리 현황"]] as const).map(([v, label]) => {
-              const on = rightView === v;
-              const n = v === "board" ? unhandledTotal(boardCounts, scheduleCount, deptEnabled) : 0;
+          <div className={`grid min-h-11 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:min-h-9 ${deptPage ? "grid-cols-4" : "grid-cols-2"}`} role="tablist" aria-label="오른쪽 보기">
+            {rightViewTabs(deptPage).map(([v, label]) => {
+              const on = shownView === v;
+              const n = v === "board" ? unhandledTotal(boardCounts, scheduleCount, deptEnabled) : v === "plan" && deptCounts ? deptCounts.plan : null;
               return (
                 <button key={v} type="button" role="tab" aria-selected={on} onClick={() => setRightView(v)}
-                  className={`flex items-center justify-center px-3 text-[12px] font-bold transition ${on ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
-                  {label}{v === "board" && <span className={`ml-1.5 font-mono tabular-nums ${on ? (n ? "text-rose-300" : "text-white/70") : n ? "text-rose-600" : "text-slate-400"}`}>{n}</span>}
+                  className={`flex items-center justify-center text-center leading-tight ${deptPage ? "px-1" : "px-3"} text-[12px] font-bold transition ${on ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+                  {label}{n !== null && <span className={`ml-1 font-mono tabular-nums ${on ? (n ? "text-rose-300" : "text-white/70") : n ? "text-rose-600" : "text-slate-400"}`}>{n}</span>}
                 </button>
               );
             })}
-          </div>}
           </div>
-          {deptPage && <DeptWorkspacePanel dept={PAGE_TYPE[page] as DeptType} view={deptRight} author={author} reloadKey={boardReload} onCounts={setDeptCounts} onChanged={() => void loadList(listDate, listPeriod, true)} />}
-          {/* 현황판은 늘 붙여 둔다(숨김) — 종류 선택기 배지·N 숫자가 접수리스트 보기에서도 살아 있게 */}
-          <div className={rightView === "board" && !deptPage ? "pt-1" : "hidden"}>
+          </div>
+          {/* 부서만: [일정리스트]·[달력] 본체. 다른 보기일 때는 숨은 채 탭 숫자만 읽는다 */}
+          {deptPage && <DeptWorkspacePanel dept={PAGE_TYPE[page] as DeptType} view={shownView} author={author} reloadKey={boardReload} onCounts={setDeptCounts} onChanged={() => void loadList(listDate, listPeriod, true)} />}
+          {/* 현황판은 늘 붙여 둔다(숨김) — 종류 선택기 배지·N 숫자가 접수리스트 보기에서도 살아 있게. 6종 모두 같은 현황판 */}
+          <div className={shownView === "board" ? "pt-1" : "hidden"}>
             <ReceptionBoardPanel compact onOpenSchedule={onOpenSchedule ? () => { requestOpenOverdue(); onOpenSchedule(); } : undefined} deptEnabled={deptEnabled} reloadKey={boardReload} onCounts={setBoardCounts} onScheduleCount={setScheduleCount} selectedType={boardFocus} onSelectedTypeChange={setBoardFocus}
               onSelectType={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
+              onOpenReceptionList={() => { setListFilter("복합기 AS"); setStatusFilter("전체"); setListDate(kstDate()); setListPeriod("quarter"); /* 열린 접수는 최근 90일 — 분기 보기로 넓혀 옛 건도 보이게 */ setRightView("list"); }}
               onOpenFieldRow={(r) => { if (r.type === "복합기 AS") setListFilter("복합기 AS"); else goPage(r.type === "IT" ? "it" : "remote"); setOpenRowId(r.id); setRightView("list"); }}
               author={author} onChanged={() => void loadList(listDate, listPeriod, true)} />
           </div>
-          <div className={(deptPage ? deptRight : rightView) === "list" ? "" : "hidden"}>
+          <div className={shownView === "list" ? "" : "hidden"}>
           {/* 어두운 "접수 리스트" 띠는 없앴다 — 위 전환 막대가 제목 역할. 날짜·기간·새로고침 줄이 패널 첫 줄 */}
           <div className="border-b border-slate-100 px-3 pb-3 pt-2.5">
             <h3 className="sr-only">접수 리스트</h3>

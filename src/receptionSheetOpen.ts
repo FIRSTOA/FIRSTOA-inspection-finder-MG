@@ -164,3 +164,39 @@ export function over90Counts(rows: SheetOpenRow[]): Partial<Record<SheetKind, nu
   for (const r of rows) out[r.kind] = (out[r.kind] || 0) + 1;
   return out;
 }
+
+// ── 상세 한 행(2026-10-25 사용자 "시트면 시트에 있는 내용이 나와야지 — 잘린 듯") ──
+// 목록 응답의 summary 는 접수내용 40자(엣지 state.ts clip). 팝업을 열 때 그 행만 다시 읽어 열 전부를 받는다.
+
+/** 엣지 state.ts SheetRowDetail 과 같은 모양 */
+export type SheetCell = { label: string; value: string };
+export type SheetRowDetail = {
+  source: SheetSource;
+  sheetRow: number;
+  seq: string;
+  state: string;
+  cells: SheetCell[];
+  contentLabel: string;
+  content: string;
+};
+
+/** 엣지 응답 → 모양 맞추기(빈 값·이상한 칸은 버린다) */
+export function normalizeSheetRowDetail(raw: unknown): SheetRowDetail | null {
+  const d = (raw && typeof raw === "object" ? raw : null) as Partial<SheetRowDetail> | null;
+  if (!d || (d.source !== "sales" && d.source !== "mgmt" && d.source !== "remote")) return null;
+  const cells = Array.isArray(d.cells)
+    ? d.cells.map((c) => ({ label: String(c?.label ?? "").trim(), value: String(c?.value ?? "") })).filter((c) => c.label && c.value.trim())
+    : [];
+  return {
+    source: d.source, sheetRow: Number(d.sheetRow) || 0, seq: String(d.seq ?? ""), state: String(d.state ?? ""),
+    cells, contentLabel: String(d.contentLabel || "내용"), content: String(d.content ?? ""),
+  };
+}
+
+/** 시트 한 행 상세 — 실패(순번 바뀜·이미 처리됨·시트 못 읽음)는 throw(부르는 쪽이 안내문으로) */
+export async function fetchSheetRowDetail(source: SheetSource, sheetRow: number, seq = ""): Promise<SheetRowDetail> {
+  const raw = await invokeEdgeFunction<{ detail?: unknown }>("reception-sheet-open", { row: { source, sheetRow, seq } }, 20_000);
+  const detail = normalizeSheetRowDetail(raw?.detail);
+  if (!detail) throw new Error("시트 행 상세를 받지 못했습니다(엣지 함수가 아직 옛 버전일 수 있음)");
+  return detail;
+}

@@ -1,16 +1,14 @@
 /**
- * 서비스접수 › 경영·운영·영업 미니 업무공간(2026-10-24) — 오른쪽 기둥의 [일정리스트]·[미처리현황] 본체와 전환 막대·시트 열기 단추.
- * 설계: docs/tasks/dept-mini-workspace.md. 접수리스트는 ServiceReception 의 기존 목록(부서 필터)을 그대로 쓴다.
+ * 서비스접수 › 경영·운영·영업 [일정리스트]·[달력] 두 보기 부품(2026-10-24 → 2026-10-25 밤 축소).
+ * 설계: docs/tasks/dept-mini-workspace.md. 2026-10-25 밤 사용자 "CS 접수·원격·IT 처럼 똑같이 가자":
+ * 오른쪽 기둥 뼈대([접수리스트][미처리 현황] + 현황판 ReceptionBoardPanel)는 6종 공통으로 ServiceReception 이 그리고,
+ * 부서일 때만 탭 줄 뒤에 붙는 [일정리스트][달력] 본체가 이 파일이다. 옛 4탭 전환 막대(DeptRightTabs)·부서 미처리 목록은 걷어냄.
  *
  * 데이터
  * - 일정리스트 [금일/익일/예정] = fetchOpenReceptions(90) 중 이 부서 + team_calendar_events 중 접수와 연결 안 된 부서 일정(오늘~90일) → deptPlanBuckets.
- *   [미처리] 칩은 없다(2026-10-25 밤 사용자 "미처리현황 탭과 중복" — 2c3f253 의 미처리 묶음을 걷어냄). 미처리는 [미처리현황] 탭에서만.
- * - 달력(2026-10-25) = DeptCalendarPanel compact(그 부서 달력 추가·수정·삭제). 일정·캘린더 탭의 부서 칩은 없어졌다.
- * - 미처리현황 = 홈과 같은 kpi/kpiData.loadUnhandledRows() → homeUnhandled.rowsForTab(부서 탭). 숫자가 홈 "경영/운영/영업" 탭과 같다.
- *   모든 줄(앱 접수·시트 행)에 [완료][보류][배정](UnhandledActionBar — 홈 팝업·현황판과 같은 부품, 확인창 포함, 2026-10-25 밤).
- *   시트만 있는 행은 시트 상태·처리자 칸만(statusOnly), 앱 접수는 runDeptAction. 누른 줄은 unhandledPending 으로 바로 빠지고 1.5초 뒤 다시 읽는다.
- *   미루기·메모는 일정리스트 카드와 접수리스트 상세의 DeptActionBar 에 남아 있다.
+ * - 달력 = DeptCalendarPanel compact(그 부서 달력 추가·수정·삭제).
  * - 60초마다·창 복귀 때 다시 읽는다. 화면이 숨어 있으면(useScreenActive) 쉰다. 실패는 빨간 줄로 보이고 이전 값은 둔다.
+ *   view 가 plan·cal 이 아니어도(접수리스트·미처리 현황 보기 중) 탭 숫자를 위해 계속 읽는다.
  * 배정 = remote_meta.handler 1명(runDeptAction "assign" → 시트 처리자 칸 갱신). 알림은 보내지 않는다(Q6).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,14 +17,9 @@ import { selectRows } from "./supabase";
 import { fetchOpenReceptions, type OpenReceptionRow } from "./deptReceptionApi";
 import { deptCalEditPatch, deptCalFormOf, deptCalQuery, deptMonthGrid, emptyDeptCalForm, shiftDeptMonth, toDeptCalEvent, type DeptCalEvent, type DeptCalForm } from "./deptCalendarView";
 import { resolveActor, runDeptAction, saveDeptCalEdit, warnTone, type DeptRowLike } from "./deptReceptionFlow";
-import { DEPT_UNHANDLED_TAB, deptMemberNames, deptPlanBuckets, planTodoCount, sheetKeyOf, type PlanBucket } from "./deptPlan";
-import { createPortal } from "react-dom";
-import { rowsForTab, UNHANDLED_BADGE, type UnhandledRow } from "./homeUnhandled";
-import { UnhandledDetail } from "./HomeUnhandledPanel";
+import { deptMemberNames, deptPlanBuckets, planTodoCount, type PlanBucket } from "./deptPlan";
 import { deptSheetUrl } from "./receptionSheetOpen";
-import UnhandledActionBar from "./UnhandledActionBar.view";
-import { applyPending, usePendingVersion } from "./unhandledPending";
-import { DEPT_RIGHT_VIEWS, type DeptRightView } from "./receptionRightView";
+import type { ReceptionRightView } from "./receptionRightView";
 import type { DeptType } from "./deptReception";
 import { useMembers } from "./authors";
 import { useScreenActive } from "./screenActive";
@@ -47,26 +40,7 @@ const addDays = (ymd: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-export type DeptCounts = { plan: number; board: number };
-
-/** 부서 화면 전환 막대 [일정리스트 n | 달력 | 접수리스트 | 미처리현황 n] */
-export function DeptRightTabs({ value, onChange, counts }: { value: DeptRightView; onChange: (v: DeptRightView) => void; counts: DeptCounts | null }) {
-  const countOf = (v: DeptRightView) => (!counts ? null : v === "plan" ? counts.plan : v === "board" ? counts.board : null);
-  const items: Array<[DeptRightView, string, number | null]> = DEPT_RIGHT_VIEWS.map(([v, label]) => [v, label, countOf(v)]);
-  return (
-    <div className="grid min-h-11 grid-cols-4 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white sm:min-h-9" role="tablist" aria-label="오른쪽 보기">
-      {items.map(([v, label, n]) => {
-        const on = value === v;
-        return (
-          <button key={v} type="button" role="tab" aria-selected={on} onClick={() => onChange(v)}
-            className={`flex items-center justify-center px-1 text-[12px] font-bold transition ${on ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
-            {label}{n !== null && <span className={`ml-1 font-mono tabular-nums ${on ? (n ? "text-rose-300" : "text-white/70") : n ? "text-rose-600" : "text-slate-400"}`}>{n}</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+export type DeptCounts = { plan: number };
 
 /** 머리 [시트 열기 ↗] — 경영·영업만(운영지원은 시트 없음 → 숨김). 폰에서는 "시트"만. */
 export function DeptSheetLink({ dept }: { dept: string }) {
@@ -82,8 +56,8 @@ export function DeptSheetLink({ dept }: { dept: string }) {
 
 type Props = {
   dept: DeptType;
-  /** "list" 일 때는 아무것도 그리지 않지만 숫자를 위해 계속 읽는다 */
-  view: DeptRightView;
+  /** "plan"·"cal" 일 때만 그린다. 다른 보기(접수리스트·미처리 현황)일 때는 아무것도 그리지 않지만 탭 숫자를 위해 계속 읽는다 */
+  view: ReceptionRightView;
   author?: string;
   /** 바깥(접수 저장 등)에서 다시 읽으라는 신호 */
   reloadKey?: number;
@@ -98,9 +72,6 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   const [today, setToday] = useState(kstDate());
   const [rows, setRows] = useState<OpenReceptionRow[]>([]);
   const [events, setEvents] = useState<DeptCalEvent[]>([]);
-  const [unhandled, setUnhandled] = useState<UnhandledRow[]>([]);
-  const [detail, setDetail] = useState<UnhandledRow | null>(null);
-  const [unNote, setUnNote] = useState("");
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [bucket, setBucket] = useState<PlanBucket | null>(null);
@@ -117,26 +88,21 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   const load = useCallback(async () => {
     const my = ++seq.current;
     const t = kstDate();
-    const [open, cal, un] = await Promise.allSettled([
+    const [open, cal] = await Promise.allSettled([
       fetchOpenReceptions(90),
       selectRows<Parameters<typeof toDeptCalEvent>[0]>("team_calendar_events", deptCalQuery(dept, t, addDays(t, 90))),
-      import("./kpi/kpiData").then((m) => m.loadUnhandledRows(t)), // 홈과 같은 로더(큰 모듈이라 늦게 읽는다)
     ]);
     if (my !== seq.current) return;
     const errs: string[] = [];
     setToday(t);
     if (open.status === "fulfilled") setRows(open.value.filter((r) => r.type === dept)); else errs.push(`열린 접수를 못 읽었습니다: ${msg(open.reason)}`);
     if (cal.status === "fulfilled") setEvents(cal.value.map(toDeptCalEvent).filter((ev): ev is DeptCalEvent => !!ev)); else errs.push(`부서 달력을 못 읽었습니다: ${msg(cal.reason)}`);
-    if (un.status === "fulfilled") {
-      setUnhandled(rowsForTab(un.value.rows, DEPT_UNHANDLED_TAB[dept]));
-      setUnNote([un.value.partialError, un.value.info.notice].filter(Boolean).join(" · "));
-    } else errs.push(`미처리를 못 읽었습니다: ${msg(un.reason)}`);
     setErrors(errs);
     setLoading(false);
   }, [dept]);
 
   // 부서가 바뀌면 처음부터
-  useEffect(() => { setLoading(true); setRows([]); setEvents([]); setUnhandled([]); setBucket(null); }, [dept]);
+  useEffect(() => { setLoading(true); setRows([]); setEvents([]); setBucket(null); }, [dept]);
   useEffect(() => {
     if (!active) return;
     void load();
@@ -156,14 +122,10 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   };
   const patchRow = (next: DeptRowLike) => setRows((cur) => cur.map((r) => (r.id === next.id ? ({ ...r, ...next } as OpenReceptionRow) : r)));
 
-  const closedIds = useMemo(() => new Set(rows.filter((r) => r.status === "완료" || r.status === "취소").map((r) => r.id)), [rows]);
-  const pendingVer = usePendingVersion(); // 방금 누른 줄은 다시 읽기 전에도 먼저 반영(prune 은 로더만 — 여기는 부서 탭 일부라 지우지 않는다)
-  const boardRows = useMemo(() => (pendingVer >= 0 ? applyPending(unhandled) : unhandled).filter((u) => !(u.receptionId && closedIds.has(u.receptionId) && !sheetKeyOf(u.key))), [unhandled, closedIds, pendingVer]);
   const buckets = useMemo(() => deptPlanBuckets(dept, rows, events, today), [dept, rows, events, today]);
   const shownBucket: PlanBucket = bucket ?? "today";
-  const sheetCount = boardRows.filter((u) => sheetKeyOf(u.key)).length;
   const planCount = planTodoCount(buckets);
-  useEffect(() => { if (!loading) onCounts?.({ plan: planCount, board: boardRows.length }); }, [planCount, boardRows.length, loading, onCounts]);
+  useEffect(() => { if (!loading) onCounts?.({ plan: planCount }); }, [planCount, loading, onCounts]);
 
   const names = useMemo(() => deptMemberNames(dept, members), [dept, members]);
   const openAssign = (row: OpenReceptionRow) => { setFreeName(String(row.remote_meta?.handler || "")); setAssignRow(row); };
@@ -202,8 +164,6 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   };
 
   const actions = (row: DeptRowLike) => <DeptActionBar row={row} compact author={author} onChanged={(next) => { patchRow(next); settle(); }} />;
-  // 미처리현황 줄 아래 단추 — 앱 접수·시트 행 모두 홈·현황판과 같은 [완료][보류][배정](확인창 포함)
-  const unhandledActions = (u: UnhandledRow) => <UnhandledActionBar row={u} author={author} onFinished={() => settle()} />;
 
   // 달력에서 고치고 일정리스트로 돌아오면 다시 읽는다(달력은 자기 조회를 따로 한다)
   const prevView = useRef(view);
@@ -213,7 +173,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   }, [view, load]);
   const calDays = useMemo(() => deptMonthGrid(calMonth), [calMonth]);
 
-  if (view === "list") return null;
+  if (view !== "plan" && view !== "cal") return null;
   return (
     <div className="pb-2">
       {!!errors.length && <div className="mx-3 mt-2 space-y-0.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
@@ -228,41 +188,10 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
           <DeptPlanList buckets={buckets} active={shownBucket} onActive={setBucket} loading={loading} assigningId={assigningId}
             onAssign={openAssign} onOpenEvent={(ev) => setEdit({ ev, form: deptCalFormOf(ev) })} renderActions={actions} />
         </>
-      ) : view === "cal" ? (
+      ) : (
         <DeptCalendarPanel key={dept} team={dept} month={calMonth} days={calDays} today={today} mode="calendar" compact
           reloadTick={calTick + reloadKey} onMonth={(d) => setCalMonth((m) => shiftDeptMonth(m, d))} />
-      ) : (
-        <div>
-          <div className="px-3 pt-2 text-[11px] font-bold text-slate-500">
-            홈 미처리 "{DEPT_UNHANDLED_TAB[dept]}" 탭과 같은 숫자 · <b className="tabular-nums text-slate-900">{boardRows.length}</b>건
-            {sheetCount > 0 && <> · <span className="text-emerald-700">시트 건 {sheetCount} — [완료]·[보류]는 시트 상태 칸에 적힘</span></>}
-          </div>
-          {!!unNote && <div className="mx-3 mt-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-800">{unNote}</div>}
-          <div className="mt-2 max-h-[70vh] divide-y divide-slate-100 overflow-y-auto border-t border-slate-100">
-            {loading && !boardRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
-            {!loading && !boardRows.length && <div className="p-8 text-center text-xs font-bold text-slate-400">미처리가 없습니다.</div>}
-            {boardRows.map((u) => {
-              const sk = sheetKeyOf(u.key);
-              return (
-                <div key={u.key} className="space-y-1.5 px-3 py-2.5">
-                  <button type="button" onClick={() => setDetail(u)} aria-haspopup="dialog" className="block min-h-11 w-full space-y-1.5 text-left">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${sk ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{sk ? "시트" : UNHANDLED_BADGE[u.kind]}</span>
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{u.vendor || "업체 미정"}</span>
-                    <span className={`shrink-0 text-[11px] font-bold tabular-nums ${u.ageDays >= 7 ? "text-rose-600" : "text-slate-400"}`}>{u.date ? `${u.date.slice(5)} · ${u.ageDays}일` : "날짜 모름"}</span>
-                  </div>
-                  <div className="truncate text-[12px] font-semibold text-slate-500">{u.title || "-"}</div>
-                  <div className="text-[11px] font-bold text-slate-400">처리 {u.assignee || <span className="text-rose-500">미배정</span>} · {u.status || "접수"}</div>
-                  </button>
-                  {unhandledActions(u)}
-                </div>
-              );
-            })}
-          </div>
-        </div>
       )}
-
-      {detail && typeof document !== "undefined" && createPortal(<UnhandledDetail row={detail} onClose={() => setDetail(null)} actions author={author} />, document.body)}
 
       {assignRow && (names.length ? (
         <AssigneePicker names={names} value={String(assignRow.remote_meta?.handler || "")} max={1} title="처리자 배정"

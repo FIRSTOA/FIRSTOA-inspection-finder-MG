@@ -13,11 +13,15 @@
  *
  * 응답: { ok, rows, fetchedAt, errors, okSources, coveredIds, healed, healEnabled, cached }
  * 시트는 절대 쓰지 않는다(D6).
+ *
+ * 상세 한 행(2026-10-25): 본문 { row: { source, sheetRow, seq } } 이면 목록 대신 그 행만 머리행과 같이 읽어
+ * { ok, detail: SheetRowDetail } 을 돌려준다(열 전부·내용 최대 4000자·줄바꿈 그대로, 전화번호 열 제외).
+ * 순번이 다르면(행이 밀림) 409, 이미 완료 계열이면 409(처리 끝난 행은 내주지 않는다). 캐시 없음(항상 지금 값).
  */
 import { batchGetValues, quoteTitle, sheetsApiConfigured, spreadsheetMeta } from "../field-sheet-sync/sheets-api.ts";
 import {
-  healCandidates, kstMonth, linkRows, openRowsOf, parseSheetRows, SHEET_LAYOUTS, SOURCE_LABEL, SPREADSHEET_ID,
-  syncedReceptionIds, type DeptJob, type ParsedSheetRow, type RemoteReception, type SheetOpenRow, type SheetSource,
+  headerError, healCandidates, kstMonth, linkRows, openRowsOf, parseSheetRows, SHEET_LAYOUTS, sheetRowDetail, SOURCE_LABEL, SPREADSHEET_ID,
+  syncedReceptionIds, type DeptJob, type ParsedSheetRow, type RemoteReception, type SheetOpenRow, type SheetRowDetail, type SheetSource,
 } from "./state.ts";
 
 const corsHeaders = {
@@ -106,8 +110,7 @@ async function compute(): Promise<Payload> {
   if (!sheetsApiConfigured()) throw new Error("GOOGLE_SERVICE_ACCOUNT 시크릿이 없어 접수 시트를 읽을 수 없습니다");
 
   // 1) 탭 이름을 gid 로 찾고 한 번에 읽는다
-  const meta = await spreadsheetMeta(SPREADSHEET_ID);
-  const sources = Object.keys(SHEET_LAYOUTS) as SheetSource[];
+  const meta = await spreadsheetMeta(SPREADSHEET_ID);  const sources = Object.keys(SHEET_LAYOUTS) as SheetSource[];
   const ranges: Array<{ source: SheetSource; range: string }> = [];
   for (const s of sources) {
     const L = SHEET_LAYOUTS[s];
@@ -170,9 +173,52 @@ async function compute(): Promise<Payload> {
   };
 }
 
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
+
+/** 상세 한 행 — 머리행 + 그 행만 읽는다(탭 이름은 spreadsheetMeta 10분 캐시) */
+async function readRowDetail(sourceRaw: unknown, rowRaw: unknown, seqRaw: unknown): Promise<SheetRowDetail> {
+  const source = String(sourceRaw || "") as SheetSource;
+  const L = SHEET_LAYOUTS[source];
+  if (!L) throw new HttpError(400, "source 는 sales·mgmt·remote 중 하나여야 합니다");
+  const sheetRow = Number(rowRaw);
+  if (!Number.isInteger(sheetRow) || sheetRow < L.dataStart || sheetRow > 200_000) throw new HttpError(400, `행 번호가 올바르지 않습니다(${String(rowRaw)})`);
+  if (!sheetsApiConfigured()) throw new Error("GOOGLE_SERVICE_ACCOUNT 시크릿이 없어 접수 시트를 읽을 수 없습니다");
+  const meta = await spreadsheetMeta(SPREADSHEET_ID);
+  const tab = meta.sheets.get(L.gid);
+  if (!tab) throw new Error(`${SOURCE_LABEL[source]} 탭(gid ${L.gid})을 찾지 못했습니다`);
+  const t = quoteTitle(tab.title);
+  const headRange = `${t}!A${L.headerRow}:${L.detailLastCol}${L.headerRow}`;
+  const rowRange = `${t}!A${sheetRow}:${L.detailLastCol}${sheetRow}`;
+  const got = await batchGetValues(SPREADSHEET_ID, [headRange, rowRange]);
+  const header = got.get(headRange)?.[0] || [];
+  const headErr = headerError(L, header);
+  if (headErr) throw new Error(headErr);
+  const detail = sheetRowDetail(L, header, got.get(rowRange)?.[0] || [], sheetRow);
+  const want = String(seqRaw ?? "").replace(/\s+/g, "");
+  if (want && detail.seq.replace(/\s+/g, "") !== want) {
+    throw new HttpError(409, `시트 ${sheetRow}행의 순번이 바뀌었습니다(기대 ${want}, 지금 ${detail.seq || "빈 칸"}) — 목록을 새로 고친 뒤 다시 열어 주세요`);
+  }
+  if (detail.cls === "done") throw new HttpError(409, `시트에서 이미 '${detail.state}' 처리된 행입니다 — 목록을 새로 고쳐 주세요`);
+  return detail;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return Response.json({ error: "Method not allowed" }, { status: 405, headers: jsonHeaders });
+  // 본문이 비었거나 JSON 이 아니면 목록 요청으로 본다(기존 호출 = {})
+  const body = await req.json().catch(() => ({})) as { row?: { source?: unknown; sheetRow?: unknown; seq?: unknown } };
+  if (body && typeof body === "object" && body.row && typeof body.row === "object") {
+    try {
+      const detail = await readRowDetail(body.row.source, body.row.sheetRow, body.row.seq);
+      return Response.json({ ok: true, detail }, { headers: jsonHeaders });
+    } catch (error) {
+      const status = error instanceof HttpError ? error.status : 500;
+      return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status, headers: jsonHeaders });
+    }
+  }
   try {
     // 캐시를 우회하는 옵션은 두지 않는다(공개 호출이 Sheets API 할당을 태우지 않게)
     if (cache && Date.now() - cache.at < CACHE_MS) {
