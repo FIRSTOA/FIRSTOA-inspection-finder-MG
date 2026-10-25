@@ -23,7 +23,7 @@ import { HomeKpiGrid, type KpiGridWidget, type KpiLayoutItem } from "./kpi/HomeK
 import { KpiWidget, type KpiLoadStatus, type KpiOkrScope, type KpiView } from "./kpi/KpiWidgets.view";
 import {
   FAST_REFRESH_MS, HOME_KPI_DEFAULT_LAYOUT, HOME_WIDGETS, SLOW_REFRESH_MS,
-  cachedView, firstLoadPhases, lastOkAgo, mergeBundle, okrView, readHomeLayout,
+  cachedView, firstLoadPhases, lastOkAgo, mergeBundle, okrView, pickOkrWeekId, readHomeLayout,
   sourcesForLayout, splitSources, tableRows, todayItems, widgetState, writeHomeLayout,
   type HomeKpiState, type HomeWidgetDef, type TablePeriod,
 } from "./kpi/homeKpiModel";
@@ -78,7 +78,7 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
   const [period, setPeriod] = useState<TablePeriod>("week"); // 달성표 기간 — 기본 "이번 주"(월~일)
   const [tableView, setTableView] = useState<"main" | "all">("main");
   const [goalBasis, setGoalBasis] = useState<"end" | "early">("end"); // 달성표 K2 행 안 분기 블록 기준 — 기본 말일
-  const [okrPeriod, setOkrPeriod] = useState<"week" | "month">("week"); // OKR — 기본 이번 주(사용자 2026-10-24)
+  const [okrWeekId, setOkrWeekId] = useState<string | undefined>(undefined); // OKR 주차 칩 — 기본 이번 주(2026-10-25 [주|월] 대신 주차)
   const [okrScope, setOkrScope] = useState<{ team: KpiOkrScope["team"]; member?: string }>({ team: "ALL" }); // OKR 범위 — 기본 CS 4파트
   // 홈 3차 팀 카드 거르기(2026-10-25): 카드를 누르면 달성표(그 팀 칸 강조)·미처리(그 팀 탭)·OKR(그 팀 범위)이 그 팀으로, 다시 누르면 전체
   const [teamFilter, setTeamFilter] = useState<TeamKey | null>(null);
@@ -244,14 +244,19 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
       }
       case "K19": {
         const scopeKey = `${okrScope.team}|${okrScope.member || ""}`;
-        const live = bundle ? cachedView(bundle, ctx, `K19|${okrPeriod}|${scopeKey}`, () => okrView(bundle, okrPeriod, okrScope)) : null;
-        // 캐시는 전체 범위(CS 4파트)만 — 다른 범위를 고르면 새 값이 올 때까지 로딩
-        const old = st.status === "loading" && okrScope.team === "ALL" && !okrScope.member ? snap?.okr[okrPeriod] ?? null : null;
+        // 고른 주차가 지금 달 주차 목록에 없으면(달이 바뀜) 이번 주로 — pickOkrWeekId 가 같은 규칙으로 고른다
+        const okrW = bundle?.facts.okr?.week;
+        const wk = okrW && okrWeekId ? pickOkrWeekId(okrW, okrWeekId) : undefined;
+        const pickedPast = Boolean(okrW && wk && wk !== okrW.id);
+        const live = bundle ? cachedView(bundle, ctx, `K19|${pickedPast ? wk : "cur"}|${scopeKey}`, () => okrView(bundle, { weekId: pickedPast ? wk : undefined, team: okrScope.team, member: okrScope.member })) : null;
+        // 캐시는 이번 주·전체 범위(CS 4파트)만 — 다른 주차·범위를 고르면 새 값이 올 때까지 로딩
+        const old = st.status === "loading" && !pickedPast && okrScope.team === "ALL" && !okrScope.member ? snap?.okr.week ?? null : null;
         const v = old ?? live;
         fromSnap = !!old;
-        view = v ? { ...v, scope: { ...v.scope, onScope: setOkrScope }, onPeriod: setOkrPeriod, teamFilter } : null;
-        chip = okrPeriod === "week" ? "이번 주" : "이번 달";
-        emptyText = okrPeriod === "week" ? "이번 주 OKR 기록이 아직 없습니다" : "이번 달 판정이 아직 없습니다"; break;
+        view = v ? { ...v, scope: { ...v.scope, onScope: setOkrScope }, onWeek: (id: string) => setOkrWeekId(okrW && id === okrW.id ? undefined : id), teamFilter } : null;
+        const selLabel = pickedPast ? okrW?.weeks.find((x) => x.id === wk)?.label ?? "" : "";
+        chip = pickedPast ? `${selLabel}차` : "이번 주";
+        emptyText = pickedPast ? `${selLabel}차 OKR 기록이 없습니다` : "이번 주 OKR 기록이 아직 없습니다"; break;
       }
     }
     let status: KpiLoadStatus = fromSnap && view ? "ready" : st.status;

@@ -131,11 +131,20 @@ export type KpiUnhandledTotalView = { kind: "unhandledTotal"; total: number; par
  * member·members 는 옛 저장 범위·컨테이너 호환용으로 타입에만 남김(화면에서 고를 수 없음).
  */
 export type KpiOkrScope = { team: "ALL" | "A" | "B" | "C" | "D"; member?: string; members?: string[]; onScope: (s: { team: "ALL" | "A" | "B" | "C" | "D"; member?: string }) => void };
-/** 팀원 한 줄: 이번 주 그 사람 판정 달성률·판정 수. missing = 이번 주 판정이 하나도 없음(0% 아님). prevPct = 지난주 */
+/** 팀원 한 줄: 고른 주차 그 사람 판정 달성률·판정 수. missing = 그 주차 판정이 하나도 없음(0% 아님). prevPct = 바로 앞 주차 */
 export type KpiOkrPerson = { name: string; pct: number | null; counts: { done: number; partial: number; poor: number; none: number }; missing: boolean; prevPct: number | null };
 /** [전체] 칩의 팀 한 줄: 달성률 · 이번 주 보고 미작성 인원(이번 달 보기는 모름 → null) */
 export type KpiOkrTeamLine = { team: string; pct: number | null; missing: number | null };
-export type KpiOkrView = { kind: "okr"; period: "week" | "month"; onPeriod: (p: "week" | "month") => void; pct: number | null; counts: Array<{ label: string; value: number; tone: string }>; weeks: Array<{ label: string; pct: number | null; current: boolean }>; missingTeams: string[];
+/**
+ * 주차 한 칸(막대 겸 칩). id 가 있으면 누를 수 있다(onWeek). current = 이번 주, selected = 고른 주(없으면 current), future = 아직 안 온 주(비활성).
+ * period 는 옛 캐시 호환으로만 남김 — 2026-10-25 부터 OKR 박스는 늘 "week"(월 보기 삭제, 달성표 K19 행에서 월·분기).
+ */
+export type KpiOkrWeek = { id?: string; label: string; pct: number | null; current: boolean; selected?: boolean; future?: boolean };
+export type KpiOkrView = { kind: "okr"; period: "week" | "month"; pct: number | null; counts: Array<{ label: string; value: number; tone: string }>; weeks: KpiOkrWeek[]; missingTeams: string[];
+  /** 고른 주차 id(없으면 이번 주) */
+  weekId?: string;
+  /** 주차 칩·막대를 누르면 — 컨테이너가 붙인다. 없으면 칩을 그리지 않는다 */
+  onWeek?: (weekId: string) => void;
   scope?: KpiOkrScope;
   /** 파트별 미니 바(A~D 이번 기간 달성률). 모델 연결 전에는 비어 있어 그 구역을 그리지 않는다 — 다음 단계 */
   teams?: Array<{ team: string; pct: number | null }>;
@@ -145,7 +154,7 @@ export type KpiOkrView = { kind: "okr"; period: "week" | "month"; onPeriod: (p: 
   allPct?: number | null;
   /** 홈 3차: 팀 칩 % 와 [전체] 칩의 팀 4줄(늘 A~D) */
   teamLines?: KpiOkrTeamLine[];
-  /** 홈 3차: 팀 칩(이번 주)을 고르면 그 팀원 목록. [전체]·[이번 달]은 빈 배열 */
+  /** 홈 3차: 팀 칩을 고르면 그 팀원 목록(고른 주차). [전체]는 빈 배열 */
   people?: KpiOkrPerson[];
   /** 홈 3차 팀 카드 필터 — 바뀌면 그 팀 칩으로 맞춘다(A~D 만, CSS·없음 = 전체) */
   teamFilter?: TeamKey | null };
@@ -946,22 +955,35 @@ const OKR_COUNT_BADGES: Array<{ key: keyof KpiOkrPerson["counts"]; label: string
 /**
  * 홈 3차(2026-10-25): 칩 [전체 n%][●A n%]…[●D n%] → 팀 칩을 누르면 오른쪽에 그 팀원 이름이 쭉(이름·막대·%·판정 수, 미작성은 빨간 점선 줄).
  * [전체]·[이번 달] = 팀 4줄(팀 배지·막대·%·미작성 n명). 왼쪽 작은 칸 = 링 + 이번 달 주별 막대. 개인 드롭다운 없음.
+ * 2026-10-25 주차 칩(사용자 "1,2,3,4주차 보이는 게 나을 듯, 달보단"): [주|월] 대신 [1주]…[4주]([5주]) — 링·팀 4줄·팀원 목록 전부 고른 주차. 주별 막대도 누르면 그 주.
  */
 function OkrBody({ v, size, theme, disabled }: { v: KpiOkrView; size?: KpiSize; theme: KpiTheme; disabled?: boolean }) {
   const t = THEMES[theme];
   const tones = TONE_TEXT[theme];
-  const unitWord = v.period === "week" ? "주" : "달";
   const sc = v.scope;
+  // 고른 주차(없으면 이번 주) — 글자: 이번 주면 "이번 주/지난주", 다른 주면 "2주/앞 주"
+  const sel = v.weeks.find((w) => w.selected) ?? v.weeks.find((w) => w.current);
+  const isCur = v.period === "week" && (!sel || sel.current);
+  const whenWord = v.period === "month" ? "이번 달" : isCur ? "이번 주" : `${sel?.label ?? ""}`;
+  const prevWord = isCur ? "지난주" : "앞 주";
   const label = v.scopeLabel || okrScopeText(sc, v.period);
   const wide = isWide(size);
-  const segWrap = `inline-flex items-center gap-0.5 rounded-full p-0.5 ${theme === "deck" ? "bg-white/[0.07]" : "bg-slate-100"}`;
   const segBtn = (on: boolean) => `inline-flex min-h-11 items-center justify-center gap-1 rounded-full px-3 text-[12px] font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} ${on ? (theme === "deck" ? "bg-white text-slate-950" : "bg-slate-900 text-white") : `${t.sub} ${t.hover}`}`;
-  const weekBar = (cur: boolean) => (cur ? "bg-sky-400" : theme === "deck" ? "bg-slate-500" : "bg-slate-300");
+  const weekBar = (on: boolean) => (on ? "bg-sky-400" : theme === "deck" ? "bg-slate-500" : "bg-slate-300");
+  const isSel = (w: KpiOkrView["weeks"][number]) => (sel ? w === sel : w.current);
+  const canPick = (w: KpiOkrView["weeks"][number]) => Boolean(v.onWeek && w.id && !w.future);
+  // 주차 칩: 고른 주 = 채움, 이번 주 = 하늘색 점, 아직 안 온 주 = 회색 비활성, 판정 없는 주 = 점선
+  const weekChip = (w: KpiOkrView["weeks"][number]) => {
+    const on = isSel(w);
+    const dashed = !on && !w.future && w.pct === null ? `border border-dashed ${t.divider}` : "";
+    return `${segBtn(on)} ${on ? "" : theme === "deck" ? "bg-white/[0.05]" : "bg-slate-100"} ${dashed} min-w-11 px-2.5 ${w.future ? "opacity-40" : ""}`;
+  };
   // 칩 % 와 팀 4줄: 새 모델(teamLines) — 옛 캐시 보기면 teams 로 대신(미작성 인원 모름)
   const lines: KpiOkrTeamLine[] = v.teamLines ?? (v.teams ?? []).map((x) => ({ team: x.team, pct: x.pct, missing: null }));
   const chipPct = (tm: (typeof OKR_SCOPE_TEAMS)[number]): number | null | undefined => (tm === "ALL" ? v.allPct : lines.find((l) => l.team === tm)?.pct);
   const people = v.people ?? [];
   const showPeople = Boolean(sc && sc.team !== "ALL" && v.period === "week");
+  const pickWeek = (w: KpiOkrView["weeks"][number]) => { if (canPick(w) && w.id) v.onWeek?.(w.id); };
 
   // 팀 카드 필터가 바뀌면 그 팀 칩으로(처음 그릴 때 필터가 있으면 그 팀으로 시작). 필터 없이 처음 그릴 때는 고른 범위를 건드리지 않는다
   const seenFilter = useRef<TeamKey | null | undefined>(undefined);
@@ -976,29 +998,40 @@ function OkrBody({ v, size, theme, disabled }: { v: KpiOkrView; size?: KpiSize; 
   }, [v.teamFilter, sc]);
 
   const weeksBlock = v.weeks.length > 0 ? (
-    <ul className="grid w-full gap-1" style={{ gridTemplateColumns: `repeat(${v.weeks.length}, minmax(0, 1fr))` }} aria-label={v.period === "week" ? "이번 달 주별 달성률" : "월별 달성률"}>
-      {v.weeks.map((w) => (
-        <li key={w.label} className="flex min-w-0 flex-col items-center gap-0.5" title={`${w.label} ${w.pct === null ? "기록 없음" : `${w.pct}%`}`}>
-          <span className={`font-mono text-[11px] font-black tabular-nums ${w.current ? t.text : t.sub}`}>{w.pct === null ? "—" : `${w.pct}`}</span>
-          <span className={`relative flex h-12 w-full max-w-7 items-end overflow-hidden rounded-md ${t.track} ${w.current ? "ring-1 ring-sky-400" : ""}`}>
-            {w.pct === null
-              ? <span aria-hidden className={`absolute inset-x-0 bottom-0 border-t border-dashed ${t.divider}`} />
-              : <span className={`w-full rounded-md ${weekBar(w.current)}`} style={{ height: `${Math.max(6, clamp(w.pct))}%` }} />}
-          </span>
-          <span className={`whitespace-nowrap text-[11px] font-black ${w.current ? t.text : t.muted}`}>{w.label}{w.current && <span className="sr-only"> (현재)</span>}</span>
-        </li>
-      ))}
+    <ul className="grid w-full gap-1" style={{ gridTemplateColumns: `repeat(${v.weeks.length}, minmax(0, 1fr))` }} aria-label={v.period === "week" ? "이번 달 주별 달성률(누르면 그 주)" : "월별 달성률"}>
+      {v.weeks.map((w) => {
+        const on = isSel(w);
+        const inner = (
+          <>
+            <span className={`font-mono text-[11px] font-black tabular-nums ${on ? t.text : t.sub}`}>{w.future ? "" : w.pct === null ? "—" : `${w.pct}`}</span>
+            <span className={`relative flex h-12 w-full max-w-7 items-end overflow-hidden rounded-md ${t.track} ${on ? "ring-2 ring-sky-400" : w.current ? "ring-1 ring-sky-400/50" : ""}`}>
+              {w.pct === null
+                ? <span aria-hidden className={`absolute inset-x-0 bottom-0 border-t border-dashed ${t.divider}`} />
+                : <span className={`w-full rounded-md ${weekBar(on)}`} style={{ height: `${Math.max(6, clamp(w.pct))}%` }} />}
+            </span>
+            <span className={`whitespace-nowrap text-[11px] font-black ${on ? t.text : t.muted}`}>{w.label}{w.current && <span className="sr-only"> (이번 주)</span>}</span>
+          </>
+        );
+        const tip = `${w.label} ${w.future ? "아직 안 옴" : w.pct === null ? "기록 없음" : `${w.pct}%`}`;
+        return (
+          <li key={w.id ?? w.label} className={`min-w-0 ${w.future ? "opacity-40" : ""}`} title={tip}>
+            {canPick(w)
+              ? <button type="button" aria-pressed={on} aria-label={tip} disabled={disabled} onClick={() => pickWeek(w)} className={`flex w-full min-w-0 flex-col items-center gap-0.5 rounded-md ${focusRing} disabled:cursor-not-allowed`}>{inner}</button>
+              : <div className="flex min-w-0 flex-col items-center gap-0.5">{inner}</div>}
+          </li>
+        );
+      })}
     </ul>
   ) : <p className={`text-[11.5px] font-bold ${t.muted}`}>—</p>;
 
   const peopleList = people.length === 0 ? (
     <p className={`rounded-lg border border-dashed px-3 py-3 text-center text-[12px] font-bold ${t.divider} ${t.sub}`}>{sc?.team}파트 이번 달 개인 보고 기록이 없습니다.</p>
   ) : (
-    <ul className="space-y-1.5" aria-label={`${sc?.team}파트 팀원 이번 주 달성률`}>
+    <ul className="space-y-1.5" aria-label={`${sc?.team}파트 팀원 ${whenWord} 달성률`}>
       {people.map((p) => p.missing ? (
         <li key={p.name} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-dashed px-2.5 py-1.5 text-[12px] font-black ${theme === "deck" ? "border-rose-400/60" : "border-rose-300"} ${tones.bad}`}>
           <span className={`w-14 shrink-0 truncate ${t.text}`} title={p.name}>{p.name}</span>
-          <span className="min-w-0">이번 주 보고 미작성 · 지난주 <span className="font-mono tabular-nums">{p.prevPct === null ? "기록 없음" : `${p.prevPct}%`}</span></span>
+          <span className="min-w-0">{whenWord} 보고 미작성 · {prevWord} <span className="font-mono tabular-nums">{p.prevPct === null ? "기록 없음" : `${p.prevPct}%`}</span></span>
         </li>
       ) : (
         <li key={p.name} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-0.5" title={`${p.name} ${p.pct === null ? "판정 없음" : `${p.pct}%`}`}>
@@ -1018,7 +1051,7 @@ function OkrBody({ v, size, theme, disabled }: { v: KpiOkrView; size?: KpiSize; 
   );
 
   const teamList = lines.length > 0 ? (
-    <ul className="space-y-1.5" aria-label={`파트별 ${v.period === "week" ? "이번 주" : "이번 달"} 달성률`}>
+    <ul className="space-y-1.5" aria-label={`파트별 ${whenWord} 달성률`}>
       {lines.map((r) => {
         const on = sc ? sc.team === r.team : false;
         return (
@@ -1035,14 +1068,20 @@ function OkrBody({ v, size, theme, disabled }: { v: KpiOkrView; size?: KpiSize; 
 
   return (
     <div className="space-y-3">
-      {/* 머리 한 줄: 범위 글자 + [주|월] */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <p className={`min-w-0 flex-1 basis-40 truncate text-[12.5px] font-black ${t.text}`} title={label} aria-live="polite">{label}</p>
-        <div className={segWrap} role="group" aria-label="OKR 기간">
-          <button type="button" aria-pressed={v.period === "week"} disabled={disabled} onClick={() => v.onPeriod("week")} className={segBtn(v.period === "week")}>주</button>
-          <button type="button" aria-pressed={v.period === "month"} disabled={disabled} onClick={() => v.onPeriod("month")} className={segBtn(v.period === "month")}>월</button>
+      {/* 머리: 범위·주차 글자 + 주차 칩 [1주][2주][3주][4주]([5주]) — 2026-10-25 [주|월] 대신. 월 보기는 달성표 K19 행에서 */}
+      <p className={`min-w-0 truncate text-[12.5px] font-black ${t.text}`} title={label} aria-live="polite">{label}</p>
+      {v.onWeek && v.weeks.some((w) => w.id) && (
+        <div className="flex flex-wrap gap-1" role="group" aria-label="OKR 주차">
+          {v.weeks.map((w) => (
+            <button key={w.id ?? w.label} type="button" aria-pressed={isSel(w)} disabled={disabled || !canPick(w)} onClick={() => pickWeek(w)}
+              title={w.future ? `${w.label} 아직 안 옴` : w.pct === null ? `${w.label} 보고 없음` : `${w.label} ${w.pct}%`} className={weekChip(w)}>
+              {w.current && <span aria-hidden className="size-1.5 rounded-full bg-sky-400" />}
+              <span>{w.label}</span>
+              {w.current && <span className="sr-only">(이번 주)</span>}
+            </button>
+          ))}
         </div>
-      </div>
+      )}
       {/* 범위 칩: [전체 n%] [●A n%] … — 칩 안에 %, 팀 색은 점에만 */}
       {sc && (
         <div className="flex flex-wrap gap-1" role="group" aria-label="OKR 범위(파트)">
@@ -1061,12 +1100,12 @@ function OkrBody({ v, size, theme, disabled }: { v: KpiOkrView; size?: KpiSize; 
         </div>
       )}
 
-      {/* 본문: 왼쪽 작은 칸(링 + 주별 막대) · 오른쪽 팀원 목록(팀 칩·이번 주) 또는 팀 4줄. 폰은 위아래로(1x1 은 링 + 주별 막대만) */}
+      {/* 본문: 왼쪽 작은 칸(링 + 주별 막대, 고른 주차) · 오른쪽 팀원 목록(팀 칩·고른 주차) 또는 팀 4줄. 폰은 위아래로(1x1 은 링 + 주별 막대만) */}
       <div className={wide ? "grid gap-3 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-start" : "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3"}>
         <div className={wide ? "flex items-center gap-3 sm:flex-col sm:items-stretch" : "flex flex-col items-center gap-1"}>
           <div className="flex flex-col items-center gap-1">
             <Ring pct={v.pct} tone={okrTone(v.pct)} theme={theme} size={wide ? 96 : 88} textClass={wide ? "text-[24px]" : "text-[20px]"} />
-            {v.pct === null && <span className={`max-w-28 text-center text-[11px] font-black leading-4 ${t.muted}`}>이번 {unitWord} 판정 기록이 아직 없습니다</span>}
+            {v.pct === null && <span className={`max-w-28 text-center text-[11px] font-black leading-4 ${t.muted}`}>{whenWord} 판정 기록이 아직 없습니다</span>}
           </div>
           {wide && <div className="min-w-0 flex-1">{weeksBlock}</div>}
         </div>

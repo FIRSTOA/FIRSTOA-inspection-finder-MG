@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "c3cafd55d4",
+    "date": "2026-10-25",
+    "note": "달성표 상태 색 고정 기준(50% 미만 빨강·이상 파랑·100% 초록) + IT 실습 = 실습 기록 ∪ 주간 현황판 배운 점(브랜드 IT)"
+  },
+  {
     "hash": "a02209b46d",
     "date": "2026-10-25",
     "note": "달성표 팀 칸 = 개인 칩 합(\"그 외\" 칩) + 순항 판정 여유 5p + 미처리 일정 팝업에 네이버 제목·메모 + 팀 카드 타일 블로그·PC확장·오버홀·IT실습"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "80e7ae96f7",
     "date": "2026-09-29",
     "note": "카톡봇 스크립트: 폰 검증본 WakeLock 그대로 + 방 활동 보고를 폴링 스레드로 + Node 모의 검증(poller-harness) 추가"
-  },
-  {
-    "hash": "e2d5675e07",
-    "date": "2026-09-29",
-    "note": "OKR: 종합판정 제안 \"미흡로\" → \"미흡\"(조사 제거), 팀원 집계 조치 필요 인원 빨강 → 파랑"
   }
 ];

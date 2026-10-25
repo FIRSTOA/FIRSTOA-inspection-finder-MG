@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "c3cafd55d4",
+    "agent": "developer",
+    "summary": "달성표 상태 색 고정 기준(50% 미만 빨강·이상 파랑·100% 초록) + IT 실습 = 실습 기록 ∪ 주간 현황판 배운 점(브랜드 IT)"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "a02209b46d",
     "agent": "debugger",
     "summary": "달성표 팀 칸 = 개인 칩 합(\"그 외\" 칩) + 순항 판정 여유 5p + 미처리 일정 팝업에 네이버 제목·메모 + 팀 카드 타일 블로그·PC확장·오버홀·IT실습"

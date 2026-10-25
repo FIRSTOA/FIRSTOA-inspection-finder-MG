@@ -8,13 +8,13 @@
  */
 import { KPI_BY_ID, KPI_DEFS, mainKpiIds, type KpiId, type KpiPeriodKey, type KpiSource, type KpiTarget } from "./kpiDefs";
 import {
-  blogYearTotals, kpiCount, kpiProgress, kpiRowStatus, KPI_TEAMS, okrKpi, okrScopeLabel, okrTeamRows, okrWeekMembers, okrWeekResult, overhaulByPerson, pct,
+  blogYearTotals, kpiCount, kpiProgress, kpiRowStatus, KPI_TEAMS, okrWeekMembers, okrWeekResult, overhaulByPerson, pct,
   rangeOfPeriod, recontractOverdue, shiftYmd, workinPace,
-  type KpiRange, type KpiRanges, type KpiRowStatus, type OkrScope,
+  type KpiRange, type KpiRanges, type KpiRowStatus, type OkrScope, type OkrWeekFacts,
 } from "./kpiCompute";
 import { kpiCellState, sourcesFor, type KpiBundle, type KpiSourceStatus } from "./kpiData";
 import { splitByGroup } from "../homeUnhandled";
-import { OKR_TEAMS, achievementRate, judgmentCounts, normalizeJudgment, type OkrJudgment, type OkrTeam } from "../okr";
+import { okrWeeksInMonth, type OkrTeam } from "../okr";
 import type {
   KpiOkrPerson, KpiOkrScope, KpiOkrTeamLine, KpiOkrView, KpiPersonCell, KpiQuarterBlock, KpiQuarterGoalView, KpiScope as KpiCellScope, KpiSize, KpiTableRow, KpiTodayItem,
   KpiView, KpiWidgetProps,
@@ -296,32 +296,30 @@ export function quarterGoalView(b: KpiBundle, basis: "end" | "early" = "end"): O
 }
 
 /**
- * ⑤ OKR — 주 단위(기본) / 이번 달. 셈법은 achievementRate·judgmentCounts 그대로, 입력 기록만 주간으로.
- * 판정이 하나도 없는 파트는 missingTeams("이번 주 OKR 미작성 n팀") — 0% 로 보이지 않는다(pct null).
- * weeks = 이번 주가 든 달의 1~n주차 달성률(아직 판정 없는 주는 null) — 고른 범위(팀·개인)와 같은 범위로 센다.
- * scope(2026-10-24 사용자 "어디의 달성률인지 + 팀/개인 필터"): 이번 주 = okrWeekResult(…, scope).
- *   이번 달 = 파트 종합 행만 있어(개인 행 없음) 팀 칩만 쓴다 — 개인 고르기는 비운다(members [], 칩 자체는 남김).
- * 돌려주는 scope 에는 onScope 가 없다(순수·캐시용) — 컨테이너(HomeKpiBoard)가 붙인다.
- * 홈 3차(2026-10-25 팀 보드, 개인 드롭다운 삭제): 아래 셋은 숫자 함수(okrWeekResult·okrWeekMembers·okrKpi·okrTeamRows) 조합만.
- *   · allPct / teamLines = 칩 안 % 와 [전체] 칩의 팀 4줄 — 고른 범위와 상관없이 늘 A~D 전부(이번 달은 미작성 인원 모름 → missing null)
- *   · people = 팀 칩(이번 주)을 고르면 그 팀원(그 달 member 기록이 있는 사람, 이름순) — 이번 주 판정이 하나도 없으면 missing(0% 아님), prevPct = 지난주(같은 달 앞 주차, 첫 주면 null)
+ * ⑤ OKR — 주차 단위(2026-10-25 사용자 "1,2,3,4주차 보이는 게 나을 듯, 달보단" → [주][월] 대신 주차 칩, 월 보기 삭제).
+ * 셈법은 okrWeekResult 그대로. 판정이 하나도 없는 파트는 missingTeams — 0% 로 보이지 않는다(pct null).
+ * weeks = 이번 주가 든 달의 1~n주차(달성률·이번 주·고른 주·아직 안 온 주) — 고른 범위(팀·개인)와 같은 범위로 센다. 막대·칩 둘 다 이걸로 그린다.
+ * 돌려주는 scope 에는 onScope 가 없다(순수·캐시용) — 컨테이너(HomeKpiBoard)가 onScope·onWeek 를 붙인다.
+ * 홈 3차(팀 보드): allPct / teamLines = 칩 안 % 와 [전체] 칩의 팀 4줄(고른 주차, 늘 A~D) · people = 팀 칩을 고르면 그 팀원(고른 주차).
  */
-export type OkrViewModel = Omit<KpiOkrView, "onPeriod" | "scope"> & { scope: Omit<KpiOkrScope, "onScope"> };
+export type OkrViewModel = Omit<KpiOkrView, "onWeek" | "scope"> & { scope: Omit<KpiOkrScope, "onScope"> };
 
 /**
  * 한 팀의 OKR 팀원 줄(홈 3차, 2026-10-25 팀장 결정 "명단 기준") — 사람 = 명단(facts.roster, 그 팀·팀장 제외) ∪ 그 달 개인 보고를 쓴 사람(okrWeekMembers).
- * 이번 주 개인 판정이 하나도 없으면 missing(0% 아님) — 이번 달에 한 번도 안 쓴 사람도 여기 잡힌다. prevPct = 같은 달 바로 앞 주차(첫 주면 null).
- * 숫자는 okrWeekResult(member 범위) 그대로. 정렬: 작성한 사람 % 내림차순(같으면 이름순) → 미작성은 아래(이름순).
- * [이번 달]은 개인 행이 없어 빈 배열. 팀 카드(teamBoard.okrMissingMembers)도 이 함수를 쓴다 — 이름·시그니처 바꾸지 말 것.
+ * 고른 주차(weekId — 없음·"week" = 이번 주) 개인 판정이 하나도 없으면 missing(0% 아님) — 이번 달에 한 번도 안 쓴 사람도 여기 잡힌다.
+ * prevPct = 고른 주차의 같은 달 바로 앞 주차(첫 주면 null). 숫자는 okrWeekResult(member 범위) 그대로.
+ * 정렬: 작성한 사람 % 내림차순(같으면 이름순) → 미작성은 아래(이름순). weekId "month" = 옛 호출 호환(빈 배열).
+ * 팀 카드(teamBoard)가 okrPeopleForTeam(b, team, "week") 로 쓴다 — 이름·그 호출 꼴 유지.
  */
-export function okrPeopleForTeam(b: KpiBundle, team: OkrTeam, period: "week" | "month"): KpiOkrPerson[] {
+export function okrPeopleForTeam(b: KpiBundle, team: OkrTeam, weekId?: string): KpiOkrPerson[] {
   const w = b.facts.okr?.week;
-  if (period !== "week" || !w) return [];
+  if (!w || weekId === "month") return []; // "month" = 옛 호출 호환(개인 행 없음)
+  const id = pickOkrWeekId(w, weekId);
   const names = new Set<string>(okrWeekMembers(w, team));
   for (const m of b.facts.roster ?? []) if (m.team === team && m.title !== "팀장" && m.name) names.add(m.name);
-  const i = w.weeks.findIndex((x) => x.id === w.id);
+  const i = w.weeks.findIndex((x) => x.id === id);
   const people = [...names].map((name): KpiOkrPerson => {
-    const r = okrWeekResult(w, w.id, { team, member: name });
+    const r = okrWeekResult(w, id, { team, member: name });
     const judged = Object.values(r.counts).reduce((a, n) => a + n, 0);
     return {
       name, pct: r.pct, missing: judged === 0,
@@ -332,47 +330,52 @@ export function okrPeopleForTeam(b: KpiBundle, team: OkrTeam, period: "week" | "
   const byName = (a: KpiOkrPerson, c: KpiOkrPerson) => a.name.localeCompare(c.name, "ko");
   return people.sort((a, c) => (a.missing !== c.missing ? (a.missing ? 1 : -1) : a.missing ? byName(a, c) : (c.pct ?? -1) - (a.pct ?? -1) || byName(a, c)));
 }
-export function okrView(b: KpiBundle, period: "week" | "month" = "week", scope: OkrScope = { team: "ALL" }): OkrViewModel | null {
-  const okr = b.facts.okr;
-  if (!okr) return null;
-  let pctValue: number | null;
-  let counts: Record<OkrJudgment, number>;
-  let missingTeams: string[];
-  let teamPcts: Array<{ team: string; pct: number | null }>;
-  const w = okr.week;
-  const sc: OkrScope = period === "month" ? { team: scope.team } : scope;
-  if (period === "week") {
-    if (!w) return null;
-    const r = okrWeekResult(w, w.id, sc);
-    pctValue = r.pct; counts = r.counts; missingTeams = r.missingTeams;
-    teamPcts = r.byTeam;
-  } else {
-    const teams = sc.team === "ALL" ? OKR_TEAMS : OKR_TEAMS.filter((t) => t === sc.team);
-    const per = teams.map((team) => ({ team, rows: okrTeamRows(okr.cycle, okr.quarter, okr.reports, team) }));
-    pctValue = sc.team === "ALL" ? okrKpi(okr, b.ranges).value : achievementRate(per.flatMap((p) => p.rows));
-    counts = judgmentCounts(per.flatMap((p) => p.rows));
-    missingTeams = per.filter((p) => !p.rows.some((x) => normalizeJudgment(x.judgment))).map((p) => p.team);
-    teamPcts = per.map((p) => ({ team: p.team, pct: achievementRate(p.rows) }));
-  }
-  // 팀 칩 % · 팀 4줄 · 팀원 목록(홈 3차) — 고른 범위와 따로, 위 숫자 함수 결과만 묶는다
-  let allPct: number | null;
-  let teamLines: KpiOkrTeamLine[];
-  let people: KpiOkrPerson[] = [];
-  if (period === "week" && w) {
-    const all = okrWeekResult(w, w.id);
-    allPct = all.pct;
-    teamLines = all.byTeam.map((t) => ({
-      team: t.team, pct: t.pct,
-      missing: okrPeopleForTeam(b, t.team as OkrTeam, "week").filter((p) => p.missing).length,
-    }));
-    if (sc.team !== "ALL") people = okrPeopleForTeam(b, sc.team, "week");
-  } else {
-    allPct = okrKpi(okr, b.ranges).value;
-    teamLines = OKR_TEAMS.map((team) => ({ team, pct: achievementRate(okrTeamRows(okr.cycle, okr.quarter, okr.reports, team)), missing: null }));
-  }
+
+/**
+ * 고른 주차 id — 없음·"week"·그 달 목록에 없는 id(달이 바뀜)·아직 안 온 주 = 이번 주(w.id).
+ * 홈 OKR 박스 주차 칩(2026-10-25 사용자 "1,2,3,4주차 보이는 게 나을 듯, 달보단").
+ */
+export function pickOkrWeekId(w: OkrWeekFacts, weekId?: string): string {
+  if (!weekId || weekId === "week") return w.id;
+  const i = w.weeks.findIndex((x) => x.id === weekId);
+  const cur = w.weeks.findIndex((x) => x.id === w.id);
+  if (i < 0 || (cur >= 0 && i > cur)) return w.id;
+  return weekId;
+}
+
+/** 머리 글 — "CS 4파트 · 10월 3주차(10/19~10/23)" · "A파트 · …" · "홍길동(A) · …". 주 = 월~금(okrWeeksInMonth) */
+export function okrWeekHeadLabel(scope: OkrScope, weekId: string): string {
+  const m = weekId.match(/^(\d{4})-(\d{2})-W(\d+)$/);
+  const who = scope.member ? `${scope.member}${scope.team === "ALL" ? "" : `(${scope.team})`}` : scope.team === "ALL" ? "CS 4파트" : `${scope.team}파트`;
+  if (!m) return `${who} · ${weekId}`;
+  const y = Number(m[1]), mo = Number(m[2]), n = Number(m[3]);
+  const wk = okrWeeksInMonth(y, mo).find((x) => x.weekNo === n);
+  const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
+  return `${who} · ${mo}월 ${n}주차${wk ? `(${md(wk.start)}~${md(wk.end)})` : ""}`;
+}
+
+/**
+ * 홈 OKR 박스 — 고른 주차(weekId, 없으면 이번 주) 기준. pct·counts·missingTeams·teams·allPct·teamLines·people 전부 그 주차.
+ * 월 보기는 2026-10-25 OKR 박스에서 뺐다(달성표 K19 행의 월·분기는 okrKpi/okrTeamRows 로 그대로).
+ */
+export function okrView(b: KpiBundle, opts: { weekId?: string; team?: OkrScope["team"]; member?: string } = {}): OkrViewModel | null {
+  const w = b.facts.okr?.week;
+  if (!w) return null;
+  const sc: OkrScope = { team: opts.team ?? "ALL", ...(opts.member ? { member: opts.member } : {}) };
+  const id = pickOkrWeekId(w, opts.weekId);
+  const r = okrWeekResult(w, id, sc);
+  const counts = r.counts;
+  // 팀 칩 % · 팀 4줄 · 팀원 목록(홈 3차) — 고른 범위와 따로, 같은 주차
+  const all = okrWeekResult(w, id);
+  const teamLines: KpiOkrTeamLine[] = all.byTeam.map((t) => ({
+    team: t.team, pct: t.pct,
+    missing: okrPeopleForTeam(b, t.team as OkrTeam, id).filter((p) => p.missing).length,
+  }));
+  const people = sc.team !== "ALL" ? okrPeopleForTeam(b, sc.team, id) : [];
+  const curIdx = w.weeks.findIndex((x) => x.id === w.id);
   return {
-    kind: "okr", period, pct: pctValue,
-    teams: teamPcts,
+    kind: "okr", period: "week", pct: r.pct,
+    teams: r.byTeam,
     counts: [
       { label: "완료", value: counts["완료"], tone: "ok" },
       { label: "부분달성", value: counts["부분달성"], tone: counts["부분달성"] ? "warn" : "idle" },
@@ -380,11 +383,15 @@ export function okrView(b: KpiBundle, period: "week" | "month" = "week", scope: 
       { label: "미착수", value: counts["미착수"], tone: counts["미착수"] ? "bad" : "idle" },
       ...(counts["해당없음"] ? [{ label: "해당없음", value: counts["해당없음"], tone: "idle" }] : []),
     ],
-    weeks: w ? w.weeks.map((x) => ({ label: x.label, pct: okrWeekResult(w, x.id, sc).pct, current: x.id === w.id })) : [],
-    missingTeams,
-    scope: { team: sc.team, ...(sc.member ? { member: sc.member } : {}), members: period === "week" && w ? okrWeekMembers(w, sc.team) : [] },
-    scopeLabel: okrScopeLabel(sc, period),
-    allPct, teamLines, people,
+    weeks: w.weeks.map((x, i) => ({
+      id: x.id, label: x.label, pct: okrWeekResult(w, x.id, sc).pct, current: x.id === w.id,
+      selected: x.id === id, future: curIdx >= 0 && i > curIdx,
+    })),
+    weekId: id,
+    missingTeams: r.missingTeams,
+    scope: { team: sc.team, ...(sc.member ? { member: sc.member } : {}), members: okrWeekMembers(w, sc.team) },
+    scopeLabel: okrWeekHeadLabel(sc, id),
+    allPct: all.pct, teamLines, people,
   };
 }
 

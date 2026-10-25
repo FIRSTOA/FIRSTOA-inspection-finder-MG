@@ -67,12 +67,12 @@ describe("홈 위젯 실제 렌더", () => {
     expect(W("unhandledTotal", { kind: "unhandledTotal", total: 0, parts: [], breakdown: [], defs: [] })).toContain("미처리가 없습니다");
   });
   it("OKR: 주 판정·주별 막대 4개·미작성 안내, 판정 없으면 0% 아님", () => {
-    const html = W("okr", { kind: "okr", period: "week", onPeriod: noop, pct: 75, counts: [{ label: "완료", value: 3, tone: "ok" }], weeks: [1, 2, 3, 4].map((n) => ({ label: `${n}주차`, pct: n === 4 ? null : 60, current: n === 3 })), missingTeams: ["A", "E"] });
+    const html = W("okr", { kind: "okr", period: "week", pct: 75, counts: [{ label: "완료", value: 3, tone: "ok" }], weeks: [1, 2, 3, 4].map((n) => ({ label: `${n}주차`, pct: n === 4 ? null : 60, current: n === 3 })), missingTeams: ["A", "E"] });
     expect(html).toContain("75");
     expect(html).toContain("4주차");
     expect(html).toContain("OKR 미작성");
     expect(html).toContain("CSS");
-    const none = W("okr", { kind: "okr", period: "week", onPeriod: noop, pct: null, counts: [], weeks: [], missingTeams: ["A"] });
+    const none = W("okr", { kind: "okr", period: "week", pct: null, counts: [], weeks: [], missingTeams: ["A"] });
     expect(none).toContain("판정 기록이 아직 없습니다");
   });
   it("금일 띠: 값·원본 연결 필요·—", () => {
@@ -86,7 +86,7 @@ describe("홈 위젯 실제 렌더", () => {
     expect(render(createElement(KpiWidget, { kind: "okr", title: "T", basis: "b", status: "pending" }))).toContain("준비 중");
   });
   it("OKR 범위: 머리 글자 기본 'CS 4파트(A~D) · 이번 주', 범위 칩 [전체/A~D]+[개인]", () => {
-    const base0 = { kind: "okr" as const, period: "week" as const, onPeriod: noop, pct: 50, counts: [], weeks: [], missingTeams: [] };
+    const base0 = { kind: "okr" as const, period: "week" as const, pct: 50, counts: [], weeks: [], missingTeams: [] };
     expect(W("okr", base0)).toContain("CS 4파트(A~D) · 이번 주");
     const html = W("okr", { ...base0, scope: { team: "B", member: "이호준", members: ["박X", "이호준"], onScope: noop } });
     expect(html).toContain("이호준(B) · 이번 주");

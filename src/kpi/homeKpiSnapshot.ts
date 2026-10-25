@@ -74,7 +74,7 @@ export function buildHomeSnapshot(b: KpiBundle, teamOf: ModelCtx["teamOf"], now:
     v: HOME_KPI_SNAPSHOT_VERSION, defs: HOME_KPI_SNAPSHOT_DEFS, savedAt: now, today: b.today,
     todayItems: items, table: rows,
     k2: { end: k2ok ? quarterGoalView(b, "end") : null, early: k2ok ? quarterGoalView(b, "early") : null },
-    okr: { week: okrOk ? okrView(b, "week") : null, month: okrOk ? okrView(b, "month") : null },
+    okr: { week: okrOk ? okrView(b) : null, month: null }, // month = 옛 모양 호환(2026-10-25 OKR 박스 월 보기 삭제)
     unhandled: b.facts.unhandled && b.sources.unhandled?.status === "ok" ? summarizeUnhandled(b.facts.unhandled, unhandledParts(b).recontract) : null,
   };
 }
