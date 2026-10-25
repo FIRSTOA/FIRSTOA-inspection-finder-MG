@@ -1,22 +1,28 @@
 // 미처리 접수 현황판 감싸개(데이터 연결). 표시는 ReceptionBoard(윤화면 틀) — 여기서는 읽기·변환·폴링만.
 // 설계: docs/tasks/reception-dept-types.md 4-1. 60초 주기 + 창 복귀 때 새로 읽고, 숨은 탭에서는 쉰다(Home.tsx 관행).
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+// 2026-10-25 밤: 모든 카드(CS 접수·원격·IT·경영·운영·영업, 앱 행·시트 행)에 같은 [완료][보류][배정](UnhandledActionBar).
+// 누른 줄은 unhandledPending(홈과 같은 저장소)으로 바로 빠지거나 상태·처리자가 덮인다 — 60초 기다리지 않는다.
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReceptionBoard, { type ReceptionRow } from "./ReceptionBoard";
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
-import type { OpenReceptionRow } from "./deptReceptionApi";
 import { isDeptType } from "./deptReception";
 import { applySheetToBoard, loadBoardData, loadScheduleOverdue, requestOpenOverdue, type BoardData, type ScheduleOverdueRow } from "./receptionBoardData";
 import { loadSheetOpen } from "./receptionSheetOpen";
 import SheetRowCard from "./SheetRowCard";
+import UnhandledActionBar from "./UnhandledActionBar.view";
+import { applyBoardPending, boardRowToUnhandled } from "./unhandledActions";
+import { usePendingVersion } from "./unhandledPending";
 import { notify } from "./toast";
 import { kstDate } from "./visits";
 
 export type ReceptionBoardPanelProps = {
   /** 숫자 띠·열 머리를 눌렀을 때 — ServiceReception 이 종류 선택기·목록 필터를 같은 종류로 맞춘다 */
   onSelectType?: (type: ReceptionType) => void;
-  /** 지원 3종 카드 단추 줄(DeptActionBar). 처리 뒤 ctx.onDone() 을 부르면 현황판을 다시 읽는다. */
-  renderDeptActions?: (row: ReceptionRow, ctx: { source: OpenReceptionRow | undefined; onDone: () => void }) => ReactNode;
-  /** 현장 3종 카드를 눌러 기존 흐름(일정리스트·원격/IT 대기열)으로 보낼 때. 없으면 안내 글자만 보인다. */
+  /** 카드 [완료][보류][배정] 처리가 끝난 뒤(바깥 접수리스트 새로 읽기용). 현황판은 스스로 다시 읽는다. */
+  onChanged?: () => void;
+  /** 처리한 사람(서비스접수 작성자 선택값). 비우면 로그인 이름·기기 작성자 */
+  author?: string;
+  /** 현장 3종 카드의 보조 단추 [접수 보기 →](접수리스트·원격/IT 대기열로). 없으면 단추를 숨긴다. */
   onOpenFieldRow?: (row: ReceptionRow) => void;
   /** 제어형: 주면 이 값이 우선(같은 종류 다시 누르면 null 로 onSelectedTypeChange 호출). 안 주면 패널 안에서 토글 */
   selectedType?: ReceptionType | null;
@@ -35,9 +41,9 @@ export type ReceptionBoardPanelProps = {
   onOpenSchedule?: () => void;
 };
 
-const fieldHint = (type: ReceptionType) => (type === "원격이관" ? "원격 대기열에서 처리" : "일정리스트에서 처리");
+const fieldHint = (type: ReceptionType) => (type === "원격이관" ? "원격 대기열" : type === "IT" ? "IT 대기열" : "접수리스트");
 
-export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, onOpenFieldRow, selectedType, onSelectedTypeChange, deptEnabled = true, reloadKey = 0, onCounts, onScheduleCount, compact = false, onOpenSchedule }: ReceptionBoardPanelProps) {
+export default function ReceptionBoardPanel({ onSelectType, onChanged, author, onOpenFieldRow, selectedType, onSelectedTypeChange, deptEnabled = true, reloadKey = 0, onCounts, onScheduleCount, compact = false, onOpenSchedule }: ReceptionBoardPanelProps) {
   const onCountsRef = useRef(onCounts);
   useEffect(() => { onCountsRef.current = onCounts; }, [onCounts]);
   const onScheduleCountRef = useRef(onScheduleCount);
@@ -78,10 +84,9 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
       // 일정 대조·자가 치유 실패는 현황판을 막지 않고 처음 한 번만 알린다(분마다 반복 방지)
       if (next.syncError) { if (!syncFailed.current) { syncFailed.current = true; notify(next.syncError, "error"); } }
       else syncFailed.current = false;
-      if (next.healed) notify(`일정이 완료된 복합기 AS 접수 ${next.healed}건을 완료로 맞췄습니다`, "success");
+      if (next.healed) notify(`일정이 완료된 CS 접수 ${next.healed}건을 완료로 맞췄습니다`, "success");
       if (next.sheetHealed) notify(`시트에서 끝난 접수 ${next.sheetHealed}건을 완료로 맞췄습니다`, "success");
-      setData(next);
-      onCountsRef.current?.(Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, next.rows.filter((r) => r.type === m.type).length])) as Record<ReceptionType, number>);
+      setData(next); // 종류별 건수(onCounts)는 아래 shownAll 효과에서 — 방금 누른 줄을 뺀 숫자
       setToday(day);
       setError("");
     } catch (e) {
@@ -100,22 +105,40 @@ export default function ReceptionBoardPanel({ onSelectType, renderDeptActions, o
   }, [refresh, reloadKey]);
 
   const openSchedule = useCallback(() => { if (onOpenSchedule) onOpenSchedule(); else requestOpenOverdue(); }, [onOpenSchedule]);
-  const onDone = useCallback(() => { void refresh(); }, [refresh]);
-  const rows = data ? (deptEnabled ? data.rows : data.rows.filter((r) => !isDeptType(r.type))) : [];
-  const over90Rows = data?.over90 ? (deptEnabled ? data.over90 : data.over90.filter((r) => !isDeptType(r.type))) : undefined;
+  // 처리 뒤: 바깥 목록은 바로, 현황판은 1.5초 모아서 한 번(시트 잡이 따라오는 동안 pending 이 줄을 가린다)
+  const settleTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
+  const onFinished = useCallback(() => {
+    onChanged?.();
+    window.clearTimeout(settleTimer.current);
+    settleTimer.current = window.setTimeout(() => { void refresh(); }, 1500);
+  }, [refresh, onChanged]);
+  const pendingVer = usePendingVersion();
+  const shownAll = useMemo(() => (data && pendingVer >= 0 ? applyBoardPending(data.rows) : []), [data, pendingVer]);
+  useEffect(() => {
+    if (!data) return;
+    onCountsRef.current?.(Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, shownAll.filter((r) => r.type === m.type).length])) as Record<ReceptionType, number>);
+  }, [data, shownAll]);
+  const rows = deptEnabled ? shownAll : shownAll.filter((r) => !isDeptType(r.type));
+  const over90Rows = useMemo(() => {
+    if (!data?.over90) return undefined;
+    const list = pendingVer >= 0 ? applyBoardPending(data.over90) : data.over90;
+    return deptEnabled ? list : list.filter((r) => !isDeptType(r.type));
+  }, [data, deptEnabled, pendingVer]);
 
   const renderActions = (row: ReceptionRow): ReactNode => {
-    // 시트 행: 앱 접수에 이어지지 않았거나(지원 3종은) 열린 DB 원본이 없으면 읽기 전용 카드 — 처리는 시트에서
-    if (row.sheet && (!row.sheet.linked || (isDeptType(row.type) && !data?.sources[row.id]))) return <SheetRowCard row={row} />;
-    if (isDeptType(row.type)) {
-      return renderDeptActions
-        ? renderDeptActions(row, { source: data?.sources[row.id], onDone })
-        : <span className="text-[11px] font-bold text-slate-400">상세에서 처리</span>;
-    }
-    const hint = fieldHint(row.type);
-    return onOpenFieldRow
-      ? <button type="button" onClick={() => onOpenFieldRow(row)} className="h-8 rounded-lg border border-slate-200 px-2.5 text-[11px] font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900">{hint} →</button>
-      : <span className="text-[11px] font-bold text-slate-400">{hint}</span>;
+    // 시트 행: [시트 내용 · 처리] 펼침 안에 같은 단추(이어진 앱 접수면 DB 경로, 아니면 시트 상태·처리자 칸만)
+    if (row.sheet) return <SheetRowCard row={row} author={author} onFinished={onFinished} />;
+    const u = boardRowToUnhandled(row, today);
+    const open = !isDeptType(row.type) && onOpenFieldRow
+      ? <button type="button" onClick={() => onOpenFieldRow(row)} className="inline-flex min-h-11 items-center text-[11px] font-bold text-slate-500 underline-offset-2 hover:text-slate-900 hover:underline sm:min-h-0">{fieldHint(row.type)}에서 보기 →</button>
+      : null;
+    return (
+      <div className="w-full space-y-1">
+        {u && <UnhandledActionBar row={u} author={author} onFinished={(_a, ok) => { if (ok) onFinished(); }} />}
+        {open}
+      </div>
+    );
   };
 
   return (

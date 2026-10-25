@@ -4,6 +4,8 @@
  *  · 완료 = 초록 실선, 보류 = 회색 외곽, 배정 = 처리자 알약. 폰은 3등분(min-h-11).
  *  · 원격·IT 는 보류 없음(Q1). CS접수·물류(일정)는 [완료]만 — 일정리스트와 같은 완료 창(DoneReasonModal, Q3).
  *  · 처리 중에는 단추 잠금(두 번 누름 방지). 결과·실패는 토스트(unhandledActions.performUnhandledAction).
+ *  · 2026-10-25 밤: [완료]·[보류]는 "무엇이 바뀌는지" 확인창(unhandledActions.confirmTextFor) — 취소면 아무 변화 없음.
+ *    CS 접수(현황판 앱 접수 줄)는 열린 연결 일정이 있으면 그 일정의 완료 창, 없으면 확인창 뒤 접수 상태만 완료.
  * 겹침: FormModal(z-200) 위에서 배정 창·완료 창을 띄우므로 body 포털 + z-[300] 감싸기.
  */
 import { lazy, Suspense, useMemo, useState } from "react";
@@ -11,7 +13,7 @@ import { createPortal } from "react-dom";
 import { Check, ExternalLink, Loader2, Pause, UserRound } from "lucide-react";
 import type { UnhandledRow } from "./homeUnhandled";
 import {
-  loadTicketForDone, performTicketDone, performUnhandledAction, sheetRefOf, unhandledButtons, unhandledRoute,
+  confirmAndPerform, findOpenCopierTicket, loadTicketForDone, performTicketDone, sheetRefOf, unhandledButtons, unhandledRoute,
   friendlyError, type TicketForDone, type UnhandledActionKind,
 } from "./unhandledActions";
 import { sheetRowUrl } from "./receptionSheetOpen";
@@ -116,11 +118,13 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
     return isDeptType(row.kind) ? deptMemberNames(row.kind, members) : [];
   }, [route, row.kind, book, members]);
 
-  const run = async (action: UnhandledActionKind, handler?: string) => {
+  // 확인창(완료·보류) → 처리. 취소면 busy·pending·토스트 모두 그대로(아무 변화 없음)
+  const run = async (action: UnhandledActionKind, handler?: string, extra: { copierNoTicket?: boolean } = {}) => {
     if (busy) return;
-    setBusy(action);
-    onStarted?.(action);
-    const ok = await performUnhandledAction(row, action, { by: resolveActor(author), handler }, notify);
+    const ok = await confirmAndPerform(row, action, { by: resolveActor(author), handler, ...extra },
+      (text) => askConfirm(text, { okLabel: action === "done" ? "완료" : String(row.status || "").replace(/\s+/g, "") === "보류" ? "보류 풀기" : "보류" }),
+      notify, () => { setBusy(action); onStarted?.(action); });
+    if (ok === null) return;
     setBusy("");
     onFinished?.(action, ok);
   };
@@ -138,17 +142,31 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
       } finally { setBusy(""); }
       return;
     }
-    const s = sheetRefOf(row);
-    const where = s && route !== "dept" ? ` ${SOURCE_NAME[s.source] || "시트"} ${s.row}행 상태 칸에도 적힙니다.` : route === "dept" && row.kind !== "운영지원" ? " 부서 시트 상태 칸에도 적힙니다." : "";
-    if (!(await askConfirm(`${row.vendor || "이 접수"} 를 처리완료로 바꿉니다.${where}`, { okLabel: "완료" }))) return;
+    if (route === "copier") {
+      // CS 접수(앱 접수): 열린 연결 일정이 있으면 그 일정 완료 창(일정리스트와 같은 completeTicket), 없으면 접수만 완료
+      setBusy("done");
+      let t: TicketForDone | null = null;
+      try {
+        t = await findOpenCopierTicket(String(row.receptionId));
+      } catch (e) {
+        notify(`연결 일정을 못 읽었습니다: ${friendlyError(e)}`, "error");
+        setBusy("");
+        return;
+      }
+      setBusy("");
+      if (t) { setTicket(t); return; }
+      await run("done", undefined, { copierNoTicket: true });
+      return;
+    }
     await run("done");
   };
 
   const applyTicket = async (reason: string, mode?: "visit" | "phone") => {
+    const t = ticket;
     setTicket(null);
     setBusy("done");
     onStarted?.("done");
-    const ok = await performTicketDone(row, { text: reason, mode }, resolveActor(author), notify);
+    const ok = await performTicketDone(row, { text: reason, mode }, resolveActor(author), notify, route === "copier" && t ? t.id : undefined);
     setBusy("");
     onFinished?.("done", ok);
   };
@@ -161,7 +179,7 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
       <UnhandledActionButtons row={row} busy={busy} onDone={() => void onDone()} onHold={() => void run("hold")} onAssign={openAssign} onOpenSchedule={onOpenSchedule} />
       {assignOpen && layer(names.length ? (
         <AssigneePicker names={names} value={String(row.assignee || "")} max={1} title="처리자 배정"
-          subtitle={`${row.vendor || "업체 미정"} · 1명${sheetRefOf(row) || route === "dept" ? " · 시트 처리자 칸에도 반영" : ""}`}
+          subtitle={`${row.vendor || "업체 미정"} · 1명${sheetRefOf(row) || route === "remote" || (route === "dept" && row.kind !== "운영지원") ? " · 저장하면 시트 처리자 칸에 적힘" : ""}`}
           onClose={() => setAssignOpen(false)} onSave={saveAssign} />
       ) : (
         <FormModal title="처리자 배정" subtitle={`${row.vendor || "업체 미정"} · 명단이 비어 있어 이름을 직접 적습니다`} onClose={() => setAssignOpen(false)}

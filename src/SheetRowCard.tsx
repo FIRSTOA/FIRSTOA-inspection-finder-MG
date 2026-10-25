@@ -11,7 +11,7 @@ import UnhandledActionBar from "./UnhandledActionBar.view";
 
 const SOURCE_LABEL: Record<string, string> = { sales: "해지방어접수(영업)", mgmt: "경영지원접수", remote: "원격" };
 
-export default function SheetRowCard({ row }: { row: ReceptionRow }) {
+export default function SheetRowCard({ row, author, onFinished }: { row: ReceptionRow; author?: string; onFinished?: () => void }) {
   const [open, setOpen] = useState(false);
   const [after, setAfter] = useState("");
   const sheet = row.sheet;
@@ -44,7 +44,7 @@ export default function SheetRowCard({ row }: { row: ReceptionRow }) {
           {sheet.summary && <p className="mt-1.5 wrap-break-word rounded bg-white px-2 py-1 text-[12px] font-semibold text-slate-700">{sheet.summary}</p>}
           <div className="mt-2 space-y-1.5">
             {after ? <div role="status" className="text-[12px] font-bold text-emerald-700">{after}</div>
-              : urow && <UnhandledActionBar row={urow} onFinished={(action, ok) => { if (ok) setAfter(action === "done" ? "처리완료로 보냈습니다 — 1~2분 뒤 목록에서 사라집니다" : action === "hold" ? "보류 상태를 보냈습니다 — 1~2분 뒤 반영" : "처리자를 보냈습니다 — 1~2분 뒤 반영"); }} />}
+              : urow && <UnhandledActionBar row={urow} author={author} onFinished={(action, ok) => { if (ok) { onFinished?.(); setAfter(action === "done" ? "처리완료로 보냈습니다 — 1~2분 뒤 목록에서 사라집니다" : action === "hold" ? "보류 상태를 보냈습니다 — 1~2분 뒤 반영" : "처리자를 보냈습니다 — 1~2분 뒤 반영"); } }} />}
             <a href={sheet.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-700 underline-offset-2 hover:underline">
               시트 {sheet.sheetRow}행 확인<ExternalLink size={11} aria-hidden />
             </a>

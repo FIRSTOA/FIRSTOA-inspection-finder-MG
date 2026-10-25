@@ -1,10 +1,10 @@
-// 서비스접수 › 부서 › 일정리스트 표시 틀(props 만, 데이터 호출 없음) — 묶음 칩 4개 + 일정 카드(업체·분야·내용 1줄·예정일·처리자 알약).
-// 설계: docs/tasks/dept-mini-workspace.md 4절 3~5. 폰 390px: 칩 4개 한 줄, 단추 줄은 카드 안에서 줄바꿈.
+// 서비스접수 › 부서 › 일정리스트 표시 틀(props 만, 데이터 호출 없음) — 묶음 칩 3개(금일·익일·예정) + 일정 카드(업체·분야·내용 1줄·예정일·처리자 알약).
+// 설계: docs/tasks/dept-mini-workspace.md 4절 3~5. 폰 390px: 칩 3개 한 줄, 단추 줄은 카드 안에서 줄바꿈.
+// 2026-10-25 밤 [미처리] 칩 제거(사용자 "미처리현황 탭과 중복") — 미처리는 [미처리현황] 탭에서만.
 import type { ReactNode } from "react";
 import { CalendarDays, UserRound } from "lucide-react";
 import { PLAN_BUCKETS, PLAN_BUCKET_LABEL, type PlanBucket, type PlanItem } from "./deptPlan";
 import type { OpenReceptionRow } from "./deptReceptionApi";
-import { UNHANDLED_BADGE, type UnhandledRow } from "./homeUnhandled";
 
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const dayLabel = (ymd: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}(${WEEK[new Date(`${ymd}T12:00:00`).getDay()]})` : "");
@@ -17,10 +17,6 @@ export type DeptPlanListProps = {
   renderActions: (row: OpenReceptionRow) => ReactNode;
   /** 처리자 알약 누름 */
   onAssign: (row: OpenReceptionRow) => void;
-  /** [미처리] 줄 아래 단추(앱 접수 = DeptActionBar, 시트 행 = [시트에서 열기]) — 미처리현황 줄과 같은 모양 */
-  renderUnhandled?: (u: UnhandledRow) => ReactNode;
-  /** [미처리] 줄 누름(상세 팝업) */
-  onOpenUnhandled?: (u: UnhandledRow) => void;
   /** 접수와 연결 안 된 부서 일정 누름(편집 창) */
   onOpenEvent: (ev: Extract<PlanItem, { kind: "event" }>["ev"]) => void;
   /** 배정 저장 중인 접수 id */
@@ -28,24 +24,22 @@ export type DeptPlanListProps = {
   loading?: boolean;
 };
 
-export default function DeptPlanList({ buckets, active, onActive, renderActions, renderUnhandled, onOpenUnhandled, onAssign, onOpenEvent, assigningId, loading }: DeptPlanListProps) {
+export default function DeptPlanList({ buckets, active, onActive, renderActions, onAssign, onOpenEvent, assigningId, loading }: DeptPlanListProps) {
   const list = buckets[active];
   return (
     <div>
-      <div className="grid grid-cols-4 gap-1.5 px-3 pt-2" role="tablist" aria-label="일정 묶음">
+      <div className="grid grid-cols-3 gap-1.5 px-3 pt-2" role="tablist" aria-label="일정 묶음">
         {PLAN_BUCKETS.map((b) => {
           const on = b === active;
           const n = buckets[b].length;
-          const warn = b === "overdue" && n > 0;
           return (
             <button key={b} type="button" role="tab" aria-selected={on} onClick={() => onActive(b)}
-              className={`flex min-h-11 items-center justify-center gap-1 rounded-lg border px-1 text-[12px] font-black transition ${on ? "border-slate-900 bg-slate-900 text-white" : warn ? "border-rose-200 bg-rose-50 text-rose-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
-              {PLAN_BUCKET_LABEL[b]}<span className={`font-mono tabular-nums ${on ? (warn ? "text-rose-300" : "text-white/70") : warn ? "text-rose-600" : "text-slate-400"}`}>{n}</span>
+              className={`flex min-h-11 items-center justify-center gap-1 rounded-lg border px-1 text-[12px] font-black transition ${on ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+              {PLAN_BUCKET_LABEL[b]}<span className={`font-mono tabular-nums ${on ? "text-white/70" : "text-slate-400"}`}>{n}</span>
             </button>
           );
         })}
       </div>
-      {active === "overdue" && <div className="px-3 pt-1.5 text-[11px] font-bold text-slate-400">미처리현황과 같은 목록(시트 이력 포함) · 접수일 오래된 순</div>}
       <div className="mt-2 max-h-[70vh] divide-y divide-slate-100 overflow-y-auto border-t border-slate-100">
         {loading && !list.length && <div className="p-8 text-center text-xs font-bold text-slate-400">불러오는 중…</div>}
         {!loading && !list.length && <div className="p-8 text-center text-xs font-bold text-slate-400">{PLAN_BUCKET_LABEL[active]} 일정이 없습니다.</div>}
@@ -58,19 +52,6 @@ export default function DeptPlanList({ buckets, active, onActive, renderActions,
             </div>
             <div className="mt-0.5 truncate pl-5 text-[11px] font-semibold text-slate-400">부서 일정{it.ev.memo ? ` · ${it.ev.memo.split("\n")[0]}` : ""}</div>
           </button>
-        ) : it.kind === "unhandled" ? (
-          <div key={it.key} className="space-y-1.5 px-3 py-2.5">
-            <button type="button" onClick={() => onOpenUnhandled?.(it.u)} aria-haspopup="dialog" className="block min-h-11 w-full space-y-1.5 text-left">
-              <div className="flex items-center gap-1.5">
-                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black ${it.u.key.startsWith("s:") ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{it.u.key.startsWith("s:") ? "시트" : UNHANDLED_BADGE[it.u.kind]}</span>
-                <span className="min-w-0 flex-1 truncate text-[13px] font-black text-slate-900">{it.u.vendor || "업체 미정"}</span>
-                <span className={`shrink-0 text-[11px] font-bold tabular-nums ${it.u.ageDays >= 7 ? "text-rose-600" : "text-slate-400"}`}>{it.u.date ? `${it.u.date.slice(5)} · ${it.u.ageDays}일` : "날짜 모름"}</span>
-              </div>
-              <div className="truncate text-[12px] font-semibold text-slate-500">{it.u.title || "-"}</div>
-              <div className="text-[11px] font-bold text-slate-400">처리 {it.u.assignee || <span className="text-rose-500">미배정</span>} · {it.u.status || "접수"}</div>
-            </button>
-            {renderUnhandled?.(it.u)}
-          </div>
         ) : (
           <div key={it.key} className="space-y-1.5 px-3 py-2.5">
             <div className="flex items-start gap-2">

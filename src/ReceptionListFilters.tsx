@@ -17,7 +17,7 @@ type Cell = { key: string; label: string; dept?: boolean; warn?: boolean };
 
 const TYPE_CELLS: Cell[] = [
   { key: "전체", label: "전체" },
-  { key: "복합기 AS", label: "복합기" },
+  { key: "복합기 AS", label: "CS 접수" },
   { key: "IT", label: "IT" },
   { key: "원격이관", label: "원격" },
   { key: "경영지원", label: "경영", dept: true },

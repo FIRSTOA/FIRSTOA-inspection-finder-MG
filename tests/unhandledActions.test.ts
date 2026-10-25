@@ -1,7 +1,8 @@
 // 미처리 [완료]·[보류]·[배정](2026-10-25) — 낙관 제거(pending 5분·실패 복원)·단추 노출 규칙·statusOnly 계약·표시 이름
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyPending, clearPending, markPending, PENDING_TTL_MS, readPending, resetPending } from "../src/unhandledPending";
-import { performUnhandledAction, sheetStatusFor, unhandledButtons, unhandledRoute, pendingValueFor } from "../src/unhandledActions";
+import { applyBoardPending, boardRowToUnhandled, confirmAndPerform, confirmTextFor, performUnhandledAction, sheetStatusFor, unhandledButtons, unhandledRoute, pendingValueFor } from "../src/unhandledActions";
+import type { ReceptionRow } from "../src/ReceptionBoard";
 import { buildSheetStatusPayload, sheetVendorHead } from "../src/deptReceptionApi";
 import { RECEPTION_TYPE_META, RECEPTION_TYPES } from "../src/ReceptionTypePicker";
 import { receptionTypeLabel } from "../src/receptionTypeLabel";
@@ -105,5 +106,77 @@ describe("CS 접수 표시 이름(값은 복합기 AS 그대로)", () => {
     expect(receptionTypeLabel("모름")).toBe("모름");
     expect(RECEPTION_TYPE_META["복합기 AS"].type).toBe("복합기 AS");
     for (const m of RECEPTION_TYPES) expect(receptionTypeLabel(m.type)).toBe(m.label); // 선택기 글자와 한 벌
+  });
+});
+
+// 2026-10-25 밤 — 현황판 모든 카드 같은 단추 + [완료]·[보류] 확인창
+describe("현황판 카드 → 미처리 줄(boardRowToUnhandled)·확인창", () => {
+  const board = (p: Partial<ReceptionRow>): ReceptionRow => ({
+    id: "77", type: "복합기 AS", vendor: "가나상사", field: "용지걸림", author: "김", handler: "", status: "접수", receipt_date: "2026-10-20", ...p,
+  });
+  beforeEach(() => resetPending());
+
+  it("앱 접수 줄: CS 접수 = copier(완료만), IT·원격 = remote(보류 없음), 부서 = dept — key 는 홈과 같은 r:<id>", () => {
+    const cs = boardRowToUnhandled(board({}), "2026-10-25")!;
+    expect(cs).toMatchObject({ key: "r:77", kind: "CS접수", receptionId: "77", ageDays: 5 });
+    expect(unhandledRoute(cs)).toBe("copier");
+    expect(unhandledButtons(cs)).toEqual({ done: true, hold: false, assign: false, openSchedule: false });
+    const it2 = boardRowToUnhandled(board({ type: "IT" }))!;
+    expect(unhandledRoute(it2)).toBe("remote");
+    expect(unhandledButtons(it2).hold).toBe(false);
+    const dept = boardRowToUnhandled(board({ type: "경영지원", handler: "박" }))!;
+    expect(unhandledRoute(dept)).toBe("dept");
+    expect(dept.assignee).toBe("박");
+    // 시트 행은 시트 key, 이어지지 않은 시트 행(id sheet:)은 receptionId 없음 → sheet 경로
+    const sh = boardRowToUnhandled(board({ id: "sheet:sales:12", type: "영업팀", sheet: { source: "sales", sheetRow: 12, linked: false, state: "", url: "", summary: "" } as ReceptionRow["sheet"] }))!;
+    expect(sh.key).toBe("s:sales:12");
+    expect(unhandledRoute(sh)).toBe("sheet");
+  });
+
+  it("누른 줄은 현황판에서도 바로: 완료 = 빠짐, 보류 = 상태, 배정 = 처리자", () => {
+    markPending("r:1", "done");
+    markPending("r:2", "hold", "보류");
+    markPending("s:sales:12", "assign", "김수인");
+    const rows = [board({ id: "1" }), board({ id: "2" }), board({ id: "sheet:sales:12", sheet: { source: "sales", sheetRow: 12 } as ReceptionRow["sheet"] }), board({ id: "3" })];
+    const out = applyBoardPending(rows);
+    expect(out.map((r) => r.id)).toEqual(["2", "sheet:sales:12", "3"]);
+    expect(out[0].status).toBe("보류");
+    expect(out[1].handler).toBe("김수인");
+  });
+
+  it("확인창 문구: 무엇이 바뀌는지", () => {
+    const sheetRow = row({ key: "s:sales:12", receptionId: undefined, sheet: { source: "sales", row: 12, seq: "1", author: "", vendor: "가나상사" } });
+    expect(confirmTextFor(sheetRow, "done")).toContain("영업시트 12행 상태를 '처리완료'로 바꿉니다(접수일·내용은 그대로)");
+    expect(confirmTextFor(sheetRow, "hold")).toContain("'보류'로 바꿉니다");
+    expect(confirmTextFor({ ...sheetRow, status: "보류" }, "hold")).toContain("'진행중'");
+    expect(confirmTextFor(row({ key: "r:5", kind: "IT", receptionId: "5" }), "done")).toContain("원격 시트 처리여부를 '처리완료'");
+    expect(confirmTextFor(row({}), "done")).toContain("부서 시트 상태 칸");
+    expect(confirmTextFor(row({ kind: "운영지원" }), "done")).not.toContain("시트");
+    const cs = row({ key: "r:9", kind: "CS접수", receptionId: "9" });
+    expect(confirmTextFor(cs, "done")).toBeNull(); // 연결 일정 있으면 완료 창이 확인 역할
+    expect(confirmTextFor(cs, "done", { copierNoTicket: true })).toContain("CS 접수 상태만 '완료'");
+    expect(confirmTextFor(row({ key: "t:1", source: "ticket", kind: "물류", receptionId: undefined }), "done")).toBeNull();
+  });
+
+  it("확인창 취소 → 아무 변화 없음(pending·토스트·onGo 없음)", async () => {
+    const notify = vi.fn();
+    const onGo = vi.fn();
+    const ask = vi.fn(async () => false);
+    const res = await confirmAndPerform(row({}), "done", { by: "나" }, ask, notify, onGo);
+    expect(res).toBeNull();
+    expect(ask).toHaveBeenCalledWith(expect.stringContaining("'완료'"));
+    expect(readPending()).toEqual({});
+    expect(notify).not.toHaveBeenCalled();
+    expect(onGo).not.toHaveBeenCalled();
+  });
+
+  it("배정은 확인창 없이 바로(이름 고르기 창이 확인 역할)", async () => {
+    const ask = vi.fn(async () => false);
+    const notify = vi.fn();
+    const onGo = vi.fn();
+    await confirmAndPerform(row({ key: "x:1", receptionId: undefined }), "assign", { by: "나", handler: "김" }, ask, notify, onGo);
+    expect(ask).not.toHaveBeenCalled();
+    expect(onGo).toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("배정 실패"), "error"); // 경로 없는 줄 → 실패 토스트(삼키지 않음)
   });
 });

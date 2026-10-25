@@ -24,7 +24,7 @@ import {
 import { teamWorkinProgress, type WorkinPlaceLite } from "../workinProgress";
 import { countUnhandledTabs, rowsForTab, UNHANDLED_TABS, type UnhandledRow, type UnhandledTab } from "../homeUnhandled";
 import {
-  OKR_TEAMS, achievementRate, emptyResultRow, findReport, goalsForTeamTotal, goalsForView, isAlert, isLegacyMonthId, judgmentCounts, monthScreenGoals, normalizeJudgment, resultRowFor, worstOfJudgments,
+  OKR_TEAMS, achievementRate, emptyResultRow, findReport, goalsApplyingTo, goalsForTeamTotal, isAlert, isLegacyMonthId, judgmentCounts, monthScreenGoals, normalizeJudgment, resultRowFor, worstOfJudgments,
   type OkrCycle, type OkrGoal, type OkrJudgment, type OkrReport, type OkrResultRow,
 } from "../okr";
 import { blogTeamOf, countBlog, type BlogRow } from "../blogSheet";
@@ -764,9 +764,10 @@ export type OkrScope = { team: OkrScopeTeam; member?: string };
 /** 그 주 그 사람(member 행)의 목표별 판정 — 팀을 주면 그 팀 행만. 기록이 없으면 빈 판정 행 */
 export function okrWeekMemberRows(goals: OkrGoal[], reports: OkrReport[], weekId: string, member: string, team?: string): OkrResultRow[] {
   const rep = reports.find((r) => r.cycle_id === weekId && r.member === member && (!team || team === "ALL" || r.team === team));
-  // 보이는 행 = 공통 + 그 파트 전용 + 본인 전용 (파트는 기록의 team, 없으면 넘겨받은 team)
+  // 그 사람 판정 대상 행 = 공통 + 그 파트 전용 + 본인 전용 (파트는 기록의 team, 없으면 넘겨받은 team).
+  // 2026-10-25 밤 화면엔 남의 전용 행도 보이지만(goalsForView) 홈 분모는 판정 대상만(goalsApplyingTo) — % 불변.
   const t = rep?.team ?? (team && team !== "ALL" ? team : undefined);
-  return goalsForView(goals, { team: t, member }).map((g) => resultRowFor(rep, g.no));
+  return goalsApplyingTo(goals, { team: t, member }).map((g) => resultRowFor(rep, g.no));
 }
 
 /** 개인 고르기 목록 — 그 달 주차 기록(w.reports)에 member 행이 있는 사람(이름순). team ALL 이면 A~D 전부 */

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "74827222ef",
+    "date": "2026-10-25",
+    "note": "OKR 행 주인 층(공통·파트 전용·개인 전용) + 미처리 [완료][보류][배정]·시트 상태만 되쓰기 + CS 접수·물류 완료 공용 모듈 + \"CS 접수\" 표시"
+  },
+  {
     "hash": "2c3f253921",
     "date": "2026-10-25",
     "note": "부서 일정리스트 [미처리] = 미처리현황과 같은 행 집합(시트 이력 포함) — 사용자 \"미처리는 동일해야지\""
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "e5ade39656",
     "date": "2026-09-30",
     "note": "점검 리포트: 하단을 안내 패널 + 대표번호 띠로 다시 디자인, 키맨 이름 보내기 전 수정 가능"
-  },
-  {
-    "hash": "b86a1e1e66",
-    "date": "2026-09-30",
-    "note": "점검 리포트: 발송 기록(message_jobs)에 id를 넣어 저장되게(다른 화면과 같은 방식)"
   }
 ];

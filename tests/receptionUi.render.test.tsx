@@ -106,7 +106,7 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(on).toContain("bg-amber-50");
     expect(off).not.toContain("영업");
     expect(off).not.toContain("경영");
-    expect(off).toContain("복합기");
+    expect(off).toContain("CS 접수"); // 2026-10-25 밤 "복합기" 칩 → "CS 접수"(표시만)
   });
 
   it("부서 폼 틀: 경영지원만 계약서구분이 보인다", () => {

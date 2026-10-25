@@ -172,14 +172,15 @@ describe("⑦ 확인창 — 추가·삭제 모두 askConfirm 뒤에만 바뀐다
   });
 });
 
-// 2026-10-25 저녁(okr-rows-per-layer 7절): 오후 규칙("공통 칸이 비면 공통 저장") 폐기 — 그 층 소유 행이면 own, 위 층 행이면 layer
+// 2026-10-25 저녁(okr-rows-per-layer 7절): 오후 규칙("공통 칸이 비면 공통 저장") 폐기.
+// 2026-10-25 밤: 전용 행은 어느 화면에서든 own(행 자체, 한 벌), 공통 행은 파트 탭에서 layer(덮어쓰기)
 describe("⑧ 파트 탭 병목현상·목표 저장 위치", () => {
   const blank: OkrGoal = { no: 10, pillar: OKR_PILLARS[0].full, bottleneck: "", objective: "", criteria: "" };
-  it("공통 칸이 비어도 파트 탭에선 layer(공통에 쓰지 않음), 그 층 전용 행이면 own", () => {
+  it("공통 칸이 비어도 파트 탭에선 layer(공통에 쓰지 않음), 전용 행이면 누가 고치든 own", () => {
     expect(goalEditTarget(blank, { team: "A" })).toBe("layer");
     expect(goalEditTarget(nine()[0], { team: "A", member: "홍길동" })).toBe("layer");
     expect(goalEditTarget({ ...blank, no: 101, scope: { team: "A" } }, { team: "A" })).toBe("own");
-    expect(goalEditTarget({ ...blank, no: 101, scope: { team: "A" } }, { team: "A", member: "홍길동" })).toBe("layer");
+    expect(goalEditTarget({ ...blank, no: 101, scope: { team: "A" } }, { team: "A", member: "홍길동" })).toBe("own");
     expect(goalEditTarget(undefined, { team: "A" })).toBe("layer");
   });
   it("분기 표 추가 문구는 따로", async () => {

@@ -956,7 +956,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
           {activeCat === "접수" && <div className="flex flex-wrap gap-1.5 px-1 pb-2">
             {["전체", "복합기 AS", "원격이관", "IT"].map((t) => {
               const count = t === "전체" ? records.length : records.filter((r) => String(r["type"] || "") === t).length;
-              return <button key={t} type="button" onClick={() => setReceptionType(t)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${receptionType === t ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{t} <span className="opacity-60">{count}</span></button>;
+              return <button key={t} type="button" onClick={() => setReceptionType(t)} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${receptionType === t ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{t === "복합기 AS" ? "CS 접수" : t} <span className="opacity-60">{count}</span></button>;
             })}
           </div>}
           {visibleRecords.map((record, index) => {

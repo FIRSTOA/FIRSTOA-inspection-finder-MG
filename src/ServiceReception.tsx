@@ -32,7 +32,6 @@ import { RECEPTION_RIGHT_KEY, RECEPTION_RIGHT_DEPT_KEY, SHOW_BOARD_EVENT, parseD
 import DeptWorkspacePanel, { DeptRightTabs, type DeptCounts } from "./DeptWorkspacePanel";
 import DeptReception from "./DeptReceptionScreen";
 import DeptReceptionDetail from "./DeptReceptionDetail";
-import DeptActionBar from "./DeptActionBar";
 import { deptListState, deptShort, isDeptType, type DeptType } from "./deptReception";
 import ReceptionListFilters from "./ReceptionListFilters";
 import LeaseDeptPill from "./LeaseDeptPill";
@@ -2036,7 +2035,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
             <ReceptionBoardPanel compact onOpenSchedule={onOpenSchedule ? () => { requestOpenOverdue(); onOpenSchedule(); } : undefined} deptEnabled={deptEnabled} reloadKey={boardReload} onCounts={setBoardCounts} onScheduleCount={setScheduleCount} selectedType={boardFocus} onSelectedTypeChange={setBoardFocus}
               onSelectType={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
               onOpenFieldRow={(r) => { if (r.type === "복합기 AS") setListFilter("복합기 AS"); else goPage(r.type === "IT" ? "it" : "remote"); setOpenRowId(r.id); setRightView("list"); }}
-              renderDeptActions={(_r, ctx) => (ctx.source ? <DeptActionBar row={ctx.source} compact author={author} onChanged={() => { ctx.onDone(); void loadList(listDate, listPeriod, true); }} /> : null)} />
+              author={author} onChanged={() => void loadList(listDate, listPeriod, true)} />
           </div>
           <div className={(deptPage ? deptRight : rightView) === "list" ? "" : "hidden"}>
           {/* 어두운 "접수 리스트" 띠는 없앴다 — 위 전환 막대가 제목 역할. 날짜·기간·새로고침 줄이 패널 첫 줄 */}

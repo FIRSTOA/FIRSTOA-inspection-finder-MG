@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "74827222ef",
+    "agent": "feature-planner",
+    "summary": "OKR 행 주인 층(공통·파트 전용·개인 전용) + 미처리 [완료][보류][배정]·시트 상태만 되쓰기 + CS 접수·물류 완료 공용 모듈 + \"CS 접수\" 표시"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "74827222ef",
+    "agent": "developer",
+    "summary": "OKR 행 주인 층(공통·파트 전용·개인 전용) + 미처리 [완료][보류][배정]·시트 상태만 되쓰기 + CS 접수·물류 완료 공용 모듈 + \"CS 접수\" 표시"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "74827222ef",
+    "agent": "qa-checker",
+    "summary": "OKR 행 주인 층(공통·파트 전용·개인 전용) + 미처리 [완료][보류][배정]·시트 상태만 되쓰기 + CS 접수·물류 완료 공용 모듈 + \"CS 접수\" 표시"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "2c3f253921",
     "agent": "developer",
     "summary": "부서 일정리스트 [미처리] = 미처리현황과 같은 행 집합(시트 이력 포함) — 사용자 \"미처리는 동일해야지\""

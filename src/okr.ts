@@ -630,17 +630,18 @@ export function goalRemoveKind(goal: OkrGoal, hasRecords: boolean): GoalRemoveKi
   return goalHasText(goal) ? "text" : "empty";
 }
 // 행 빼기 — 기록이 있으면 hidden 으로 보관(판정 데이터는 보고서에 그대로), 없으면 배열에서 뺀다. 다른 행 번호는 그대로.
-// view 를 주면 그 화면 층이 주인인 행만 뺀다(아니면 goals 그대로 + blocked). view 생략 = 예전처럼 검사 없음.
+// view 를 주면 그 화면에서 지울 수 있는 행만 뺀다(editsRowDirectly — 전용 행은 누구나, 공통 행은 통합집계·분기에서만; 아니면 goals 그대로 + blocked).
+// view 생략 = 예전처럼 검사 없음. (2026-10-25 밤: "주인 층만" → "누구나, 공통은 팀장 화면에서만")
 export function removeGoalRow(goals: OkrGoal[], no: number, hasRecords: boolean, view?: OkrGoalView): { goals: OkrGoal[]; kind: GoalRemoveKind; blocked?: true } {
   const goal = goals.find((g) => g.no === no);
   if (!goal) return { goals, kind: "empty" };
-  if (view && !ownsGoal(goal, view)) return { goals, kind: goalRemoveKind(goal, hasRecords), blocked: true };
+  if (view && !editsRowDirectly(goal, view)) return { goals, kind: goalRemoveKind(goal, hasRecords), blocked: true };
   const kind = goalRemoveKind(goal, hasRecords);
   return { goals: kind === "archive" ? goals.map((g) => (g.no === no ? { ...g, hidden: true } : g)) : goals.filter((g) => g.no !== no), kind };
 }
 // 보관 행 되살리기 — 같은 자리·같은 번호로(지난 판정이 다시 붙는다)
 export function restoreGoalRow(goals: OkrGoal[], no: number, view?: OkrGoalView): OkrGoal[] {
-  return goals.map((g) => { if (g.no !== no || !g.hidden || (view && !ownsGoal(g, view))) return g; const rest = { ...g }; delete rest.hidden; return rest; });
+  return goals.map((g) => { if (g.no !== no || !g.hidden || (view && !editsRowDirectly(g, view))) return g; const rest = { ...g }; delete rest.hidden; return rest; });
 }
 
 // ── 행의 주인 층(2026-10-25 저녁, docs/tasks/okr-rows-per-layer-2026-10-25.md 3-1) ──
@@ -653,21 +654,40 @@ export const isCommonGoal = (g: Pick<OkrGoal, "scope">): boolean => !g.scope;
 export const commonGoalsOf = (goals: OkrGoal[]): OkrGoal[] => goals.filter(isCommonGoal);
 // 통째 교체 때 지킬 행(scope 있는 행)
 export const layerRowsOf = (goals: OkrGoal[]): OkrGoal[] => goals.filter(isLayerGoal);
-// 그 화면이 이 행의 주인인지 — 통합집계·분기({}) = 공통 · 파트 종합({team}) = 그 파트 전용 · 파트원({team, member}) = 본인 전용
+// 그 화면이 이 행의 주인인지(새 행을 만드는 층과 같은 뜻 — 2026-10-25 밤부터 편집·삭제 판단엔 안 쓴다, editsRowDirectly·goalAppliesTo) — 통합집계·분기({}) = 공통 · 파트 종합({team}) = 그 파트 전용 · 파트원({team, member}) = 본인 전용
 export function ownsGoal(g: Pick<OkrGoal, "scope">, view: OkrGoalView): boolean {
   if (!view.team) return !g.scope;
   if (!g.scope || g.scope.team !== view.team) return false;
   return view.member ? g.scope.member === view.member : !g.scope.member;
 }
-// 화면에 보일 행 — 통합집계(둘 다 없음) = 공통만 / 파트 종합(team) = 공통 + 그 파트 전용 / 파트원(team, member) = 공통 + 그 파트 전용 + 본인 전용.
-// 보관 행(hidden)은 거르지 않는다(visibleGoals 는 따로). 순서 그대로.
-export function goalsForView(goals: OkrGoal[], view: OkrGoalView = {}): OkrGoal[] {
-  return goals.filter((g) => {
-    if (!g.scope) return true;
-    if (!view.team || g.scope.team !== view.team) return false;
-    return !g.scope.member || (!!view.member && g.scope.member === view.member);
-  });
+// 이 행이 그 화면(view)의 판정·실제결과 대상인지(= 예전 goalsForView 의 거르기, 2026-10-25 밤 이름만 옮김).
+//   통합집계({}) = 공통만 / 파트 종합({team}) = 공통 + 그 파트 전용 / 파트원({team, member}) = 공통 + 그 파트 전용 + 본인 전용.
+//   다른 층 행은 화면에 보이되(goalsForView) 판정 칸이 잠긴다 — 홈 개인 % 분모(kpiCompute okrWeekMemberRows)도 이것.
+export function goalAppliesTo(g: Pick<OkrGoal, "scope">, view: OkrGoalView = {}): boolean {
+  if (!g.scope) return true;
+  if (!view.team || g.scope.team !== view.team) return false;
+  return !g.scope.member || (!!view.member && g.scope.member === view.member);
 }
+export const goalsApplyingTo = (goals: OkrGoal[], view: OkrGoalView = {}): OkrGoal[] => goals.filter((g) => goalAppliesTo(g, view));
+// 화면에 보일 행(2026-10-25 밤 사용자 "그 사람만의 병목을 다른 사람도 보이게 — 구글시트처럼"):
+//   어느 화면이든 공통 + 모든 파트 전용 + 모든 개인 전용 전부. 주인(scope)은 칩으로 표시만 한다.
+//   순서: 같은 Pillar 묶음 안에서 공통(원래 순서) → 파트 전용(A→D) → 개인 전용(팀 → 이름 순). Pillar 묶음 순서는 처음 나온 순서.
+//   보관 행(hidden)은 거르지 않는다(visibleGoals 는 따로).
+const layerRank = (g: OkrGoal): string => (!g.scope ? "0" : g.scope.member ? `2|${g.scope.team}|${g.scope.member}` : `1|${g.scope.team}`);
+export function goalsForView(goals: OkrGoal[]): OkrGoal[] {
+  const pillarAt = new Map<string, number>();
+  goals.forEach((g) => { if (!pillarAt.has(g.pillar)) pillarAt.set(g.pillar, pillarAt.size); });
+  return goals.map((g, i) => ({ g, i })).sort((a, b) => {
+    const pa = pillarAt.get(a.g.pillar) ?? 0; const pb = pillarAt.get(b.g.pillar) ?? 0;
+    if (pa !== pb) return pa - pb;
+    const ra = layerRank(a.g); const rb = layerRank(b.g);
+    if (ra !== rb) return ra === "0" ? -1 : rb === "0" ? 1 : ra.localeCompare(rb, "ko");
+    return a.i - b.i;
+  }).map((x) => x.g);
+}
+// 그 화면에서 행 자체(okr_cycles.goals)를 고치는지 — 전용 행(scope)은 어디서든 행 자체(구글시트처럼 한 벌),
+//   공통 행은 통합집계·분기({})에서만 행 자체, 파트 탭에선 그 층 덮어쓰기(팀장 문서 보호, 4차 그대로). 삭제·보관 × 도 같은 기준.
+export function editsRowDirectly(g: Pick<OkrGoal, "scope">, view: OkrGoalView = {}): boolean { return !!g.scope || !view.team; }
 // 파트 % 집계·팀원 집계용 — 공통 + 그 파트 전용 + 그 파트 사람들의 개인 전용 전부
 export function goalsForTeamTotal(goals: OkrGoal[], team: OkrTeam | string): OkrGoal[] {
   return goals.filter((g) => !g.scope || g.scope.team === team);
