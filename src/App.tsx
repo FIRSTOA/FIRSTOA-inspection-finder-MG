@@ -3,12 +3,11 @@ import { ScreenActiveContext } from "./screenActive";
 import { askConfirm } from "./confirmModal";
 import { parseQuickVendorInput } from "./quickInput";
 import { Home as HomeIcon, ClipboardList, CalendarDays, ListChecks, Map as MapIcon, FileText, Wand2, Boxes, Inbox, Printer, MonitorSmartphone, GraduationCap, CalendarRange, Target, TrendingUp, PhoneCall, Megaphone, MessageSquare, PanelLeftClose, PanelLeftOpen, UserRound, Settings2, Database, ChevronDown, Utensils, BookOpen } from "lucide-react";
-import VendorSearch from "./VendorSearch";
-import AirSearch from "./AirSearch";
 import PcForm, { EMPTY_PC_FORM, buildPcText, type PcFormState } from "./PcForm";
 import CopierExpansionForm, { EMPTY_COPIER_EXPANSION_FORM, buildCopierExpansionText, type CopierExpansionFormState } from "./CopierExpansionForm";
 import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
+import { searchIconLabel } from "./fieldSearchIcon";
 import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey , extractCompanyForTemplate} from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { ToastHost } from "./toast";
@@ -48,7 +47,6 @@ import { regionLetter, tableVisitRegion } from "./region";
 import { ProcessingFormPanel } from "./field/ProcessingFormPanel";
 import { AirPurifierFormPanel } from "./field/AirPurifierFormPanel";
 import { AuthorPickerModal } from "./field/AuthorPicker";
-import { FieldGuideNote } from "./field/FieldGuideNote.view";
 import { FieldActionBar } from "./field/FieldActionBar.view";
 import { changeSpareToken, spareTokenCount, type AirPurifierForm, type DeviceInfo, type PerItemForm, type SharedForm, type SpareToken } from "./field/fieldFormModel";
 // 재계약 준비 — 별도 chunk로 떼어 둔다. 이 탭을 열지 않는 사람은 코드를 받지 않는다
@@ -99,7 +97,7 @@ const CsCalendar = lazyScreen<object>(() => import("./CsAsWorkspace").then((m) =
 const PromoWorkspace = lazyScreen<ComponentProps<EngagementModule["PromoWorkspace"]>>(() => import("./CustomerEngagement").then((m) => ({ default: m.PromoWorkspace })), "홍보물 발송");
 // 통합이력 팝업은 열 때만 받는다(77KB) — 다른 화면(일정리스트·서비스접수·조회…)과 같은 조각을 나눠 쓴다(2026-10-10 속도)
 const UnifiedHistoryLazy = lazy(() => import("./UnifiedHistory"));
-const TabSearchBar = lazy(() => import("./TabSearchBar")); // 필드 탭 맨 위 검색(2026-10-22, docs/tasks/tab-search-kakao-history.md 1단계)
+const FieldSearchSheet = lazy(() => import("./field/FieldSearchSheet")); // 헤더 🔍 시트 — 모든 필드 탭(2026-10-25, docs/tasks/tab-search-icon-merge-2026-10-25.md)
 
 type Mode = "inspection" | "blank-report" | "air-purifier" | "samsung-note" | "pc"
   | "logistics" | "replacement" | "contact-change" | "bulman" | "misu" | "overage-adjust" | "recontract" | "praise";
@@ -141,23 +139,6 @@ type ModeConfig = {
   textDark: string;
   placeholder: string;
 };
-
-const FIELD_GUIDES: Record<Mode, { icon: string; title: string; description: string }> = {
-  inspection: { icon: "🖨️", title: "점검·AS 업무", description: "기존 양식이나 AS 원본을 불러와 현장 처리내용을 작성하고 점검방·AS방으로 전송합니다." },
-  "blank-report": { icon: "🖨️", title: "점검·AS 업무", description: "AS 접수 원본을 자동 변환해 현장 처리내용을 작성하고 점검방·AS방으로 전송합니다." },
-  "air-purifier": { icon: "🌿", title: "청정기 점검", description: "청정기 양식을 불러오거나 사진으로 생성해 필터 점검내용을 기록합니다." },
-  "samsung-note": { icon: "📝", title: "일정 원본 변환", description: "번호가 붙은 현장 일정을 여러 건의 업무 양식으로 변환합니다." },
-  pc: { icon: "💻", title: "확장성 업무", description: "거래처의 PC·소프트웨어 현황과 홍보·견적 내용을 기록합니다." },
-  logistics: { icon: "📦", title: "물류 업무", description: "납품·교체·철수·이전·셋팅 업무와 물품 상태를 기록합니다." },
-  replacement: { icon: "🔁", title: "교체양식", description: "퍼스트전산 채널에 복사해서 붙여넣는 교체 전용 양식을 작성합니다." },
-  "contact-change": { icon: "👤", title: "담당자/주소 변경", description: "거래처 담당자 또는 주소 변경 전·후 정보와 명함 사진을 정리합니다." },
-  bulman: { icon: "📣", title: "불만 방문", description: "거래처 불만 내용과 방문 처리결과를 정해진 양식으로 기록합니다." },
-  misu: { icon: "💳", title: "미수 방문", description: "미수 거래처 방문과 확인 내용을 기록하고 지역별 미수방으로 전송합니다." },
-  "overage-adjust": { icon: "📈", title: "초과조정", description: "초과 사용량과 조정 상담·처리내용을 기록합니다." },
-  recontract: { icon: "🤝", title: "재계약", description: "계약 종료 예정 거래처의 상담과 재계약 진행내용을 기록합니다." },
-  praise: { icon: "🌟", title: "칭찬 접수", description: "고객이 칭찬한 내용을 기록하면 DB통합시트 칭찬 탭에 자동 기입됩니다." },
-};
-
 
 // 토스풍 팔레트: 단일 블루 포인트 + 연블루 소프트.
 const BW_ACCENT = "#334155";
@@ -5287,8 +5268,8 @@ export default function App() {
               )}
               <button type="button" onClick={() => setHistoryOpen(true)} aria-label="통합이력"
                 className="flex h-10 w-10 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🗂️</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">이력</span></button>
-              {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
-                <button type="button" onClick={() => setSearchOpen(true)} aria-label="거래처검색"
+              {searchIconLabel(mode, pcSubTab) && (
+                <button type="button" onClick={() => setSearchOpen(true)} aria-label={searchIconLabel(mode, pcSubTab)!}
                   className="flex h-10 w-10 flex-col items-center justify-center rounded-xl border border-slate-200 bg-white leading-none transition hover:bg-slate-50 active:scale-95"><span className="text-sm">🔍</span><span className="mt-0.5 text-[9px] font-bold text-slate-600">검색</span></button>
               )}
               {(mode === "inspection" || mode === "air-purifier" || mode === "blank-report") && (
@@ -5529,7 +5510,6 @@ export default function App() {
             })}
           </div>
         )}
-        <Suspense fallback={null}><TabSearchBar mode={mode} pcSubTab={pcSubTab} onLoadForm={(t) => handleLoadForm(t, { silent: true })} hasDraft={!!inputText.trim()} /></Suspense>
         </>)}{/* /필드 탭 */}
         </div>{/* /헤더 존 */}
 
@@ -5538,7 +5518,6 @@ export default function App() {
 
         <div className={`grid gap-5 lg:items-start ${mode === "misu" ? "" : "lg:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_520px]"}`}>
         <div className="min-w-0 space-y-3">
-        <FieldGuideNote {...FIELD_GUIDES[mode]} />
 
         {(workinInspectionMatch || fieldVendorFlags) && (() => {
           // AS 처리 중 이중 확인 없이 한눈에 — 워킨맵 사이드탭과 같은 형식의 한 줄 요약들.
@@ -6032,47 +6011,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 거래처 검색 팝업 */}
-      {searchOpen && (
-        <div
-          className="fixed inset-0 z-[70] flex items-end bg-slate-900/40 backdrop-blur-sm sm:items-center sm:justify-center"
-          onClick={closeSearch}
-        >
-          <div
-            className="flex h-[90vh] w-full flex-col rounded-t-3xl bg-white sm:h-[82vh] sm:max-w-2xl sm:rounded-3xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between rounded-t-3xl px-5 py-4 text-white" style={{ background: config.accent }}>
-              <div>
-                <div className="text-base font-bold">{mode === "air-purifier" ? "청정기 거래처 찾기" : "거래처·양식 검색"}</div>
-                {mode !== "air-purifier" && <div className="mt-0.5 text-[11px] font-semibold text-white/70">업체를 찾아 최근 점검·AS 양식을 불러옵니다.</div>}
-              </div>
-              <button type="button" onClick={closeSearch} className="rounded-xl bg-white/20 px-3 py-1.5 text-sm font-semibold">
-                닫기
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              {mode === "air-purifier" ? (
-                <AirSearch
-                  accent={config.accent}
-                  onLoadForm={handleLoadForm}
-                  onVendor={setCurrentVendor}
-                  onError={(m) => showToast(m, "error")}
-                />
-              ) : (
-                <VendorSearch
-                  key={searchSeed}
-                  initialQuery={searchSeed}
-                  accent={config.accent}
-                  onLoadForm={handleLoadForm}
-                  onVendor={setCurrentVendor}
-                  onError={(m) => showToast(m, "error")}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <Suspense fallback={null}><FieldSearchSheet open={searchOpen} onClose={closeSearch} mode={mode} pcSubTab={pcSubTab} seed={searchSeed} accent={config.accent} onLoadForm={handleLoadForm} onVendor={setCurrentVendor} hasDraft={!!inputText.trim()} onError={(m) => showToast(m, "error")} /></Suspense>
 
       {photoPrompt && <div className="fixed inset-0 z-[2200] flex items-end bg-slate-950/45 sm:items-center sm:justify-center sm:p-4" onMouseDown={() => setPhotoPrompt(null)}>
         <div className="w-full rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-sm sm:rounded-xl" onMouseDown={(event) => event.stopPropagation()}>

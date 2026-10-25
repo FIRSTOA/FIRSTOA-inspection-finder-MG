@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "894bd00b9b",
+    "date": "2026-10-25",
+    "note": "홈 팀 카드 즉시 표시(캐시 v3·부분 그리기·7지표 선계산) + 상세 팝업 즉시 내용(목록 content 600자·세션 캐시·미리 읽기) + 필드 탭 검색 [불러오기] + 양식 윗줄 등급 드롭다운"
+  },
+  {
     "hash": "afcca6fe28",
     "date": "2026-10-25",
     "note": "서비스접수 6종 같은 뼈대(부서는 일정리스트·달력 탭만 추가) + 현황판 CS 접수 = 홈과 같은 57 + 미처리 상세 팝업에 시트·캘린더 내용 전체"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "50195e78c9",
     "date": "2026-09-30",
     "note": "점검 리포트 하단 문구: 카카오톡 채널이나 대표번호로 연락 주시면 신속히 처리 + 카드에 채널 주소 표시"
-  },
-  {
-    "hash": "4a1f4768ef",
-    "date": "2026-09-30",
-    "note": "점검 리포트: 하단 연락 문구 개선, 여러 대도 1대 디자인 그대로 세로로(두 열 압축 배치 제거)"
   }
 ];

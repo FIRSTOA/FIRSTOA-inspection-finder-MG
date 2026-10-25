@@ -8,7 +8,6 @@ import { renderToString } from "react-dom/server";
 import { AirPurifierFormPanel } from "../src/field/AirPurifierFormPanel";
 import { ProcessingFormPanel, type ProcessingFormPanelProps } from "../src/field/ProcessingFormPanel";
 import { FieldActionBar, type FieldActionBarProps } from "../src/field/FieldActionBar.view";
-import { FieldGuideNote } from "../src/field/FieldGuideNote.view";
 import { fieldSendLabel, type AirPurifierForm, type PerItemForm, type SharedForm } from "../src/field/fieldFormModel";
 
 const EMPTY_AIR_FORM_FOR_TEST: AirPurifierForm = { filterReset: "", filterChange: "", notes: "", arrivalHour: "", arrivalMinute: "", duration: "" };
@@ -120,10 +119,5 @@ describe("S7 단추 줄·안내", () => {
   it("지역 없음 경고: PC 만 A~E 바로 고르기", () => {
     expect(bar({ variant: "side", issue: "region" })).toContain(">E</button>");
     expect(bar({ variant: "bottom", issue: "region" })).not.toContain(">E</button>");
-  });
-  it("안내 한 줄", () => {
-    const html = render(createElement(FieldGuideNote, { icon: "🧾", title: "점검 원문 정리", description: "붙여넣으면 양식이 채워집니다" }));
-    expect(html).toContain("점검 원문 정리");
-    expect(html).toContain("자세히");
   });
 });

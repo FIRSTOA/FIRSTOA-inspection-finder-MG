@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "894bd00b9b",
+    "agent": "developer",
+    "summary": "홈 팀 카드 즉시 표시(캐시 v3·부분 그리기·7지표 선계산) + 상세 팝업 즉시 내용(목록 content 600자·세션 캐시·미리 읽기) + 필드 탭 검색 [불러오기] + 양식 윗줄 등급 드롭다운"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "894bd00b9b",
+    "agent": "debugger",
+    "summary": "홈 팀 카드 즉시 표시(캐시 v3·부분 그리기·7지표 선계산) + 상세 팝업 즉시 내용(목록 content 600자·세션 캐시·미리 읽기) + 필드 탭 검색 [불러오기] + 양식 윗줄 등급 드롭다운"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "894bd00b9b",
+    "agent": "qa-checker",
+    "summary": "홈 팀 카드 즉시 표시(캐시 v3·부분 그리기·7지표 선계산) + 상세 팝업 즉시 내용(목록 content 600자·세션 캐시·미리 읽기) + 필드 탭 검색 [불러오기] + 양식 윗줄 등급 드롭다운"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "afcca6fe28",
     "agent": "developer",
     "summary": "서비스접수 6종 같은 뼈대(부서는 일정리스트·달력 탭만 추가) + 현황판 CS 접수 = 홈과 같은 57 + 미처리 상세 팝업에 시트·캘린더 내용 전체"

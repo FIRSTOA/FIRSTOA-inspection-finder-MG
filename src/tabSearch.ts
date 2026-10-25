@@ -218,6 +218,11 @@ export type TabLine = {
   vendor: string;      // 기록에 적힌 업체명(가림 적용) — 펼침의 "같은 업체 이력" 묶음
   logiKind: string;    // 물류 탭만: 납품·철수·교체·여분… (같은 날·같은 종류 한 줄로 묶는 기준)
   formText?: string;   // 점검·AS 탭의 jeomgeom·as_records 줄만: 양식 [불러오기]에 넣을 _원문 전체(가림·자르기 없음 — 거래처검색 불러오기와 같은 글)
+  // 2026-10-25 한 목록(FIELD 기록 + 카톡 대화) — 없으면 FIELD 기록으로 본다
+  source?: "field" | "kakao";
+  time?: string;       // 카톡 줄만: KST "14:31"
+  kindGuess?: string;  // 카톡 줄만: kakao_messages.kind_guess(form:점검·share·media·chat…) — form:* 인데 남은 줄 = "표에 안 들어간 양식 글"
+  hideReason?: KakaoHideReason; // 숨긴 카톡 줄만(맨 아래 [보기])
 };
 
 /** [불러오기]에 넣을 양식 원문 — 점검·AS 탭의 점검(jeomgeom)·AS(as_records) 기록만. 다른 탭·표(방문기록·물류·불만…)는 "" = 단추 없음 */
@@ -525,4 +530,219 @@ export function highlightParts(text: string, q: string): Array<{ t: string; hit:
   }
   if (last < src.length) out.push({ t: src.slice(last), hit: false });
   return out.length ? out : [{ t: src, hit: false }];
+}
+
+// ── FIELD 기록 + 카톡 대화 한 목록(2026-10-25) ───────────────────────
+// 설계: docs/tasks/tab-search-icon-merge-2026-10-25.md 4-1~4-3·5-1·6절 R1. 화면(useTabSearch·FieldSearchSheet)은 이 함수들만 쓴다.
+// 숨김 규칙: share(FIELD 링크)·media(사진 자리)는 항상 / form:* 는 표에 같은 글(숫자 뺀 앞 80자)이나 ±1일·같은 종류의 정확 일치 기록이 있을 때만 / chat 은 절대 숨기지 않는다.
+// 숨긴 줄은 버리지 않고 hidden 으로 돌려준다(맨 아래 "표에 이미 있는 카톡 글 n건 숨김 [보기]").
+
+export type KakaoHideReason = "share" | "media" | "same-text" | "same-day";
+
+/** 카톡 양식 종류 → 같은 기록이 들어가는 표(GAS 구조 적재 kakao-collect-expand 3-2) */
+export const KAKAO_FORM_TABLES: Record<string, string[]> = {
+  "form:점검": ["jeomgeom", "visit_logs"],
+  "form:AS": ["as_records"],
+  "form:물류": ["logistics_records", "as_tickets", "activity_events"],
+  "form:불만접수": ["bulman"],
+  "form:계약갱신": ["recontract"],
+  "form:미수방문": ["misu", "misu_visits"],
+  "form:초과조정": ["overage_adjust"],
+};
+
+const KAKAO_TONE = "bg-slate-100 text-slate-600 border-slate-200";
+const DUP_MIN = 10; // 정규화 뒤 이보다 짧은 글은 글 비교로 숨기지 않는다("점검완료" 같은 짧은 글끼리 우연히 같음)
+
+/** 중복 비교 키 — 소문자, 영문·한글만(숫자·기호·공백 제거: 가림 010-****-5678 차이 흡수), 앞 80자 */
+export function dupKey80(text: string): string {
+  return String(text || "").toLowerCase().replace(/[^a-z가-힣]/g, "").slice(0, 80);
+}
+
+/** 카톡 한 줄 → 목록 줄. 업체 키가 본문에 없으면 loose(확인 필요) */
+export function kakaoToLine(hit: KakaoHit, e?: Entity | null): TabLine {
+  const label = kakaoTimeLabel(hit.sent_at);
+  const text = maskRrn(String(hit.text || ""));
+  const firstLine = text.split("\n").map((s) => s.trim()).find(Boolean) || "";
+  const textKey = text.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
+  const keys = e?.nameKeys || [];
+  return {
+    key: `kakao:${hit.id}`, table: "kakao_messages", kind: "카톡", tone: KAKAO_TONE,
+    date: label.slice(0, 10), time: label.slice(11, 16),
+    title: firstLine.slice(0, 60), detail: String(hit.room || ""), author: maskRrn(String(hit.author || "")), team: "",
+    device: "", raw: text.slice(0, 2000),
+    loose: keys.length > 0 && !keys.some((k) => textKey.includes(k)),
+    otherVendor: "", vendor: e ? maskRrn(e.name) : "", logiKind: "",
+    source: "kakao", kindGuess: hit.kind_guess || "chat",
+  };
+}
+
+const sentMs = (h: KakaoHit) => { const t = Date.parse(h.sent_at); return Number.isFinite(t) ? t : 0; };
+
+/** 같은 방·같은 사람·같은 본문이 ±2분 안이면 한 줄(먼저 쓴 것)로 — 같은 id 도 한 번만 */
+export function collapseKakao(hits: KakaoHit[]): KakaoHit[] {
+  const sorted = [...hits].sort((a, b) => sentMs(a) - sentMs(b) || (a.seq || 0) - (b.seq || 0));
+  const out: KakaoHit[] = [];
+  const ids = new Set<number>();
+  const lastAt = new Map<string, number>();
+  for (const h of sorted) {
+    if (ids.has(h.id)) continue;
+    ids.add(h.id);
+    const k = `${h.room}|${h.author}|${String(h.text || "").replace(/\s+/g, " ").trim()}`;
+    const prev = lastAt.get(k);
+    if (prev !== undefined && sentMs(h) - prev <= 2 * 60_000) continue;
+    lastAt.set(k, sentMs(h));
+    out.push(h);
+  }
+  return out;
+}
+
+/** 이 카톡 줄을 숨길 이유 — 없으면 null(남긴다). fieldLines = 같은 탭 FIELD 기록 줄 */
+export function kakaoHideReason(line: TabLine, fieldLines: TabLine[]): KakaoHideReason | null {
+  const kind = line.kindGuess || "chat";
+  if (kind === "share") return "share";
+  if (kind === "media") return "media";
+  if (!kind.startsWith("form:")) return null; // chat·알 수 없는 값은 절대 숨기지 않는다
+  const k80 = dupKey80(line.raw);
+  if (k80.length >= DUP_MIN && fieldLines.some((f) => dupKey80(f.raw) === k80)) return "same-text";
+  const tables = KAKAO_FORM_TABLES[kind];
+  if (tables && YMD.test(line.date)
+    && fieldLines.some((f) => !f.loose && tables.includes(f.table) && YMD.test(f.date) && daysApart(f.date, line.date) <= 1)) return "same-day";
+  return null;
+}
+
+export type KakaoMerge = { lines: TabLine[]; hidden: TabLine[]; collapsed: number };
+
+/**
+ * FIELD 기록 줄 + 카톡 대화 → 한 목록. 날짜 내림차순, 같은 날이면 FIELD 줄 먼저(FIELD 끼리는 받은 순서, 카톡끼리는 늦은 시각 먼저).
+ * kakaoRows 가 비면 fieldLines 를 그대로 돌려준다. collapsed = ±2분 같은 글로 접힌 수
+ */
+export function mergeKakaoLines(fieldLines: TabLine[], kakaoRows: KakaoHit[], opts: { e?: Entity | null } = {}): KakaoMerge {
+  if (!kakaoRows.length) return { lines: fieldLines, hidden: [], collapsed: 0 };
+  const field = fieldLines.filter((l) => l.source !== "kakao");
+  const kept = collapseKakao(kakaoRows);
+  const shown: TabLine[] = [];
+  const hidden: TabLine[] = [];
+  for (const hit of kept) {
+    const line = kakaoToLine(hit, opts.e);
+    const why = kakaoHideReason(line, field);
+    if (why) hidden.push({ ...line, hideReason: why });
+    else shown.push(line);
+  }
+  const byNewest = (a: TabLine, b: TabLine) => `${b.date}${b.time || ""}`.localeCompare(`${a.date}${a.time || ""}`);
+  const order = new Map(fieldLines.map((l, i) => [l.key, i]));
+  const lines = [...fieldLines, ...shown].sort((a, b) => {
+    const d = (b.date || "0000").localeCompare(a.date || "0000");
+    if (d) return d;
+    const ak = a.source === "kakao" ? 1 : 0;
+    const bk = b.source === "kakao" ? 1 : 0;
+    if (ak !== bk) return ak - bk;
+    return ak ? byNewest(a, b) : (order.get(a.key) ?? 0) - (order.get(b.key) ?? 0);
+  });
+  return { lines, hidden: hidden.sort(byNewest), collapsed: kakaoRows.length - kept.length };
+}
+
+// ── 카톡 검색어 · 꺼짐 기억 · 5분 캐시 ─────────────────────────────
+const LEGAL_RX = /주식회사|유한책임회사|유한회사|합자회사|합명회사|재단법인|사단법인|농업회사법인|의료법인|학교법인/g;
+
+/**
+ * 카톡 검색어 — 업체명에서 법인 표기((주)·㈜·(유)·주식회사·유한회사…)·괄호 메모·공백·기호를 뺀 핵심 이름(소문자, 30자까지).
+ * 엣지가 text_key(공백·기호 뺀 글) 부분 일치로 찾으므로 "(주)건영테크" 그대로 넣으면 "주건영테크"가 되어 "건영테크"만 쓴 글을 놓친다. 2자 미만이면 null(부르지 않는다)
+ */
+export function kakaoQueryOf(vendorName: string): string | null {
+  const q = String(vendorName || "")
+    .replace(/㈜|\(주\)|\(유\)/g, " ")
+    .replace(/\([^)]*\)?/g, " ")
+    .replace(LEGAL_RX, " ")
+    .replace(/[^0-9A-Za-z가-힣]/g, "")
+    .toLowerCase()
+    .slice(0, 30);
+  return q.length >= 2 ? q : null;
+}
+
+type MemoStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+const KAKAO_OFF_KEY = "field.kakaoSearchOff";
+
+/** 스위치 꺼짐 기억 — 처음 한 번 enabled:false 를 받으면 그 세션(sessionStorage, 없으면 모듈 상태) 동안 다시 부르지 않는다 */
+export function createKakaoDisabledMemo(store?: MemoStore | null) {
+  let off = false;
+  try { off = store?.getItem(KAKAO_OFF_KEY) === "1"; } catch { off = false; } // 저장소 막힘(사생활 모드) = 모듈 상태만
+  return {
+    isOff: () => off,
+    /** 엣지 응답을 본다 — enabled:false 면 꺼짐으로 기억 */
+    note(res: Pick<KakaoSearchResult, "enabled">) {
+      if (res.enabled !== false) return;
+      off = true;
+      try { store?.setItem(KAKAO_OFF_KEY, "1"); } catch { /* 모듈 상태로 충분 */ }
+    },
+    reset() {
+      off = false;
+      try { store?.removeItem(KAKAO_OFF_KEY); } catch { /* 모듈 상태로 충분 */ }
+    },
+  };
+}
+export type KakaoDisabledMemo = ReturnType<typeof createKakaoDisabledMemo>;
+const sessionStore = (): MemoStore | null => {
+  try { return typeof sessionStorage !== "undefined" ? sessionStorage : null; } catch { return null; }
+};
+export const kakaoDisabledMemo: KakaoDisabledMemo = createKakaoDisabledMemo(sessionStore());
+
+export const KAKAO_CACHE_TTL_MS = 5 * 60_000;
+export const kakaoCacheKey = (tab: TabKey, q: string) => `${tab}|${q}`;
+
+/** 카톡 결과 캐시 — 키 = 탭+검색어, 5분. 사무실 IP 분당 30회 제한(R1) 대비. 성공 결과만 넣는다 */
+export function createKakaoCache(ttlMs = KAKAO_CACHE_TTL_MS, max = 50) {
+  const m = new Map<string, { at: number; value: KakaoSearchResult }>();
+  return {
+    get(tab: TabKey, q: string, now = Date.now()): KakaoSearchResult | null {
+      const k = kakaoCacheKey(tab, q);
+      const hit = m.get(k);
+      if (!hit) return null;
+      if (now - hit.at >= ttlMs) { m.delete(k); return null; }
+      return hit.value;
+    },
+    set(tab: TabKey, q: string, value: KakaoSearchResult, now = Date.now()) {
+      const k = kakaoCacheKey(tab, q);
+      m.delete(k);
+      m.set(k, { at: now, value });
+      while (m.size > max) {
+        const first = m.keys().next().value;
+        if (first === undefined) break;
+        m.delete(first);
+      }
+    },
+    clear: () => m.clear(),
+    size: () => m.size,
+  };
+}
+export type KakaoCache = ReturnType<typeof createKakaoCache>;
+export const kakaoResultCache: KakaoCache = createKakaoCache();
+
+/**
+ * 화면이 부르는 카톡 조회 한 번 — 탭+업체명 → 결과.
+ * - "none": 그 탭에 카톡 방 종류가 없거나 검색어가 2자 미만(부르지 않음, 안내도 없음)
+ * - "off": 스위치 꺼짐(이번 응답 또는 세션 기억) — 화면은 "카톡 원문 검색은 꺼져 있습니다" 한 줄
+ * - "ok": 결과(cached = 5분 캐시에서)
+ * 실패(네트워크·429·500)는 throw — 화면은 FIELD 목록을 그대로 두고 "카톡 대화를 못 불러왔습니다 [다시]"
+ */
+export type KakaoFetch =
+  | { status: "none" }
+  | { status: "off" }
+  | { status: "ok"; q: string; result: KakaoSearchResult; cached: boolean };
+export async function searchKakaoForTab(
+  tab: TabKey, vendorName: string,
+  deps: { memo?: KakaoDisabledMemo; cache?: KakaoCache; now?: number } = {},
+): Promise<KakaoFetch> {
+  const memo = deps.memo || kakaoDisabledMemo;
+  const cache = deps.cache || kakaoResultCache;
+  const spec = TAB_SPECS[tab];
+  const q = kakaoQueryOf(vendorName);
+  if (!spec?.kakaoKinds?.length || !q) return { status: "none" };
+  if (memo.isOff()) return { status: "off" };
+  const hit = cache.get(tab, q, deps.now);
+  if (hit) return { status: "ok", q, result: hit, cached: true };
+  const result = await searchKakao(spec, q);
+  memo.note(result);
+  if (result.enabled === false) return { status: "off" };
+  cache.set(tab, q, result, deps.now);
+  return { status: "ok", q, result, cached: false };
 }

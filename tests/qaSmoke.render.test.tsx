@@ -11,7 +11,7 @@ vi.hoisted(() => {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import TabSearchView from "../src/TabSearch.view";
+import { TabSearchResults } from "../src/TabSearch.view";
 import { TAB_SPECS, type TabLine } from "../src/tabSearch";
 import InboxHub from "../src/InboxHub";
 import ItLearningHistory from "../src/ItLearningHistory";
@@ -37,10 +37,9 @@ describe("QA 스모크", () => {
   it("TabSearch 결과 줄(펼침 단추)", () => {
     const line: TabLine = { key: "1", table: "as_records", kind: "AS", tone: "blue", date: "2026-10-20", title: "용지걸림 처리", detail: "롤러 교체", author: "홍길동", team: "A", device: "C3060 · ABC", raw: "원문", loose: false, otherVendor: "", vendor: "가나상사", logiKind: "" };
     const spec = Object.values(TAB_SPECS)[0];
-    const html = render(createElement(TabSearchView, { spec, query: "가나", onQuery: noop, onClear: noop, candState: "done", candidates: [], onPick: noop, picked: { name: "가나상사" }, runState: "done", error: "", onRun: noop, lines: [line, { ...line, key: "2" }], chip: "", onChip: noop, summary: "2건", coverage: { searched: ["AS"], failed: [], missing: [], rawSkipped: [] }, resultKey: "k" }));
+    const html = render(createElement(TabSearchResults, { spec, title: "가나상사", runState: "done", error: "", onRun: noop, lines: [line, { ...line, key: "2" }], all: [line, { ...line, key: "2" }], hidden: [], chip: "all", onChip: noop, summary: "2건", coverage: { searched: ["AS"], failed: [], missing: [], rawSkipped: [] }, resultKey: "k", kakao: "off", onKakaoRetry: noop }));
     expect(html).toContain("용지걸림 처리");
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toMatch(/autocomplete="off"/i);
     expect(html).not.toMatch(bad);
   });
   const okrBase = { kind: "okr" as const, period: "week" as const, onPeriod: noop, pct: 60, counts: [{ label: "완료", value: 3, tone: "ok" }], weeks: [1, 2, 3].map((n) => ({ label: `${n}주차`, pct: 50, current: n === 3 })), missingTeams: ["C"] };
