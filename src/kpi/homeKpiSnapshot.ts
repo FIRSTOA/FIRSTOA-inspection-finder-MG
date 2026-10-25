@@ -6,6 +6,8 @@
  *  · 복원: 홈을 열면 바로 이 값으로 그리고("n분 전 값 · 갱신 중"), 새로 읽은 원본이 오는 대로 그 위젯·행만 새 값으로 바꾼다.
  *    아직 안 온 원본(off)의 행·칩만 캐시로 채운다 — 실패(error)한 원본은 캐시로 덮지 않는다(실패를 숨기지 않음).
  *  · 버린다: 버전·지표 목록이 다르거나, 다른 날(KST) 값이거나, 12시간 지났거나, 모양이 깨졌으면.
+ *  · v3(2026-10-25 밤): 팀 카드 5장(teamBoardView 결과 — 미처리·OKR·점검·미니 타일 4·알약·주의 한 줄)도. 홈 첫 그림에 팀 숫자가 바로.
+ *    v2 로 저장된 값도 읽는다(팀 카드만 없음 → 칸마다 "…"), 쓰기는 v3 키에.
  * 숫자는 homeKpiModel 의 같은 함수(todayItems·tableRows·quarterGoalView·okrView)와 homeUnhandled(countUnhandledTabs·countUnhandledKinds)가 센 값 그대로다. 조회·화면 없음.
  * 테스트: tests/homeKpiSnapshot.test.ts
  */
@@ -13,11 +15,13 @@ import { KPI_DEFS, type KpiId } from "./kpiDefs";
 import { kpiCellState, type KpiBundle } from "./kpiData";
 import { HOME_WIDGETS, cachedView, okrView, quarterGoalView, tableRows, todayItems, unhandledParts, type ModelCtx, type OkrViewModel, type TableRowModel } from "./homeKpiModel";
 import type { KpiQuarterGoalView, KpiTodayItem } from "./KpiWidgets.view";
+import { teamBoardView, type TeamCardModel } from "./teamBoard";
 import { countUnhandledKinds, countUnhandledTabs, oldestUnhandled, UNHANDLED_BADGE, UNHANDLED_KIND_LABEL, UNHANDLED_KINDS, UNHANDLED_TABS, type UnhandledRow } from "../homeUnhandled";
 
-/** v2(2026-10-24): 미처리 합계 추가 · K2 위젯 삭제(달성표 행 안으로) — 키도 올려 옛 캐시는 읽지 않는다 */
-export const HOME_KPI_SNAPSHOT_KEY = "home_kpi_snapshot_v2";
-export const HOME_KPI_SNAPSHOT_VERSION = 2;
+/** v2(2026-10-24): 미처리 합계 추가 · K2 위젯 삭제(달성표 행 안으로). v3(2026-10-25 밤): 팀 카드 추가 — v2 키는 읽기만(호환) */
+export const HOME_KPI_SNAPSHOT_KEY = "home_kpi_snapshot_v3";
+export const HOME_KPI_SNAPSHOT_VERSION = 3;
+export const HOME_KPI_SNAPSHOT_KEY_V2 = "home_kpi_snapshot_v2";
 export const HOME_KPI_SNAPSHOT_MAX_AGE_MS = 12 * 60 * 60_000;
 /** 이보다 크면 저장하지 않는다(localStorage 를 다른 기능과 나눠 쓴다) */
 export const HOME_KPI_SNAPSHOT_MAX_CHARS = 96_000;
@@ -46,6 +50,8 @@ export type HomeKpiSnapshot = {
   k2: { end: Omit<KpiQuarterGoalView, "onBasis"> | null; early: Omit<KpiQuarterGoalView, "onBasis"> | null };
   okr: { week: OkrViewModel | null; month: OkrViewModel | null };
   unhandled: SnapUnhandled | null;
+  /** v3: 팀 카드 5장(이번 주·말일 기준) — v2 값을 읽으면 null */
+  teams?: TeamCardModel[] | null;
 };
 
 /** 미처리 행 → 합계 요약(SnapUnhandled). 팀 탭은 건수 있는 것만(전체 제외) */
@@ -76,6 +82,8 @@ export function buildHomeSnapshot(b: KpiBundle, teamOf: ModelCtx["teamOf"], now:
     k2: { end: k2ok ? quarterGoalView(b, "end") : null, early: k2ok ? quarterGoalView(b, "early") : null },
     okr: { week: okrOk ? okrView(b) : null, month: null }, // month = 옛 모양 호환(2026-10-25 OKR 박스 월 보기 삭제)
     unhandled: b.facts.unhandled && b.sources.unhandled?.status === "ok" ? summarizeUnhandled(b.facts.unhandled, unhandledParts(b).recontract) : null,
+    // 팀 카드 = 화면과 같은 함수(이번 주·말일 기준). 그때도 안 읽은 칸은 wait 로 남아 복원 때 쓰지 않는다
+    teams: teamBoardView(b, "week", teamOf, "end"),
   };
 }
 
@@ -85,20 +93,31 @@ export function parseHomeSnapshot(raw: string | null | undefined, today: string,
   let s: Partial<HomeKpiSnapshot>;
   try { s = JSON.parse(raw) as Partial<HomeKpiSnapshot>; } catch { return null; }
   if (!s || typeof s !== "object") return null;
-  if (s.v !== HOME_KPI_SNAPSHOT_VERSION || s.defs !== HOME_KPI_SNAPSHOT_DEFS) return null;
+  if ((s.v !== HOME_KPI_SNAPSHOT_VERSION && s.v !== 2) || s.defs !== HOME_KPI_SNAPSHOT_DEFS) return null;
   if (s.today !== today || typeof s.savedAt !== "number" || now - s.savedAt > HOME_KPI_SNAPSHOT_MAX_AGE_MS || s.savedAt > now + 60_000) return null;
   if (!Array.isArray(s.todayItems) || !Array.isArray(s.table) || !s.k2 || typeof s.k2 !== "object" || !s.okr || typeof s.okr !== "object") return null;
   if (s.unhandled !== null && (!s.unhandled || typeof s.unhandled.total !== "number" || !Array.isArray(s.unhandled.tabs) || !Array.isArray(s.unhandled.kinds))) return null;
   if (!s.table.every((r) => r && typeof r.id === "string" && Array.isArray(r.cells))) return null;
   if (!s.todayItems.every((it) => it && typeof it.id === "string")) return null;
-  return s as HomeKpiSnapshot;
+  // 팀 카드: v2 는 없음, 모양이 깨졌으면 팀 카드만 버린다(나머지 캐시는 그대로 씀)
+  const teams = s.v === HOME_KPI_SNAPSHOT_VERSION && validTeams(s.teams) ? s.teams : null;
+  return { ...(s as HomeKpiSnapshot), teams };
+}
+
+function validTeams(t: unknown): t is TeamCardModel[] {
+  return Array.isArray(t) && t.length > 0 && t.every((c) => c && typeof c === "object"
+    && typeof (c as TeamCardModel).team === "string" && Array.isArray((c as TeamCardModel).tiles) && Array.isArray((c as TeamCardModel).alerts));
 }
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 export function readHomeSnapshot(storage: StorageLike | null | undefined, today: string, now: number): HomeKpiSnapshot | null {
   let raw: string | null = null;
-  try { raw = storage?.getItem(HOME_KPI_SNAPSHOT_KEY) ?? null; } catch { return null; } // 사생활 모드 — 캐시 없이 평소대로
-  return parseHomeSnapshot(raw, today, now);
+  let old: string | null = null;
+  try {
+    raw = storage?.getItem(HOME_KPI_SNAPSHOT_KEY) ?? null;
+    if (!raw) old = storage?.getItem(HOME_KPI_SNAPSHOT_KEY_V2) ?? null; // 배포 직후 첫 열기 — v2 값으로라도(팀 카드만 없음)
+  } catch { return null; } // 사생활 모드 — 캐시 없이 평소대로
+  return parseHomeSnapshot(raw ?? old, today, now);
 }
 /** 저장. 너무 크거나 저장공간이 차면 저장하지 않고 이유를 돌려준다(캐시일 뿐 — 화면은 새로 읽은 값으로 그대로) */
 export function writeHomeSnapshot(storage: StorageLike | null | undefined, snap: HomeKpiSnapshot): string {

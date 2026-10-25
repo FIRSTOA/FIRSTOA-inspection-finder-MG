@@ -4,9 +4,9 @@
 // 2단계(2026-10-24): 결과 칸 위 [FIELD 기록][카톡 대화] 탭. 카톡 대화 칸(KakaoPane)은 자기 검색어·조회 상태를 직접 가진다
 // (TabSearchBar 를 고치지 않고 붙이려고 — 조회는 tabSearch.searchKakao 하나, 엣지 kakao-search).
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, ChevronDown, Loader2, MessageSquareText, RotateCcw, Search, X } from "lucide-react";
+import { AlertCircle, ChevronDown, Download, Loader2, MessageSquareText, RotateCcw, Search, X } from "lucide-react";
 import type { Candidate } from "./entity360";
-import { highlightParts, kakaoTimeLabel, relatedLines, searchKakao, type Coverage, type KakaoHit, type KakaoSearchResult, type TabLine, type TabSpec } from "./tabSearch";
+import { canLoadLine, highlightParts, kakaoTimeLabel, relatedLines, searchKakao, type Coverage, type KakaoHit, type KakaoSearchResult, type TabLine, type TabSpec } from "./tabSearch";
 
 export type TabSearchViewProps = {
   spec: TabSpec;
@@ -26,12 +26,15 @@ export type TabSearchViewProps = {
   summary: string;
   coverage: Coverage | null;
   resultKey: string;            // 새 조회마다 바뀜 — 결과 칸의 "더 보기"·접힘 상태를 처음으로
+  onLoad?: (line: TabLine) => void; // 점검·AS 탭만: 그 기록 원문을 양식에 [불러오기]. 줄에 formText 가 있을 때만 단추가 보인다
 };
+
+type LoadFn = ((line: TabLine) => void) | undefined;
 
 const PAGE = 40;
 
 /** 펼침 — 주요 칸 · 원문 · 같은 업체 같은 종류 최근 5건(이미 모은 줄에서). 글은 tabSearch.toLines 에서 주민번호를 가린 값 */
-function LineDetail({ line, related }: { line: TabLine; related: TabLine[] }) {
+function LineDetail({ line, related, onLoad }: { line: TabLine; related: TabLine[]; onLoad: LoadFn }) {
   const fields: [string, string][] = [
     ["날짜", line.date || "날짜 없음"],
     ["작성", [line.author, line.team].filter(Boolean).join(" · ")],
@@ -63,15 +66,22 @@ function LineDetail({ line, related }: { line: TabLine; related: TabLine[] }) {
           </ul>
         )}
       </div>
+      {canLoadLine(line, onLoad) && (
+        <button type="button" onClick={() => onLoad!(line)} className="flex h-9 w-full items-center justify-center gap-1 rounded-lg bg-slate-900 text-[12px] font-bold text-white active:scale-[0.99]">
+          <Download size={13} />이 {line.kind} 기록을 양식으로 불러오기
+        </button>
+      )}
     </div>
   );
 }
 
-function LineRow({ line, all }: { line: TabLine; all: TabLine[] }) {
+function LineRow({ line, all, onLoad }: { line: TabLine; all: TabLine[]; onLoad: LoadFn }) {
   const [open, setOpen] = useState(false);
+  const loadable = canLoadLine(line, onLoad);
   return (
     <li className="border-b border-slate-100 bg-white last:border-b-0">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="block w-full px-3 py-2 text-left hover:bg-slate-50">
+      <div className="flex items-start">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="block min-w-0 flex-1 px-3 py-2 text-left hover:bg-slate-50">
         <div className="flex items-center gap-1.5 text-[11px]">
           <span className="shrink-0 font-bold tabular-nums text-slate-700">{line.date || "날짜 없음"}</span>
           <span className={`shrink-0 rounded-full border px-1.5 py-px text-[10px] font-bold ${line.tone}`}>{line.kind}</span>
@@ -82,7 +92,12 @@ function LineRow({ line, all }: { line: TabLine; all: TabLine[] }) {
         <div className={`mt-0.5 text-[13px] font-bold text-slate-900 ${open ? "" : "line-clamp-1"}`}>{line.title}</div>
         {(line.detail || line.device) && <div className={`text-[11px] text-slate-500 ${open ? "" : "line-clamp-1"}`}>{[line.detail, line.device].filter(Boolean).join(" · ")}</div>}
       </button>
-      {open && <LineDetail line={line} related={relatedLines(all, line)} />}
+      {loadable && (
+        <button type="button" onClick={() => onLoad!(line)} aria-label={`${line.date || "날짜 없음"} ${line.kind} 기록 불러오기`}
+          className="mr-2 mt-2 shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50 active:scale-95">불러오기</button>
+      )}
+      </div>
+      {open && <LineDetail line={line} related={relatedLines(all, line)} onLoad={onLoad} />}
     </li>
   );
 }
@@ -279,7 +294,7 @@ function DoneList(p: TabSearchViewProps) {
           {!!p.coverage?.missing.length && <div className="text-slate-400">아직 표가 없어 건너뜀: {p.coverage.missing.join(" · ")}</div>}
         </div>
       ) : (
-        <ul>{exact.slice(0, shown).map((l) => <LineRow key={l.key} line={l} all={p.lines} />)}</ul>
+        <ul>{exact.slice(0, shown).map((l) => <LineRow key={l.key} line={l} all={p.lines} onLoad={p.onLoad} />)}</ul>
       )}
       {exact.length > shown && (
         <button type="button" onClick={() => setShown((n) => n + PAGE)} className="block w-full border-t border-slate-100 py-2 text-center text-[11px] font-bold text-slate-500 hover:bg-slate-50">
@@ -291,7 +306,7 @@ function DoneList(p: TabSearchViewProps) {
           <button type="button" onClick={() => setLooseOpen((v) => !v)} aria-expanded={looseOpen} className="flex w-full items-center gap-1 px-3 py-2 text-left text-[11px] font-bold text-amber-800 hover:bg-amber-50">
             <ChevronDown size={12} className={looseOpen ? "rotate-180" : ""} />이름 일부만 일치 {loose.length}줄 — 같은 업체인지 확인 필요
           </button>
-          {looseOpen && <ul>{loose.slice(0, 60).map((l) => <LineRow key={l.key} line={l} all={p.lines} />)}</ul>}
+          {looseOpen && <ul>{loose.slice(0, 60).map((l) => <LineRow key={l.key} line={l} all={p.lines} onLoad={p.onLoad} />)}</ul>}
         </div>
       )}
       {!!p.coverage?.rawSkipped.length && <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">원문 속 기번 검색이 오래 걸려 건너뜀: {p.coverage.rawSkipped.join(" · ")}</div>}

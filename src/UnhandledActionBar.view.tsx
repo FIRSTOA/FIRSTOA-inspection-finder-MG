@@ -26,6 +26,7 @@ import { notify } from "./toast";
 import { formatAssignees } from "./assignees";
 import AssigneePicker from "./AssigneePicker";
 import FormModal from "./FormModal";
+import { forgetUnhandledDetail } from "./unhandledDetail";
 
 const DoneReasonModal = lazy(() => import("./DoneReasonModal"));
 
@@ -126,6 +127,7 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
       notify, () => { setBusy(action); onStarted?.(action); });
     if (ok === null) return;
     setBusy("");
+    forgetUnhandledDetail(row); // 처리 끝난 행의 상세 캐시 버림(처리 중 미리 읽기로 옛 본문이 다시 캐시되는 틈 막기, 검수아 2026-10-25)
     onFinished?.(action, ok);
   };
 
@@ -168,6 +170,7 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
     onStarted?.("done");
     const ok = await performTicketDone(row, { text: reason, mode }, resolveActor(author), notify, route === "copier" && t ? t.id : undefined);
     setBusy("");
+    forgetUnhandledDetail(row);
     onFinished?.("done", ok);
   };
 

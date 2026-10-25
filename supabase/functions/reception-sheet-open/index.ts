@@ -12,6 +12,8 @@
  *  5. 결과는 엣지 메모리에 60초 캐시(Sheets API 할당·속도). 고객 전화번호는 돌려주지 않는다.
  *
  * 응답: { ok, rows, fetchedAt, errors, okSources, coveredIds, healed, healEnabled, cached }
+ *  rows[].content(2026-10-25 밤) = 최근 90일 행의 내용 열 원문 600자(줄바꿈 그대로, 40자 summary 로 다 보이면 없음) — 상세 팝업이 바로 보여 준다.
+ *  644행 실측: 원문 236.8KB → 299.4KB, gzip(서버) 72.5KB → 약 97.6KB 추정(+25KB).
  * 시트는 절대 쓰지 않는다(D6).
  *
  * 상세 한 행(2026-10-25): 본문 { row: { source, sheetRow, seq } } 이면 목록 대신 그 행만 머리행과 같이 읽어
@@ -20,7 +22,7 @@
  */
 import { batchGetValues, quoteTitle, sheetsApiConfigured, spreadsheetMeta } from "../field-sheet-sync/sheets-api.ts";
 import {
-  headerError, healCandidates, kstMonth, linkRows, openRowsOf, parseSheetRows, SHEET_LAYOUTS, sheetRowDetail, SOURCE_LABEL, SPREADSHEET_ID,
+  headerError, healCandidates, kstDaysAgo, kstMonth, LIST_CONTENT_DAYS, linkRows, openRowsOf, parseSheetRows, SHEET_LAYOUTS, sheetRowDetail, SOURCE_LABEL, SPREADSHEET_ID,
   syncedReceptionIds, type DeptJob, type ParsedSheetRow, type RemoteReception, type SheetOpenRow, type SheetRowDetail, type SheetSource,
 } from "./state.ts";
 
@@ -163,7 +165,7 @@ async function compute(): Promise<Payload> {
   const covered = new Set<string>([...syncedReceptionIds(jobs), ...links.values()]);
   return {
     ok: true,
-    rows: openRowsOf(all, links),
+    rows: openRowsOf(all, links, kstDaysAgo(LIST_CONTENT_DAYS)),
     fetchedAt: new Date().toISOString(),
     errors,
     okSources,

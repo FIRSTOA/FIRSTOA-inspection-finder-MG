@@ -111,9 +111,9 @@ describe("마지막 값 캐시 v2 — 미처리 합계", () => {
     expect(u.recontract).toBe(3);
     expect(u.oldest).toMatch(/나 \(11일/); // 복합기 AS 접수 "가"는 일정 기준이라 미처리 밖(2026-10-25)
   });
-  it("캐시에 들어가고(원본 ok 일 때만), 키·버전은 v2", () => {
-    expect(HOME_KPI_SNAPSHOT_KEY).toBe("home_kpi_snapshot_v2");
-    expect(HOME_KPI_SNAPSHOT_VERSION).toBe(2);
+  it("캐시에 들어가고(원본 ok 일 때만), 키·버전은 v3(2026-10-25 밤 팀 카드 추가 — v2 는 읽기만)", () => {
+    expect(HOME_KPI_SNAPSHOT_KEY).toBe("home_kpi_snapshot_v3");
+    expect(HOME_KPI_SNAPSHOT_VERSION).toBe(3);
     const b = bundleOf({ roster: ROSTER, unhandled: rows });
     const snap = buildHomeSnapshot(b, teamOf, Date.parse("2026-10-23T03:00:00Z"));
     expect(snap.unhandled?.total).toBe(rows.length);

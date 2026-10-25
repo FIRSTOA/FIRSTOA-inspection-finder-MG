@@ -189,6 +189,7 @@ export function boardSheetToUnhandled(row: ReceptionRow, today: string = kstDate
     key: `s:${s.source}:${s.sheetRow}`, source: "reception", kind: row.type as UnhandledKind, team: "", date,
     vendor: row.vendor || "", title: s.summary || row.field || "", assignee: row.handler || "", status: s.state || "",
     ageDays: date ? ageDaysOf(date, today) : 0, ...(s.linked && !row.id.startsWith("sheet:") ? { receptionId: row.id } : {}),
+    ...(s.content ? { detail: s.content } : {}),
     sheet: { source: s.source, row: s.sheetRow, seq: s.seq || "", author: row.author || "", vendor: row.vendor || "" },
   };
 }

@@ -34,6 +34,8 @@ export type SheetOpenRow = {
   field: string;
   region: string;
   summary: string;
+  /** 내용 열 원문(줄바꿈 그대로·600자) — 최근 90일 행 중 summary 40자로 다 안 보이는 것만(엣지 state.ts listContent). 옛 엣지는 없음 */
+  content?: string;
   receptionId?: string;
 };
 

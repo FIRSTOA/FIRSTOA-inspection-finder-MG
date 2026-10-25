@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "afcca6fe28",
+    "date": "2026-10-25",
+    "note": "서비스접수 6종 같은 뼈대(부서는 일정리스트·달력 탭만 추가) + 현황판 CS 접수 = 홈과 같은 57 + 미처리 상세 팝업에 시트·캘린더 내용 전체"
+  },
+  {
     "hash": "35f57aa2f1",
     "date": "2026-10-25",
     "note": "OKR 전용 행: 내 탭에만 보이고(저녁 규칙), 그 탭을 연 사람은 누구나 수정·판정·삭제(밤 규칙) — 사용자 재정정"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "4a1f4768ef",
     "date": "2026-09-30",
     "note": "점검 리포트: 하단 연락 문구 개선, 여러 대도 1대 디자인 그대로 세로로(두 열 압축 배치 제거)"
-  },
-  {
-    "hash": "00db5ed752",
-    "date": "2026-09-30",
-    "note": "점검 리포트: 카톡 플러스친구 링크·문자 끝 형식, 고객용 문구(조치·접수) 편집, 업체명 편집, 사진 줄 삭제, 여러 대는 두 열 가로형 카드 + 원본 크기 PNG 링크"
   }
 ];

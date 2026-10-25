@@ -18,6 +18,8 @@ export type SheetRowInfo = {
   seq: string;
   state: string;
   summary: string;
+  /** 내용 열 원문 600자(목록 응답에 있을 때만) — 상세 팝업이 바로 보여 준다 */
+  content?: string;
   region: string;
   url: string;
   linked: boolean;
@@ -71,6 +73,8 @@ type Props = {
   over90Rows?: ReceptionRow[];
   /** 카드 윗줄(업체·분야)을 누르면 — 상세 팝업 열기(2026-10-25 밤, 홈 미처리와 같은 UnhandledDetail). 없으면 누를 수 없는 글 */
   onOpenRow?: (row: ReceptionRow) => void;
+  /** 윗줄에 손을 올리면(마우스·터치 시작·포커스) — 팝업 본문 미리 읽기(2026-10-25 밤). 실패는 부르는 쪽이 무시 */
+  onWarmRow?: (row: ReceptionRow) => void;
 };
 
 const OPEN = ["접수", "진행중", "보류", "원격대기"] as const;
@@ -106,7 +110,7 @@ function SheetBadge({ sheet, compact }: { sheet: SheetRowInfo; compact: boolean 
   );
 }
 
-export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, onOpenRow }: Props) {
+export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, onOpenRow, onWarmRow }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
   const open = rows.filter((r) => (OPEN as readonly string[]).includes(r.status));
@@ -142,6 +146,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const openProps = (r: ReceptionRow) => (onOpenRow ? {
     role: "button" as const, tabIndex: 0, "aria-haspopup": "dialog" as const, title: "눌러서 상세 보기",
     onClick: () => onOpenRow(r),
+    ...(onWarmRow ? { onMouseEnter: () => onWarmRow(r), onTouchStart: () => onWarmRow(r), onFocus: () => onWarmRow(r) } : {}),
     onKeyDown: (e: { key: string; preventDefault: () => void }) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenRow(r); } },
   } : {});
   const renderCard = (r: ReceptionRow) => {

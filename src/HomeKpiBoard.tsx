@@ -4,7 +4,8 @@
  *  · 갱신: 화면이 보이고(KeepAlive 활성) 탭이 보일 때만. 60초마다 가벼운 원본, 5분마다 전체(homeKpiModel FAST_SOURCES)
  *  · 첫 로드는 세 묶음(2026-10-24 속도): 첫 숫자 원본으로 먼저 그리고 바깥 느린 원본(LATE_SOURCES)·무거운 원본(HEAVY_SOURCES)은 오는 대로
  *  · 위젯 4개(2026-10-24 마무리): 금일 현황 · KPI 달성표(분기 점검 진행은 K2 행 안) · 미처리 · OKR(범위 칩 전체/A~D/개인)
- *  · 마지막 값 캐시(homeKpiSnapshot v2): 미처리 합계도 — 미처리 원본(엣지 함수)이 오기 전엔 캐시 합계 카드, 오면 미처리 칸
+ *  · 팀 카드(2026-10-25 밤): 온 칸은 숫자·안 온 칸만 "…", 캐시(v3 teams)가 있으면 안 온 칸도 캐시 값으로 첫 그림부터
+ *  · 마지막 값 캐시(homeKpiSnapshot v3): 미처리 합계도 — 미처리 원본(엣지 함수)이 오기 전엔 캐시 합계 카드, 오면 미처리 칸
  *  · 위젯 보기는 묶음·기간이 같으면 다시 세지 않는다(cachedView) — 부모가 다시 그려도 달성표를 매번 세지 않게
  *  · 실패: 위젯마다 "—" + [다시] + 마지막 값(N분 전). 원본 표 없음 = 준비 중, 원본 없음 = 원본 연결 필요(절대 0 으로 안 보임)
  *  · 배치: localStorage home_kpi_layout_v1 = {v:1, items}. 편집(크기·위치·숨김)은 HomeKpiGrid
@@ -29,7 +30,7 @@ import {
 } from "./kpi/homeKpiModel";
 import { buildHomeSnapshot, mergeSnapshotList, readHomeSnapshot, snapshotAgo, writeHomeSnapshot, type HomeKpiSnapshot } from "./kpi/homeKpiSnapshot";
 import { kpiCellState } from "./kpi/kpiData";
-import { teamBoardView, toggleTeamFilter } from "./kpi/teamBoard";
+import { mergeTeamCardsWithSnapshot, teamBoardView, toggleTeamFilter } from "./kpi/teamBoard";
 import { TeamBoardStrip } from "./kpi/TeamBoard.view";
 import type { TeamKey } from "./kpi/teamColors";
 
@@ -298,13 +299,17 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
   const notices = [...new Set([loadError, bundle?.settings.error ? `목표 설정: ${bundle.settings.error}` : "", ...sourceNotices].filter(Boolean))];
   // 마지막 값 캐시로 그린 칸이 있는 동안(아직 안 읽은 원본이 있음) 한 줄로 알린다
   const snapAgo = snap && (!bundle || [...want].some((s) => !bundle.sources[s])) ? snapshotAgo(snap.savedAt, Date.now()) : "";
-  // 팀 카드 5장 — 달성표와 같은 행(cachedView)·미처리 묶음·OKR 이번 주에서 조합(새 조회 없음)
-  const teamCards = useMemo(() => teamBoardView(bundle, period, teamForAuthor, goalBasis), [bundle, period, goalBasis]);
+  // 팀 카드 5장 — 달성표와 같은 행 캐시(tableRowsFor)·미처리 묶음·OKR 이번 주에서 조합(새 조회 없음).
+  // 안 온 칸만 "…", 마지막 값 캐시는 이번 주·말일 기준일 때만(캐시가 그 기준으로 저장됨)
+  const teamCards = useMemo(() => {
+    const live = teamBoardView(bundle, period, teamForAuthor, goalBasis, want);
+    return period === "week" && goalBasis === "end" ? mergeTeamCardsWithSnapshot(live, snap?.teams).cards : live;
+  }, [bundle, period, goalBasis, want, snap]);
   return (
     <div className="relative border-b border-white/[0.08] px-2 py-2">
       {snapAgo && <p role="status" className="mb-2 rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-[11.5px] font-bold text-sky-200">{snapAgo === "방금" ? "방금 전" : snapAgo} 값 · {loading || !bundle ? "갱신 중" : "일부 갱신 대기"}</p>}
       {notices.map((n) => <p key={n} role="alert" className="mb-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11.5px] font-bold text-amber-300">{n}</p>)}
-      <TeamBoardStrip cards={teamCards} selected={teamFilter} onSelect={pickTeam} loading={!bundle} />
+      <TeamBoardStrip cards={teamCards} selected={teamFilter} onSelect={pickTeam} />
       <HomeKpiGrid
         layout={layout}
         widgets={widgets}

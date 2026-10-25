@@ -4,6 +4,18 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "afcca6fe28",
+    "agent": "developer",
+    "summary": "서비스접수 6종 같은 뼈대(부서는 일정리스트·달력 탭만 추가) + 현황판 CS 접수 = 홈과 같은 57 + 미처리 상세 팝업에 시트·캘린더 내용 전체"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "afcca6fe28",
+    "agent": "qa-checker",
+    "summary": "서비스접수 6종 같은 뼈대(부서는 일정리스트·달력 탭만 추가) + 현황판 CS 접수 = 홈과 같은 57 + 미처리 상세 팝업에 시트·캘린더 내용 전체"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "35f57aa2f1",
     "agent": "developer",
     "summary": "OKR 전용 행: 내 탭에만 보이고(저녁 규칙), 그 탭을 연 사람은 누구나 수정·판정·삭제(밤 규칙) — 사용자 재정정"

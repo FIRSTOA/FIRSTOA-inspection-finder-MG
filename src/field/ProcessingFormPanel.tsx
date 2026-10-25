@@ -12,6 +12,8 @@ import { NumSelect } from "./NumSelect";
 import { DevicePicker } from "./DevicePicker";
 import { SpareQuickEditor } from "./SpareQuickEditor";
 import { CounterOcrButton } from "./CounterOcrButton";
+import { GradeCustomInput, GradeSelect } from "./GradeSelect";
+import { applyGradeEverywhere, gradeChoice, hasGradeLine, readGradeLine, type GradeSetters } from "./gradeField";
 import { DURATION_STEPS, HANTIN_OPTIONS, HOUR_OPTIONS, LEVEL_OPTIONS, MINUTE_OPTIONS, PARKING_OPTIONS, SHIP_OPTIONS, TONER_COLORS, type DeviceInfo, type PerItemForm, type SharedForm } from "./fieldFormModel";
 import { Field, FieldFormCard, FieldFormHead, FieldSection, FIELD_TEXTAREA } from "./FieldFormShell.view";
 
@@ -42,6 +44,12 @@ export type ProcessingFormPanelProps = {
   showLevel: boolean;
   showHantinParking: boolean;
   regionValue: string;
+  /** 등급 — 결과 글(textOutput 또는 listOutput[0])의 "등급:" 줄이 값. gradeSetters 를 안 넘기면 등급 칸을 그리지 않는다 */
+  gradeText?: string;
+  gradeSetters?: GradeSetters;
+  /** (테스트·직접 지정용) 등급 값과 바꾸기. gradeText/gradeSetters 보다 앞선다. null = 줄이 아직 없음(원본 전, 잠금) */
+  grade?: string | null;
+  onGrade?: (v: string) => void;
 };
 
 // 매수·잔량 숫자칸은 예전 높이(py-1.5) 그대로 — 폰에서 양식이 길어지지 않게(Q2). 나머지 한 줄 입력은 UI.input(h-10)
@@ -60,16 +68,25 @@ export function ProcessingFormPanel({
   reportTypes, reportTypeOther, setReportTypes, setReportTypeOther,
   canManageDevices, allItemForms, onAddDevice, onUpdateDevice, onMoveDevice, onReorderDevice, onRemoveDevice,
   showLevel, showHantinParking, regionValue,
+  gradeText, gradeSetters, grade: gradeProp, onGrade: onGradeProp,
 }: ProcessingFormPanelProps) {
+  const grade = gradeProp !== undefined ? gradeProp : gradeSetters ? (hasGradeLine(gradeText || "") ? readGradeLine(gradeText || "") : null) : undefined;
+  const onGrade = onGradeProp || (gradeSetters ? (g: string) => applyGradeEverywhere(g, gradeSetters.text, gradeSetters.list, gradeSetters.blocks) : undefined);
   const [partsExpanded, setPartsExpanded] = useState(false);
+  // 직접 입력 글 칸 — 직접 입력을 골랐거나 목록 밖 값(불러온 '유지보수' 등)이면 연다. 목록 값을 고르면 닫는다
+  const [gradeCustomPicked, setGradeCustomPicked] = useState(false);
+  const showGrade = grade !== undefined && !!onGrade;
+  const gradeCustomOpen = showGrade && grade !== null && (gradeCustomPicked || gradeChoice(grade).custom);
   const [selfExpanded, setSelfExpanded] = useState(false);
   const chip = (active: boolean) => ({ background: active ? accent : "#F1F5F9", color: active ? "white" : "#334155" });
 
   return (
     <FieldFormCard label="점검·AS 양식">
-      {/* 머리: 작성자 / 지역 / 구분 / 레벨 */}
-      <FieldFormHead accent={accent} className={`grid gap-2 ${showLevel ? "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)_4.5rem]" : "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)]"}`}>
-        <Field label="작성자">
+      {/* 머리: 작성자 / 지역 / 등급 / 구분 / 레벨 — 폰(390px)은 작성자 한 줄 + 지역·등급·구분·레벨 한 줄, sm 이상은 한 줄 */}
+      <FieldFormHead accent={accent} className={`grid gap-2 ${showGrade
+        ? (showLevel ? "grid-cols-[4rem_4.5rem_minmax(0,1fr)_4.5rem] sm:grid-cols-[minmax(0,1fr)_4rem_4.5rem_minmax(0,1fr)_4.5rem]" : "grid-cols-[4rem_4.5rem_minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_4rem_4.5rem_minmax(0,1fr)]")
+        : (showLevel ? "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)_4.5rem]" : "grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)]")}`}>
+        <Field label="작성자" className={showGrade ? "col-span-full sm:col-span-1" : ""}>
           {authorLocked() ? <div className="truncate rounded-lg border border-transparent px-2 py-2 text-sm font-semibold text-slate-900">{author}</div> /* 그룹웨어 로그인 고정이면 이름만 글자로(2026-10-19 사용자 "없애라") */ : <AuthorPicker value={author} onChange={setAuthor} accent={accent} />}
         </Field>
         <Field label="지역">
@@ -81,6 +98,13 @@ export function ProcessingFormPanel({
             accent={accent}
           />
         </Field>
+        {showGrade && (
+          <Field label="등급">
+            {grade === null
+              ? <div className="truncate rounded-lg border border-dashed border-slate-300 px-2 py-2 text-sm text-slate-400" title="원본을 넣으면 고를 수 있습니다">-</div>
+              : <GradeSelect value={grade} accent={accent} onCustom={() => setGradeCustomPicked(true)} onChange={(v) => { setGradeCustomPicked(false); onGrade!(v); }} />}
+          </Field>
+        )}
         <Field label="구분" aside={<span className="text-[11px] text-slate-400">중복</span>}>
           <ReportTypeSelector selected={reportTypes} other={reportTypeOther} onSelected={setReportTypes} onOther={setReportTypeOther} accent={accent} />
         </Field>
@@ -94,6 +118,11 @@ export function ProcessingFormPanel({
               accent={accent}
             />
           </Field>
+        )}
+        {gradeCustomOpen && (
+          <div className="col-span-full">
+            <GradeCustomInput value={grade ?? ""} onChange={(v) => onGrade!(v)} autoFocus={gradeCustomPicked} />
+          </div>
         )}
       </FieldFormHead>
 

@@ -57,6 +57,22 @@ describe("필드 양식 패널 렌더", () => {
     expect(html).toContain("기기 선택");
   });
 
+  it("등급 칸(2026-10-25): 지역→등급→구분→레벨 순, 목록 밖 값은 직접 입력 칸에, 원본 전엔 잠금, 넘기지 않으면 칸 없음", () => {
+    const html = render(createElement(ProcessingFormPanel, processingProps({ showLevel: true, grade: "유지보수", onGrade: noop })));
+    const order = ["지역", "등급", "구분", "레벨"].map((l) => html.indexOf(`>${l}<`));
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html).toContain('aria-label="등급 직접 입력"');
+    expect(html).toContain('value="유지보수"');
+    const known = render(createElement(ProcessingFormPanel, processingProps({ showLevel: true, grade: "SS", onGrade: noop })));
+    expect(known).not.toContain('aria-label="등급 직접 입력"');
+    expect(render(createElement(ProcessingFormPanel, processingProps({ grade: null, onGrade: noop })))).toContain("원본을 넣으면 고를 수 있습니다");
+    expect(render(createElement(ProcessingFormPanel, processingProps({})))).not.toContain(">등급<");
+    const setters = { text: noop, list: noop, blocks: noop };
+    expect(render(createElement(ProcessingFormPanel, processingProps({ gradeText: "구분: AS\n등급: 유지보수\n업체명: A", gradeSetters: setters })))).toContain('value="유지보수"');
+    expect(render(createElement(ProcessingFormPanel, processingProps({ gradeText: "업체명: A", gradeSetters: setters })))).toContain("원본을 넣으면 고를 수 있습니다");
+  });
+
   it("S6 한 장의 종이: 섹션 제목·카드 1장, 알약 라벨·3중 상자 없음", () => {
     const html = render(createElement(ProcessingFormPanel, processingProps({ showLevel: true, showHantinParking: true })));
     expect(html).toContain("추가 정보");

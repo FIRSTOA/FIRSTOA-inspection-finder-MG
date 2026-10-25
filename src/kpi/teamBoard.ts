@@ -1,15 +1,19 @@
 /**
  * 홈 3차 "팀 보드"(2026-10-25, docs/tasks/home-design-3-impl-2026-10-25.md) — 팀 카드 5장(A·B·C·D·CSS=E)과 머리 띠 큰 숫자 3개의 순수 모델.
  * 새 조회 없음: 이미 읽은 묶음(KpiBundle)과 이미 있는 함수 결과만 조합한다.
- *  · 주요 목표 판정·미니 KPI·정기점검 % = 달성표 행(homeKpiModel.tableRows — 달성표 위젯과 같은 cachedView 키라 다시 세지 않음)의 팀 칸
+ *  · 주요 목표 판정·미니 KPI·정기점검 % = 달성표 행(homeKpiModel.tableRowsFor — 달성표 위젯과 같은 행 캐시라 다시 세지 않음)의 팀 칸
  *  · 미처리 = facts.unhandled(homeUnhandled.mergeUnhandled 결과)의 팀 행 수 — 홈 미처리 칸 팀 탭과 같은 숫자
  *  · OKR 이번 주 % = okrWeekResult(이번 주, 전체 범위).byTeam — OKR 위젯 [전체] 칩과 같은 숫자. CSS(E)는 OKR 대상 아님 → "—"
- * 화면은 TeamBoard.view.tsx. 테스트: tests/teamBoard.test.ts
+ * 첫 그림(2026-10-25 밤 사용자 "홈에서 팀별 수치가 조금 늦게 나온다"):
+ *  · 팀 카드는 34지표 달성표 전체가 아니라 필요한 지표(주요 목표·미니 4·분기 점검)만 행 단위 캐시(tableRowsFor)로 센다
+ *  · 칸마다 "기다림(wait)" — 원본을 아직 안 읽었고 읽을 예정이면 그 칸만 "…"(점선), 온 칸은 숫자. 카드 전체를 로딩으로 묶지 않는다
+ *  · 마지막 값 캐시(homeKpiSnapshot v3 teams)가 있으면 기다리는 칸을 그 값으로(mergeTeamCardsWithSnapshot) — 실패(error) 칸은 덮지 않음
+ * 화면은 TeamBoard.view.tsx. 테스트: tests/teamBoard.test.ts · tests/teamBoardFirstPaint.test.ts
  */
-import { KPI_DEFS, type KpiId } from "./kpiDefs";
+import { KPI_BY_ID, KPI_DEFS, mainKpiIds, type KpiId, type KpiSource } from "./kpiDefs";
 import { okrWeekResult, pct, workinPace, type OkrWeekFacts, type RosterMember } from "./kpiCompute";
 import type { KpiBundle } from "./kpiData";
-import { cachedView, okrPeopleForTeam, tableRows, type ModelCtx, type TablePeriod, type TableRowModel } from "./homeKpiModel";
+import { cachedView, okrPeopleForTeam, tableRowsFor, type ModelCtx, type TablePeriod, type TableRowModel } from "./homeKpiModel";
 import { OKR_TEAMS } from "../okr";
 import type { KpiStatus } from "./KpiWidgets.view";
 import { UNHANDLED_KINDS, type UnhandledKind, type UnhandledRow, type UnhandledTab } from "../homeUnhandled";
@@ -33,7 +37,12 @@ export const TEAM_INSPECTION_KPI: KpiId | undefined = KPI_DEFS.find((d) => d.nam
 export type TeamPill = "behind" | "done" | "onTrack" | "none";
 export const TEAM_PILL_LABEL: Record<TeamPill, string> = { behind: "부족", done: "달성", onTrack: "순항", none: "판정 없음" };
 
-export type TeamMiniTile = { id: string; label: string; status: KpiStatus; pct: number | null; value: number | null };
+/** wait = 그 지표 원본을 아직 안 읽었고 읽을 예정(화면 "…" 점선). 실패·준비 중은 wait 아님 */
+export type TeamMiniTile = { id: string; label: string; status: KpiStatus; pct: number | null; value: number | null; wait?: boolean };
+
+/** 칸별 기다림 — true 인 칸만 "…", 나머지는 숫자(또는 "—") */
+export type TeamCardWait = { pill: boolean; headcount: boolean; unhandled: boolean; okr: boolean; inspection: boolean; alerts: boolean };
+export const NO_WAIT: TeamCardWait = { pill: false, headcount: false, unhandled: false, okr: false, inspection: false, alerts: false };
 
 export type TeamCardModel = {
   team: TeamKey;
@@ -49,6 +58,10 @@ export type TeamCardModel = {
   tiles: TeamMiniTile[];
   /** 주의 한 줄 조각(없으면 빈 배열 → "주의 없음") */
   alerts: string[];
+  /** 아직 안 온 칸(없으면 다 옴) */
+  wait?: TeamCardWait;
+  /** 마지막 값 캐시로 채운 칸이 있다 */
+  stale?: boolean;
 };
 
 /**
@@ -78,14 +91,37 @@ export type TeamBoardParts = {
   okrWeek: OkrWeekFacts | null;
   /** 팀별 이번 주 OKR 보고 미작성 인원 = homeKpiModel.okrPeopleForTeam(명단 ∪ 보고자) 의 missing 수 — OKR 칸 팀원 목록과 같은 정의 */
   okrMissing?: Partial<Record<TeamKey, number>> | null;
+  /** 기다리는 원본 — 없으면 다 온 것(옛 호출·테스트) */
+  waiting?: TeamWaiting;
 };
+
+/** 아직 안 왔고 올 예정인 것: 지표 id 집합(또는 전부) + 미처리·OKR·명단 원본 */
+export type TeamWaiting = { ids: ReadonlySet<string> | "all"; unhandled: boolean; okr: boolean; roster: boolean };
+
+/**
+ * 부분 그리기 판정(순수). 알약은 주요 목표 하나라도 기다리면 "…"(일부만으로 달성·부족을 말하지 않음),
+ * 주의 한 줄은 그 재료(주요 목표·미처리·OKR) 중 하나라도 기다리면 "…".
+ */
+export function teamCardWait(team: TeamKey, mainIds: readonly string[], w: TeamWaiting | undefined): { card: TeamCardWait; tile: (id: string) => boolean } {
+  if (!w) return { card: NO_WAIT, tile: () => false };
+  const idWait = (id: string) => w.ids === "all" || w.ids.has(id);
+  const pill = w.ids === "all" || mainIds.some(idWait);
+  const okr = team !== "E" && w.okr; // CSS(E)는 OKR 대상 아님 — 기다리지 않는다
+  const unhandled = w.unhandled;
+  return {
+    card: { pill, headcount: w.roster, unhandled, okr, inspection: TEAM_INSPECTION_KPI ? idWait(TEAM_INSPECTION_KPI) : false, alerts: pill || unhandled || okr },
+    tile: idWait,
+  };
+}
 
 /** 순수 조합 — 테스트는 이것으로. rows 는 tableRows 결과(이번 기간), unhandled 는 mergeUnhandled 결과 */
 export function teamBoardFromParts(p: TeamBoardParts): TeamCardModel[] {
   const byId = new Map((p.rows || []).map((r) => [r.id, r]));
   const okr = p.okrWeek ? okrWeekResult(p.okrWeek, p.okrWeek.id) : null;
+  const mainIds = (p.rows || []).filter((r) => r.main).map((r) => r.id);
   return TEAM_ORDER.map((team) => {
     const okrApplies = team !== "E";
+    const w = teamCardWait(team, mainIds, p.waiting);
     const mainRows = (p.rows || []).filter((r) => r.main && r.cellState === "ready");
     const mainCells = mainRows.map((r) => ({ row: r, cell: cellOf(r, team) })).filter((x): x is { row: TableRowModel; cell: NonNullable<ReturnType<typeof cellOf>> } => !!x.cell);
     const teamRows = p.unhandled ? p.unhandled.filter((r) => r.team === team) : null;
@@ -93,7 +129,7 @@ export function teamBoardFromParts(p: TeamBoardParts): TeamCardModel[] {
     const tiles: TeamMiniTile[] = TEAM_MINI_KPIS.map(({ id, short }) => {
       const row = byId.get(id);
       const c = cellOf(row, team);
-      return { id, label: short, status: c ? c.status : "pending", pct: cellPct(c), value: c ? c.value : null };
+      return { id, label: short, status: c ? c.status : "pending", pct: cellPct(c), value: c ? c.value : null, ...(w.tile(id) ? { wait: true } : {}) };
     });
     // 주의 한 줄: 가장 낮은 % 의 부족 지표 · OKR 미작성 n명 · 가장 오래된 미처리 n일(오늘 들어온 건은 주의 아님)
     const alerts: string[] = [];
@@ -114,18 +150,83 @@ export function teamBoardFromParts(p: TeamBoardParts): TeamCardModel[] {
       okrPct, okrApplies,
       inspectionPct: TEAM_INSPECTION_KPI ? cellPct(cellOf(byId.get(TEAM_INSPECTION_KPI), team)) : null,
       tiles, alerts,
+      ...(p.waiting ? { wait: w.card } : {}),
     };
   });
 }
 
-/** 묶음 → 팀 카드 5장. 달성표 위젯과 같은 cachedView 키(`table|end`)를 써서 같은 묶음·기간이면 다시 세지 않는다 */
-export function teamBoardView(b: KpiBundle | null, period: TablePeriod, teamOf: ModelCtx["teamOf"], basis: "end" | "early" = "end"): TeamCardModel[] {
-  if (!b) return teamBoardFromParts({ rows: null, unhandled: null, roster: null, okrWeek: null });
+/** 팀 카드가 쓰는 지표 — 주요 목표 + 미니 타일 4 + 분기 점검(정의 순서) */
+export function teamBoardKpiIds(targets: Parameters<typeof mainKpiIds>[0]): KpiId[] {
+  const want = new Set<KpiId>([...mainKpiIds(targets), ...TEAM_MINI_KPIS.map((t) => t.id), ...(TEAM_INSPECTION_KPI ? [TEAM_INSPECTION_KPI] : [])]);
+  return KPI_DEFS.filter((d) => want.has(d.id)).map((d) => d.id);
+}
+
+/**
+ * 묶음 → 기다리는 것(순수). want = 이번에 읽을 원본(HomeKpiBoard 배치 기준). 안 읽은 원본이 want 에 있어야 "기다림" —
+ * 숨긴 위젯 원본처럼 안 읽을 것은 기다리지 않는다("—" 그대로). want 를 안 주면 안 읽은 것은 모두 올 예정으로 본다.
+ * 지표는 kpiCellState 가 off(안 읽은 원본이 있음)이고 그 안 읽은 원본이 모두 올 예정이며, 이미 온 원본 중 실패가 없을 때만 기다림.
+ */
+export function teamWaiting(b: KpiBundle | null, ids: readonly KpiId[], want?: ReadonlySet<KpiSource>): TeamWaiting {
+  const coming = (s: KpiSource) => !b?.sources[s] && (!want || want.has(s));
+  const idWaits = (id: KpiId) => {
+    const def = KPI_BY_ID[id];
+    if (def.status === "unlinked") return false;
+    const notYet = def.loads.filter((s) => !b?.sources[s]);
+    if (!notYet.length || !notYet.every(coming)) return false;
+    return def.loads.every((s) => !b?.sources[s] || b.sources[s]!.status === "ok" || s === "roster"); // 이미 실패한 원본이 있으면 기다려도 숫자가 안 온다
+  };
+  return { ids: new Set(ids.filter(idWaits)), unhandled: coming("unhandled"), okr: coming("okr"), roster: coming("roster") };
+}
+
+/**
+ * 묶음 → 팀 카드 5장. 필요한 지표 행만 센다(tableRowsFor — 행 캐시를 달성표와 같이 써 두 번 세지 않음) + 기다리는 칸 표시.
+ * want = 읽을 원본(기다림 판정용).
+ */
+export function teamBoardView(b: KpiBundle | null, period: TablePeriod, teamOf: ModelCtx["teamOf"], basis: "end" | "early" = "end", want?: ReadonlySet<KpiSource>): TeamCardModel[] {
+  if (!b) return teamBoardFromParts({ rows: null, unhandled: null, roster: null, okrWeek: null, waiting: { ...teamWaiting(null, [], want), ids: "all" } });
   const ctx: ModelCtx = { teamOf, period };
-  const rows = cachedView(b, ctx, `table|${basis}`, () => tableRows(b, ctx, basis));
+  const ids = teamBoardKpiIds(b.settings.targets);
+  const rows = cachedView(b, ctx, `teamBoard|rows|${basis}`, () => tableRowsFor(b, ctx, ids, basis));
+  const waiting = teamWaiting(b, ids, want);
   const okrMissing = cachedView(b, ctx, "teamBoard|okrMissing", () =>
     Object.fromEntries(OKR_TEAMS.map((t) => [t, okrPeopleForTeam(b, t, "week").filter((x) => x.missing).length])) as Partial<Record<TeamKey, number>>);
-  return teamBoardFromParts({ rows, unhandled: b.facts.unhandled ?? null, roster: b.facts.roster ?? null, okrWeek: b.facts.okr?.week ?? null, okrMissing });
+  return teamBoardFromParts({ rows, unhandled: b.facts.unhandled ?? null, roster: b.facts.roster ?? null, okrWeek: b.facts.okr?.week ?? null, okrMissing, waiting });
+}
+
+/**
+ * 기다리는 칸만 마지막 값 캐시로(순수). 캐시 카드의 그 칸도 기다림이었으면 쓰지 않는다. 실패 칸은 live 가 기다림이 아니라 덮지 않는다.
+ * used = 캐시 값을 하나라도 썼는지.
+ */
+export function mergeTeamCardsWithSnapshot(live: TeamCardModel[], snap: TeamCardModel[] | null | undefined): { cards: TeamCardModel[]; used: boolean } {
+  if (!snap?.length) return { cards: live, used: false };
+  const byTeam = new Map(snap.map((c) => [c.team, c]));
+  let used = false;
+  const cards = live.map((c) => {
+    const old = byTeam.get(c.team);
+    const w = c.wait;
+    if (!old || !w) return c;
+    const ow = old.wait ?? NO_WAIT;
+    const nw: TeamCardWait = { ...w };
+    const next: TeamCardModel = { ...c, wait: nw };
+    let took = false;
+    const take = (k: keyof TeamCardWait, apply: () => void) => { if (w[k] && !ow[k]) { apply(); nw[k] = false; took = true; } };
+    take("pill", () => { next.pill = old.pill; });
+    take("headcount", () => { next.headcount = old.headcount; });
+    take("unhandled", () => { next.unhandled = old.unhandled; });
+    take("okr", () => { next.okrPct = old.okrPct; });
+    take("inspection", () => { next.inspectionPct = old.inspectionPct; });
+    take("alerts", () => { next.alerts = [...old.alerts]; });
+    next.tiles = c.tiles.map((t) => {
+      const o = old.tiles.find((x) => x.id === t.id);
+      if (!t.wait || !o || o.wait) return t;
+      took = true;
+      return { ...o, wait: false };
+    });
+    if (!took) return c;
+    used = true;
+    return { ...next, stale: true };
+  });
+  return { cards, used };
 }
 
 /** 홈 머리 띠 큰 숫자 3개 — 미처리 전체 · OKR 이번 주(CS 4파트) % · 분기 점검 % . 못 읽었으면 null("—") */

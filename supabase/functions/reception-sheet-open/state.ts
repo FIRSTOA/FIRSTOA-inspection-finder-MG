@@ -133,7 +133,23 @@ export type ParsedSheetRow = {
   field: string;
   region: string;
   summary: string;
+  /**
+   * 내용 열 원문(줄바꿈 그대로, 최대 LIST_CONTENT_MAX 자) — summary(한 줄 40자)로 다 보이지 않을 때만 있다.
+   * 상세 팝업이 엣지 한 행 조회(1~2초)를 기다리지 않고 바로 보여 주려고(2026-10-25 밤). 최근 LIST_CONTENT_DAYS 일 행만 응답에 싣는다(openRowsOf).
+   */
+  content?: string;
 };
+
+/** 목록 응답에 싣는 내용 최대 글자 */
+export const LIST_CONTENT_MAX = 600;
+/** 이보다 오래된 행은 내용 원문을 싣지 않는다(프런트가 90일 넘은 행은 접어 둠 — 응답 크기, 2026-10-25 실측 644행 중 307행만 최근) */
+export const LIST_CONTENT_DAYS = 90;
+
+/** 내용 칸 원문 → 목록에 실을 값. 한 줄 40자(summary)로 다 보이면 "" */
+export function listContent(raw: string): string {
+  const full = keepText(raw, LIST_CONTENT_MAX);
+  return full && (full.length > 40 || full.includes("\n")) ? full : "";
+}
 
 /** 프런트로 돌려주는 모양(미처리·보류만) */
 export type SheetOpenRow = Omit<ParsedSheetRow, "cls"> & { cls: "open" | "hold"; receptionId?: string };
@@ -186,6 +202,8 @@ export function parseSheetRows(layout: SheetLayout, values: string[][]): { rows:
       region: cell(row, layout.regionCol),
       summary: clip(cell(row, layout.summaryCol), 40),
     });
+    const content = listContent(row[layout.summaryCol - 1] ?? "");
+    if (content) rows[rows.length - 1].content = content;
   }
   return { rows, error: "" };
 }
@@ -249,15 +267,25 @@ export function healCandidates(rows: ParsedSheetRow[], links: Map<string, string
   return out;
 }
 
-/** 미처리·보류 행만 + 이어진 접수 id */
-export function openRowsOf(rows: ParsedSheetRow[], links: Map<string, string>): SheetOpenRow[] {
+/**
+ * 미처리·보류 행만 + 이어진 접수 id. contentSince(YYYY-MM-DD)를 주면 그보다 오래된 행(날짜 있는 것)은 내용 원문(content)을 뺀다 —
+ * 날짜를 모르는 행은 프런트가 최근 칸에 넣으므로 남긴다. 안 주면 그대로.
+ */
+export function openRowsOf(rows: ParsedSheetRow[], links: Map<string, string>, contentSince = ""): SheetOpenRow[] {
   const out: SheetOpenRow[] = [];
   for (const r of rows) {
     if (r.cls === "done") continue;
     const id = links.get(`${r.source}:${r.sheetRow}`);
-    out.push({ ...r, cls: r.cls, ...(id ? { receptionId: id } : {}) });
+    const { content, ...rest } = r;
+    const keep = content && !(contentSince && r.date && r.date < contentSince);
+    out.push({ ...rest, cls: r.cls, ...(keep ? { content } : {}), ...(id ? { receptionId: id } : {}) });
   }
   return out;
+}
+
+/** KST 오늘에서 days 일 전(YYYY-MM-DD) */
+export function kstDaysAgo(days: number, now: Date = new Date()): string {
+  return new Date(now.getTime() + 9 * 3600_000 - days * 86_400_000).toISOString().slice(0, 10);
 }
 
 /** KST 이번 달(YYYY-MM) */

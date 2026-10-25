@@ -13,6 +13,7 @@ import { isDeptType } from "./deptReception";
 import { applySheetToBoard, loadBoardData, loadScheduleOverdue, replaceCopierWithTickets, requestOpenOverdue, type BoardData, type ScheduleOverdueRow } from "./receptionBoardData";
 import type { UnhandledRow } from "./homeUnhandled";
 import { UnhandledDetail } from "./HomeUnhandledPanel";
+import { prefetchUnhandledDetail } from "./unhandledDetail";
 import { loadSheetOpen } from "./receptionSheetOpen";
 import SheetRowCard from "./SheetRowCard";
 import UnhandledActionBar from "./UnhandledActionBar.view";
@@ -161,6 +162,7 @@ export default function ReceptionBoardPanel({ onSelectType, onChanged, author, o
     return u ? <div className="w-full"><UnhandledActionBar row={u} author={author} onFinished={(_a, ok) => { if (ok) onFinished(); }} onOpenSchedule={u.source === "ticket" ? openSchedule : undefined} /></div> : null;
   };
   const openDetail = (row: ReceptionRow) => { const u = unhandledOf(row); if (u) setDetail({ row: u, board: row }); };
+  const warmDetail = (row: ReceptionRow) => { const u = unhandledOf(row); if (u) prefetchUnhandledDetail(u); }; // 손을 올리면 팝업 본문 미리 읽기(동시 2개)
   // 팝업 안 보조 단추: 일정 줄 = 일정리스트 미처리, 원격·IT 앱 접수 = 원격/IT 대기열·접수리스트. 부서·시트 줄은 없음(팝업의 시트 링크로)
   const detailOpen = (d: { row: UnhandledRow; board: ReceptionRow }): (() => void) | undefined => {
     if (d.row.source === "ticket") return () => { setDetail(null); openSchedule(); };
@@ -195,6 +197,7 @@ export default function ReceptionBoardPanel({ onSelectType, onChanged, author, o
       sheetNotice={notice || undefined}
       over90Rows={over90Rows}
       onOpenRow={openDetail}
+      onWarmRow={warmDetail}
     />
     {data && copierOpen > 0 && (!selected || selected === "복합기 AS") && (
       <button type="button" onClick={onOpenReceptionList} disabled={!onOpenReceptionList}

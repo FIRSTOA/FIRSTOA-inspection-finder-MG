@@ -454,10 +454,24 @@ function targetLabelOf(id: KpiId, t: KpiTarget | undefined, board: KpiPeriodKey)
 }
 
 export function tableRows(b: KpiBundle, ctx: ModelCtx, basis: "end" | "early" = "end"): TableRowModel[] {
+  return tableRowsFor(b, ctx, KPI_DEFS.map((d) => d.id), basis);
+}
+
+/**
+ * 고른 지표 행만(정의 순서). 행마다 cachedView(`row|기준|id`) — 팀 카드(필요한 지표 몇 개)와 달성표(34개)가 같은 행을 두 번 세지 않는다(2026-10-25 밤).
+ * 숫자는 tableRows 와 같은 계산 그대로(행 하나를 세는 몸통을 나눴을 뿐).
+ */
+export function tableRowsFor(b: KpiBundle, ctx: ModelCtx, ids: Iterable<KpiId>, basis: "end" | "early" = "end"): TableRowModel[] {
+  const want = new Set(ids);
   const main = new Set(mainKpiIds(b.settings.targets));
-  // 개인 칩 보조 글자 — 블로그 올해 누계(K20)·오버홀 수리 점수(K33). 원본이 없으면 붙이지 않는다
-  const blogTotals = b.facts.blog ? blogYearTotals(b.facts.blog, b.today) : null;
-  return KPI_DEFS.map((def) => {
+  // 개인 칩 보조 글자 — 블로그 올해 누계(K20)·오버홀 수리 점수(K33). 원본이 없으면 붙이지 않는다(필요할 때 한 번만 센다)
+  const blogTotals = () => (b.facts.blog ? cachedView(b, ctx, "blogYearTotals", () => blogYearTotals(b.facts.blog!, b.today)) : null);
+  return KPI_DEFS.filter((def) => want.has(def.id)).map((def) =>
+    cachedView(b, ctx, `row|${def.id === "K2" ? basis : "-"}|${def.id}|${main.has(def.id) ? 1 : 0}`, () => tableRowOf(b, ctx, def, basis, main, blogTotals)));
+}
+
+function tableRowOf(b: KpiBundle, ctx: ModelCtx, def: (typeof KPI_DEFS)[number], basis: "end" | "early", main: Set<KpiId>, blogTotalsOf: () => Map<string, number> | null): TableRowModel {
+  {
     const st = kpiCellState(def.id, b);
     const p = effectivePeriod(def.id, ctx.period) ?? "month";
     const open = !isPeriodKey(def.period) && !def.periods.length; // 열린 건·7일 — 기간 경과 판정 없음
@@ -496,7 +510,8 @@ export function tableRows(b: KpiBundle, ctx: ModelCtx, basis: "end" | "early" = 
         name: r.label, team: teamLabelOf(r.team), value: r.actual ?? 0, target: r.target, done: statusOf(r.actual, r.target) === "done",
         ...(r.rest ? { sub: "명단 밖·다른 팀 작성" } : {}),
       }));
-    if (def.id === "K20" && blogTotals) for (const person of people) person.total = blogTotals.get(person.name) ?? 0;
+    const blogTotals = def.id === "K20" ? blogTotalsOf() : null;
+    if (blogTotals) for (const person of people) person.total = blogTotals.get(person.name) ?? 0;
     if (def.id === "K33" && b.facts.overhaul) {
       const by = new Map(overhaulByPerson(b.facts.overhaul, b.facts.roster, ctx.teamOf, rangeOfPeriod(b.ranges, p)).byPerson.map((x) => [x.name, x]));
       for (const person of people) { const o = by.get(person.name); if (o && o.repairPoints) person.sub = `수리 ${o.repairPoints}점`; }
@@ -514,5 +529,5 @@ export function tableRows(b: KpiBundle, ctx: ModelCtx, basis: "end" | "early" = 
       trend = { delta: prev === null || all.actual === null ? null : all.actual - prev, label: pr ? `${pr.label} 대비` : "" };
     }
     return { ...base, status, cells, teamBars, people, ...(trend ? { trend } : {}), ...(quarter ? { quarter } : {}) };
-  });
+  }
 }

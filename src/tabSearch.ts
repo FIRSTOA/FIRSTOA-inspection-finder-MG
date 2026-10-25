@@ -217,7 +217,25 @@ export type TabLine = {
   otherVendor: string; // 같은 기기가 다른 업체 이름으로 남은 기록이면 그 이름
   vendor: string;      // 기록에 적힌 업체명(가림 적용) — 펼침의 "같은 업체 이력" 묶음
   logiKind: string;    // 물류 탭만: 납품·철수·교체·여분… (같은 날·같은 종류 한 줄로 묶는 기준)
+  formText?: string;   // 점검·AS 탭의 jeomgeom·as_records 줄만: 양식 [불러오기]에 넣을 _원문 전체(가림·자르기 없음 — 거래처검색 불러오기와 같은 글)
 };
+
+/** [불러오기]에 넣을 양식 원문 — 점검·AS 탭의 점검(jeomgeom)·AS(as_records) 기록만. 다른 탭·표(방문기록·물류·불만…)는 "" = 단추 없음 */
+export function loadableFormText(tab: TabKey, table: string, row: Row): string {
+  if (tab !== "inspection") return "";
+  if (table !== "jeomgeom" && table !== "as_records") return "";
+  return str(row, "_원문").trim() ? str(row, "_원문") : "";
+}
+
+/** 이 줄에 [불러오기] 단추를 그릴까 — 불러오기 함수를 받은 화면(점검·AS 탭) + 양식 원문이 있는 점검·AS 기록 */
+export function canLoadLine(line: Pick<TabLine, "formText">, onLoad: unknown): boolean {
+  return typeof onLoad === "function" && !!line.formText;
+}
+
+/** 불러온 뒤 토스트 — "○○ 2026-10-20 AS 기록을 불러왔습니다" */
+export function loadedToast(line: Pick<TabLine, "vendor" | "date" | "kind">): string {
+  return [line.vendor, line.date, `${line.kind} 기록을 불러왔습니다`].filter(Boolean).join(" ");
+}
 
 /** 탭 기준으로 남길 행인가 — 청정기·교체·방문기록(점검) 거름 */
 export function keepRow(tab: TabKey, table: string, row: Row): boolean {
@@ -279,6 +297,7 @@ export function toLines(tab: TabKey, results: SourceResult[], e: Entity | null):
         device: maskRrn(device), raw: maskRrn(rawText).slice(0, 2000), loose,
         otherVendor: e && !via && isOtherVendor(ev, e) ? maskRrn(ev.vendor) : "",
         vendor: maskRrn(via || (ticket && ticketVendorOf(row)) || ev.vendor), logiKind,
+        formText: loadableFormText(tab, r.source.table, row),
       });
     };
     r.exact.forEach((row) => push(row, false));

@@ -7,15 +7,30 @@
 //  - 요청 번호로 늦게 온 결과가 새 결과를 덮지 않게 한다.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildEntity, looksLikeDevice, resolveCandidates, type Candidate, type Entity } from "./entity360";
-import { coverageOf, filterByChip, lastEvents, runTabSearch, summaryText, TAB_SPECS, tabKeyOf, toLines, type TabKey, type TabResult } from "./tabSearch";
+import { coverageOf, filterByChip, lastEvents, loadedToast, runTabSearch, summaryText, TAB_SPECS, tabKeyOf, toLines, type TabKey, type TabLine, type TabResult } from "./tabSearch";
 import { notify } from "./toast";
+import { askConfirm } from "./confirmModal";
 import TabSearchView from "./TabSearch.view";
 
 type CandBox = { q: string; list: Candidate[] };
 type Picked = { cand: Candidate | null; name: string; query: string };
 type Run = { id: number; tab: TabKey; state: "loading" | "done" | "error"; results: TabResult[]; error: string };
 
-export default function TabSearchBar({ mode, pcSubTab }: { mode: string; pcSubTab?: string }) {
+// 점검·AS 탭 [불러오기](2026-10-25): 거래처검색의 불러오기와 같은 함수(App handleLoadForm — _원문을 변환기에 넣고 점검/AS 양식을 글로 자동 판별)를 받아 쓴다.
+//  hasDraft = 원본에 입력 중인 글이 있음 → 덮어쓰기 확인. 불러온 뒤 결과 칸을 닫고 양식 카드로 스크롤·첫 칸 포커스.
+type Props = { mode: string; pcSubTab?: string; onLoadForm?: (text: string) => void; hasDraft?: boolean };
+
+/** 양식 카드(ProcessingFormPanel 의 FieldFormCard aria-label)로 스크롤하고 첫 입력에 포커스 — 변환이 끝나 카드가 다시 그려진 뒤에 */
+function focusFieldForm() {
+  window.setTimeout(() => {
+    const card = document.querySelector<HTMLElement>('section[aria-label="점검·AS 양식"]');
+    if (!card) return;
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+    card.querySelector<HTMLElement>("input:not([disabled]), textarea, button:not([disabled])")?.focus({ preventScroll: true });
+  }, 350);
+}
+
+export default function TabSearchBar({ mode, pcSubTab, onLoadForm, hasDraft }: Props) {
   const tab = tabKeyOf(mode, pcSubTab);
   const [query, setQuery] = useState("");
   const [cand, setCand] = useState<CandBox>({ q: "", list: [] });
@@ -77,6 +92,17 @@ export default function TabSearchBar({ mode, pcSubTab }: { mode: string; pcSubTa
     // start 는 매 렌더 새로 만들어지지만 검색어·탭이 바뀔 때만 다시 돌면 된다
   }, [q, tab, picked]);
 
+  const clearAll = () => { candReq.current++; runReq.current++; setQuery(""); setCand({ q: "", list: [] }); setPicked(null); setEntity(null); setRun(null); };
+
+  const loadLine = async (line: TabLine) => {
+    if (!onLoadForm || !line.formText) return;
+    if (hasDraft && !(await askConfirm("입력 중인 내용을 덮어씁니다. 이 기록으로 불러올까요?", { okLabel: "불러오기" }))) return;
+    onLoadForm(line.formText);
+    clearAll();
+    notify(loadedToast(line), "success");
+    focusFieldForm();
+  };
+
   const current = run && run.tab === tab ? run : null; // 탭이 바뀌면 이전 결과는 안 보인다
   const spec = tab ? TAB_SPECS[tab] : null;
   const lines = useMemo(() => (current && current.state === "done" && tab ? toLines(tab, current.results, entity) : []), [current, tab, entity]);
@@ -90,7 +116,7 @@ export default function TabSearchBar({ mode, pcSubTab }: { mode: string; pcSubTa
       spec={spec}
       query={query}
       onQuery={(v) => { setQuery(v); if (picked) { runReq.current++; setPicked(null); setEntity(null); setRun(null); } }}
-      onClear={() => { candReq.current++; runReq.current++; setQuery(""); setCand({ q: "", list: [] }); setPicked(null); setEntity(null); setRun(null); }}
+      onClear={clearAll}
       candState={candState}
       candidates={cand.list}
       onPick={pick}
@@ -104,6 +130,7 @@ export default function TabSearchBar({ mode, pcSubTab }: { mode: string; pcSubTa
       summary={summaryText(lastEvents(spec, lines))}
       coverage={coverage}
       resultKey={`${tab}:${current?.id ?? 0}`}
+      onLoad={tab === "inspection" && onLoadForm ? (line) => { void loadLine(line); } : undefined}
     />
   );
 }

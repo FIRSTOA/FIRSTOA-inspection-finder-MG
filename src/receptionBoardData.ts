@@ -189,7 +189,7 @@ export function sheetToBoardRow(row: SheetOpenRow): BoardRow {
     postponeCount: 0,
     sheet: {
       source: row.source, sheetRow: row.sheetRow, seq: String(row.seq || ""), state: String(row.state || ""),
-      summary: String(row.summary || ""), region: String(row.region || ""), url: sheetRowUrl(row.source, row.sheetRow),
+      summary: String(row.summary || ""), ...(row.content ? { content: String(row.content) } : {}), region: String(row.region || ""), url: sheetRowUrl(row.source, row.sheetRow),
       linked: Boolean(row.receptionId),
     },
   };

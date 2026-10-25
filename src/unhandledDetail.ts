@@ -7,6 +7,8 @@
  *    목록 응답의 summary 는 40자라 잘려 보였다(엣지 state.ts parseSheetRows clip 40).
  *  - 앱 접수(service_receptions): 팝업을 열 때 그 접수 한 줄을 읽어 내용·증상·처리자·처리내용·비고·사진 수까지.
  *  - 일정(as_tickets): 목록을 읽을 때 이미 받은 값(homeUnhandled.ticketFields·ticketContent) — 새 조회 없음.
+ *  - 2026-10-25 밤: 시트 행은 목록 응답 content(내용 원문 600자, 최근 90일)가 row.detail 로 와서 팝업이 내용을 바로 보이고 나머지 열만 뒤에 채운다.
+ *    읽은 본문은 세션 캐시(5분), 목록 줄에 손을 올리면 미리 읽기(동시 2개).
  * 화면은 HomeUnhandledPanel UnhandledDetail. 글은 전부 평문(HTML 해석 안 함).
  */
 import { selectRows } from "./supabase";
@@ -96,8 +98,66 @@ export function detailSourceOf(row: Pick<UnhandledRow, "key" | "sheet" | "recept
   return null;
 }
 
-/** 팝업 본문 읽기 — 실패는 throw(팝업이 안내문 + 목록 값으로 보여 준다). 읽을 게 없는 행은 null */
-export async function loadUnhandledDetail(row: UnhandledRow): Promise<UnhandledDetailBody | null> {
+/* ── 본문 캐시·미리 읽기(2026-10-25 밤 사용자 "서비스접수 상세 팝업 내용이 조금 늦게 나온다") ──
+ * 시트 행 상세는 엣지 → Sheets API 왕복(1~2초). 같은 행을 다시 열면 세션 메모리 값으로 즉시, 목록 줄에 손을 올리면(마우스·터치 시작) 미리 읽는다.
+ * 실패는 캐시하지 않는다(팝업이 다시 읽고 안내문을 보인다). 처리 단추를 누르면 그 행 캐시를 버린다(상태가 바뀜).
+ */
+
+/** 캐시 키 — 시트 행 = 탭·행·순번, 앱 접수 = id. 읽을 게 없는 행(일정)은 "" */
+export function detailCacheKey(row: Pick<UnhandledRow, "key" | "sheet" | "receptionId" | "source">): string {
+  const kind = detailSourceOf(row);
+  if (kind === "sheet" && row.sheet) return `s:${row.sheet.source}:${row.sheet.row}:${row.sheet.seq}`;
+  if (kind === "reception" && row.receptionId) return `r:${row.receptionId}`;
+  return "";
+}
+
+export const DETAIL_CACHE_TTL_MS = 5 * 60_000;
+export const DETAIL_CACHE_MAX = 200;
+export type DetailCache = {
+  get: (key: string, now: number) => UnhandledDetailBody | null | undefined;
+  set: (key: string, body: UnhandledDetailBody | null, now: number) => void;
+  delete: (key: string) => void;
+  size: () => number;
+};
+/** 세션 메모리 캐시(순수 — 시각은 부르는 쪽). ttl 지나면 없음, max 넘으면 가장 먼저 넣은 것부터 버린다 */
+export function createDetailCache(max = DETAIL_CACHE_MAX, ttl = DETAIL_CACHE_TTL_MS): DetailCache {
+  const m = new Map<string, { at: number; body: UnhandledDetailBody | null }>();
+  return {
+    get: (key, now) => {
+      const hit = m.get(key);
+      if (!hit) return undefined;
+      if (now - hit.at > ttl) { m.delete(key); return undefined; }
+      return hit.body;
+    },
+    set: (key, body, now) => {
+      m.delete(key);
+      m.set(key, { at: now, body });
+      while (m.size > max) { const first = m.keys().next().value; if (first === undefined) break; m.delete(first); }
+    },
+    delete: (key) => { m.delete(key); },
+    size: () => m.size,
+  };
+}
+
+/** 미리 읽기 문지기 — 동시에 limit 개까지만, 넘치면 그 요청은 건너뛴다(줄 위를 훑을 때 요청이 쌓이지 않게). 실패는 무시 */
+export function createPrefetcher(limit = 2) {
+  let active = 0;
+  return {
+    run(task: () => Promise<unknown>): boolean {
+      if (active >= limit) return false;
+      active++;
+      task().catch(() => undefined).finally(() => { active--; }); // 미리 읽기 실패는 버린다 — 팝업을 열면 다시 읽고 실패면 안내문
+      return true;
+    },
+    active: () => active,
+  };
+}
+
+const detailCache = createDetailCache();
+const detailInflight = new Map<string, Promise<UnhandledDetailBody | null>>();
+const prefetcher = createPrefetcher(2);
+
+async function fetchUnhandledDetail(row: UnhandledRow): Promise<UnhandledDetailBody | null> {
   const kind = detailSourceOf(row);
   if (kind === "sheet" && row.sheet) {
     return sheetDetailBody(await fetchSheetRowDetail(row.sheet.source, row.sheet.row, row.sheet.seq));
@@ -108,4 +168,38 @@ export async function loadUnhandledDetail(row: UnhandledRow): Promise<UnhandledD
     return receptionDetailBody(rows[0]);
   }
   return null;
+}
+
+/** 캐시에 있으면 그 값(동기) — 팝업 첫 그림용. 없으면 undefined */
+export function peekUnhandledDetail(row: UnhandledRow, now: number = Date.now()): UnhandledDetailBody | null | undefined {
+  const key = detailCacheKey(row);
+  return key ? detailCache.get(key, now) : undefined;
+}
+
+/** 처리 단추를 누른 행 — 상태가 바뀌므로 캐시를 버린다 */
+export function forgetUnhandledDetail(row: UnhandledRow): void {
+  const key = detailCacheKey(row);
+  if (key) detailCache.delete(key);
+}
+
+/** 팝업 본문 읽기 — 실패는 throw(팝업이 안내문 + 목록 값으로 보여 준다). 읽을 게 없는 행은 null. 캐시·같은 행 동시 읽기는 한 번 */
+export async function loadUnhandledDetail(row: UnhandledRow): Promise<UnhandledDetailBody | null> {
+  const key = detailCacheKey(row);
+  if (!key) return null;
+  const hit = detailCache.get(key, Date.now());
+  if (hit !== undefined) return hit;
+  const running = detailInflight.get(key);
+  if (running) return running;
+  const p = fetchUnhandledDetail(row)
+    .then((body) => { detailCache.set(key, body, Date.now()); return body; })
+    .finally(() => { detailInflight.delete(key); });
+  detailInflight.set(key, p);
+  return p;
+}
+
+/** 목록 줄에 마우스를 올리거나 터치를 시작하면 — 이미 있거나 읽는 중이면 아무것도 안 함. 시작했으면 true */
+export function prefetchUnhandledDetail(row: UnhandledRow): boolean {
+  const key = detailCacheKey(row);
+  if (!key || detailInflight.has(key) || detailCache.get(key, Date.now()) !== undefined) return false;
+  return prefetcher.run(() => loadUnhandledDetail(row));
 }

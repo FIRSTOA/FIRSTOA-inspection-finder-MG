@@ -16,7 +16,7 @@ import FormModal from "./FormModal";
 import { teamColor, type TeamKey } from "./kpi/teamColors";
 import { kindsForTab } from "./kpi/teamBoard";
 import { CalendarClock, ExternalLink } from "lucide-react";
-import { detailSourceOf, loadUnhandledDetail, type UnhandledDetailBody } from "./unhandledDetail";
+import { detailSourceOf, forgetUnhandledDetail, loadUnhandledDetail, peekUnhandledDetail, prefetchUnhandledDetail, type UnhandledDetailBody } from "./unhandledDetail";
 import { fieldTicketVendor } from "./ids";
 import { formatAssignees } from "./assignees";
 import { overdueAgeTone } from "./overdueLogic";
@@ -204,10 +204,11 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
   );
 }
 
-/** 목록 한 줄 단추 — 누르면 상세 팝업(onPick)만. 화면 이동 콜백은 받지 않는다(이동은 팝업 안 [열기]) */
+/** 목록 한 줄 단추 — 누르면 상세 팝업(onPick)만. 화면 이동 콜백은 받지 않는다(이동은 팝업 안 [열기]). 손을 올리면(마우스·터치 시작) 팝업 본문 미리 읽기 */
 export function UnhandledRowButton({ row, onPick, children }: { row: UnhandledRow; onPick: (r: UnhandledRow) => void; children: ReactNode }) {
+  const warm = () => { prefetchUnhandledDetail(row); };
   return (
-    <button type="button" onClick={() => onPick(row)} aria-haspopup="dialog" className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-white/[0.05] ${row.kind === "물류" ? "opacity-80" : ""}`}>
+    <button type="button" onClick={() => onPick(row)} onMouseEnter={warm} onTouchStart={warm} onFocus={warm} aria-haspopup="dialog" className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition hover:bg-white/[0.05] ${row.kind === "물류" ? "opacity-80" : ""}`}>
       {children}
     </button>
   );
@@ -223,7 +224,11 @@ export function UnhandledDetail({ row, onClose, onOpen, actions = false, author 
   const c = tc(row.team);
   // 2026-10-25 밤: 시트 행·앱 접수 행은 팝업을 열 때 전체 열·전체 내용을 읽는다(목록 값은 40자로 잘려 있음). 일정은 받은 값 그대로
   const needsLoad = detailSourceOf(row) !== null;
-  const [loaded, setLoaded] = useState<{ key: string; body: UnhandledDetailBody | null; error: string } | null>(null);
+  // 같은 행을 다시 열거나 미리 읽어 둔 행이면 캐시 값으로 첫 그림부터(unhandledDetail 세션 캐시)
+  const [loaded, setLoaded] = useState<{ key: string; body: UnhandledDetailBody | null; error: string } | null>(() => {
+    const hit = needsLoad ? peekUnhandledDetail(row) : undefined;
+    return hit !== undefined ? { key: row.key, body: hit, error: "" } : null;
+  });
   useEffect(() => {
     if (!needsLoad) return;
     let alive = true;
@@ -249,7 +254,7 @@ export function UnhandledDetail({ row, onClose, onOpen, actions = false, author 
       subtitle={`${UNHANDLED_KIND_LABEL[row.kind]} 미처리 · ${row.source === "reception" ? "서비스접수" : "AS 일정"}`}
       onClose={onClose}
       footer={<div className="flex w-full flex-col gap-2">
-        {actions && <UnhandledActionBar row={row} author={author} onStarted={onClose} onOpenSchedule={ticketOpen ? onOpen : undefined} />}
+        {actions && <UnhandledActionBar row={row} author={author} onStarted={() => { forgetUnhandledDetail(row); onClose(); }} onOpenSchedule={ticketOpen ? onOpen : undefined} />}
         <div className="flex items-center justify-end gap-2">
           {onOpen && !ticketOpen && <button type="button" onClick={onOpen} className={`min-h-11 rounded-xl px-4 text-[13px] font-black transition ${actions ? "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100" : "bg-blue-600 text-white hover:bg-blue-500"}`}>{row.source === "reception" ? "서비스접수에서 열기" : "AS 일정리스트에서 열기"}</button>}
           <button type="button" onClick={onClose} className="min-h-11 rounded-xl bg-white px-4 text-[13px] font-black text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-100">닫기</button>
@@ -269,7 +274,7 @@ export function UnhandledDetail({ row, onClose, onOpen, actions = false, author 
           <dl className="space-y-1.5 rounded-xl border border-slate-100 px-3 py-2.5">{extra.map((f, i) => field(f.label, f.value, `${i}:${f.label}`))}</dl>
         </div>
       )}
-      {loading && <p className="text-[12px] font-bold text-slate-500">{row.sheet ? "시트에서 그 행 전체를 읽는 중…" : "접수 전체 내용을 읽는 중…"}</p>}
+      {loading && <p role="status" className="text-[12px] font-bold text-slate-500">{row.sheet ? (row.detail ? "나머지 열 읽는 중…" : "시트에서 그 행 전체를 읽는 중…") : "접수 전체 내용을 읽는 중…"}</p>}
       {got?.error && <p className="text-[12px] font-bold text-amber-700">전체 내용을 읽지 못했습니다 — 목록 값(일부)만 보입니다 · {got.error}</p>}
       <div>
         <div className="mb-1 flex items-center gap-2 text-[12px] font-bold text-slate-500">{contentLabel}<span className="ml-auto"><SheetRowLink row={row} /></span></div>

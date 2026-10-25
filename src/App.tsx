@@ -3497,7 +3497,7 @@ export default function App() {
   };
 
   // 점검탭 검색에서 고른 양식(_원문)을 변환기에 주입 — 붙여넣기 확인과 같은 경로(자동 변환).
-  const handleLoadForm = (rawText: string) => {
+  const handleLoadForm = (rawText: string, opts: { silent?: boolean } = {}) => {
     // 과거 전송분에 붙었던 "📷 현장사진 모아보기" 링크는 이번 방문 사진이 아니므로 떼고 불러온다
     const text = rawText.replace(/\n*📷 현장사진[^\n]*(?:\n\S*\?album=[\w-]+\S*)?/g, "").trimEnd();
     clearPreviousVendorWork(false);
@@ -3515,7 +3515,7 @@ export default function App() {
     setInputText(text);
     searchReturnRef.current = "";   // 양식을 골랐으면 FIELD 에 남는다
     setSearchOpen(false);
-    showToast("양식을 불러왔어요");
+    if (!opts.silent) showToast("양식을 불러왔어요"); // 탭 검색 [불러오기]는 자기 토스트("○○ 날짜 AS 기록을…")를 띄운다
   };
 
   // [점검/AS 불러오기]: 세션 출력에서 등급·업체명·지역·키맨(이름/연락처 분리) 추출
@@ -5529,7 +5529,7 @@ export default function App() {
             })}
           </div>
         )}
-        <Suspense fallback={null}><TabSearchBar mode={mode} pcSubTab={pcSubTab} /></Suspense>
+        <Suspense fallback={null}><TabSearchBar mode={mode} pcSubTab={pcSubTab} onLoadForm={(t) => handleLoadForm(t, { silent: true })} hasDraft={!!inputText.trim()} /></Suspense>
         </>)}{/* /필드 탭 */}
         </div>{/* /헤더 존 */}
 
@@ -5651,6 +5651,7 @@ export default function App() {
             showLevel
             showHantinParking={mode === "blank-report" || mode === "inspection"}
             regionValue={fieldParsedRegion}
+            gradeText={textOutput || listOutput[0]?.content || ""} gradeSetters={{ text: setTextOutput, list: setListOutput, blocks: setEditedBlocks }}
           />
         )}
 
