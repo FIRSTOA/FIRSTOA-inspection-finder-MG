@@ -227,8 +227,8 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
   const opsDot = opsTone === "ok" ? "bg-emerald-400" : opsTone === "warn" ? "bg-amber-400" : opsTone === "bad" ? "bg-rose-500" : "bg-slate-500";
 
   return (
-    <div className="-mx-3 -mt-5 pb-8 sm:-mx-6 lg:-mx-8">
-      <div className="relative overflow-hidden bg-[#0B0F17] text-white shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
+    <div className="-mx-1 -mt-2 pb-8 sm:-mx-4 lg:-mx-6">
+      <div className="relative overflow-hidden rounded-xl bg-[#0B0F17] text-white shadow-[0_20px_60px_rgba(2,6,23,0.45)]">
         {/* 배경 결 — 격자 + 광원 셋 */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(rgba(148,163,184,.7) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.7) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
         <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-blue-600/20 blur-3xl" />
