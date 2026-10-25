@@ -137,6 +137,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
         {rows !== null && tab !== "전체" && <span className="text-[10.5px] font-bold text-slate-500">{tc(tab)?.label ?? tab} {tabRows.length}건</span>}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1">
+        <span className="flex flex-wrap items-center gap-1">
         {TAB_GROUPS.map((group, gi) => {
           const shown = group.filter((t) => t !== "기타" || counts[t] > 0); // 기타(팀 없는 일정)는 있을 때만
           if (!shown.length) return null;
@@ -156,6 +157,8 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
             </span>
           );
         })}
+        </span>
+        <span className="ml-auto"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} dark /></span>
       </div>
       {/* 칸이 하나뿐이면(경영·운영·영업 탭) 칸 띠는 숨기고 목록 바로 */}
       {(shownKinds.kinds.length + (shownKinds.recontract ? 1 : 0)) > 1 && (
@@ -181,8 +184,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
           {info.over90 > 0 && <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-black text-slate-300">90일 넘음 {info.over90}</span>}
         </p>
       )}
-      <div className="mt-2 flex justify-end"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} dark /></div>
-      <div className="mt-1 max-h-[320px] overflow-y-auto rounded-xl border border-white/[0.06]">
+      <div className="mt-3 max-h-[320px] overflow-y-auto rounded-xl border border-white/[0.06]">
         {rows === null && <ul>{Array.from({ length: 3 }).map((_, i) => <li key={i} className="px-3 py-2.5"><div className="h-3.5 animate-pulse rounded bg-white/[0.06]" /></li>)}</ul>}
         {rows !== null && !list.length && <p className="px-3 py-5 text-center text-[12px] font-bold text-emerald-300">{tab === "전체" ? "" : `${tc(tab)?.label ?? tab} `}{activeKind ? `${UNHANDLED_KIND_LABEL[activeKind]} ` : ""}미처리 없음</p>}
         {rows !== null && groups.work.length > 0 && (

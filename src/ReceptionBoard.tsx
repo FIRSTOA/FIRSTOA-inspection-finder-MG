@@ -12,7 +12,6 @@ import { sheetStateLabel } from "./receptionSheetState";
 import { formatAssignees } from "./assignees";
 import { SHEET_MISSING_HINT } from "./receptionSheetOpen";
 import { sortUnhandled } from "./homeUnhandled";
-import UnhandledSortToggle from "./UnhandledSortToggle";
 import { useUnhandledSort } from "./unhandledSort";
 
 /** 시트에서 온 행(C3 시트 기준) — 상태 글자·내용 요약·시트 링크. linked = 앱 접수에 이어진 행 */
@@ -117,7 +116,7 @@ function SheetBadge({ sheet, compact }: { sheet: SheetRowInfo; compact: boolean 
 
 export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, onOpenRow, onWarmRow }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [sortOrder, setSortOrder] = useUnhandledSort(); // 오래된 순(기본)·최근 순 — 홈·부서 업무공간과 공유
+  const [sortOrder] = useUnhandledSort(); // 오래된 순(기본)·최근 순 — 토글은 서비스접수 탭 줄·홈 탭 줄에 있고 선택은 공유
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
   const open = rows.filter((r) => (OPEN as readonly string[]).includes(r.status));
   const [scheduleOnly, setScheduleOnly] = useState(false); // 물류 미처리 열만 넓게 보기(내부 상태)
@@ -288,7 +287,6 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const header = compact ? (
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2">
       <div className="text-[13px] font-bold text-slate-900">미처리 접수 <span className="ml-0.5 tabular-nums text-slate-400">{openCount}건</span></div>
-      <UnhandledSortToggle order={sortOrder} onChange={setSortOrder} />
       <div className="text-[11px] font-medium text-slate-500">오늘 접수 <b className="tabular-nums text-slate-900">{todayN}</b> · 완료율 <b className="tabular-nums text-slate-900">{weekDoneRate == null ? "-" : `${weekDoneRate}%`}</b>{sheetMode && <span className="text-slate-400">(앱 접수 기준)</span>}</div>
       {sheetMode && <p className="w-full text-[11px] font-bold leading-snug text-slate-500">영업·경영·원격은 시트 상태 열 기준(처리완료·취소·이관이 아니면 미처리), 최근 90일</p>}
     </div>
@@ -296,7 +294,6 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-4 py-3">
       <div className="text-sm font-black text-white lg:text-[15px]">미처리 접수 현황 <span className="ml-1 tabular-nums text-slate-400">{openCount}건</span><span className="ml-2 text-[11px] font-bold text-slate-400">{sheetMode ? "최근 90일 · 영업·경영·원격은 시트 상태 열 기준(처리완료·취소·이관이 아니면 미처리)" : "최근 90일 열린 건 · 오른쪽 목록은 고른 기간 기준"}</span></div>
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-black">
-        <UnhandledSortToggle order={sortOrder} onChange={setSortOrder} dark />
         <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-200">오늘 접수 <b className="tabular-nums text-white">{todayN}</b></span>
         <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-200">이번 주 완료율 <b className="tabular-nums text-white">{weekDoneRate == null ? "-" : `${weekDoneRate}%`}</b>{sheetMode && <span className="ml-1 font-bold text-slate-400">앱 접수 기준</span>}</span>
       </div>

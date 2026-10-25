@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "2f988c80f4",
+    "agent": "developer",
+    "summary": "미처리 = 시트 열린 행 ∪ 시트에 짝 없는 앱 접수(\"시트에 없음\", 저장 직후 빈 틈 해소) + 정렬 토글 [오래된 순|최근 순] + 부서 접수 예정일 비우면 접수일로 달력 자동"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "2f988c80f4",
+    "agent": "debugger",
+    "summary": "미처리 = 시트 열린 행 ∪ 시트에 짝 없는 앱 접수(\"시트에 없음\", 저장 직후 빈 틈 해소) + 정렬 토글 [오래된 순|최근 순] + 부서 접수 예정일 비우면 접수일로 달력 자동"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "2f988c80f4",
+    "agent": "qa-checker",
+    "summary": "미처리 = 시트 열린 행 ∪ 시트에 짝 없는 앱 접수(\"시트에 없음\", 저장 직후 빈 틈 해소) + 정렬 토글 [오래된 순|최근 순] + 부서 접수 예정일 비우면 접수일로 달력 자동"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "cbd05276d1",
     "agent": "feature-planner",
     "summary": "필드 탭 검색 입구 하나로(헤더 🔍 → 탭별 시트, 맨 위 검색칸·안내 띠 제거) + 카톡 원문과 FIELD 기록 한 목록(표에 있는 글은 숨김)"
