@@ -8,13 +8,14 @@
  */
 import { KPI_BY_ID, KPI_DEFS, mainKpiIds, type KpiId, type KpiPeriodKey, type KpiSource, type KpiTarget } from "./kpiDefs";
 import {
-  blogYearTotals, kpiCount, kpiProgress, kpiRowStatus, KPI_TEAMS, okrWeekMembers, okrWeekResult, overhaulByPerson, pct,
+  blogYearTotals, kpiCount, kpiLoadFrom, kpiProgress, kpiRangesAt, kpiRowStatus, KPI_TEAMS, okrWeekMembers, okrWeekResult, overhaulByPerson, pct,
   rangeOfPeriod, recontractOverdue, shiftYmd, workinPace,
-  type KpiRange, type KpiRanges, type KpiRowStatus, type OkrScope, type OkrWeekFacts,
+  type KpiFacts, type KpiRange, type KpiRanges, type KpiRowStatus, type OkrScope, type OkrWeekFacts,
 } from "./kpiCompute";
 import { kpiCellState, sourcesFor, type KpiBundle, type KpiSourceStatus } from "./kpiData";
 import { splitByGroup } from "../homeUnhandled";
-import { okrWeeksInMonth, type OkrTeam } from "../okr";
+import { currentWeekOf, okrWeeksInMonth, weekCycleId, type OkrTeam } from "../okr";
+import { anchorOf, coveredBy, cursorRange, type PeriodCursor } from "./periodCursor";
 import type {
   KpiOkrPerson, KpiOkrScope, KpiOkrTeamLine, KpiOkrView, KpiPersonCell, KpiQuarterBlock, KpiQuarterGoalView, KpiScope as KpiCellScope, KpiSize, KpiTableRow, KpiTodayItem,
   KpiView, KpiWidgetProps,
@@ -224,12 +225,154 @@ export function periodChip(id: KpiId, board: KpiPeriodKey): string {
   return KPI_BY_ID[id].period === "7d" ? "최근 7일" : "열린 건";
 }
 
-/** 지난 기간(같은 날수) — 오늘 ↔ 어제, 주 ↔ 지난주 같은 요일까지, 달 ↔ 지난달 같은 날까지. 분기는 비교 없음 */
-export function prevRangeOf(r: KpiRanges, p: KpiPeriodKey): { range: KpiRange; label: string } | null {
-  if (p === "today") { const y = shiftYmd(r.today, -1); return { range: { from: y, to: y }, label: "어제" }; }
-  if (p === "week") return { range: r.prevWeekToDate, label: "지난주" };
-  if (p === "month") return { range: r.prevMonthToDate, label: "지난달" };
-  return null;
+/**
+ * 지난 기간(같은 날수) — 오늘 ↔ 어제, 주 ↔ 지난주 같은 요일까지, 달 ↔ 지난달 같은 날까지. 분기는 비교 없음.
+ * 끝난 기간(지난 기간 보기)이면 kpiRangesAt 이 직전 기간 전체를 낸다 → 라벨 "전 주"·"전 달".
+ * read = 묶음이 날짜 원본을 읽은 범위(readRangeOf) — 직전 기간이 그 밖이면 null(대비 숨김, 2026-10-26). 안 주면 옛 동작.
+ */
+export function prevRangeOf(r: KpiRanges, p: KpiPeriodKey, read?: KpiRange): { range: KpiRange; label: string } | null {
+  let out: { range: KpiRange; label: string } | null = null;
+  if (p === "today") { const y = shiftYmd(r.today, -1); out = { range: { from: y, to: y }, label: "어제" }; }
+  else if (p === "week") out = { range: r.prevWeekToDate, label: r.week.to < r.today ? "전 주" : "지난주" };
+  else if (p === "month") out = { range: r.prevMonthToDate, label: r.month.to < r.today ? "전 달" : "지난달" };
+  if (out && read && !coveredBy(read.from, read.to, out.range)) return null;
+  return out;
+}
+
+/* ───────────── 지난 기간 보기(2026-10-26 docs/tasks/home-period-nav-2026-10-26.md 6절 구현 C) ───────────── */
+
+/** 묶음이 날짜로 거르는 원본을 읽은 범위 — 추가 조회 묶음은 window, 메인 묶음은 kpiLoadFrom ~ 분기 말(로더와 같은 식) */
+export function readRangeOf(b: Pick<KpiBundle, "ranges" | "window">): KpiRange {
+  if (b.window) return { from: b.window.from, to: b.window.to };
+  return { from: kpiLoadFrom(b.ranges), to: [b.ranges.quarter.to, b.ranges.week.to].sort().pop() as string };
+}
+
+/** 그 기간이 이미 끝났나(범위 말일 < 진짜 오늘) — 지난 기간 묶음 판정 */
+export function isPastPeriod(r: KpiRanges, p: KpiPeriodKey): boolean {
+  return rangeOfPeriod(r, p).to < r.today;
+}
+
+/** OKR 원본 읽기 기준(로더와 같은 식: 기준일의 달 + 그 주 월요일 주차의 달). 메인 묶음과 다르면 OKR 만 따로 읽어야 한다 */
+export function okrLoadKey(date: string): string {
+  const cw = currentWeekOf(date);
+  return `${date.slice(0, 7)}|${cw.year}-${cw.month}`;
+}
+
+/** 묶음 OKR 의 "그 주"를 기간 첫 주(월요일)로 — 같은 달 주차 목록에 있을 때만. K19 주 행이 그 주를 센다 */
+function pointOkrWeek(facts: KpiFacts, weekFrom: string): KpiFacts {
+  const okr = facts.okr;
+  const w = okr?.week;
+  if (!okr || !w) return facts;
+  const cw = currentWeekOf(weekFrom);
+  const id = weekCycleId(cw.year, cw.month, cw.weekNo);
+  if (id === w.id || !w.weeks.some((x) => x.id === id)) return facts;
+  return { ...facts, okr: { ...okr, week: { ...w, id } } };
+}
+
+/** 지난 기간 범위 — 주·월 커서면 분기 칸은 메인 묶음 것을 그대로(워킨맵은 메인 분기만 읽었다, K2 는 분기 지표) */
+function rangesAt(main: KpiRanges, today: string, cursor: PeriodCursor): KpiRanges {
+  const at = kpiRangesAt(today, anchorOf(today, cursor));
+  if (cursor.period === "quarter") return at;
+  return { ...at, quarter: main.quarter, quarterNo: main.quarterNo, quarterElapsedRate: main.quarterElapsedRate };
+}
+
+/**
+ * 파생 묶음 — 이미 읽은 묶음에서 기간(ranges)만 바꾼다. offset 0 이면 b 그대로(같은 객체 → cachedView 캐시 유지).
+ * 아니면 새 객체(cachedView 는 객체별 WeakMap 이라 이번 기간 캐시와 안 섞인다). window = 원래 읽은 범위(대비 숨김 판정용).
+ * 명단은 지금 명단 그대로(cs_members joined_on·left_on 이 모두 null 이라 기간별로 걸러도 같다, 2026-10-26).
+ */
+export function bundleAt(b: KpiBundle, today: string, cursor: PeriodCursor): KpiBundle {
+  const anchor = anchorOf(today, cursor);
+  if (cursor.offset === 0 || anchor === today) return b;
+  const ranges = rangesAt(b.ranges, today, cursor);
+  const facts = cursor.period === "week" ? pointOkrWeek(b.facts, ranges.week.from) : b.facts;
+  return { ...b, ranges, facts, anchor, window: readRangeOf(b) };
+}
+
+/**
+ * 지난 기간 추가 조회로 읽는 원본(날짜로 거르는 것). 나머지(블로그·오버홀·재계약·명단·미처리·키맨·설정)는 메인 묶음 것을 그대로 쓴다.
+ * 워킨맵은 분기 커서일 때만(그 분기 quarter=N). 접수 처리율(K29)은 주 지표라 2달 전·분기에는 쓰지 않는다.
+ */
+export const PAST_LOAD_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>([
+  "field", "expansion", "events", "visits", "overage", "logistics", "contact", "bulman", "misu", "praise", "customerPraise", "itQuiz", "itPractice", "okr",
+]);
+
+/** 커서 → 할 일. now = 메인 묶음 그대로, derive = 메모리에서(OKR 이 다른 달이면 okrKey 로 OKR 만 작은 추가 조회), load = 추가 조회 */
+export type CursorPlan =
+  | { kind: "now" }
+  | { kind: "derive"; anchor: string; range: KpiRange; okrKey: string | null }
+  | { kind: "load"; anchor: string; range: KpiRange; sources: Set<KpiSource> };
+
+export function cursorPlan(main: KpiBundle, today: string, cursor: PeriodCursor, want: ReadonlySet<KpiSource>): CursorPlan {
+  const anchor = anchorOf(today, cursor);
+  if (cursor.offset === 0 || anchor === today) return { kind: "now" };
+  const range = cursorRange(today, cursor);
+  const read = readRangeOf(main);
+  if (coveredBy(read.from, read.to, range)) {
+    const okrKey = want.has("okr") && okrLoadKey(anchor) !== okrLoadKey(main.today) ? okrLoadKey(anchor) : null;
+    return { kind: "derive", anchor, range, okrKey };
+  }
+  const sources = new Set<KpiSource>([...want].filter((s) => PAST_LOAD_SOURCES.has(s) || (s === "workin" && cursor.period === "quarter")));
+  if (sources.has("events")) { sources.add("field"); sources.add("expansion"); }
+  if (sources.size) sources.add("roster"); // 작성자 → 팀 판정은 명단을 다 읽은 뒤(로더 ROSTER_FIRST) — 그 기간 재직자 명단
+  return { kind: "load", anchor, range, sources };
+}
+
+type FactsBag = Record<string, unknown>;
+
+/**
+ * 지난 기간 묶음 하나로 합친다(순수).
+ *  · derive: bundleAt(main) + (okrKey 가 있으면) okr 를 okrBundle 것으로 — 아직 없으면 okr 원본을 빼 둔다("…", 다른 달 숫자를 보이지 않게)
+ *  · load: 메인 묶음에서 추가 조회 원본만 뺀 자리에 loaded 를 덮는다. loaded 가 아직 없으면 그 칸들은 원본 없음(= "…" 기다림)
+ * 범위·window·anchor 는 여기서 정한다(로더가 낸 ranges 와 같은 식, 주·월 커서는 분기 칸만 메인 것).
+ */
+export function pastBundle(main: KpiBundle, today: string, cursor: PeriodCursor, plan: CursorPlan, extra: { loaded?: KpiBundle | null; okr?: KpiBundle | null } = {}): KpiBundle {
+  if (plan.kind === "now") return main;
+  if (plan.kind === "derive") {
+    const d = bundleAt(main, today, cursor);
+    if (!plan.okrKey) return d;
+    const facts: KpiFacts = { ...d.facts };
+    const sources = { ...d.sources };
+    const o = extra.okr;
+    if (o && o.sources.okr) { facts.okr = o.facts.okr; sources.okr = o.sources.okr; }
+    else { delete facts.okr; delete sources.okr; }
+    return { ...d, facts: cursor.period === "week" ? pointOkrWeek(facts, d.ranges.week.from) : facts, sources };
+  }
+  const facts: FactsBag = { ...main.facts };
+  const sources = { ...main.sources };
+  const loaded = extra.loaded ?? null;
+  for (const s of plan.sources) {
+    if (s === "roster" && !loaded?.sources.roster) continue; // 명단은 새로 못 읽었으면 지금 명단
+    delete facts[s];
+    delete sources[s];
+    const st = loaded?.sources[s];
+    if (loaded && st) {
+      sources[s] = st;
+      const v = (loaded.facts as FactsBag)[s];
+      if (v !== undefined) facts[s] = v;
+    }
+  }
+  const ranges = rangesAt(main.ranges, today, cursor);
+  const merged = facts as KpiFacts;
+  return { ...main, ranges, facts: cursor.period === "week" ? pointOkrWeek(merged, ranges.week.from) : merged, sources, anchor: plan.anchor, window: { ...plan.range } };
+}
+
+/** 추가 묶음 캐시 키 — 날짜가 바뀌면 다른 키(옛 것은 LRU 로 밀려난다) */
+export const cursorCacheKey = (today: string, cursor: PeriodCursor) => `${today}|${cursor.period}|${cursor.offset}`;
+
+/** LRU(순수) — 새 Map 을 돌려준다. 넣은 키는 맨 뒤(최근), max 를 넘으면 가장 오래된 것부터 버린다 */
+export function lruPut<K, V>(m: ReadonlyMap<K, V>, key: K, value: V, max = 3): Map<K, V> {
+  const next = new Map(m);
+  next.delete(key);
+  next.set(key, value);
+  for (const k of next.keys()) { if (next.size <= max) break; next.delete(k); }
+  return next;
+}
+
+/** 늦게 온 응답 버리기 — 요청마다 begin() 번호, 응답 때 isLatest(번호)가 false 면 버린다 */
+export function requestGate(): { begin: () => number; isLatest: (token: number) => boolean } {
+  let latest = 0;
+  return { begin: () => ++latest, isLatest: (t) => t === latest };
 }
 
 /** 경과율(달성 판정용). 오늘은 판정 안 함 */
@@ -284,10 +427,12 @@ export function quarterGoalView(b: KpiBundle, basis: "end" | "early" = "end"): O
   if (!all || !all.total) return null;
   const pick = (t: (typeof rows)[number]) => (basis === "end" ? t.toEnd : t.toEarly);
   const d = pick(all);
+  // 끝난 분기(지난 분기 보기, 2026-10-26): 필요량은 workinPace 가 null 로 낸다, 기준일 글은 "분기 마감", 남은 영업일 0
+  const ended = b.ranges.today > b.ranges.quarter.to;
   return {
     kind: "quarterGoal", basis,
-    endLabel: `${basis === "end" ? "분기 말일" : "말일 10일 전"}(${md(d.date)})`,
-    bizDaysLeft: d.days, elapsed: b.ranges.quarterElapsedRate / 100, // 위젯 약속: 0~1
+    endLabel: ended ? `분기 마감(${md(b.ranges.quarter.to)})` : `${basis === "end" ? "분기 말일" : "말일 10일 전"}(${md(d.date)})`,
+    bizDaysLeft: ended ? 0 : d.days, elapsed: b.ranges.quarterElapsedRate / 100, // 위젯 약속: 0~1
     teams: rows.slice(1).map((t) => ({
       team: teamLabelOf(t.team), done: t.done, total: t.total, pct: t.rate, headcount: t.headcount,
       need: pick(t).needHead, now: t.pacePerPerson,
@@ -493,16 +638,19 @@ function tableRowOf(b: KpiBundle, ctx: ModelCtx, def: (typeof KPI_DEFS)[number],
       kpiRowStatus({ actual, target, elapsed: pace, basis: def.targetBasis, better: def.better, goalPct });
     const all = rows.find((r) => r.scope === "all");
     const teamRows = rows.filter((r) => r.scope === "team");
-    const status = all ? statusOf(all.actual, all.target) : "none";
+    // 지난 기간 보기의 열린 건(K12·K16·K17·K18): 지난 시점 값이 없어 지금 값 + 회색 "지금" 칩, 상태색 없음(2026-10-26 설계안 4-1)
+    const nowOnly = open && isPastPeriod(b.ranges, ctx.period);
+    const judge = (actual: number | null, target: number | null): KpiRowStatus => (nowOnly ? "none" : statusOf(actual, target));
+    const status = all ? judge(all.actual, all.target) : "none";
     const cells = [
       { scope: "CS" as KpiCellScope, value: all?.actual ?? null, target: all?.target ?? null, status },
       ...CELL_SCOPES.map((scope) => {
         const t = teamRows.find((r) => r.team === scope);
-        return t ? { scope, value: t.actual, target: t.target, status: statusOf(t.actual, t.target) } : { scope, value: null, target: null, status: "none" as KpiRowStatus };
+        return t ? { scope, value: t.actual, target: t.target, status: judge(t.actual, t.target) } : { scope, value: null, target: null, status: "none" as KpiRowStatus };
       }),
     ];
     // 막대 색도 팀 칸과 같은 판정(kpiRowStatus) — 화면에서 따로 비교하지 않는다
-    const teamBars = teamRows.map((t) => ({ team: teamLabelOf(t.team), value: t.actual ?? 0, target: t.target, pct: t.actual === null || !t.target ? null : pct(t.actual, t.target), status: statusOf(t.actual, t.target) }));
+    const teamBars = teamRows.map((t) => ({ team: teamLabelOf(t.team), value: t.actual ?? 0, target: t.target, pct: t.actual === null || !t.target ? null : pct(t.actual, t.target), status: judge(t.actual, t.target) }));
     const order = (team: string) => KPI_TEAMS.indexOf(team);
     const people: KpiPersonCell[] = rows.filter((r) => r.scope === "person")
       .sort((a, z) => order(a.team) - order(z.team) || (z.actual ?? 0) - (a.actual ?? 0) || a.label.localeCompare(z.label, "ko"))
@@ -524,10 +672,10 @@ function tableRowOf(b: KpiBundle, ctx: ModelCtx, def: (typeof KPI_DEFS)[number],
     }
     let trend: KpiTableRow["trend"];
     if (status === "none" && all) {
-      const pr = open ? null : prevRangeOf(b.ranges, p);
+      const pr = open ? null : prevRangeOf(b.ranges, p, readRangeOf(b)); // 직전 기간을 안 읽었으면(−7주 등) 대비 숨김
       const prev = pr ? kpiCount(def.id, b.facts, {}, pr.range, { today: b.ranges.today, teamOf: ctx.teamOf })?.n ?? null : null;
       trend = { delta: prev === null || all.actual === null ? null : all.actual - prev, label: pr ? `${pr.label} 대비` : "" };
     }
-    return { ...base, status, cells, teamBars, people, ...(trend ? { trend } : {}), ...(quarter ? { quarter } : {}) };
+    return { ...base, status, cells, teamBars, people, ...(trend ? { trend } : {}), ...(quarter ? { quarter } : {}), ...(nowOnly ? { nowChip: true } : {}) };
   }
 }

@@ -90,6 +90,21 @@ export function kpiRanges(today: string): KpiRanges {
   };
 }
 
+/**
+ * 지난 기간 보기(2026-10-26 docs/tasks/home-period-nav-2026-10-26.md) — 기간 범위는 anchor(그 기간 말일) 기준,
+ * today·todayRange·last7 은 진짜 오늘, 경과율은 elapsedRate(범위, 진짜 오늘)(끝난 기간 = 100).
+ * anchor === today 이면 kpiRanges(today) 와 깊이 같다.
+ */
+export function kpiRangesAt(today: string, anchor: string): KpiRanges {
+  const r = kpiRanges(anchor);
+  return {
+    ...r,
+    today, todayRange: { from: today, to: today },
+    weekElapsedRate: elapsedRate(r.week, today), monthElapsedRate: elapsedRate(r.month, today), quarterElapsedRate: elapsedRate(r.quarter, today),
+    last7: { from: shiftYmd(today, -6), to: today },
+  };
+}
+
 export function rangeOfPeriod(r: KpiRanges, p: KpiPeriodKey): KpiRange {
   return p === "today" ? r.todayRange : p === "week" ? r.week : p === "month" ? r.month : r.quarter;
 }
@@ -173,11 +188,21 @@ export type RosterMember = { name: string; team: string; title?: string };
  * cs_members 활성 행 → KPI 명단. 팀 판정은 작성자 명단(authors.ts bookOf)과 같은 규칙:
  * 겸직 표기("A·B")는 나눠 보고, "CSS" = E(CSS팀) — DB 에는 팀 값 "E" 가 없고 CSS 인원은 team="CSS" 다(2026-10-24 실측).
  * A~E 가 아닌 행(팀 칸 빈 파트장 등)은 인원·팀에서 빠지지만, 직책자면 team "" 로 남겨 titledNames(오버홀 직책자 제외)에 잡히게 한다.
+ * range 를 주면(지난 기간 보기) joined_on ≤ range.to 이고 (left_on 없음 또는 left_on ≥ range.from) 인 사람만 — 두 칸이 비면 통과.
+ * 그 기간에 있다가 나간 사람(active=false 이고 left_on ≥ range.from)은 그 기간 명단에 넣는다. left_on 없는 비활성은 지금처럼 뺀다.
  */
-export function rosterFromMembers(members: ReadonlyArray<{ name: string; team: string; title?: string | null; active: boolean }>): RosterMember[] {
+export function rosterFromMembers(
+  members: ReadonlyArray<{ name: string; team: string; title?: string | null; active: boolean; joined_on?: string | null; left_on?: string | null }>,
+  range?: KpiRange,
+): RosterMember[] {
   const out: RosterMember[] = [];
   for (const m of members) {
-    if (!m.active) continue;
+    const joined = String(m.joined_on || "").slice(0, 10), left = String(m.left_on || "").slice(0, 10);
+    if (range) {
+      if (joined && joined > range.to) continue;
+      if (left && left < range.from) continue;
+      if (!m.active && !left) continue;
+    } else if (!m.active) continue;
     const title = String(m.title || "").trim();
     const team = String(m.team || "").split(/[·/,]/).map((t) => t.trim()).map((t) => (t === "CSS" ? "E" : t)).find((t) => KPI_TEAMS.includes(t)) || "";
     if (team || OVERHAUL_EXCLUDED_TITLES.has(title)) out.push({ name: m.name, team, title });
@@ -351,7 +376,8 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
     }
     case "K29": {
       if (!f.receptionWeek || s.team || s.author) return null;
-      const w = weekCompletionRate(f.receptionWeek, ctx.today);
+      // 넘긴 범위의 첫날(월요일) 주 — 이번 주면 ctx.today 와 같은 주, 지난 주를 고르면 그 주(2026-10-26 지난 기간 보기)
+      const w = weekCompletionRate(f.receptionWeek, r.from);
       return { n: w.done, d: w.total };
     }
     case "K18": {
@@ -582,6 +608,8 @@ const need = (remaining: number, days: number, members: number) => (remaining <=
 export function workinPace(places: WorkinPlaceLite[], ranges: KpiRanges, roster: RosterMember[] | undefined, holidays: readonly string[] = []): WorkinPaceRow[] {
   const heads = headcountByTeam(roster);
   const q = ranges.quarter;
+  // 끝난 분기(지난 분기 보기): 하루 필요량은 뜻이 없다 → need 칸 null, 완료·대상·%만(2026-10-26)
+  const ended = ranges.today > q.to;
   const start = ranges.today > q.from ? ranges.today : q.from;
   const early = shiftYmd(q.to, -10);
   const toEndDays = bizDays(start, q.to, holidays), toEarlyDays = bizDays(start, early, holidays);
@@ -591,7 +619,9 @@ export function workinPace(places: WorkinPlaceLite[], ranges: KpiRanges, roster:
   return [all, ...teams].map((t) => {
     const headcount = t.team === "전체" ? Object.values(heads).reduce((a, b) => a + b, 0) : heads[t.team] || 0;
     const remaining = Math.max(0, t.total - t.done);
-    const dl = (date: string, days: number): WorkinDeadline => ({ date, days, need3: need(remaining, days, 3), need4: need(remaining, days, 4), needHead: need(remaining, days, headcount) });
+    const dl = (date: string, days: number): WorkinDeadline => (ended
+      ? { date, days, need3: null, need4: null, needHead: null }
+      : { date, days, need3: need(remaining, days, 3), need4: need(remaining, days, 4), needHead: need(remaining, days, headcount) });
     return {
       team: t.team, label: t.team === "전체" ? "CS 전체" : `${t.team}팀`, done: t.done, total: t.total,
       rate: t.total ? Math.round((t.done / t.total) * 100) : 0, remaining, headcount,

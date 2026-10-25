@@ -10,6 +10,9 @@
  *  · 실패: 위젯마다 "—" + [다시] + 마지막 값(N분 전). 원본 표 없음 = 준비 중, 원본 없음 = 원본 연결 필요(절대 0 으로 안 보임)
  *  · 배치: localStorage home_kpi_layout_v1 = {v:1, items}. 편집(크기·위치·숨김)은 HomeKpiGrid
  *  · 위젯을 누르면 같은 숫자의 화면으로(Home 이 받던 onNavigate 재사용)
+ *  · 지난 기간 보기(2026-10-26 docs/tasks/home-period-nav-2026-10-26.md): 달성표 [주][월][분기] + ◀ ▶ [오늘로] = cursor{period, offset}.
+ *    메모리에 있는 기간(지난 1~7주·지난달)은 파생 묶음(조회 0), 그 밖(2~5달 전·지난 분기)은 추가 조회 → 메모리 LRU 3, 늦은 응답은 버림.
+ *    팀 카드·달성표만 그 기간, 금일 띠·미처리 칸·머리 큰 숫자는 늘 지금. 마지막 값 캐시는 offset 0 일 때만. 커서는 저장하지 않는다.
  * 표시 부품은 kpi/KpiWidgets.view · kpi/HomeKpiGrid.view(윤화면) 를 그대로 쓴다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,14 +21,14 @@ import { kstDate } from "./visits";
 import { teamForAuthor } from "./operations";
 import { useScreenActive } from "./screenActive";
 import HomeUnhandledPanel from "./HomeUnhandledPanel";
-import { loadKpiBundle } from "./kpi/kpiData";
+import { loadKpiBundle, type KpiBundle } from "./kpi/kpiData";
 import { KPI_BY_ID, type KpiScreen, type KpiSource } from "./kpi/kpiDefs";
 import { HomeKpiGrid, type KpiGridWidget, type KpiLayoutItem } from "./kpi/HomeKpiGrid.view";
 import { KpiWidget, type KpiLoadStatus, type KpiOkrScope, type KpiView } from "./kpi/KpiWidgets.view";
 import {
   FAST_REFRESH_MS, HOME_KPI_DEFAULT_LAYOUT, HOME_WIDGETS, SLOW_REFRESH_MS,
-  cachedView, firstLoadPhases, lastOkAgo, mergeBundle, okrView, pickOkrWeekId, readHomeLayout,
-  sourcesForLayout, splitSources, tableRows, todayItems, widgetState, writeHomeLayout,
+  cachedView, cursorCacheKey, cursorPlan, firstLoadPhases, lastOkAgo, lruPut, mergeBundle, okrView, pastBundle, pickOkrWeekId, readHomeLayout,
+  requestGate, sourcesForLayout, splitSources, tableRows, todayItems, widgetState, writeHomeLayout,
   type HomeKpiState, type HomeWidgetDef, type TablePeriod,
 } from "./kpi/homeKpiModel";
 import { buildHomeSnapshot, mergeSnapshotList, readHomeSnapshot, snapshotAgo, writeHomeSnapshot, type HomeKpiSnapshot } from "./kpi/homeKpiSnapshot";
@@ -33,6 +36,8 @@ import { kpiCellState } from "./kpi/kpiData";
 import { mergeTeamCardsWithSnapshot, teamBoardView, toggleTeamFilter } from "./kpi/teamBoard";
 import { TeamBoardStrip } from "./kpi/TeamBoard.view";
 import type { TeamKey } from "./kpi/teamColors";
+import { canStep, cursorLabel, cursorRange, isEnded, step, type PeriodCursor } from "./kpi/periodCursor";
+import { currentWeekOf, weekCycleId } from "./okr";
 
 export type HomeKpiBoardProps = {
   /** 위젯·표 행·띠 칩을 누르면 열 화면(App 의 screen 값) */
@@ -76,7 +81,9 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
   const active = useScreenActive();
   const [layout, setLayout] = useState<KpiLayoutItem[]>(() => readHomeLayout(storage()));
   const [layoutNotice, setLayoutNotice] = useState("");
-  const [period, setPeriod] = useState<TablePeriod>("week"); // 달성표 기간 — 기본 "이번 주"(월~일)
+  // 달성표 기간 커서(2026-10-26) — 기본 "이번 주"(월~일), offset 0 = 이번 기간. 저장하지 않는다(홈을 다시 열면 늘 이번 주)
+  const [cursor, setCursor] = useState<PeriodCursor>({ period: "week", offset: 0 });
+  const period: TablePeriod = cursor.period;
   const [tableView, setTableView] = useState<"main" | "all">("main");
   const [goalBasis, setGoalBasis] = useState<"end" | "early">("end"); // 달성표 K2 행 안 분기 블록 기준 — 기본 말일
   const [okrWeekId, setOkrWeekId] = useState<string | undefined>(undefined); // OKR 주차 칩 — 기본 이번 주(2026-10-25 [주|월] 대신 주차)
@@ -181,6 +188,62 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
   const bundle = state?.bundle ?? null;
   const ctx = useMemo(() => ({ teamOf: teamForAuthor, period }), [period]);
 
+  // ── 지난 기간 보기 ──
+  const today = bundle?.today ?? kstDate();
+  const [pastCache, setPastCache] = useState<Map<string, KpiBundle>>(() => new Map()); // 추가 조회 묶음(키 = 날짜|기간|offset, LRU 3)
+  const [okrCache, setOkrCache] = useState<Map<string, KpiBundle>>(() => new Map()); // 다른 달 OKR 만 읽은 묶음(LRU 3)
+  const [pastLoading, setPastLoading] = useState(false);
+  const [pastError, setPastError] = useState("");
+  const [pastRetry, setPastRetry] = useState(0);
+  const pastGate = useRef(requestGate());
+  const plan = useMemo(() => (bundle ? cursorPlan(bundle, today, cursor, want) : ({ kind: "now" } as const)), [bundle, today, cursor, want]);
+  const okrKeyFull = plan.kind === "derive" && plan.okrKey ? `${today}|okr|${plan.okrKey}` : "";
+  const needKey = plan.kind === "load" ? cursorCacheKey(today, cursor) : okrKeyFull;
+  const needLoad = Boolean(needKey) && !(plan.kind === "load" ? pastCache.has(needKey) : okrCache.has(needKey));
+  useEffect(() => {
+    const token = pastGate.current.begin(); // 커서가 바뀌면 앞 요청 응답은 버린다
+    const main = stateRef.current?.bundle;
+    if (!needLoad || !main) { setPastLoading(false); return; }
+    const p = cursorPlan(main, today, cursor, want);
+    if (p.kind === "now") { setPastLoading(false); return; }
+    const opts = p.kind === "load"
+      ? { sources: p.sources, today, anchor: p.anchor, window: p.range }
+      : { sources: ["okr" as const], today, anchor: p.anchor };
+    setPastLoading(true);
+    setPastError("");
+    loadKpiBundle(opts).then((b) => {
+      if (!pastGate.current.isLatest(token)) return;
+      if (p.kind === "load") setPastCache((m) => lruPut(m, needKey, b, 3));
+      else setOkrCache((m) => lruPut(m, needKey, b, 3));
+    }, (e: unknown) => {
+      if (pastGate.current.isLatest(token)) setPastError(`지난 기간 숫자를 불러오지 못했습니다: ${msg(e)} — 달성표 [다시]를 누르세요`);
+    }).finally(() => { if (pastGate.current.isLatest(token)) setPastLoading(false); });
+  }, [needLoad, needKey, today, cursor, want, pastRetry]);
+  // 화면에 쓰는 묶음: 달성표·팀 카드 = 그 기간(viewBundle), 금일 띠·미처리·머리 숫자 = 지금(bundle)
+  const viewBundle = useMemo(() => {
+    if (!bundle || plan.kind === "now") return bundle;
+    return pastBundle(bundle, today, cursor, plan, {
+      loaded: plan.kind === "load" ? pastCache.get(cursorCacheKey(today, cursor)) ?? null : null,
+      okr: okrKeyFull ? okrCache.get(okrKeyFull) ?? null : null,
+    });
+  }, [bundle, today, cursor, plan, pastCache, okrCache, okrKeyFull]);
+  const isNow = plan.kind === "now" && cursor.offset === 0; // 묶음이 오기 전에 커서를 옮겼으면 캐시(이번 주 값)를 쓰지 않는다
+  // OKR 박스: 주 커서가 다른 달 주차면 그 달 OKR 묶음(읽는 중이면 null = 로딩)
+  const okrBundle = cursor.period === "week" && okrKeyFull ? okrCache.get(okrKeyFull) ?? null : bundle;
+  const setPeriod = (p: TablePeriod) => { setCursor({ period: p, offset: 0 }); setOkrWeekId(undefined); };
+  const stepCursor = (dir: -1 | 1) => {
+    const next = step(cursor, dir, today);
+    if (next === cursor) return;
+    setCursor(next);
+    // OKR 박스 한 방향 연동(설계안 5절 5): 주 기간일 때만 그 주차로, 이번 주면 기본(이번 주)
+    if (next.period === "week") {
+      if (next.offset === 0) setOkrWeekId(undefined);
+      else { const cw = currentWeekOf(cursorRange(today, next).from); setOkrWeekId(weekCycleId(cw.year, cw.month, cw.weekNo)); }
+    }
+  };
+  const toToday = () => { setCursor({ period: cursor.period, offset: 0 }); setOkrWeekId(undefined); };
+  const retry = () => { if (isNow) void refresh(true); else { setPastError(""); setPastRetry((n) => n + 1); } };
+
   const renderWidget = (w: HomeWidgetDef, size: KpiGridWidget["sizes"][number], inEdit: boolean) => {
     // 홈 미처리 칸(2026-10-24 "미처리 전체" 카드와 합침) — 숫자는 이 묶음의 unhandled(mergeUnhandled)·recontract 한 벌
     if (w.id === "unhandledPanel") {
@@ -208,7 +271,7 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
         </div>
       );
     }
-    const st = widgetState(w, bundle);
+    const st = widgetState(w, w.id === "K19" ? okrBundle : bundle);
     const first = KPI_BY_ID[w.kpis[0]];
     let view: KpiView | null = null;
     let chip: string | undefined;
@@ -216,7 +279,7 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
     let onOpen: (() => void) | undefined = onNavigate && first ? () => open(first.screen) : undefined;
     const openLabel = first?.screen.tab;
     // 묶음이 아직 없거나 그 지표 원본을 아직 안 읽었으면(off) 마지막 값 캐시(snap)로 그린다 — 실패(error)한 원본은 덮지 않는다
-    const isOff = (id: string) => !bundle || kpiCellState(id as keyof typeof KPI_BY_ID, bundle).status === "off";
+    const isOff = (id: string) => { const b = w.id === "table" ? viewBundle : bundle; return !b || kpiCellState(id as keyof typeof KPI_BY_ID, b).status === "off"; };
     let fromSnap = false;
     switch (w.id) {
       case "today": {
@@ -227,8 +290,9 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
         chip = "오늘"; onOpen = undefined; break;
       }
       case "table": {
-        const live = bundle ? cachedView(bundle, ctx, `table|${goalBasis}`, () => tableRows(bundle, ctx, goalBasis)) : null;
-        const m = mergeSnapshotList(live, period === "week" ? snap?.table : undefined, isOff); // 캐시는 이번 주(홈 기본 기간)만
+        const vb = viewBundle;
+        const live = vb ? cachedView(vb, ctx, `table|${goalBasis}`, () => tableRows(vb, ctx, goalBasis)) : null;
+        const m = mergeSnapshotList(live, period === "week" && isNow ? snap?.table : undefined, isOff); // 캐시는 이번 주(홈 기본 기간)·offset 0 만
         fromSnap = m.used;
         const all = m.list;
         if (live || m.used) {
@@ -239,22 +303,30 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
               const q = alt ? withoutKind(alt) : r.quarter;
               return { ...r, quarter: q ? { ...q, onBasis: setGoalBasis } : undefined, onOpen: onNavigate ? () => open(KPI_BY_ID[r.id as keyof typeof KPI_BY_ID].screen) : undefined };
             });
-          view = { kind: "kpiTable", period, view: tableView, rows, counts: { main: all.filter((r) => r.main).length, all: all.length }, onPeriod: setPeriod, onView: setTableView, teamFilter };
+          view = {
+            kind: "kpiTable", period, view: tableView, rows, counts: { main: all.filter((r) => r.main).length, all: all.length }, onPeriod: setPeriod, onView: setTableView, teamFilter,
+            cursor: {
+              label: cursorLabel(today, cursor), ended: isEnded(today, cursor), canPrev: canStep(cursor, -1, today), canNext: canStep(cursor, 1, today),
+              loading: pastLoading, onStep: stepCursor, onToday: toToday,
+            },
+          };
         }
         onOpen = undefined; break;
       }
       case "K19": {
         const scopeKey = `${okrScope.team}|${okrScope.member || ""}`;
         // 고른 주차가 지금 달 주차 목록에 없으면(달이 바뀜) 이번 주로 — pickOkrWeekId 가 같은 규칙으로 고른다
-        const okrW = bundle?.facts.okr?.week;
+        const ob = okrBundle; // 보통 지금 묶음, 주 커서가 다른 달 주차면 그 달 OKR 묶음
+        const otherMonth = ob !== bundle;
+        const okrW = ob?.facts.okr?.week;
         const wk = okrW && okrWeekId ? pickOkrWeekId(okrW, okrWeekId) : undefined;
-        const pickedPast = Boolean(okrW && wk && wk !== okrW.id);
-        const live = bundle ? cachedView(bundle, ctx, `K19|${pickedPast ? wk : "cur"}|${scopeKey}`, () => okrView(bundle, { weekId: pickedPast ? wk : undefined, team: okrScope.team, member: okrScope.member })) : null;
+        const pickedPast = Boolean(okrW && wk && (wk !== okrW.id || otherMonth));
+        const live = ob ? cachedView(ob, ctx, `K19|${pickedPast ? wk : "cur"}|${scopeKey}`, () => okrView(ob, { weekId: pickedPast ? wk : undefined, team: okrScope.team, member: okrScope.member })) : null;
         // 캐시는 이번 주·전체 범위(CS 4파트)만 — 다른 주차·범위를 고르면 새 값이 올 때까지 로딩
         const old = st.status === "loading" && !pickedPast && okrScope.team === "ALL" && !okrScope.member ? snap?.okr.week ?? null : null;
         const v = old ?? live;
         fromSnap = !!old;
-        view = v ? { ...v, scope: { ...v.scope, onScope: setOkrScope }, onWeek: (id: string) => setOkrWeekId(okrW && id === okrW.id ? undefined : id), teamFilter } : null;
+        view = v ? { ...v, scope: { ...v.scope, onScope: setOkrScope }, onWeek: (id: string) => setOkrWeekId(okrW && id === okrW.id && !otherMonth ? undefined : id), teamFilter } : null;
         const selLabel = pickedPast ? okrW?.weeks.find((x) => x.id === wk)?.label ?? "" : "";
         chip = pickedPast ? `${selLabel}차` : "이번 주";
         emptyText = pickedPast ? `${selLabel}차 OKR 기록이 없습니다` : "이번 주 OKR 기록이 아직 없습니다"; break;
@@ -281,7 +353,7 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
         lastOk={st.status === "error" && view && state ? { text: headline(view), at: lastOkAgo(w, state.okAt, Date.now()) } : undefined}
         pendingText={st.status === "pending" ? st.message : undefined}
         emptyText={emptyText}
-        onRetry={() => { void refresh(true); }}
+        onRetry={w.id === "table" ? retry : () => { void refresh(true); }}
         onOpen={onOpen}
         openLabel={openLabel}
         disabled={inEdit}
@@ -296,20 +368,21 @@ export default function HomeKpiBoard({ onNavigate, onOpenOverdue, onOpenReceptio
 
   // 원본은 읽었지만 알릴 것(접수 일부 실패·시트 기준 안내·명단 못 읽음) — 기준 툴팁에만 두지 않고 위에 한 줄로
   const sourceNotices = bundle ? layout.filter((x) => !x.hidden).map((x) => HOME_WIDGETS.find((w) => w.id === x.id)).flatMap((w) => (w ? [widgetState(w, bundle).notice] : [])) : [];
-  const notices = [...new Set([loadError, bundle?.settings.error ? `목표 설정: ${bundle.settings.error}` : "", ...sourceNotices].filter(Boolean))];
+  const notices = [...new Set([loadError, isNow ? "" : pastError, bundle?.settings.error ? `목표 설정: ${bundle.settings.error}` : "", ...sourceNotices].filter(Boolean))];
   // 마지막 값 캐시로 그린 칸이 있는 동안(아직 안 읽은 원본이 있음) 한 줄로 알린다
   const snapAgo = snap && (!bundle || [...want].some((s) => !bundle.sources[s])) ? snapshotAgo(snap.savedAt, Date.now()) : "";
   // 팀 카드 5장 — 달성표와 같은 행 캐시(tableRowsFor)·미처리 묶음·OKR 이번 주에서 조합(새 조회 없음).
   // 안 온 칸만 "…", 마지막 값 캐시는 이번 주·말일 기준일 때만(캐시가 그 기준으로 저장됨)
+  // 지난 기간이면 그 기간 묶음(viewBundle) + 미처리·OKR 이번 주는 지금 묶음(bundle). 마지막 값 캐시는 offset 0 일 때만
   const teamCards = useMemo(() => {
-    const live = teamBoardView(bundle, period, teamForAuthor, goalBasis, want);
-    return period === "week" && goalBasis === "end" ? mergeTeamCardsWithSnapshot(live, snap?.teams).cards : live;
-  }, [bundle, period, goalBasis, want, snap]);
+    const live = teamBoardView(viewBundle, period, teamForAuthor, goalBasis, want, bundle);
+    return isNow && period === "week" && goalBasis === "end" ? mergeTeamCardsWithSnapshot(live, snap?.teams).cards : live;
+  }, [viewBundle, bundle, isNow, period, goalBasis, want, snap]);
   return (
     <div className="relative border-b border-white/[0.08] px-2 py-2">
       {snapAgo && <p role="status" className="mb-2 rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-1.5 text-[11.5px] font-bold text-sky-200">{snapAgo === "방금" ? "방금 전" : snapAgo} 값 · {loading || !bundle ? "갱신 중" : "일부 갱신 대기"}</p>}
       {notices.map((n) => <p key={n} role="alert" className="mb-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11.5px] font-bold text-amber-300">{n}</p>)}
-      <TeamBoardStrip cards={teamCards} selected={teamFilter} onSelect={pickTeam} />
+      <TeamBoardStrip cards={teamCards} selected={teamFilter} onSelect={pickTeam} periodLabel={isNow ? undefined : `${cursorLabel(today, cursor)} 기준`} />
       <HomeKpiGrid
         layout={layout}
         widgets={widgets}

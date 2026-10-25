@@ -4,6 +4,36 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-26",
+    "hash": "eb367a858d",
+    "agent": "feature-planner",
+    "summary": "홈 달성표 블로그 답글 CS 전체 = CS 팀 사람 합(다른 부서 댓글 제외) + '점검' 중복 줄 삭제 + 인당 주 목표 소수 올림"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "eb367a858d",
+    "agent": "ui-designer",
+    "summary": "홈 달성표 블로그 답글 CS 전체 = CS 팀 사람 합(다른 부서 댓글 제외) + '점검' 중복 줄 삭제 + 인당 주 목표 소수 올림"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "eb367a858d",
+    "agent": "developer",
+    "summary": "홈 달성표 블로그 답글 CS 전체 = CS 팀 사람 합(다른 부서 댓글 제외) + '점검' 중복 줄 삭제 + 인당 주 목표 소수 올림"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "eb367a858d",
+    "agent": "qa-checker",
+    "summary": "홈 달성표 블로그 답글 CS 전체 = CS 팀 사람 합(다른 부서 댓글 제외) + '점검' 중복 줄 삭제 + 인당 주 목표 소수 올림"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "eb367a858d",
+    "agent": "field-deploy-check",
+    "summary": "홈 달성표 블로그 답글 CS 전체 = CS 팀 사람 합(다른 부서 댓글 제외) + '점검' 중복 줄 삭제 + 인당 주 목표 소수 올림"
+  },
+  {
+    "date": "2026-10-26",
     "hash": "f82fe35e25",
     "agent": "developer",
     "summary": "미처리 정렬 토글을 종류 묶음 머리 줄(⌄ CS 접수 n건) 오른쪽으로, 홈은 목록 바로 위 — 사용자 재지정"

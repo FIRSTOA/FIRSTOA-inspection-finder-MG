@@ -12,7 +12,7 @@
  * 톤: theme="deck"(기본, 홈 검은 판 #0B0F17 안의 반투명 카드) / "light"(흰 화면에 놓을 때).
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, ChevronRight, Clock3, Info, Minus, RefreshCw, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Clock3, Info, Minus, RefreshCw, type LucideIcon } from "lucide-react";
 import { TEAM_COLORS, teamColor, type TeamKey } from "./teamColors";
 import { okrTeamFromFilter, okrTone, statusTileClass, teamCellDimmed } from "./kpiTiles";
 
@@ -115,11 +115,17 @@ export type KpiTableRow = {
   cellState: "ready" | "pending" | "error"; pendingText?: string; main: boolean;
   /** 분기 점검 진행(K2) 행 펼침 — 있으면 팀 막대 대신 팀 5줄·기준일 칩·필요/지금 페이스(분기 점검 위젯과 같은 모양) */
   quarter?: KpiQuarterBlock;
+  /** true 면 CS 전체 칸 옆에 회색 "지금" 칩(열린 건은 지난 시점 값이 없어 지금 값) — 계산은 모델이 한다 */
+  nowChip?: boolean;
   onOpen?: () => void;
 };
+/** 기간 이동(2026-10-26) — 있으면 기간 칩 [주][월][분기] + ◀ 라벨 ▶ 스테퍼. 없으면 옛 화면 그대로 */
+export type KpiTableCursor = { label: string; ended: boolean; canPrev: boolean; canNext: boolean; loading?: boolean; onStep: (dir: -1 | 1) => void; onToday: () => void };
 export type KpiTableView = { kind: "kpiTable"; period: "week" | "month" | "quarter"; view: "main" | "all"; rows: KpiTableRow[]; counts: { main: number; all: number }; onPeriod: (p: "week" | "month" | "quarter") => void; onView: (v: "main" | "all") => void;
   /** 홈 3차 팀 카드 필터(2026-10-25) — 있으면 그 팀 칸은 그대로, 다른 팀 칸은 흐리게(opacity-40). CS 전체 열은 그대로. 없으면 지금처럼 */
-  teamFilter?: TeamKey | null };
+  teamFilter?: TeamKey | null;
+  /** 기간 이동 스테퍼(없으면 옛 모양) */
+  cursor?: KpiTableCursor };
 export type KpiQuarterGoalView = { kind: "quarterGoal"; basis: "end" | "early"; onBasis: (b: "end" | "early") => void; endLabel: string; bizDaysLeft: number; elapsed: number;
   teams: Array<{ team: string; done: number; total: number; pct: number; headcount: number; need: number | null; now: number | null }> };
 /** 달성표 K2 행 안에 넣는 같은 블록(kind 없음) */
@@ -636,6 +642,7 @@ function QuarterGoalBody({ v, theme, disabled }: { v: KpiQuarterBlock; theme: Kp
 
 // ── KPI 달성표(kpiTable) ────────────────────────────────────────────────────
 const PERIOD_LABEL: Record<KpiTableView["period"], string> = { week: "이번 주", month: "이번 달", quarter: "분기" };
+const PERIOD_LABEL_SHORT: Record<KpiTableView["period"], string> = { week: "주", month: "월", quarter: "분기" };
 const TEAM_SCOPES: KpiScope[] = ["A", "B", "C", "D", "E"];
 /** PC 열: 지표 · 상태 · CS 전체 · 팀 5칸. */
 const TABLE_GRID = "lg:grid lg:grid-cols-[minmax(0,1.7fr)_4.75rem_minmax(0,1.5fr)_repeat(5,minmax(0,1fr))]";
@@ -668,6 +675,10 @@ function TrendMark({ trend, theme }: { trend?: KpiTableRow["trend"]; theme: KpiT
   );
 }
 
+function NowChip({ theme }: { theme: KpiTheme }) {
+  return <span title="열린 건은 지난 시점 값이 없어 지금 값" className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-black ${THEMES[theme].chip}`}>지금</span>;
+}
+
 /** CS 전체 큰 숫자 + 막대. 목표 없으면 실적만 크게 + 추세. */
 function CsSummary({ r, theme }: { r: KpiTableRow; theme: KpiTheme }) {
   const t = THEMES[theme];
@@ -677,7 +688,10 @@ function CsSummary({ r, theme }: { r: KpiTableRow; theme: KpiTheme }) {
   if (!c.target) {
     return (
       <span className="flex min-w-0 flex-col gap-1">
-        <span className={`font-mono text-[24px] font-black leading-none tabular-nums lg:text-[28px] ${t.text}`}>{fmt(c.value)}<span className={`ml-1 font-sans text-[12px] font-bold ${t.sub}`}>{r.unit}</span></span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className={`font-mono text-[24px] font-black leading-none tabular-nums lg:text-[28px] ${t.text}`}>{fmt(c.value)}<span className={`ml-1 font-sans text-[12px] font-bold ${t.sub}`}>{r.unit}</span></span>
+          {r.nowChip && <NowChip theme={theme} />}
+        </span>
         <TrendMark trend={r.trend} theme={theme} />
       </span>
     );
@@ -688,6 +702,7 @@ function CsSummary({ r, theme }: { r: KpiTableRow; theme: KpiTheme }) {
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className={`font-mono text-[24px] font-black leading-none tabular-nums lg:text-[28px] ${STATUS_TEXT[theme][c.status]}`}>{fmt(c.value)}<span className={`text-[15px] ${t.sub}`}>/{fmt(c.target)}</span></span>
         <span className={`rounded-full px-2 py-0.5 font-mono text-[13px] font-black tabular-nums ${STATUS_PILL[theme][c.status]}`}>{pct}%</span>
+        {r.nowChip && <NowChip theme={theme} />}
       </span>
       <Bar pct={pct} barClass={STATUS_BAR[c.status]} paceFrac={r.pace} theme={theme} h="h-2.5" label={`${r.name} CS 전체 ${pct}%`} />
     </span>
@@ -798,14 +813,28 @@ function KpiTableBody({ v, theme, disabled }: { v: KpiTableView; theme: KpiTheme
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const periods = ["week", "month", "quarter"] as const;
+  const cur = v.cursor;
+  const periodText = cur ? PERIOD_LABEL_SHORT : PERIOD_LABEL;
 
   return (
     <div>
-      {/* 기간 칩 · 보기 칩 */}
+      {/* 기간 칩 · (스테퍼) · 보기 칩 */}
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="flex flex-wrap gap-1" role="group" aria-label="기간">
-          {periods.map((p) => <button key={p} type="button" aria-pressed={v.period === p} disabled={disabled} onClick={() => v.onPeriod(p)} className={chipClass(v.period === p, theme)}>{PERIOD_LABEL[p]}</button>)}
+          {periods.map((p) => <button key={p} type="button" aria-pressed={v.period === p} disabled={disabled} onClick={() => v.onPeriod(p)} className={chipClass(v.period === p, theme)}>{periodText[p]}</button>)}
         </div>
+        {cur && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label="기간 이동">
+            <button type="button" aria-label="이전 기간" disabled={disabled || !cur.canPrev} onClick={() => cur.onStep(-1)} className={chipClass(false, theme)}><ChevronLeft size={16} aria-hidden /></button>
+            <span className={`flex min-h-11 min-w-0 items-center gap-1.5 px-1 text-[12px] font-black ${t.text}`} aria-live="polite">
+              <span className="truncate">{cur.label}</span>
+              {cur.ended && <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black ${t.chip}`}>마감</span>}
+              {cur.loading && <span className={`shrink-0 text-[10.5px] font-bold ${t.muted}`}>읽는 중…</span>}
+            </span>
+            <button type="button" aria-label="다음 기간" disabled={disabled || !cur.canNext} onClick={() => cur.onStep(1)} className={chipClass(false, theme)}><ChevronRight size={16} aria-hidden /></button>
+            {cur.canNext && <button type="button" disabled={disabled} onClick={() => cur.onToday()} className={chipClass(false, theme)}>오늘로</button>}
+          </div>
+        )}
         <div className="flex flex-wrap gap-1" role="group" aria-label="보기">
           <button type="button" aria-pressed={v.view === "main"} disabled={disabled} onClick={() => v.onView("main")} className={chipClass(v.view === "main", theme)}>주요 목표<span className="font-mono opacity-70">{v.counts.main}</span></button>
           <button type="button" aria-pressed={v.view === "all"} disabled={disabled} onClick={() => v.onView("all")} className={chipClass(v.view === "all", theme)}>전체 지표<span className="font-mono opacity-70">{v.counts.all}</span></button>
@@ -1213,7 +1242,7 @@ export function KpiWidget(props: KpiWidgetProps) {
   const ready = status === "ready" && view && view.kind === kind;
   const effective: KpiLoadStatus = status === "ready" && !ready ? "empty" : status;
   const isTable = kind === "kpiTable";
-  const headTitle = isTable && view?.kind === "kpiTable" ? `${title} · ${PERIOD_LABEL[view.period]}` : title;
+  const headTitle = isTable && view?.kind === "kpiTable" ? `${title} · ${view.cursor ? view.cursor.label : PERIOD_LABEL[view.period]}` : title;
 
   let body: ReactNode;
   if (effective === "loading") body = <Skeleton kind={kind} theme={theme} />;

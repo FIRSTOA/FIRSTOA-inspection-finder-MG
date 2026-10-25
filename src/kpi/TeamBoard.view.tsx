@@ -26,10 +26,13 @@ const num = (n: number | null, suffix = "") => (n === null ? "—" : `${n.toLoca
 const WAIT_MARK = "…";
 const say = (wait: boolean, text: string) => (wait ? "불러오는 중" : text);
 
-function Big({ label, value, tone, wait = false }: { label: string; value: string; tone?: string; wait?: boolean }) {
+function Big({ label, value, tone, wait = false, nowChip = false }: { label: string; value: string; tone?: string; wait?: boolean; nowChip?: boolean }) {
   return (
     <div className="min-w-0">
-      <div className="truncate text-[11px] font-bold text-slate-400">{label}</div>
+      <div className="flex min-w-0 items-center gap-1 text-[11px] font-bold text-slate-400">
+        <span className="truncate">{label}</span>
+        {nowChip && <span title="열린 건은 지난 시점 값이 없어 지금 값" className="shrink-0 rounded-full bg-white/[0.07] px-1 text-[10px] font-black text-slate-400">지금</span>}
+      </div>
       {wait
         ? <div className="mt-0.5 inline-flex h-5.5 min-w-10 items-center justify-center rounded border border-dashed border-slate-600 font-mono text-[15px] font-black leading-none text-slate-500" aria-label={`${label} 불러오는 중`}>{WAIT_MARK}</div>
         : <div className={`truncate font-mono text-[20px] font-black leading-6 tabular-nums ${tone || "text-white"}`}>{value}</div>}
@@ -37,7 +40,7 @@ function Big({ label, value, tone, wait = false }: { label: string; value: strin
   );
 }
 
-function TeamCard({ c, on, dim, onPick }: { c: TeamCardModel; on: boolean; dim: boolean; onPick: () => void }) {
+function TeamCard({ c, on, dim, onPick, nowChip = false }: { c: TeamCardModel; on: boolean; dim: boolean; onPick: () => void; nowChip?: boolean }) {
   const tc = TEAM_COLORS[c.team];
   const w = c.wait ?? NO_WAIT;
   const aria = `${c.label}팀 ${say(w.pill, TEAM_PILL_LABEL[c.pill])} · 미처리 ${say(w.unhandled, num(c.unhandled))} · OKR ${c.okrApplies ? say(w.okr, num(c.okrPct, "%")) : "대상 아님"} · 정기점검 ${say(w.inspection, num(c.inspectionPct, "%"))}${c.stale ? " · 마지막 값(갱신 중)" : ""}${on ? " · 선택됨(다시 누르면 전체)" : ""}`;
@@ -54,7 +57,7 @@ function TeamCard({ c, on, dim, onPick }: { c: TeamCardModel; on: boolean; dim: 
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-black ${w.pill ? `${PILL.none} border border-dashed border-slate-600` : PILL[c.pill]}`}>{w.pill ? WAIT_MARK : TEAM_PILL_LABEL[c.pill]}</span>
         </div>
         <div className="grid grid-cols-3 gap-1.5">
-          <Big label="미처리" wait={w.unhandled} value={num(c.unhandled)} tone={c.unhandled ? "text-rose-200" : c.unhandled === 0 ? "text-emerald-300" : "text-slate-500"} />
+          <Big label="미처리" nowChip={nowChip} wait={w.unhandled} value={num(c.unhandled)} tone={c.unhandled ? "text-rose-200" : c.unhandled === 0 ? "text-emerald-300" : "text-slate-500"} />
           <Big label="OKR 이번 주" wait={w.okr} value={c.okrApplies ? num(c.okrPct, "%") : "—"} tone={c.okrApplies && c.okrPct !== null ? undefined : "text-slate-500"} />
           <Big label="정기점검" wait={w.inspection} value={num(c.inspectionPct, "%")} tone={c.inspectionPct === null ? "text-slate-500" : undefined} />
         </div>
@@ -77,13 +80,14 @@ function TeamCard({ c, on, dim, onPick }: { c: TeamCardModel; on: boolean; dim: 
   );
 }
 
-export function TeamBoardStrip({ cards, selected, onSelect }: { cards: TeamCardModel[]; selected: TeamKey | null; onSelect: (t: TeamKey) => void }) {
+export function TeamBoardStrip({ cards, selected, onSelect, periodLabel }: { cards: TeamCardModel[]; selected: TeamKey | null; onSelect: (t: TeamKey) => void; periodLabel?: string }) {
   return (
     <section aria-label="팀 카드 — 누르면 아래 달성표·미처리·OKR 이 그 팀으로" className="mb-2 min-w-0">
+      {periodLabel && <p className="mb-1 px-1 text-[11px] font-bold text-slate-400">{periodLabel}</p>}
       <ul className="grid min-w-0 auto-cols-[15rem] grid-flow-col gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin] xl:auto-cols-auto xl:grid-flow-row xl:grid-cols-5 xl:overflow-visible xl:pb-0">
         {cards.map((c) => (
           <li key={c.team} className="flex min-w-0">
-            <TeamCard c={c} on={selected === c.team} dim={selected !== null && selected !== c.team} onPick={() => onSelect(c.team)} />
+            <TeamCard c={c} on={selected === c.team} dim={selected !== null && selected !== c.team} onPick={() => onSelect(c.team)} nowChip={Boolean(periodLabel)} />
           </li>
         ))}
       </ul>

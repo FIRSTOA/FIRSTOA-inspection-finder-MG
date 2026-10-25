@@ -181,16 +181,20 @@ export function teamWaiting(b: KpiBundle | null, ids: readonly KpiId[], want?: R
 /**
  * 묶음 → 팀 카드 5장. 필요한 지표 행만 센다(tableRowsFor — 행 캐시를 달성표와 같이 써 두 번 세지 않음) + 기다리는 칸 표시.
  * want = 읽을 원본(기다림 판정용).
+ * now = 지금 묶음(지난 기간 보기, 2026-10-26) — b 가 지난 기간 파생 묶음이면 미처리·"OKR 이번 주" 칸은 now 의 값(늘 지금, 미처리 칸에 "지금" 칩은 화면이 단다).
+ *   주의 한 줄의 OKR 미작성·미처리 최장도 now 기준. 주요 목표·미니 타일·정기점검은 b(그 기간).
  */
-export function teamBoardView(b: KpiBundle | null, period: TablePeriod, teamOf: ModelCtx["teamOf"], basis: "end" | "early" = "end", want?: ReadonlySet<KpiSource>): TeamCardModel[] {
+export function teamBoardView(b: KpiBundle | null, period: TablePeriod, teamOf: ModelCtx["teamOf"], basis: "end" | "early" = "end", want?: ReadonlySet<KpiSource>, now?: KpiBundle | null): TeamCardModel[] {
   if (!b) return teamBoardFromParts({ rows: null, unhandled: null, roster: null, okrWeek: null, waiting: { ...teamWaiting(null, [], want), ids: "all" } });
   const ctx: ModelCtx = { teamOf, period };
   const ids = teamBoardKpiIds(b.settings.targets);
   const rows = cachedView(b, ctx, `teamBoard|rows|${basis}`, () => tableRowsFor(b, ctx, ids, basis));
+  const cur = now && now !== b ? now : b;
   const waiting = teamWaiting(b, ids, want);
-  const okrMissing = cachedView(b, ctx, "teamBoard|okrMissing", () =>
-    Object.fromEntries(OKR_TEAMS.map((t) => [t, okrPeopleForTeam(b, t, "week").filter((x) => x.missing).length])) as Partial<Record<TeamKey, number>>);
-  return teamBoardFromParts({ rows, unhandled: b.facts.unhandled ?? null, roster: b.facts.roster ?? null, okrWeek: b.facts.okr?.week ?? null, okrMissing, waiting });
+  if (cur !== b) { const nw = teamWaiting(cur, [], want); waiting.unhandled = nw.unhandled; waiting.okr = nw.okr; }
+  const okrMissing = cachedView(cur, ctx, "teamBoard|okrMissing", () =>
+    Object.fromEntries(OKR_TEAMS.map((t) => [t, okrPeopleForTeam(cur, t, "week").filter((x) => x.missing).length])) as Partial<Record<TeamKey, number>>);
+  return teamBoardFromParts({ rows, unhandled: cur.facts.unhandled ?? null, roster: b.facts.roster ?? null, okrWeek: cur.facts.okr?.week ?? null, okrMissing, waiting });
 }
 
 /**

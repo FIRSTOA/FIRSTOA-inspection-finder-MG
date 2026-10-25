@@ -27,7 +27,7 @@ import { loadMisuVisits, isTableMissingError } from "../misuVisitHistoryData";
 import { loadOverhaulRows, overhaulTabFrom } from "../overhaulSheet";
 import { KPI_BY_ID, KPI_DEFS, KPI_TARGETS_CONFIG_KEY, parseKpiTargets, type KpiId, type KpiSettings, type KpiSource } from "./kpiDefs";
 import {
-  kpiLoadFrom, kpiRanges, RECONTRACT_COLUMNS, rosterFromMembers, shiftYmd, toFormRows,
+  kpiLoadFrom, kpiRanges, kpiRangesAt, RECONTRACT_COLUMNS, rosterFromMembers, shiftYmd, toFormRows,
   type CustomerPraiseRow, type FormRaw, type ItLogLite, type KeymanRow, type KpiFacts, type KpiRanges, type OkrFacts,
   type PraiseRow, type ReceptionWeekRow, type VisitLite,
 } from "./kpiCompute";
@@ -40,7 +40,12 @@ export type KpiSourceStatus =
 export type KpiUnhandledInfo = { sheetMode: boolean; notice: string; over90: number };
 
 export type KpiBundle = {
+  /** 진짜 오늘(kstDate) — anchor 를 줘도 바뀌지 않는다 */
   today: string;
+  /** 기간 기준일(지난 기간 보기, 설계안 home-period-nav 2-2). 없으면 today 기준 묶음 */
+  anchor?: string;
+  /** 날짜로 거르는 원본을 이 범위만 읽은 묶음(지난 기간 추가 조회). 없으면 kpiLoadFrom(ranges)~분기 말 */
+  window?: { from: string; to: string };
   ranges: KpiRanges;
   facts: KpiFacts;
   sources: Partial<Record<KpiSource, KpiSourceStatus>>;
@@ -116,17 +121,31 @@ async function loadItPracticeBoth(from: string, to: string): Promise<{ rows: ItL
   return { rows, notice };
 }
 
+export type LoadKpiBundleOpts = {
+  sources?: Iterable<KpiSource>;
+  /** 진짜 오늘(기본 kstDate()) */
+  today?: string;
+  /** 기간 기준일(지난 기간의 말일 등). 주면 ranges = kpiRangesAt(today, anchor) — okr 달·주차, workin 분기도 이 날 기준 */
+  anchor?: string;
+  /** 날짜로 거르는 원본(점검·AS·활동·확장성·방문·양식·미수·IT·칭찬)을 이 범위만 읽는다 */
+  window?: { from: string; to: string };
+};
+
 /**
  * 한 번 읽기. sources 를 주면 그 원본만(기본: 전부). 실패는 throw 하지 않고 sources[원본] 상태로 돌려준다.
- * today 는 kstDate() 값(테스트에서 넘길 수 있다).
+ * today 는 kstDate() 값(테스트에서 넘길 수 있다). anchor·window 는 지난 기간 보기(설계안 home-period-nav 6절 구현 B).
  */
-export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today?: string } = {}): Promise<KpiBundle> {
+export async function loadKpiBundle(opts: LoadKpiBundleOpts = {}): Promise<KpiBundle> {
   const today = opts.today || kstDate();
-  const ranges = kpiRanges(today);
+  const anchor = opts.anchor || "";
+  const ranges = anchor ? kpiRangesAt(today, anchor) : kpiRanges(today);
   const want = new Set(opts.sources ? [...opts.sources] : ALL_KPI_SOURCES);
   if (want.has("events")) { want.add("field"); want.add("expansion"); }
-  const from = kpiLoadFrom(ranges);
-  const to = [ranges.quarter.to, ranges.week.to].sort().pop() as string;
+  const win = opts.window ? { from: opts.window.from, to: opts.window.to } : undefined;
+  const from = win ? win.from : kpiLoadFrom(ranges);
+  const to = win ? win.to : [ranges.quarter.to, ranges.week.to].sort().pop() as string;
+  // 지난 기간이면 그 기간에 재직한 사람만(cs_members joined_on·left_on, 4-3). 기간 = window, 없으면 읽은 범위 시작 ~ 기준일
+  const rosterRange = anchor ? (win || { from, to: anchor }) : undefined;
   const facts: KpiFacts = {};
   const sources: Partial<Record<KpiSource, KpiSourceStatus>> = {};
   const ok = (s: KpiSource, notice?: string) => { sources[s] = { status: "ok", at: Date.now(), ...(notice ? { notice } : {}) }; };
@@ -147,7 +166,7 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
   // 조회는 동시에 시작하되, 팀 판정을 쓰는 곳(행 → 팀 변환 put, 로더 안에서 팀을 매기는 ROSTER_FIRST)은 명단이 끝난 뒤에 돈다 — 숫자는 예전 직렬과 같다
   const rosterReady: Promise<void> = !want.has("roster") ? Promise.resolve() : fetchMembers().then(
     (members) => {
-      facts.roster = rosterFromMembers(members);
+      facts.roster = rosterFromMembers(members, rosterRange);
       ok("roster");
     },
     (e) => { fail("roster", e); },
@@ -180,13 +199,16 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     run("bulman", () => loadFormRaw("bulman", from, to), (v) => { facts.bulman = toFormTableRows("bulman", v, teamForAuthor); }),
     run("misu", () => loadMisuVisits({ from, to }), (v) => { facts.misu = v; }),
     run("unhandled", () => loadUnhandledRows(today), (v) => { facts.unhandled = v.rows; hold.unhandled = v.info; if (v.partialError || v.info.notice) ok("unhandled", [v.partialError, v.info.notice].filter(Boolean).join(" · ")); }),
-    run("receptionWeek", () => selectAllRows<ReceptionWeekRow>("service_receptions", `select=status,receipt_date&receipt_date=gte.${ranges.week.from}&deleted=eq.false`), (v) => { facts.receptionWeek = v; }),
+    // 8주 치(지난 주 K29 를 추가 조회 없이 — 설계안 2-2). 이번 주 값은 kpiCompute 가 주 범위로 거르므로 같다
+    run("receptionWeek", () => selectAllRows<ReceptionWeekRow>("service_receptions", `select=status,receipt_date&receipt_date=gte.${ranges.weeks8[0].from}&deleted=eq.false`), (v) => { facts.receptionWeek = v; }),
     run("keyman", () => selectRows<KeymanRow>("contact_changes", `select=greeting_done,category&change_date=gte.${ranges.last7.from}&_hidden=not.is.true`), (v) => { facts.keyman = v; }),
     run("okr", async (): Promise<OkrFacts> => {
-      const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
+      // 기준일 = anchor(지난 기간) 또는 오늘. 주차는 그 주 월요일 기준(currentWeekOf(월요일) — 일요일 anchor 도 같은 주)
+      const base = anchor || today;
+      const y = Number(base.slice(0, 4)), m = Number(base.slice(5, 7));
       const id = monthCycleId(y, m);
-      // 주 단위(2026-10-24): 오늘이 든 주차(월~금, 주가 시작한 달 기준 — 10/1 은 9월 4주차)와 그 달 주차 기록 한 번에
-      const cw = currentWeekOf(today);
+      // 주 단위(2026-10-24): 기준일이 든 주차(월~금, 주가 시작한 달 기준 — 10/1 은 9월 4주차)와 그 달 주차 기록 한 번에
+      const cw = currentWeekOf(ranges.week.from);
       const weeks = weeksOfMonth(cw.year, cw.month);
       const sameMonth = cw.year === y && cw.month === m;
       const [cycle, quarter, reports, weekReports, wCycle, wQuarter] = await Promise.all([
@@ -223,7 +245,7 @@ export async function loadKpiBundle(opts: { sources?: Iterable<KpiSource>; today
     sources.events = { status: "error", at: Date.now(), error: "점검·AS·확장성 표를 못 읽어 활동 기록 합계를 낼 수 없습니다" };
   }
 
-  return { today, ranges, facts, sources, settings, unhandledInfo: hold.unhandled, loadedAt: Date.now() };
+  return { today, ...(anchor ? { anchor } : {}), ...(win ? { window: win } : {}), ranges, facts, sources, settings, unhandledInfo: hold.unhandled, loadedAt: Date.now() };
 }
 
 /** 위젯 하나의 상태 — 원본 없음(연결 필요) · 준비 중(표 없음) · 실패(—·[다시]) · 정상 */
