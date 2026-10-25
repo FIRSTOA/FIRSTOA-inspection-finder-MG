@@ -454,7 +454,7 @@ function targetLabelOf(id: KpiId, t: KpiTarget | undefined, board: KpiPeriodKey)
 }
 
 export function tableRows(b: KpiBundle, ctx: ModelCtx, basis: "end" | "early" = "end"): TableRowModel[] {
-  return tableRowsFor(b, ctx, KPI_DEFS.map((d) => d.id), basis);
+  return tableRowsFor(b, ctx, KPI_DEFS.filter((d) => d.table !== false).map((d) => d.id), basis);
 }
 
 /**
@@ -466,7 +466,7 @@ export function tableRowsFor(b: KpiBundle, ctx: ModelCtx, ids: Iterable<KpiId>, 
   const main = new Set(mainKpiIds(b.settings.targets));
   // 개인 칩 보조 글자 — 블로그 올해 누계(K20)·오버홀 수리 점수(K33). 원본이 없으면 붙이지 않는다(필요할 때 한 번만 센다)
   const blogTotals = () => (b.facts.blog ? cachedView(b, ctx, "blogYearTotals", () => blogYearTotals(b.facts.blog!, b.today)) : null);
-  return KPI_DEFS.filter((def) => want.has(def.id)).map((def) =>
+  return KPI_DEFS.filter((def) => want.has(def.id) && def.table !== false).map((def) =>
     cachedView(b, ctx, `row|${def.id === "K2" ? basis : "-"}|${def.id}|${main.has(def.id) ? 1 : 0}`, () => tableRowOf(b, ctx, def, basis, main, blogTotals)));
 }
 

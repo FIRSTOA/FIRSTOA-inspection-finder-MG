@@ -84,7 +84,7 @@ describe("달성표 개인 칩 보조 글자 — 같은 함수", () => {
     expect(by.byPerson.find((p) => p.name === "한왕주")?.repairPoints).toBe(1.5);
     expect(k33.people.find((p) => p.name === "한왕주")?.sub).toBe("수리 1.5점");
     expect(k33.people.find((p) => p.name === "이민구")?.sub).toBeUndefined();
-    expect(rows.find((r) => r.id === "K1")?.people.every((p) => p.sub === undefined && p.total === undefined)).toBe(true);
+    expect(rows.find((r) => r.id === "K3")?.people.every((p) => p.sub === undefined && p.total === undefined)).toBe(true);
   });
 });
 

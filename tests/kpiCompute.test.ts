@@ -225,6 +225,22 @@ describe("블로그 — KPI = 주간현황판 블로그 칸(countBlog)", () => {
   });
 });
 
+describe("블로그 CS 전체 = 팀 합 (2026-10-26)", () => {
+  it("다른 부서 행은 CS 전체에 안 들어가고 전체 = 팀 합", () => {
+    const rows: BlogRow[] = [
+      { seq: "1", date: "2026-10-19", name: "한왕주", dept: "CS", points: 1 },
+      { seq: "2", date: "2026-10-22", name: "이권선", dept: "CS", points: 1 },
+      { seq: "3", date: "2026-10-22", name: "타부서", dept: "운영지원", points: 1 },
+      { seq: "4", date: "2026-10-23", name: "타부서", dept: "운영지원", points: 1 },
+    ];
+    const all = kpiCount("K20", { blog: rows, roster: ROSTER }, {}, R.week, ctx)?.n;
+    const sum = ["A", "B", "C", "D", "E"].reduce((a, t) => a + (kpiCount("K20", { blog: rows, roster: ROSTER }, { team: t }, R.week, ctx)?.n ?? 0), 0);
+    expect(all).toBe(2);
+    expect(all).toBe(sum);
+    expect(kpiCount("K20", { blog: rows }, {}, R.week, ctx)).toBeNull();
+  });
+});
+
 describe("분기 점검 진행 — 홈·워킨맵 식 + 남은 영업일·하루 필요량", () => {
   const places: WorkinPlaceLite[] = [
     ...Array.from({ length: 10 }, (_, i) => ({ team: "C", label: i < 4 ? "G5" : "G1", kind: "quarter" })),
@@ -266,6 +282,12 @@ describe("목표(인당 × 인원) · 주요 목표 · 설정", () => {
   it("PC 인당 영업일 1건: 이번 달 영업일 20일(10/5·10/9 제외) × 인원", () => {
     const base = { range: R.month, period: "month" as const, today: TODAY, teamCount: 5, holidays: [] };
     expect(kpiTargetFor("K7", { perPersonBizDay: 1 }, { ...base, scope: "team", headcount: 3 })).toEqual({ full: 60, toDate: 45 });
+  });
+  it("주 단위 목표는 올림 정수(소수 → 올림)", () => {
+    const base = { range: R.month, period: "month" as const, today: TODAY, teamCount: 5, holidays: [], scope: "all" as const };
+    const r = kpiTargetFor("K20", { perPersonWeek: 2 }, { ...base, headcount: 3 });
+    expect(Number.isInteger(r.full)).toBe(true);
+    expect(Number.isInteger(r.toDate)).toBe(true);
   });
   it("초과 파트당 월 2 · 전체 = 파트 수 × 2(5팀 = 10) · 인당 설정 · 주 단위는 목표 없음", () => {
     const base = { range: R.month, period: "month" as const, today: TODAY, teamCount: 5, holidays: [] };

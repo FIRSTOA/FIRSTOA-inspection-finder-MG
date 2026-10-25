@@ -6,12 +6,12 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { countField, toFieldRows, type FieldRaw } from "../src/workCount";
-import { kpiRanges, workinPace, type KpiFacts } from "../src/kpi/kpiCompute";
+import { kpiCount, kpiRanges, workinPace, type KpiFacts } from "../src/kpi/kpiCompute";
 import { ALL_KPI_SOURCES, type KpiBundle } from "../src/kpi/kpiData";
 import { parseKpiTargets, type KpiSource } from "../src/kpi/kpiDefs";
 import {
   HOME_KPI_DEFAULT_LAYOUT, HOME_KPI_LAYOUT_KEY, HOME_KPI_LAYOUT_VERSION, HOME_WIDGETS, effectivePeriod, mergeBundle, okrView, okrPeopleForTeam, pickOkrWeekId,
-  parseHomeLayout, quarterGoalView, readHomeLayout, serializeHomeLayout, sourcesForLayout, splitSources, tableRows, todayItems, unhandledParts,
+  parseHomeLayout, quarterGoalView, readHomeLayout, serializeHomeLayout, sourcesForLayout, splitSources, tableRows, tableRowsFor, todayItems, unhandledParts,
   writeHomeLayout,
 } from "../src/kpi/homeKpiModel";
 import { countUnhandledKinds, countUnhandledTabs, mergeUnhandled, splitByGroup, UNHANDLED_KINDS, UNHANDLED_TABS, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
@@ -166,27 +166,14 @@ describe("위젯 보기 = kpiCompute 와 같은 값", () => {
   const b = bundleOf(FACTS);
   const ctx = { teamOf, period: "week" as const };
 
-  it("달성표: 점검 행 = countField(이번 주, 팀장 제외) — CS·A~E 칸, 팀 막대·개인 칩도 같은 함수, 목표 없음 = none + 지난주 대비", () => {
+  it("달성표: 점검(K1) 줄은 없다(분기 점검 진행 K2 와 원본이 같아 중복 — 2026-10-26). 숫자는 kpiCount·금일 현황·팀 현황에 그대로", () => {
     const rows = tableRows(b, ctx);
-    const k1 = rows.find((r) => r.id === "K1")!;
+    expect(rows.find((r) => r.id === "K1")).toBeUndefined();
+    expect(tableRowsFor(b, ctx, ["K1", "K2"]).map((r) => r.id)).toEqual(["K2"]);
     const w = b.ranges.week;
-    const cs = k1.cells.find((c) => c.scope === "CS")!;
-    expect(cs.value).toBe(countField(FIELD, { kind: "inspection", from: w.from, to: w.to }));
-    expect(cs.value).toBe(3);
-    expect(k1.cells.map((c) => c.scope)).toEqual(["CS", "A", "B", "C", "D", "E"]);
-    expect(k1.cells.find((c) => c.scope === "C")?.value).toBe(2);
-    expect(k1.teamBars.find((t) => t.team === "CSS")?.value).toBe(1); // E 는 CSS 로 보인다
-    expect(k1.people.find((p) => p.name === "엄재현")).toMatchObject({ value: 1, team: "CSS", target: null, done: false });
-    expect(k1.status).toBe("none");
-    expect(k1.trend).toEqual({ delta: 3, label: "지난주 대비" });
-    expect(k1.cellState).toBe("ready");
-    expect(k1.pace).toBeCloseTo(b.ranges.weekElapsedRate / 100); // 위젯 약속: 0~1
-    expect(k1.main).toBe(false);
-  });
-
-  it("개인 칩은 팀 순서 → 실적 내림차순", () => {
-    const k1 = tableRows(b, ctx).find((r) => r.id === "K1")!;
-    expect(k1.people.map((p) => p.name)).toEqual(["이권선", "이민구", "한왕주", "엄재현"]);
+    expect(kpiCount("K1", FACTS, {}, w, { teamOf })?.n).toBe(countField(FIELD, { kind: "inspection", from: w.from, to: w.to }));
+    expect(kpiCount("K1", FACTS, {}, w, { teamOf })?.n).toBe(3);
+    expect(kpiCount("K1", FACTS, { team: "C" }, w, { teamOf })?.n).toBe(2);
   });
 
   it("주요 목표 = 설정 main(분기 점검·블로그·PC·초과·IT 실습·IT 퀴즈·오버홀). IT 표가 없으면 '준비 중 · SQL 실행 대기'(숫자 0 금지)", () => {
@@ -197,8 +184,8 @@ describe("위젯 보기 = kpiCompute 와 같은 값", () => {
     const k21 = rows.find((r) => r.id === "K21")!;
     expect(k21).toMatchObject({ cellState: "pending", pendingText: "준비 중 · SQL 실행 대기", status: "pending" });
     expect(k21.cells.every((c) => c.value === null)).toBe(true);
-    const custom = tableRows(bundleOf(FACTS, ALL_KPI_SOURCES, '{"K1":{"main":true},"K7":{"main":false}}'), ctx);
-    expect(custom.find((r) => r.id === "K1")?.main).toBe(true);
+    const custom = tableRows(bundleOf(FACTS, ALL_KPI_SOURCES, '{"K3":{"main":true},"K7":{"main":false}}'), ctx);
+    expect(custom.find((r) => r.id === "K3")?.main).toBe(true);
     expect(custom.find((r) => r.id === "K7")?.main).toBe(false);
   });
 
@@ -215,7 +202,7 @@ describe("위젯 보기 = kpiCompute 와 같은 값", () => {
     const bad = bundleOf(FACTS);
     bad.sources.field = { status: "error", at: 1, error: "timeout" };
     const rows = tableRows(bad, ctx);
-    expect(rows.find((r) => r.id === "K1")).toMatchObject({ cellState: "error", pendingText: "불러오지 못함", status: "pending" });
+    expect(rows.find((r) => r.id === "K3")).toMatchObject({ cellState: "error", pendingText: "불러오지 못함", status: "pending" });
     expect(todayItems(bad, ctx).find((x) => x.id === "K1")?.value).toBeNull();
   });
 
@@ -254,13 +241,13 @@ describe("위젯 보기 = kpiCompute 와 같은 값", () => {
     void _kind;
     expect(k2.quarter).toEqual(q);
     expect(tableRows(b, ctx, "early").find((r) => r.id === "K2")?.quarter?.basis).toBe("early");
-    expect(tableRows(b, ctx).find((r) => r.id === "K1")?.quarter).toBeUndefined();
+    expect(tableRows(b, ctx).find((r) => r.id === "K3")?.quarter).toBeUndefined();
   });
 
   it("고른 기간과 실제 기간이 다른 행은 기준 글에 기간 칩(이번 주 → K10 '이번 달')", () => {
     const rows = tableRows(b, ctx);
     expect(rows.find((r) => r.id === "K10")?.targetLabel).toMatch(/이번 달$/);
-    expect(rows.find((r) => r.id === "K1")?.targetLabel).not.toMatch(/이번 (주|달)$/);
+    expect(rows.find((r) => r.id === "K3")?.targetLabel).not.toMatch(/이번 (주|달)$/);
     const month = tableRows(b, { ...ctx, period: "month" });
     expect(month.find((r) => r.id === "K19")?.targetLabel).not.toMatch(/이번 주$/); // K19 는 월도 된다
   });

@@ -93,6 +93,8 @@ export type KpiDef = {
   screen: KpiScreen;
   /** 금일 현황 띠에 넣을지 */
   today: boolean;
+  /** false 면 달성표·팀 카드 행에서 뺀다(오늘 띠·팀 현황·kpiCount 는 그대로) — K1 은 K2 와 원본이 같아 중복 */
+  table?: false;
 };
 
 export const KPI_TARGETS_CONFIG_KEY = "KPI_TARGETS";
@@ -116,7 +118,7 @@ export const KPI_DEFS: KpiDef[] = [
   {
     id: "K1", name: "점검", unit: "대", group: "현장 실행", period: "week", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1", "2x1", "2x2"],
     basis: `${FIELD_BASIS} · 기기 대수`, source: "workCount.countField(kind inspection) — 홈·조회 탭·팀 현황·순위표 공통", loads: ["field"], status: "ready",
-    targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황" }, today: true,
+    targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황" }, today: true, table: false,
   },
   {
     id: "K3", name: "AS", unit: "건", group: "현장 실행", period: "week", periods: ALL_P, scopes: ATP, widget: "spark", sizes: ["1x1", "2x1"],

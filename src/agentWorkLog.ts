@@ -3,6 +3,12 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-26",
+    "hash": "f82fe35e25",
+    "agent": "developer",
+    "summary": "미처리 정렬 토글을 종류 묶음 머리 줄(⌄ CS 접수 n건) 오른쪽으로, 홈은 목록 바로 위 — 사용자 재지정"
+  },
+  {
     "date": "2026-10-25",
     "hash": "55c09a19b2",
     "agent": "developer",

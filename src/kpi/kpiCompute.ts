@@ -377,10 +377,11 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
     case "K20": {
       if (!f.blog) return null;
       const c = countBlog(f.blog, { from: r.from, to: r.to, person: s.author });
-      if (!s.team) return { n: c.count };
+      if (s.author && !s.team) return { n: c.count };
       if (!f.roster) return null;
       const memberTeam = new Map(f.roster.map((m) => [m.name, m.team]));
-      return { n: c.byPerson.filter((p) => blogTeamOf(p, memberTeam) === s.team).reduce((a, p) => a + p.count, 0) };
+      // 팀 없음(CS 전체)도 A~E 팀에 드는 사람만 합 — 시트 전체엔 다른 부서 행이 섞여 팀 합과 어긋났다(2026-10-26)
+      return { n: c.byPerson.filter((p) => { const t = blogTeamOf(p, memberTeam); return s.team ? t === s.team : KPI_TEAMS.includes(t); }).reduce((a, p) => a + p.count, 0) };
     }
     case "K30": case "K31": {
       if (!f.praise) return null;
@@ -416,8 +417,9 @@ export function kpiTargetFor(id: KpiId, t: KpiTarget | undefined, c: KpiTargetCt
   const share = total ? done / total : 0;
   if (basis === "perPersonWeek" && t.perPersonWeek !== undefined) {
     if (!c.headcount) return { full: null, toDate: null };
-    const full = round1(t.perPersonWeek * c.headcount * total / 5);
-    return { full, toDate: round1(full * share) };
+    // 올림 정수(2026-10-26 사용자: 453.6 → 454)
+    const full = Math.ceil(round1(t.perPersonWeek * c.headcount * total / 5));
+    return { full, toDate: Math.ceil(round1(full * share)) };
   }
   if (basis === "perPersonBizDay" && t.perPersonBizDay !== undefined) {
     if (!c.headcount) return { full: null, toDate: null };
