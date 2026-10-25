@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countUnhandledKinds, countUnhandledTabs, filterUnhandled, mergeUnhandled, receptionTeam, rowsForTab, splitByGroup, ticketDetail, UNHANDLED_KINDS, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
+import { countUnhandledKinds, countUnhandledTabs, filterUnhandled, mergeUnhandled, receptionTeam, parseSortOrder, rowsForTab, sortUnhandled, UNHANDLED_SORT_KEY, splitByGroup, ticketDetail, UNHANDLED_KINDS, type ReceptionInput, type TicketInput } from "../src/homeUnhandled";
 import { isOverdueTicket } from "../src/overdueLogic";
 
 const today = "2026-10-19";
@@ -154,5 +154,23 @@ describe("일정 행 상세 본문 — 네이버에서 온 일정은 issue 가 �
     expect(ticketDetail({ issue: "토너 교체", calendarTitle: "토너 교체", note: "", address: "", time: "" })).toBe("토너 교체");
     expect(ticketDetail({ issue: "토너 교체", calendarTitle: "강남C 토너", note: "메모", address: "", time: "" })).toBe("강남C 토너\n토너 교체\n메모");
     expect(ticketDetail({})).toBe("");
+  });
+});
+
+describe("미처리 정렬 sortUnhandled(2026-10-25 밤)", () => {
+  const mk = (key: string, date: string) => ({ key, date }) as never;
+  const rows = [mk("b", "2026-10-02"), mk("x", ""), mk("a", "2026-10-01"), mk("c", "2026-10-03")];
+  const keys = (rs: Array<{ key: string }>) => rs.map((r) => r.key).join(",");
+  it("오래된 순·최근 순 양방향, 날짜 없는 행은 어느 쪽이든 맨 아래, 원본 불변", () => {
+    expect(keys(sortUnhandled(rows, "old"))).toBe("a,b,c,x");
+    expect(keys(sortUnhandled(rows, "recent"))).toBe("c,b,a,x");
+    expect(keys(rows)).toBe("b,x,a,c");
+  });
+  it("저장값 복원: recent 만 최근 순, 없음·깨진 값은 오래된 순, 키는 cs_unhandled_sort_v1", () => {
+    expect(UNHANDLED_SORT_KEY).toBe("cs_unhandled_sort_v1");
+    expect(parseSortOrder("recent")).toBe("recent");
+    expect(parseSortOrder("old")).toBe("old");
+    expect(parseSortOrder(null)).toBe("old");
+    expect(parseSortOrder("zzz")).toBe("old");
   });
 });

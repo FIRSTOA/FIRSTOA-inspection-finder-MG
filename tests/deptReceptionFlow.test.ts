@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteDeptReception, formatPhone, memoLine, nextWeekday, pickVendorAlias, prependMemo, resolveReceiver, retryDeptSheetAppend, runDeptAction, runDeptSave, saveDeptReceptionEdit } from "../src/deptReceptionFlow";
 import { isCheckConstraintError } from "../src/deptReceptionApi";
+import { kstDate } from "../src/visits";
 import { invalidateConfigCaches } from "../src/supabase";
 import type { DeptReceptionInput } from "../src/deptReception";
 
@@ -80,11 +81,27 @@ describe("저장 6단계 (runDeptSave)", () => {
     expect(res.summary).toContain("카톡 전송");
   });
 
-  it("운영지원·예정일 없음·매핑 없음: 시트 잡·달력·outbox 없음, 카톡 방 미정", async () => {
+  it("예정일 비우면 접수일(KST 오늘)로 일정 생성", async () => {
+    mockFetch(standard([]));
+    const res = await runDeptSave(base({ scheduleDate: "" }));
+    const row = calls[firstIndex("POST", "service_receptions")].body as { remote_meta: Record<string, string> };
+    expect(row.remote_meta.schedule_date).toBe(kstDate());
+    expect(touched("team_calendar_events")).toBe(true);
+    expect(res.calendarId).toBe("c1");
+  });
+
+  it("예정일을 넣으면 그 날짜로 일정 생성", async () => {
+    mockFetch(standard([]));
+    await runDeptSave(base({ scheduleDate: "2026-12-31" }));
+    const row = calls[firstIndex("POST", "service_receptions")].body as { remote_meta: Record<string, string> };
+    expect(row.remote_meta.schedule_date).toBe("2026-12-31");
+    expect(touched("team_calendar_events")).toBe(true);
+  });
+
+  it("운영지원·예정일 없음·매핑 없음: 시트 잡·outbox 없음, 카톡 방 미정(일정은 오늘로)", async () => {
     mockFetch(standard([]));
     const res = await runDeptSave(base({ dept: "운영지원", field: "소모품" }));
     expect(touched("field_sheet_sync_jobs")).toBe(false);
-    expect(touched("team_calendar_events")).toBe(false);
     expect(touched("outbox")).toBe(false);
     expect(res.sheetState).toBe("none");
     expect(res.kakao).toBe("no_room");

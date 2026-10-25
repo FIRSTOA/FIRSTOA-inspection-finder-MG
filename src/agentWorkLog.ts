@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-25",
+    "hash": "cbd05276d1",
+    "agent": "feature-planner",
+    "summary": "필드 탭 검색 입구 하나로(헤더 🔍 → 탭별 시트, 맨 위 검색칸·안내 띠 제거) + 카톡 원문과 FIELD 기록 한 목록(표에 있는 글은 숨김)"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "cbd05276d1",
+    "agent": "developer",
+    "summary": "필드 탭 검색 입구 하나로(헤더 🔍 → 탭별 시트, 맨 위 검색칸·안내 띠 제거) + 카톡 원문과 FIELD 기록 한 목록(표에 있는 글은 숨김)"
+  },
+  {
+    "date": "2026-10-25",
+    "hash": "cbd05276d1",
+    "agent": "qa-checker",
+    "summary": "필드 탭 검색 입구 하나로(헤더 🔍 → 탭별 시트, 맨 위 검색칸·안내 띠 제거) + 카톡 원문과 FIELD 기록 한 목록(표에 있는 글은 숨김)"
+  },
+  {
+    "date": "2026-10-25",
     "hash": "894bd00b9b",
     "agent": "developer",
     "summary": "홈 팀 카드 즉시 표시(캐시 v3·부분 그리기·7지표 선계산) + 상세 팝업 즉시 내용(목록 content 600자·세션 캐시·미리 읽기) + 필드 탭 검색 [불러오기] + 양식 윗줄 등급 드롭다운"

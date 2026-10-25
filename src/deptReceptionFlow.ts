@@ -112,6 +112,7 @@ export type DeptSaveResult = {
 export async function runDeptSave(input: DeptReceptionInput, extraMeta: Record<string, string> = {}): Promise<DeptSaveResult> {
   const row = buildDeptReceptionRow(input);
   const meta = { ...row.remote_meta, ...extraMeta } as typeof row.remote_meta;
+  if (!meta.schedule_date) meta.schedule_date = kstDate(); // 예정일을 비우면 접수일(KST 오늘)이 예정일 — 저장 직후 일정리스트 금일·달력에 보인다
   row.remote_meta = meta;
   const id = await saveDeptReception(row); // 실패 → throw (화면: isCheckConstraintError 면 "SQL 실행 필요")
   const createdAt = new Date().toISOString();
@@ -151,7 +152,7 @@ export async function runDeptSave(input: DeptReceptionInput, extraMeta: Record<s
     }
   }
 
-  // ④ 달력(예정일 있을 때만)
+  // ④ 달력(예정일은 비어 있으면 위에서 접수일로 채워진다)
   let calendarId = "";
   if (meta.schedule_date) {
     try {

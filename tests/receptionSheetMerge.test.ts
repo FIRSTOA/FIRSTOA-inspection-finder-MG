@@ -7,7 +7,7 @@ vi.mock("../src/supabase", async (orig) => {
 });
 
 import { getConfig, invokeEdgeFunction } from "../src/supabase";
-import { isSheetOpenOn, loadSheetOpen, mergeSheetAndDb, sheetRowStatus, sheetRowUrl, type SheetOpenResponse, type SheetOpenRow } from "../src/receptionSheetOpen";
+import { isSheetOpenOn, loadSheetOpen, markSheetMissing, mergeSheetAndDb, SHEET_MISSING_LABEL, sheetRowStatus, sheetRowUrl, type SheetOpenResponse, type SheetOpenRow } from "../src/receptionSheetOpen";
 import { applySheetToBoard, type BoardData } from "../src/receptionBoardData";
 import { countUnhandledTabs, mergeUnhandled } from "../src/homeUnhandled";
 import type { OpenReceptionRow } from "../src/deptReceptionApi";
@@ -37,15 +37,18 @@ const resp: SheetOpenResponse = {
     sr({ source: "remote", kind: "IT", sheetRow: 7, region: "강남구" }),
     sr({ source: "remote", kind: "원격이관", sheetRow: 6, region: "부산", receptionId: "remote-linked" }),
   ],
-  fetchedAt: "", errors: [], okSources: ["sales", "mgmt", "remote"], coveredIds: ["sales-linked", "remote-linked"], healed: 0, healEnabled: true,
+  fetchedAt: "", errors: [], okSources: ["sales", "mgmt", "remote"], coveredIds: ["sales-linked", "sales-synced-meta", "remote-linked"],
+  // sales-linked = 시트 '완료' 행에 이어짐(열린 행 목록엔 없음), sales-synced-meta = 잡은 synced 인데 지금 시트에 짝 행이 없음
+  linkedIds: ["sales-linked", "remote-linked"], healed: 0, healEnabled: true,
 };
 
 afterEach(() => { vi.mocked(getConfig).mockReset(); vi.mocked(invokeEdgeFunction).mockReset(); });
 
 describe("합치기 규칙", () => {
-  it("영업은 시트가 진실: 이어졌거나 동기화된 DB 행은 빼고 대기 행만 남김, 운영·복합기·안 이어진 원격은 DB 그대로", () => {
+  it("영업은 시트가 진실: 시트 행에 이어진 DB 행만 빼고, 짝 없는 행(기입 전·시트 행 지워짐)은 남겨 시트에 없음, 운영·복합기·안 이어진 원격은 DB 그대로", () => {
     const m = mergeSheetAndDb(db, resp, TODAY);
-    expect(m.db.map((r) => r.id)).toEqual(["sales-queued", "ops-1", "copier-1", "remote-free"]);
+    expect(m.db.map((r) => r.id)).toEqual(["sales-queued", "sales-synced-meta", "ops-1", "copier-1", "remote-free"]);
+    expect(m.sheetMissing).toEqual(["sales-queued", "sales-synced-meta"]);
     expect(m.sheet.map((r) => `${r.source}:${r.sheetRow}`)).toEqual(["sales:8", "sales:9", "sales:11", "mgmt:20", "remote:7", "remote:6"]);
     expect(m.over90.map((r) => r.sheetRow)).toEqual([10]);
     expect(m.notice).toBe("");
@@ -140,5 +143,61 @@ describe("현황판·홈 연결", () => {
     expect(teamSum).toBe(c["전체"]);
     // 기본값 [] — 기존 호출 무회귀
     expect(mergeUnhandled(db, [], TODAY)).toHaveLength(db.filter((r) => r.type !== "복합기 AS").length); // 복합기 AS 접수는 일정 기준(2026-10-25)
+  });
+});
+
+// 2026-10-25 밤 사고 재현: 경영지원 앱 접수 2건(잡 synced·sheet_row 1785/1786)의 시트 행을 사람이 지웠더니
+// 현황판·홈 미처리 어디에도 안 보였다(mergeSheetAndDb 가 sheet_row·synced 만 보고 DB 행을 버림).
+describe("시트에 짝 없는 부서 접수(2026-10-25 밤)", () => {
+  const mg = (id: string, sheetRow: number): OpenReceptionRow => ({
+    ...base, id, type: "경영지원", receipt_date: "2026-10-25", status: "접수", region: "수도권C", sheet_row: sheetRow,
+    remote_meta: { sheet_state: "synced", sheet_seq: String(sheetRow - 6) },
+  });
+  const dbRows = [mg("mg-a", 1785), mg("mg-b", 1786)];
+  const today = "2026-10-25";
+
+  it("시트 행이 지워진 접수: 새 엣지(linkedIds 빈 배열)든 옛 엣지(linkedIds 없음)든 미처리에 '시트에 없음'으로 남는다", () => {
+    for (const r of [
+      { rows: [], fetchedAt: "", errors: [], okSources: ["sales", "mgmt", "remote"], coveredIds: ["mg-a", "mg-b"], linkedIds: [], healed: 0, healEnabled: true },
+      { rows: [], fetchedAt: "", errors: [], okSources: ["sales", "mgmt", "remote"], coveredIds: ["mg-a", "mg-b"], healed: 0, healEnabled: true },
+    ] as SheetOpenResponse[]) {
+      const m = mergeSheetAndDb(dbRows, r, today);
+      expect(m.db.map((x) => x.id)).toEqual(["mg-a", "mg-b"]);
+      expect(m.sheetMissing).toEqual(["mg-a", "mg-b"]);
+      const rows = markSheetMissing(mergeUnhandled(m.db, [], today, m.sheet), m.sheetMissing);
+      expect(rows.filter((x) => x.kind === "경영지원" && x.team === "경영")).toHaveLength(2);
+      expect(rows.every((x) => x.sheetMissing && x.fields?.some((f) => f.label === SHEET_MISSING_LABEL))).toBe(true);
+    }
+  });
+
+  it("시트 행이 살아 있고 이어졌으면 한 번만(시트 행으로), 시트에 없음 표시 없음", () => {
+    const live: SheetOpenResponse = {
+      rows: [
+        sr({ source: "mgmt", kind: "경영지원", sheetRow: 1785, seq: "1779", date: "2026-10-25", state: "진행중", author: "이민구", receptionId: "mg-a" }),
+        sr({ source: "mgmt", kind: "경영지원", sheetRow: 1786, seq: "1780", date: "2026-10-25", state: "진행중", author: "이민구", receptionId: "mg-b" }),
+      ],
+      fetchedAt: "", errors: [], okSources: ["sales", "mgmt", "remote"], coveredIds: ["mg-a", "mg-b"], linkedIds: ["mg-a", "mg-b"], healed: 0, healEnabled: true,
+    };
+    const m = mergeSheetAndDb(dbRows, live, today);
+    expect(m.db).toEqual([]);
+    expect(m.sheetMissing).toEqual([]);
+    const rows = markSheetMissing(mergeUnhandled(m.db, [], today, m.sheet), m.sheetMissing);
+    expect(rows.map((x) => x.key)).toEqual(["s:mgmt:1785", "s:mgmt:1786"]);
+    expect(rows.some((x) => "sheetMissing" in x)).toBe(false);
+  });
+
+  it("기입 직후 엣지 60초 캐시가 아직 옛 목록이어도(이 접수 행 없음) DB 행이 보인다 — 사라지는 틈 없음", () => {
+    const stale: SheetOpenResponse = { rows: [], fetchedAt: "", errors: [], okSources: ["sales", "mgmt", "remote"], coveredIds: [], linkedIds: [], healed: 0, healEnabled: true };
+    const m = mergeSheetAndDb([mg("mg-a", 1785)], stale, today);
+    expect(m.db.map((x) => x.id)).toEqual(["mg-a"]);
+  });
+
+  it("현황판도 같은 줄에 sheetMissing", () => {
+    const board: BoardData = {
+      rows: dbRows.map((r) => ({ id: r.id, type: "경영지원" as never, vendor: r.vendor, field: "", author: "", handler: "", status: r.status, receipt_date: r.receipt_date })),
+      sources: Object.fromEntries(dbRows.map((r) => [r.id, r])), todayCount: 2, weekDoneRate: null, healed: 0, syncError: "",
+    };
+    const out = applySheetToBoard(board, { enabled: true, data: { rows: [], fetchedAt: "", errors: [], okSources: ["sales", "mgmt", "remote"], coveredIds: ["mg-a", "mg-b"], linkedIds: [], healed: 0, healEnabled: true }, error: "" }, today);
+    expect(out.rows.map((r) => [r.id, r.sheetMissing])).toEqual([["mg-a", true], ["mg-b", true]]);
   });
 });

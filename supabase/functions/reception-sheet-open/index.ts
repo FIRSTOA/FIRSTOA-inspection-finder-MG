@@ -11,7 +11,9 @@
  *     조건부 PATCH 로 완료(시트 '취소'면 취소). 한 번에 최대 50건. 스위치가 꺼져 있으면 읽기만 한다.
  *  5. 결과는 엣지 메모리에 60초 캐시(Sheets API 할당·속도). 고객 전화번호는 돌려주지 않는다.
  *
- * 응답: { ok, rows, fetchedAt, errors, okSources, coveredIds, healed, healEnabled, cached }
+ * 응답: { ok, rows, fetchedAt, errors, okSources, coveredIds, linkedIds, healed, healEnabled, cached }
+ *  linkedIds(2026-10-25 밤) = 지금 시트에 있는 행(완료·보류·미처리 무관)에 이어진 접수 id. 프런트는 영업·경영 DB 접수를 이 id 일 때만 뺀다 —
+ *  coveredIds(잡이 synced 인 접수 전부)로 빼면 시트 행이 지워진 접수가 어디에도 안 보였다(src/receptionSheetOpen.ts mergeSheetAndDb).
  *  rows[].content(2026-10-25 밤) = 최근 90일 행의 내용 열 원문 600자(줄바꿈 그대로, 40자 summary 로 다 보이면 없음) — 상세 팝업이 바로 보여 준다.
  *  644행 실측: 원문 236.8KB → 299.4KB, gzip(서버) 72.5KB → 약 97.6KB 추정(+25KB).
  * 시트는 절대 쓰지 않는다(D6).
@@ -46,6 +48,7 @@ type Payload = {
   errors: string[];
   okSources: SheetSource[];
   coveredIds: string[];
+  linkedIds: string[];
   healed: number;
   healEnabled: boolean;
 };
@@ -170,6 +173,7 @@ async function compute(): Promise<Payload> {
     errors,
     okSources,
     coveredIds: [...covered],
+    linkedIds: [...new Set(links.values())],
     healed,
     healEnabled,
   };

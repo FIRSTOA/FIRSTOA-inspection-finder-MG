@@ -240,7 +240,7 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
           </label>
 
           <div><div className={label}>처리자</div><div className="mt-1">{p.handlerSlot}</div></div>
-          <label className="block"><span className={label}>예정일 (넣으시면 부서 달력에 올라갑니다)</span><input type="date" value={p.scheduledDate} onChange={(e) => p.onScheduledDate(e.target.value)} onClick={openNativePicker} className={`${input} mt-1`} /></label>
+          <label className="block"><span className={label}>예정일 (비우면 오늘(접수일)로 부서 달력에 올라갑니다)</span><input type="date" value={p.scheduledDate} onChange={(e) => p.onScheduledDate(e.target.value)} onClick={openNativePicker} className={`${input} mt-1`} /></label>
 
           <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-[13px] font-semibold text-slate-700 sm:col-span-2">
             <input type="checkbox" checked={p.outside} onChange={(e) => p.onOutside(e.target.checked)} className="h-4 w-4 accent-blue-600" />외근 요청

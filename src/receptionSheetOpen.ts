@@ -6,8 +6,10 @@
  * 엣지를 부르지 않고 지금처럼 DB 기준(숫자 변화 없음).
  *
  * 합치기 규칙
- * - 영업팀·경영지원: 시트 행이 진실. DB 행 중 시트에 이어졌거나(coveredIds) 시트 동기화가 끝난 것(sheet_row 있음)은 뺀다.
- *   아직 시트에 안 간(잡 대기·실패) DB 행만 DB 상태로 남긴다.
+ * - 영업팀·경영지원: 시트 행이 진실. DB 행 중 **지금 시트 행에 이어진 것**(linkedIds, 옛 엣지는 열린 시트 행의 receptionId)만 뺀다.
+ *   시트에 짝이 없는 DB 열린 행(기입 전·잡 실패·시트 행을 사람이 지움·접수자 칸이 바뀌어 못 이음)은 남기고 sheetMissing 에 id 를 적는다
+ *   → 화면 '시트에 없음' 배지. (2026-10-25 밤 오류진: 예전엔 sheet_row·synced 만 보고 뺐더니, 시트 행이 지워진 접수와
+ *   기입 직후 엣지 60초 캐시 사이의 접수가 현황판·홈 어디에도 안 보였다.)
  * - 원격이관·IT: 시트 행이 진실. 시트에 이어진 DB 행만 뺀다. 이어지지 않은 DB 원격대기의 7일 규칙(isStaleRemote)은 부르는 쪽이 그대로.
  * - 운영지원·복합기 AS: 시트를 읽지 않는다 — DB 그대로.
  * - 시트(탭)를 못 읽으면 그 종류는 DB 만으로 보여 주고 안내 한 줄(숫자를 0으로 만들지 않는다).
@@ -45,6 +47,8 @@ export type SheetOpenResponse = {
   errors: string[];
   okSources: SheetSource[];
   coveredIds: string[];
+  /** 지금 시트에 있는 행(완료·보류·미처리 무관)에 이어진 접수 id — 2026-10-25 밤 엣지부터. 옛 엣지는 없음(undefined) */
+  linkedIds?: string[];
   healed: number;
   healEnabled: boolean;
   cached?: boolean;
@@ -81,6 +85,7 @@ function normalizeResponse(raw: Partial<SheetOpenResponse> | null | undefined): 
     errors: Array.isArray(r.errors) ? r.errors.map(String) : [],
     okSources: Array.isArray(r.okSources) ? r.okSources.filter((s): s is SheetSource => s === "sales" || s === "mgmt" || s === "remote") : [],
     coveredIds: Array.isArray(r.coveredIds) ? r.coveredIds.map(String) : [],
+    ...(Array.isArray(r.linkedIds) ? { linkedIds: r.linkedIds.map(String) } : {}),
     healed: Number(r.healed) || 0,
     healEnabled: Boolean(r.healEnabled),
     cached: Boolean(r.cached),
@@ -126,7 +131,13 @@ export type SheetMerge<T> = {
   notice: string;
   /** 시트 기준으로 센 종류 */
   sheetKinds: SheetKind[];
+  /** 남긴 DB 행 중 시트에 짝이 없는 영업·경영 접수 id(화면 '시트에 없음' 배지) */
+  sheetMissing: string[];
 };
+
+/** '시트에 없음' 배지·상세 줄 문구 */
+export const SHEET_MISSING_LABEL = "시트에 없음";
+export const SHEET_MISSING_HINT = "앱 접수는 열려 있는데 시트에 이 행이 없습니다(기입 전이거나 시트에서 행이 지워짐) — 시트에 다시 적거나 앱에서 완료·삭제하세요";
 
 /**
  * DB 열린 행 + 엣지 결과 → 남길 DB 행·시트 행. resp 가 null(시트 읽기 실패)이면 DB 그대로 + 안내.
@@ -134,17 +145,24 @@ export type SheetMerge<T> = {
  */
 export function mergeSheetAndDb<T extends DbLike>(db: T[], resp: SheetOpenResponse | null, today: string, error = "", days = SHEET_DAYS): SheetMerge<T> {
   if (!resp) {
-    return { db, sheet: [], over90: [], sheetKinds: [], notice: `시트를 못 읽어 영업·경영·원격 숫자가 빠졌을 수 있음 — 앱 접수(DB) 기준으로 표시${error ? ` (${error})` : ""}` };
+    return { db, sheet: [], over90: [], sheetKinds: [], sheetMissing: [], notice: `시트를 못 읽어 영업·경영·원격 숫자가 빠졌을 수 있음 — 앱 접수(DB) 기준으로 표시${error ? ` (${error})` : ""}` };
   }
   const okSources = resp.okSources;
   const sheetKinds = okSources.flatMap((s) => SOURCE_KINDS[s]);
   const okKind = new Set<string>(sheetKinds);
   const covered = new Set(resp.coveredIds);
+  // 영업·경영: 지금 시트 행에 이어진 접수만 시트가 대신한다. 옛 엣지(linkedIds 없음)는 열린 시트 행의 receptionId 로 —
+  // 시트 '완료' 행에 이어진 접수는 엣지 자가 치유가 DB 를 완료로 바꿔 열린 목록에서 빠진다.
+  const linked = new Set(resp.linkedIds ?? resp.rows.map((r) => String(r.receptionId || "")).filter(Boolean));
+  const sheetMissing: string[] = [];
   const keptDb = db.filter((r) => {
     if (!okKind.has(r.type)) return true;
-    if (covered.has(r.id)) return false;
-    if (DEPT_SHEET_KINDS.has(r.type) && (r.sheet_row || String(r.remote_meta?.sheet_state || "") === "synced")) return false;
-    return true;
+    if (DEPT_SHEET_KINDS.has(r.type)) {
+      if (linked.has(r.id)) return false;
+      sheetMissing.push(r.id);
+      return true;
+    }
+    return !covered.has(r.id);
   });
   const sheet: SheetOpenRow[] = [];
   const over90: SheetOpenRow[] = [];
@@ -157,7 +175,19 @@ export function mergeSheetAndDb<T extends DbLike>(db: T[], resp: SheetOpenRespon
   const notes: string[] = [];
   if (missing.length) notes.push(`시트를 못 읽어 ${missing.map((s) => SOURCE_NAME[s]).join("·")} 숫자는 앱 접수(DB) 기준`);
   if (resp.errors.length) notes.push(resp.errors.join(" / ").slice(0, 200));
-  return { db: keptDb, sheet, over90, sheetKinds, notice: notes.join(" — ") };
+  return { db: keptDb, sheet, over90, sheetKinds, sheetMissing, notice: notes.join(" — ") };
+}
+
+/**
+ * 미처리 행(mergeUnhandled 결과) 중 시트에 짝 없는 DB 접수 줄(key "r:<id>")에 sheetMissing 표시 + 상세 정보 줄 하나.
+ * 숫자는 바꾸지 않는다(줄을 더하거나 빼지 않음). ids 가 비면 rows 그대로.
+ */
+export function markSheetMissing<T extends { key: string; fields?: Array<{ label: string; value: string }> }>(rows: T[], ids: readonly string[]): Array<T & { sheetMissing?: true }> {
+  if (!ids.length) return rows;
+  const keys = new Set(ids.map((id) => `r:${id}`));
+  return rows.map((r) => (keys.has(r.key)
+    ? { ...r, sheetMissing: true as const, fields: [...(r.fields || []), { label: SHEET_MISSING_LABEL, value: SHEET_MISSING_HINT }] }
+    : r));
 }
 
 /** 종류별 90일 넘은 건수 */

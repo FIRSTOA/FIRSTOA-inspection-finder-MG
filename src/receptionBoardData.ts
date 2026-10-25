@@ -20,8 +20,11 @@ export function postponeOf(v: unknown): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** 현황판 행 + "일정 없음" 표시(복합기 AS 인데 연결 일정이 하나도 없음). ReceptionRow 에 같은 이름 optional 필드가 생기면 그대로 맞물린다. */
-export type BoardRow = ReceptionRow & { noTicket?: boolean };
+/**
+ * 현황판 행 + "일정 없음" 표시(복합기 AS 인데 연결 일정이 하나도 없음) + "시트에 없음"(영업·경영 앱 접수인데 시트에 짝 행이 없음, 2026-10-25 밤).
+ * ReceptionRow 에 같은 이름 optional 필드가 생기면 그대로 맞물린다.
+ */
+export type BoardRow = ReceptionRow & { noTicket?: boolean; sheetMissing?: boolean };
 
 export function toBoardRows(rows: OpenReceptionRow[], noTicketIds?: ReadonlySet<string>, today: string = kstDate()): BoardRow[] {
   const out: BoardRow[] = [];
@@ -203,13 +206,14 @@ export function applySheetToBoard(data: BoardData, sheet: SheetOpenResult, today
   if (!sheet.enabled) return data;
   const merge = mergeSheetAndDb(Object.values(data.sources), sheet.data, today, sheet.error);
   const kept = new Set(merge.db.map((r) => r.id));
+  const missing = new Set(merge.sheetMissing);
   const sources: Record<string, OpenReceptionRow> = {};
   for (const r of merge.db) sources[r.id] = r;
   // 이어진 시트 행의 DB 원본은 (열려 있으면) 남겨 둔다 — 지원 3종 처리 단추가 원본을 쓴다
   for (const r of merge.sheet) if (r.receptionId && data.sources[r.receptionId]) sources[r.receptionId] = data.sources[r.receptionId];
   return {
     ...data,
-    rows: [...data.rows.filter((r) => kept.has(r.id)), ...merge.sheet.map(sheetToBoardRow)],
+    rows: [...data.rows.filter((r) => kept.has(r.id)).map((r) => (missing.has(r.id) ? { ...r, sheetMissing: true } : r)), ...merge.sheet.map(sheetToBoardRow)],
     sources,
     sheetMode: merge.sheetKinds.length > 0,
     sheetNotice: merge.notice,

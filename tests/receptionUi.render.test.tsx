@@ -37,6 +37,14 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(renderToString(createElement(ReceptionBoard, { rows: [], today: "2026-10-19", onSelectType: noop, renderActions: () => null, error: "x" }))).toContain("불러오지 못했습니다");
   });
 
+  it("현황판: 시트에 짝 없는 접수 카드에만 \"시트에 없음\" 칩", () => {
+    const mk = (compact: boolean, sheetMissing: boolean) => renderToString(createElement(ReceptionBoard, { rows: [{ ...rows[0], sheetMissing }], today: "2026-10-19", onSelectType: noop, renderActions: () => null, compact }));
+    for (const compact of [true, false]) {
+      expect(mk(compact, true)).toContain("시트에 없음");
+      expect(mk(compact, false)).not.toContain("시트에 없음");
+    }
+  });
+
   it("홈 카드: 합계와 가장 오래된 건", () => {
     const html = renderToString(createElement(HomeReceptionCard, { counts, oldest: { vendor: "가나상사", type: "영업팀", days: 14 }, onClick: noop }));
     expect(html).toContain("미처리 접수 15건");

@@ -35,6 +35,8 @@ export type UnhandledRow = {
   /** 상세 팝업 정보 표에 더할 줄(일정: 제목·시각·주소, 2026-10-25 밤). 내용 칸 머리는 contentLabel */
   fields?: Array<{ label: string; value: string }>;
   contentLabel?: string;
+  /** 시트에 짝 없는 앱(DB) 부서 접수 — receptionSheetOpen.markSheetMissing 이 채움(2026-10-25 밤). 줄에 회색 칩 "시트에 없음" */
+  sheetMissing?: boolean;
 };
 
 /** fetchOpenReceptions 행 중 쓰는 칸만 */
@@ -220,3 +222,33 @@ export function oldestUnhandled(rows: UnhandledRow[]): UnhandledRow | null {
 export const UNHANDLED_BADGE: Record<UnhandledKind, string> = {
   CS접수: "CS", 원격이관: "원격", IT: "IT", 경영지원: "경영", 운영지원: "운영", 영업팀: "영업", 물류: "납품·물류",
 };
+
+/** 미처리 목록 정렬(2026-10-25 밤, 사용자 "최근순·나중순") — 홈 미처리 칸·서비스접수 현황판·부서 미니 업무공간이 같이 쓴다 */
+export type UnhandledSortOrder = "old" | "recent";
+/** 선택 기억 키(localStorage, 세 곳 공유) */
+export const UNHANDLED_SORT_KEY = "cs_unhandled_sort_v1";
+
+/** 저장값 복원 — "recent" 만 최근 순, 그 밖(없음·깨진 값)은 기본 오래된 순 */
+export function parseSortOrder(raw: string | null | undefined): UnhandledSortOrder {
+  return raw === "recent" ? "recent" : "old";
+}
+
+/**
+ * 날짜순 정렬(새 배열). old = 오래된 것 먼저, recent = 최근 것 먼저. 날짜 없는 행은 어느 방향이든 맨 아래.
+ * 같은 날짜는 키 오름차순(안정). pick 을 안 주면 UnhandledRow 의 date·key.
+ */
+export function sortUnhandled(rows: UnhandledRow[], order: UnhandledSortOrder): UnhandledRow[];
+export function sortUnhandled<T>(rows: T[], order: UnhandledSortOrder, pick: (r: T) => [date: string, key: string]): T[];
+export function sortUnhandled<T>(rows: T[], order: UnhandledSortOrder, pick?: (r: T) => [string, string]): T[] {
+  const get = pick ?? ((r: T) => [(r as unknown as UnhandledRow).date, (r as unknown as UnhandledRow).key] as [string, string]);
+  const dir = order === "recent" ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const [da, ka] = get(a);
+    const [db, kb] = get(b);
+    const ea = !String(da || ""), eb = !String(db || "");
+    if (ea !== eb) return ea ? 1 : -1;
+    const A = String(da || "").slice(0, 10), B = String(db || "").slice(0, 10);
+    if (A !== B) return (A < B ? -1 : 1) * dir;
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+}

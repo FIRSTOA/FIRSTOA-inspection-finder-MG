@@ -24,10 +24,13 @@ import { RECEPTION_TYPE_META, type ReceptionType } from "./ReceptionTypePicker";
 import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT } from "./receptionRightView";
 import type { KpiBundle } from "./kpi/kpiData";
 import { unhandledParts } from "./kpi/homeKpiModel";
+import UnhandledSortToggle from "./UnhandledSortToggle";
+import { useUnhandledSort } from "./unhandledSort";
 import UnhandledActionBar, { SheetRowLink } from "./UnhandledActionBar.view";
+import { SHEET_MISSING_HINT } from "./receptionSheetOpen";
 import { applyPending, usePendingVersion } from "./unhandledPending";
 import {
-  countUnhandledKinds, countUnhandledTabs, oldestUnhandled, rowsForTab, splitByGroup, UNHANDLED_BADGE, UNHANDLED_KIND_LABEL,
+  countUnhandledKinds, countUnhandledTabs, oldestUnhandled, rowsForTab, sortUnhandled, splitByGroup, UNHANDLED_BADGE, UNHANDLED_KIND_LABEL,
   type UnhandledKind, type UnhandledRow, type UnhandledTab,
 } from "./homeUnhandled";
 
@@ -86,7 +89,8 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
   const activeKind = kind && shownKinds.kinds.includes(kind) ? kind : null;
   if (kind && !activeKind) setKind(null);
   const list = useMemo(() => (activeKind ? tabRows.filter((r) => r.kind === activeKind) : tabRows), [tabRows, activeKind]);
-  const groups = useMemo(() => splitByGroup(list), [list]);
+  const [sortOrder, setSortOrder] = useUnhandledSort();
+  const groups = useMemo(() => splitByGroup(sortUnhandled(list, sortOrder)), [list, sortOrder]);
   const oldest = useMemo(() => oldestUnhandled(tabRows), [tabRows]);
   const total = counts["전체"];
   // 서비스접수 화면이 이미 떠 있으면(KeepAlive) localStorage 를 다시 읽지 않으므로 이벤트도 같이 보낸다
@@ -108,6 +112,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
           {UNHANDLED_BADGE[r.kind]}
           {r.team && !DEPT_TEAMS.has(r.team) ? <TeamBadge team={r.team} /> : null}
         </span>
+        {r.sheetMissing && <span title={SHEET_MISSING_HINT} className="shrink-0 rounded bg-white/10 px-1 py-0.5 text-[10px] font-black text-slate-400">시트에 없음</span>}
         <span className={`w-14 shrink-0 truncate text-right text-[11px] font-black ${r.assignee ? "text-slate-400" : "text-rose-300"}`}>{formatAssignees(r.assignee, { short: true }) || "미배정"}</span>
       </>
     );
@@ -176,7 +181,8 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
           {info.over90 > 0 && <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-black text-slate-300">90일 넘음 {info.over90}</span>}
         </p>
       )}
-      <div className="mt-3 max-h-[320px] overflow-y-auto rounded-xl border border-white/[0.06]">
+      <div className="mt-2 flex justify-end"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} dark /></div>
+      <div className="mt-1 max-h-[320px] overflow-y-auto rounded-xl border border-white/[0.06]">
         {rows === null && <ul>{Array.from({ length: 3 }).map((_, i) => <li key={i} className="px-3 py-2.5"><div className="h-3.5 animate-pulse rounded bg-white/[0.06]" /></li>)}</ul>}
         {rows !== null && !list.length && <p className="px-3 py-5 text-center text-[12px] font-bold text-emerald-300">{tab === "전체" ? "" : `${tc(tab)?.label ?? tab} `}{activeKind ? `${UNHANDLED_KIND_LABEL[activeKind]} ` : ""}미처리 없음</p>}
         {rows !== null && groups.work.length > 0 && (

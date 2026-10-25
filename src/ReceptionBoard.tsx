@@ -10,6 +10,10 @@ import { AlertCircle, CalendarClock, CalendarX2, Check, ChevronDown, ChevronRigh
 import { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
 import { sheetStateLabel } from "./receptionSheetState";
 import { formatAssignees } from "./assignees";
+import { SHEET_MISSING_HINT } from "./receptionSheetOpen";
+import { sortUnhandled } from "./homeUnhandled";
+import UnhandledSortToggle from "./UnhandledSortToggle";
+import { useUnhandledSort } from "./unhandledSort";
 
 /** 시트에서 온 행(C3 시트 기준) — 상태 글자·내용 요약·시트 링크. linked = 앱 접수에 이어진 행 */
 export type SheetRowInfo = {
@@ -36,6 +40,7 @@ export type ReceptionRow = {
   receipt_date: string;
   scheduled_date?: string | null;
   postponeCount?: number;
+  sheetMissing?: boolean; // 시트에 짝 없는 앱 접수(receptionBoardData 가 표시)
   noTicket?: boolean; // 복합기 AS 접수인데 일정 등록이 없는 건
   sheet?: SheetRowInfo; // 시트에서 온 행(시트 기준 모드)
 };
@@ -112,6 +117,7 @@ function SheetBadge({ sheet, compact }: { sheet: SheetRowInfo; compact: boolean 
 
 export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, onOpenRow, onWarmRow }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [sortOrder, setSortOrder] = useUnhandledSort(); // 오래된 순(기본)·최근 순 — 홈·부서 업무공간과 공유
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
   const open = rows.filter((r) => (OPEN as readonly string[]).includes(r.status));
   const [scheduleOnly, setScheduleOnly] = useState(false); // 물류 미처리 열만 넓게 보기(내부 상태)
@@ -119,9 +125,10 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const focusSchedule = scheduleOnly && scheduleRows !== undefined && !selectedType;
   const columns = focusSchedule ? [] : selectedType ? types.filter((m) => m.type === selectedType) : types;
   const selectType = (t: ReceptionType) => { setScheduleOnly(false); onSelectType(t); };
-  const sortOld = (a: ReceptionRow, b: ReceptionRow) => a.receipt_date.localeCompare(b.receipt_date) || a.id.localeCompare(b.id);
+  const sortRows = <T,>(rs: T[], pick: (r: T) => [string, string]) => sortUnhandled(rs, sortOrder, pick);
+  const pickReception = (r: ReceptionRow): [string, string] => [r.receipt_date, r.id];
   const isLate = (r: ReceptionRow) => Boolean(r.scheduled_date) && String(r.scheduled_date).slice(0, 10) < today;
-  const byType = (t: ReceptionType) => open.filter((r) => r.type === t).sort(sortOld);
+  const byType = (t: ReceptionType) => sortRows(open.filter((r) => r.type === t), pickReception);
   // 원격대기는 '접수' 칸에 합산
   const countOf = (t: ReceptionType, s: string) => open.filter((r) => r.type === t && (r.status === s || (s === "접수" && r.status === "원격대기"))).length;
   const todayN = todayCount ?? rows.filter((r) => r.receipt_date.slice(0, 10) === today).length;
@@ -134,7 +141,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     if (selectedType) { onSelectType(selectedType); setScheduleOnly(true); return; }
     setScheduleOnly((v) => !v);
   };
-  const schedAll = [...(scheduleRows ?? [])].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  const schedAll = sortUnhandled([...(scheduleRows ?? [])], sortOrder, (s) => [s.date, s.id]);
   const openCount = open.filter((r) => types.some((m) => m.type === r.type)).length;
   const lastFieldTileType = types.filter((m) => m.group === "현장").at(-1)?.type; // 타일 띠는 선택과 무관
   const lastFieldType = columns.filter((m) => m.group === "현장").at(-1)?.type;
@@ -160,6 +167,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
             <span className="min-w-0 truncate font-black text-slate-900">{r.vendor || "업체 미정"}</span>
             <span className="min-w-0 shrink truncate font-bold text-slate-500">· {r.field || "분야 미입력"}</span>
             {r.noTicket && <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] font-black text-slate-500">일정 없음</span>}
+            {r.sheetMissing && <span title={SHEET_MISSING_HINT} className="shrink-0 rounded bg-slate-100 px-1 text-[10px] font-black text-slate-500">시트에 없음</span>}
             {r.sheet && <SheetBadge sheet={r.sheet} compact />}
             {!r.sheet && r.status === "보류" && <span className="shrink-0 rounded bg-slate-200 px-1 text-[10px] font-black text-slate-600">보류</span>}
             {r.status === "원격대기" && <span className="shrink-0 text-[10px] font-black text-violet-600">원격대기</span>}
@@ -180,6 +188,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
         <div className="mt-0.5 wrap-break-word text-[12px] font-bold text-slate-600">
           {r.field || "분야 미입력"}
           {r.noTicket && <span className="ml-1.5 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-black text-slate-500">일정 없음</span>}
+          {r.sheetMissing && <span title={SHEET_MISSING_HINT} className="ml-1.5 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-black text-slate-500">시트에 없음</span>}
           {r.sheet && <SheetBadge sheet={r.sheet} compact={false} />}
           {!r.sheet && r.status === "보류" && <span className="ml-1.5 rounded bg-slate-200 px-1 py-0.5 text-[10px] font-black text-slate-600">보류</span>}
           {r.status === "원격대기" && <span className="ml-1.5 text-[10px] font-black text-violet-600">원격대기</span>}
@@ -224,7 +233,7 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   );
 
   // ---- 90일 넘은 시트 미처리: 칸 숫자 밖, 칩을 눌러야 펼친다(오래된 순, 20장씩) ----
-  const oldOf = (type: ReceptionType) => (over90Rows ?? []).filter((r) => r.type === type).sort(sortOld);
+  const oldOf = (type: ReceptionType) => sortRows((over90Rows ?? []).filter((r) => r.type === type), pickReception);
   const oldBody = (type: ReceptionType) => {
     const old = oldOf(type);
     if (!old.length) return null;
@@ -250,12 +259,13 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   // ---- 공통: 종류 열의 카드 묶음(예정일 지남 먼저) ----
   const typeBody = (type: ReceptionType) => {
     const all = byType(type);
-    const late = all.filter(isLate);
-    const ordered = [...late, ...all.filter((r) => !isLate(r))];
+    // 오래된 순 = 예정일 지남 먼저(기존), 최근 순 = 순수 날짜순(지남은 카드 빨간 테두리로만)
+    const late = sortOrder === "old" ? all.filter(isLate) : [];
+    const ordered = sortOrder === "old" ? [...late, ...all.filter((r) => !isLate(r))] : all;
     const shown = expanded[type] ? ordered : ordered.slice(0, PAGE);
     const hidden = ordered.length - shown.length;
-    const shownLate = shown.filter(isLate);
-    const shownRest = shown.filter((r) => !isLate(r));
+    const shownLate = sortOrder === "old" ? shown.filter(isLate) : [];
+    const shownRest = sortOrder === "old" ? shown.filter((r) => !isLate(r)) : shown;
     return (
       <div className={compact ? "pb-1" : "space-y-2 px-2 pb-2"}>
         {shownLate.length > 0 && (
@@ -278,13 +288,15 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
   const header = compact ? (
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-3 py-2">
       <div className="text-[13px] font-bold text-slate-900">미처리 접수 <span className="ml-0.5 tabular-nums text-slate-400">{openCount}건</span></div>
+      <UnhandledSortToggle order={sortOrder} onChange={setSortOrder} />
       <div className="text-[11px] font-medium text-slate-500">오늘 접수 <b className="tabular-nums text-slate-900">{todayN}</b> · 완료율 <b className="tabular-nums text-slate-900">{weekDoneRate == null ? "-" : `${weekDoneRate}%`}</b>{sheetMode && <span className="text-slate-400">(앱 접수 기준)</span>}</div>
       {sheetMode && <p className="w-full text-[11px] font-bold leading-snug text-slate-500">영업·경영·원격은 시트 상태 열 기준(처리완료·취소·이관이 아니면 미처리), 최근 90일</p>}
     </div>
   ) : (
     <div className="flex flex-wrap items-center justify-between gap-2 bg-[#1E252F] px-4 py-3">
       <div className="text-sm font-black text-white lg:text-[15px]">미처리 접수 현황 <span className="ml-1 tabular-nums text-slate-400">{openCount}건</span><span className="ml-2 text-[11px] font-bold text-slate-400">{sheetMode ? "최근 90일 · 영업·경영·원격은 시트 상태 열 기준(처리완료·취소·이관이 아니면 미처리)" : "최근 90일 열린 건 · 오른쪽 목록은 고른 기간 기준"}</span></div>
-      <div className="flex gap-2 text-[11px] font-black">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-black">
+        <UnhandledSortToggle order={sortOrder} onChange={setSortOrder} dark />
         <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-200">오늘 접수 <b className="tabular-nums text-white">{todayN}</b></span>
         <span className="rounded-full bg-white/10 px-2.5 py-1 text-slate-200">이번 주 완료율 <b className="tabular-nums text-white">{weekDoneRate == null ? "-" : `${weekDoneRate}%`}</b>{sheetMode && <span className="ml-1 font-bold text-slate-400">앱 접수 기준</span>}</span>
       </div>
