@@ -31,6 +31,7 @@
  *  2026-10-22 ⑨ 야간 발송 금지 — 22:00~08:00(KST)엔 outbox 를 꺼내 보내지 않고 서버에 그대로 둔다(지우지 않음 → 무유실).
  *      08:00 이후 첫 폴링에 밀린 글을 보낸다. 노트북 카톡 PC 중계(tools/kakao-pc/outbox_relay.py)와 같은 시각 규칙.
  *      계기: 10/22 00:06 영업확장성미션방 심야 발송. "봇테스트" 응답(사람이 부른 것)과 마감 목록 수집은 밤에도 그대로.
+ *  2026-10-27 ⑩ 테스트 전용방은 야간에도 보낸다 — 밤에 앱 테스트가 막히던 것. 심박·12시간 폐기 규칙은 그대로.
  */
 
 // ===================== 설정 =====================
@@ -234,12 +235,16 @@ function inQuietHours() {
   return h >= QUIET_START_HOUR || h < QUIET_END_HOUR;
 }
 
+// ⑩ 테스트 전용방은 밤에도 보낸다(2026-10-27 사용자 "22~08시 해두니 테스트하기 어렵다") — 실제 방은 ⑨ 그대로
+const TEST_ROOM = "테스트 전용방";
+function isTestRoom(room) { return roomKey(room) === roomKey(TEST_ROOM); }
+
 function pollOnce() {
   if (_polling) return; // 겹침 방지
-  if (inQuietHours()) { // ⑨ 밤에는 꺼내지도 않는다 — 서버에 남아 있다가 08:00 이후 첫 폴링에 나간다
+  var quiet = inQuietHours(); // ⑨ 밤에는 테스트 전용방 글만 보내고 나머지는 서버에 남겨 08:00 이후 첫 폴링에 보낸다
+  if (quiet) {
     var qt = nowMs();
-    if (qt - _quietLoggedAt > 60 * 60 * 1000) { _quietLoggedAt = qt; Log.i("[야간] 22:00~08:00 발송 금지 — 밀린 글은 08:00 이후에 보냅니다"); }
-    return;
+    if (qt - _quietLoggedAt > 60 * 60 * 1000) { _quietLoggedAt = qt; Log.i("[야간] 22:00~08:00 발송 금지 — 밀린 글은 08:00 이후에 보냅니다(테스트 전용방만 지금)"); }
   }
   _polling = true;
   try {
@@ -260,6 +265,7 @@ function pollOnce() {
         var created = Date.parse(String(it.created_at || "").replace(/(\.\d{3})\d+/, "$1"));
         var ageMs = created ? t - created : 0;
         if (/^🤖/.test(String(it.text || "")) && ageMs > 12 * 60 * 60 * 1000) { done.push(it.id); Log.i("[심박 폐기] " + it.room); continue; }
+        if (quiet && !isTestRoom(it.room)) continue; // ⑩ 야간엔 테스트 전용방만 — 나머지는 건드리지 않는다(삭제도 안 함)
         var rk = roomKey(it.room);
         if (_failedAt[rk] && t - _failedAt[rk] < RETRY_MS) continue; // 세션 없는 방 — 10분 뒤에(또는 그 방 메시지가 오면) 다시
         var r = false;
@@ -314,7 +320,7 @@ function startPolling() {
     }
   });
   t.setName("inspPoller"); t.setDaemon(true); t.start();
-  Log.i("[봇] Supabase outbox 폴링 시작 (2026-10-22판 — 마감 목록 수집 + 야간 22~08시 발송 금지)");
+  Log.i("[봇] Supabase outbox 폴링 시작 (2026-10-27판 — 야간 22~08시 금지, 테스트 전용방은 예외)");
 }
 function onStartCompile() { startPolling(); }
 startPolling();

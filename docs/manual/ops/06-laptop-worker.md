@@ -16,7 +16,7 @@
 | 심박 | 1분마다 | `worker_heartbeat` upsert. 15분 끊기면 cron `worker-watchdog` 가 담당자에게 웹푸시(2시간 1회) |
 | 전체 표 백업 | 매일 **02:30 KST** 이후 첫 바퀴 | `backup_tables.py` → `내 드라이브\FIRSTOA-백업\<YYYY-MM-DD>\<표>.jsonl.gz` + `manifest.json`, **14회차 보관**. 구글 드라이브가 없으면 OneDrive → `사용자 폴더\FIRSTOA-백업`(로그에 경고). `FIRSTOA_BACKUP_ROOT` 로 지정 가능 |
 | 카톡 PC 발송 중계 | 1분마다 | 봇이 **2분 넘게** 못 가져간 `outbox` 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`). 보낸 행은 삭제, `room_activity` 에 `pc_send` 기록 |
-| 야간 발송 금지 | **22:00~08:00 KST** | 중계는 보내지 않고 들고 있다가 08:00 이후 첫 1분에 보냄(한 번에 3방 상한) |
+| 야간 발송 금지 | **22:00~08:00 KST** | 중계는 보내지 않고 들고 있다가 08:00 이후 첫 1분에 보냄(한 번에 3방 상한). **예외: 테스트 전용방 글은 밤에도 바로 보냄**(2026-10-27, 밤에 앱 테스트하려고) |
 | 월요 키맨 포스터 | **월요일 10시대** (`POSTER_HOUR = 10`) | `poster_send.py --weekly` — 사진으로 보냄. 서버 안전망 cron 은 10:30 |
 | 카톡 대화 내용 저장 | **스위치 켤 때만**(`FIRSTOA_KAKAO_EXPORT=1`, 기본 꺼짐) 매일 **05:30~06:50 KST** 첫 바퀴 1회(Apps Script 수집 트리거 07시보다 먼저 파일이 도착해야 하루 늦게 적재되지 않는다) | `tools/kakao-pc/export_rooms.py --export` — Supabase `kakao_collect_rooms` 의 `enabled`·`export`=true 방 중(표가 없거나 비면 `room_map` 의 점검·AS·물류·미수·불만·재계약 방만 — 마감·부품·자가 제외) **창이 열려 있는 방만** Ctrl+S → 저장 창에 `<방이름>_YYYYMMDD.txt` 경로 붙여넣기 → 구글 드라이브 `카톡 자동적재 수신함`. 뒤는 Apps Script `Drive.gs` 가 적재(아래 절) |
 | 일감 | 들어올 때 | `worker_jobs` 의 `status=queued` 행: `ping` `backup` `relay` `poster` `kakao_photo` (음성·OCR 은 자리만) |

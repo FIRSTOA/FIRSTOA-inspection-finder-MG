@@ -61,6 +61,13 @@ KST = timezone(timedelta(hours=9))
 MAX_ROOMS_PER_RUN = 3  # 한 번(1분)에 보내는 방 수 상한 — 08:00 직후 밤새 밀린 글이 한꺼번에 몰려 창이 쌓이면 카톡이 죽는다(10/19 08:02 사례, 방지훈 검토 2026-10-22)
 
 
+TEST_ROOM = "테스트 전용방"  # 앱 TEST_MODE 가 보내는 방(src/api.ts, app_config TEST_ROOM 기본값) — 야간에도 보내는 유일한 방
+
+
+def is_test_room(room: str) -> bool:
+    return "".join(room.split()) == "".join(TEST_ROOM.split())  # 봇 roomKey(\s+ 제거)와 같은 기준
+
+
 def in_quiet_hours(now: datetime | None = None) -> bool:
     h = (now or datetime.now(KST)).hour  # PC 시간대 설정과 상관없이 KST(폰 봇과 같은 기준)
     return h >= QUIET_START_HOUR or h < QUIET_END_HOUR
@@ -92,7 +99,10 @@ def report_pc_send(room: str) -> None:
 def main() -> int:
     global _open_fail_streak, _kakao_restarted_at
     cutoff = (datetime.now(timezone.utc) - timedelta(seconds=STALE_SECONDS)).strftime("%Y-%m-%dT%H:%M:%S")
-    rows = rest_call(f"/outbox?select=id,room,text,created_at&created_at=lt.{cutoff}&order=created_at.asc&limit=20") or []
+    # 야간엔 테스트 전용방 글만 조회(실제 방 글이 20건 넘게 쌓이면 테스트방 글이 limit 밖으로 밀리던 것 — 방지훈 2026-10-27)
+    from urllib.parse import quote as _q
+    room_filter = f"&room=eq.{_q(TEST_ROOM)}" if in_quiet_hours() else ""
+    rows = rest_call(f"/outbox?select=id,room,text,created_at&created_at=lt.{cutoff}{room_filter}&order=created_at.asc&limit=20") or []
     if not rows:
         return 0  # 적체 없음 — 봇이 잘 돌고 있다 (로그도 남기지 않는다: 1분마다 도는 조용한 파수꾼)
 
@@ -100,10 +110,14 @@ def main() -> int:
 
     global _quiet_logged_at, _login_logged_at
     if in_quiet_hours():
-        if _t.time() - _quiet_logged_at > 3600:
+        # 테스트 전용방으로 가는 글만 밤에도 보낸다(2026-10-27 사용자 "22~08시 해두니 테스트하기 어렵다") — 실제 방은 그대로 08:00 이후
+        held = [r for r in rows if not is_test_room(str(r.get("room") or ""))]
+        rows = [r for r in rows if is_test_room(str(r.get("room") or ""))]
+        if held and _t.time() - _quiet_logged_at > 3600:
             _quiet_logged_at = _t.time()
-            log(f"  🌙 야간({QUIET_START_HOUR:02d}:00~{QUIET_END_HOUR:02d}:00) — 밀린 글 {len(rows)}건은 {QUIET_END_HOUR:02d}:00 이후에 보낸다 (이 줄은 1시간에 한 번)")
-        return 0
+            log(f"  🌙 야간({QUIET_START_HOUR:02d}:00~{QUIET_END_HOUR:02d}:00) — 밀린 글 {len(held)}건은 {QUIET_END_HOUR:02d}:00 이후에 보낸다 (이 줄은 1시간에 한 번)")
+        if not rows:
+            return 0
     if login_window():
         try:
             from kakao_login import auto_login  # 저장된 봇 계정으로 대신 로그인(10분에 한 번)
