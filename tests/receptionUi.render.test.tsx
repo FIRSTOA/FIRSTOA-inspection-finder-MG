@@ -19,8 +19,8 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
   it("선택기: 지원 줄은 deptEnabled 일 때만 나온다", () => {
     const on = renderToString(createElement(ReceptionTypePicker, { value: "IT", onChange: noop, counts, deptEnabled: true }));
     const off = renderToString(createElement(ReceptionTypePicker, { value: "IT", onChange: noop, counts, deptEnabled: false }));
-    expect(on).toContain("영업팀");
-    expect(off).not.toContain("영업팀");
+    expect(on).toContain("전략영업");
+    expect(off).not.toContain("전략영업");
     expect(off).toContain("CS 접수"); // 2026-10-25 표시 이름만 CS 접수(값은 복합기 AS 그대로)
   });
 
@@ -56,7 +56,7 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(sel).toMatch(/예정일 지남 (<!-- -->)?1/);
     expect(sel).not.toContain("다라전자");
     const off = renderToString(createElement(ReceptionBoard, { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => null, deptEnabled: false }));
-    expect(off).not.toContain("영업팀");
+    expect(off).not.toContain("전략영업");
     expect(off).toContain("다라전자");
   });
 

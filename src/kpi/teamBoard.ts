@@ -3,7 +3,7 @@
  * 새 조회 없음: 이미 읽은 묶음(KpiBundle)과 이미 있는 함수 결과만 조합한다.
  *  · 주요 목표 판정·미니 KPI·정기점검 % = 달성표 행(homeKpiModel.tableRowsFor — 달성표 위젯과 같은 행 캐시라 다시 세지 않음)의 팀 칸
  *  · 미처리 = facts.unhandled(homeUnhandled.mergeUnhandled 결과)의 팀 행 수 — 홈 미처리 칸 팀 탭과 같은 숫자
- *  · OKR 이번 주 % = okrWeekResult(이번 주, 전체 범위).byTeam — OKR 위젯 [전체] 칩과 같은 숫자. CSS(E)는 OKR 대상 아님 → "—"
+ *  · OKR 이번 주 % = okrWeekResult(이번 주, 전체 범위, 명단).byTeam = 팀원별 달성률 평균(미작성 0%) — OKR 위젯 [전체] 칩과 같은 숫자. CSS(E)는 OKR 대상 아님 → "—"
  * 첫 그림(2026-10-25 밤 사용자 "홈에서 팀별 수치가 조금 늦게 나온다"):
  *  · 팀 카드는 34지표 달성표 전체가 아니라 필요한 지표(주요 목표·미니 4·분기 점검)만 행 단위 캐시(tableRowsFor)로 센다
  *  · 칸마다 "기다림(wait)" — 원본을 아직 안 읽었고 읽을 예정이면 그 칸만 "…"(점선), 온 칸은 숫자. 카드 전체를 로딩으로 묶지 않는다
@@ -33,6 +33,8 @@ export const TEAM_MINI_KPIS: Array<{ id: KpiId; short: string }> = MINI_KPI_NAME
 });
 /** 정기점검 % = 분기 점검 진행(K2) 행의 팀 칸 */
 export const TEAM_INSPECTION_KPI: KpiId | undefined = KPI_DEFS.find((d) => d.name === "분기 점검 진행")?.id;
+/** 재계약 % = 재계약 진행(K35, 워킨맵 G5 / G7 뺀 전부) 행의 팀 칸 — 정기점검 오른쪽(2026-10-26). 옛 K25 "재계약 기록"(재계약 표 곳 수)와 헷갈리지 않게 분기 비율 지표로 찾는다 */
+export const TEAM_RENEWAL_KPI: KpiId | undefined = KPI_DEFS.find((d) => d.name === "재계약 진행" && d.targetBasis === "workin")?.id;
 
 export type TeamPill = "behind" | "done" | "onTrack" | "none";
 export const TEAM_PILL_LABEL: Record<TeamPill, string> = { behind: "부족", done: "달성", onTrack: "순항", none: "판정 없음" };
@@ -41,8 +43,8 @@ export const TEAM_PILL_LABEL: Record<TeamPill, string> = { behind: "부족", don
 export type TeamMiniTile = { id: string; label: string; status: KpiStatus; pct: number | null; value: number | null; wait?: boolean };
 
 /** 칸별 기다림 — true 인 칸만 "…", 나머지는 숫자(또는 "—") */
-export type TeamCardWait = { pill: boolean; headcount: boolean; unhandled: boolean; okr: boolean; inspection: boolean; alerts: boolean };
-export const NO_WAIT: TeamCardWait = { pill: false, headcount: false, unhandled: false, okr: false, inspection: false, alerts: false };
+export type TeamCardWait = { pill: boolean; headcount: boolean; unhandled: boolean; okr: boolean; inspection: boolean; renewal?: boolean; alerts: boolean };
+export const NO_WAIT: TeamCardWait = { pill: false, headcount: false, unhandled: false, okr: false, inspection: false, renewal: false, alerts: false };
 
 export type TeamCardModel = {
   team: TeamKey;
@@ -55,6 +57,8 @@ export type TeamCardModel = {
   /** CSS(E)는 OKR 대상이 아니다 — 화면은 "—" */
   okrApplies: boolean;
   inspectionPct: number | null;
+  /** 재계약 진행 %(K35). 대상 0(팀 지점 없음)·못 읽음 = null → "—". 옛 캐시(v3, 2026-10-26 전)엔 없음 */
+  renewalPct?: number | null;
   tiles: TeamMiniTile[];
   /** 주의 한 줄 조각(없으면 빈 배열 → "주의 없음") */
   alerts: string[];
@@ -89,6 +93,8 @@ export type TeamBoardParts = {
   unhandled: UnhandledRow[] | null;
   roster: RosterMember[] | null;
   okrWeek: OkrWeekFacts | null;
+  /** OKR % 의 구성원 명단(okrWeek 와 같은 묶음 것) — 없으면 roster */
+  okrRoster?: RosterMember[] | null;
   /** 팀별 이번 주 OKR 보고 미작성 인원 = homeKpiModel.okrPeopleForTeam(명단 ∪ 보고자) 의 missing 수 — OKR 칸 팀원 목록과 같은 정의 */
   okrMissing?: Partial<Record<TeamKey, number>> | null;
   /** 기다리는 원본 — 없으면 다 온 것(옛 호출·테스트) */
@@ -109,7 +115,7 @@ export function teamCardWait(team: TeamKey, mainIds: readonly string[], w: TeamW
   const okr = team !== "E" && w.okr; // CSS(E)는 OKR 대상 아님 — 기다리지 않는다
   const unhandled = w.unhandled;
   return {
-    card: { pill, headcount: w.roster, unhandled, okr, inspection: TEAM_INSPECTION_KPI ? idWait(TEAM_INSPECTION_KPI) : false, alerts: pill || unhandled || okr },
+    card: { pill, headcount: w.roster, unhandled, okr, inspection: TEAM_INSPECTION_KPI ? idWait(TEAM_INSPECTION_KPI) : false, renewal: TEAM_RENEWAL_KPI ? idWait(TEAM_RENEWAL_KPI) : false, alerts: pill || unhandled || okr },
     tile: idWait,
   };
 }
@@ -117,7 +123,7 @@ export function teamCardWait(team: TeamKey, mainIds: readonly string[], w: TeamW
 /** 순수 조합 — 테스트는 이것으로. rows 는 tableRows 결과(이번 기간), unhandled 는 mergeUnhandled 결과 */
 export function teamBoardFromParts(p: TeamBoardParts): TeamCardModel[] {
   const byId = new Map((p.rows || []).map((r) => [r.id, r]));
-  const okr = p.okrWeek ? okrWeekResult(p.okrWeek, p.okrWeek.id) : null;
+  const okr = p.okrWeek ? okrWeekResult(p.okrWeek, p.okrWeek.id, undefined, p.okrRoster ?? p.roster) : null;
   const mainIds = (p.rows || []).filter((r) => r.main).map((r) => r.id);
   return TEAM_ORDER.map((team) => {
     const okrApplies = team !== "E";
@@ -149,15 +155,16 @@ export function teamBoardFromParts(p: TeamBoardParts): TeamCardModel[] {
       unhandled: teamRows ? teamRows.length : null,
       okrPct, okrApplies,
       inspectionPct: TEAM_INSPECTION_KPI ? cellPct(cellOf(byId.get(TEAM_INSPECTION_KPI), team)) : null,
+      renewalPct: TEAM_RENEWAL_KPI ? cellPct(cellOf(byId.get(TEAM_RENEWAL_KPI), team)) : null,
       tiles, alerts,
       ...(p.waiting ? { wait: w.card } : {}),
     };
   });
 }
 
-/** 팀 카드가 쓰는 지표 — 주요 목표 + 미니 타일 4 + 분기 점검(정의 순서) */
+/** 팀 카드가 쓰는 지표 — 주요 목표 + 미니 타일 4 + 분기 점검 + 재계약 진행(정의 순서) */
 export function teamBoardKpiIds(targets: Parameters<typeof mainKpiIds>[0]): KpiId[] {
-  const want = new Set<KpiId>([...mainKpiIds(targets), ...TEAM_MINI_KPIS.map((t) => t.id), ...(TEAM_INSPECTION_KPI ? [TEAM_INSPECTION_KPI] : [])]);
+  const want = new Set<KpiId>([...mainKpiIds(targets), ...TEAM_MINI_KPIS.map((t) => t.id), ...(TEAM_INSPECTION_KPI ? [TEAM_INSPECTION_KPI] : []), ...(TEAM_RENEWAL_KPI ? [TEAM_RENEWAL_KPI] : [])]);
   return KPI_DEFS.filter((d) => want.has(d.id)).map((d) => d.id);
 }
 
@@ -194,7 +201,7 @@ export function teamBoardView(b: KpiBundle | null, period: TablePeriod, teamOf: 
   if (cur !== b) { const nw = teamWaiting(cur, [], want); waiting.unhandled = nw.unhandled; waiting.okr = nw.okr; }
   const okrMissing = cachedView(cur, ctx, "teamBoard|okrMissing", () =>
     Object.fromEntries(OKR_TEAMS.map((t) => [t, okrPeopleForTeam(cur, t, "week").filter((x) => x.missing).length])) as Partial<Record<TeamKey, number>>);
-  return teamBoardFromParts({ rows, unhandled: cur.facts.unhandled ?? null, roster: b.facts.roster ?? null, okrWeek: cur.facts.okr?.week ?? null, okrMissing, waiting });
+  return teamBoardFromParts({ rows, unhandled: cur.facts.unhandled ?? null, roster: b.facts.roster ?? null, okrWeek: cur.facts.okr?.week ?? null, okrRoster: cur.facts.roster ?? null, okrMissing, waiting });
 }
 
 /**
@@ -219,6 +226,7 @@ export function mergeTeamCardsWithSnapshot(live: TeamCardModel[], snap: TeamCard
     take("unhandled", () => { next.unhandled = old.unhandled; });
     take("okr", () => { next.okrPct = old.okrPct; });
     take("inspection", () => { next.inspectionPct = old.inspectionPct; });
+    if (old.renewalPct !== undefined) take("renewal", () => { next.renewalPct = old.renewalPct; }); // 옛 캐시(칸 없음)면 "…" 그대로 기다림
     take("alerts", () => { next.alerts = [...old.alerts]; });
     next.tiles = c.tiles.map((t) => {
       const o = old.tiles.find((x) => x.id === t.id);
@@ -241,7 +249,7 @@ export function headlineNumbers(b: KpiBundle | null): HeadlineNumbers {
   const all = b.facts.workin ? workinPace(b.facts.workin, b.ranges, b.facts.roster, b.settings.holidays)[0] : undefined;
   return {
     unhandled: b.facts.unhandled ? b.facts.unhandled.length : null,
-    okrPct: w ? okrWeekResult(w, w.id).pct : null,
+    okrPct: w ? okrWeekResult(w, w.id, undefined, b.facts.roster).pct : null,
     inspectionPct: all && all.total ? all.rate : null,
   };
 }

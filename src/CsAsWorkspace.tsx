@@ -20,7 +20,7 @@ import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { useAuthorBook, teamLabel } from "./authors";
 import { escapeRegExp, extractCategory, extractIssue, groupReportTickets, hasReportMember, reportHeadOf } from "./reportAssignee";
-import { addedAssignees, formatAssignees, MAX_ASSIGNEES } from "./assignees";
+import { addedAssignees, formatAssignees, titleAssigneeLabel } from "./assignees";
 import AssigneePicker from "./AssigneePicker";
 import DoneReasonModal from "./DoneReasonModal";
 import { copierDoneKind, copierDoneText, isDeliveryTicket, naverCompleteAction, NAVER_DELIVERY_CAL_ID, receptionStatusFromSiblings, TICKETS_CHANGED_EVENT } from "./ticketCompletion";
@@ -296,7 +296,7 @@ const TICKET_COLUMNS = "id,team,date,time,vendor,contact,address,department,mode
 /** 리스트·캘린더 표시 제목 — 캘린더 제목(보고양식 첫 줄)에 배정자 이름 접두사. 없으면 업체명 */
 function displayTitleOf(t: AsTicket) {
   const base = (t.calendarTitle || "").trim() || t.vendor || "일정";
-  return `${t.assignee ? `${t.assignee}-` : ""}${base}`;
+  return `${t.assignee ? `${titleAssigneeLabel(t.assignee)}-` : ""}${base}`;
 }
 function toDbRow(t: AsTicket) {
   return { id: t.id, team: t.team, date: t.date, time: t.time, vendor: t.vendor, contact: t.contact, address: t.address, department: t.department, model: t.model, serial: t.serial, asset: t.asset || "", grade: t.grade || "", keyman: t.keyman || "", receptionId: t.receptionId || "", naverUid: t.naverUid || "", calendarTitle: t.calendarTitle || "", repeatMonthly: !!t.repeatMonthly, issue: t.issue, note: t.note || "", assignee: t.assignee, status: t.status, scheduleType: t.scheduleType };
@@ -2419,7 +2419,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
         </div>
       )}
       {assignTicket && (
-        <AssigneePicker key={assignTicket.id} names={teamAssignees[assignTicket.team]} value={assignTicket.assignee} max={MAX_ASSIGNEES}
+        <AssigneePicker key={assignTicket.id} names={teamAssignees[assignTicket.team]} value={assignTicket.assignee}
           subtitle={`${assignTicket.vendor || "이 일정"} · ${assignTicket.team}팀 · 현재 ${formatAssignees(assignTicket.assignee) || "미배정"}`}
           onSave={(value) => { if (value === assignTicket.assignee) setAssignId(""); else applyAssign(assignTicket, value); }}
           onClose={() => setAssignId("")} />

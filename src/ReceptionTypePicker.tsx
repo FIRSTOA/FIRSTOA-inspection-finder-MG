@@ -31,7 +31,7 @@ export const RECEPTION_TYPES: ReceptionTypeMeta[] = [
   { type: "IT", label: "IT", group: "현장", icon: Laptop, badge: "bg-cyan-50 text-cyan-700", active: "border-cyan-600 bg-cyan-600 text-white", hover: "hover:border-cyan-300 hover:text-cyan-700", bar: "bg-cyan-500", dot: "bg-cyan-400" },
   { type: "경영지원", label: "경영지원", group: "지원", icon: Briefcase, badge: "bg-fuchsia-50 text-fuchsia-700", active: "border-fuchsia-600 bg-fuchsia-600 text-white", hover: "hover:border-fuchsia-300 hover:text-fuchsia-700", bar: "bg-fuchsia-500", dot: "bg-fuchsia-400" },
   { type: "운영지원", label: "운영지원", group: "지원", icon: Settings2, badge: "bg-emerald-50 text-emerald-700", active: "border-emerald-600 bg-emerald-600 text-white", hover: "hover:border-emerald-300 hover:text-emerald-700", bar: "bg-emerald-500", dot: "bg-emerald-400" },
-  { type: "영업팀", label: "영업팀", group: "지원", icon: Handshake, badge: "bg-orange-50 text-orange-700", active: "border-orange-600 bg-orange-600 text-white", hover: "hover:border-orange-300 hover:text-orange-700", bar: "bg-orange-500", dot: "bg-orange-400" },
+  { type: "영업팀", label: "전략영업", group: "지원", icon: Handshake, badge: "bg-orange-50 text-orange-700", active: "border-orange-600 bg-orange-600 text-white", hover: "hover:border-orange-300 hover:text-orange-700", bar: "bg-orange-500", dot: "bg-orange-400" },
 ];
 
 export const RECEPTION_TYPE_META = Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, m])) as Record<ReceptionType, ReceptionTypeMeta>;

@@ -4,6 +4,36 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-26",
+    "hash": "33cb094804",
+    "agent": "feature-planner",
+    "summary": "홈 달성표·팀 카드 지난 기간 넘겨 보기 — 기간 칩 [주][월][분기] + ◀ 라벨 ▶ 스테퍼(지난주·저저번 주 8주, 6개월, 올해 분기)"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "33cb094804",
+    "agent": "ui-designer",
+    "summary": "홈 달성표·팀 카드 지난 기간 넘겨 보기 — 기간 칩 [주][월][분기] + ◀ 라벨 ▶ 스테퍼(지난주·저저번 주 8주, 6개월, 올해 분기)"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "33cb094804",
+    "agent": "developer",
+    "summary": "홈 달성표·팀 카드 지난 기간 넘겨 보기 — 기간 칩 [주][월][분기] + ◀ 라벨 ▶ 스테퍼(지난주·저저번 주 8주, 6개월, 올해 분기)"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "33cb094804",
+    "agent": "qa-checker",
+    "summary": "홈 달성표·팀 카드 지난 기간 넘겨 보기 — 기간 칩 [주][월][분기] + ◀ 라벨 ▶ 스테퍼(지난주·저저번 주 8주, 6개월, 올해 분기)"
+  },
+  {
+    "date": "2026-10-26",
+    "hash": "33cb094804",
+    "agent": "field-deploy-check",
+    "summary": "홈 달성표·팀 카드 지난 기간 넘겨 보기 — 기간 칩 [주][월][분기] + ◀ 라벨 ▶ 스테퍼(지난주·저저번 주 8주, 6개월, 올해 분기)"
+  },
+  {
+    "date": "2026-10-26",
     "hash": "eb367a858d",
     "agent": "feature-planner",
     "summary": "홈 달성표 블로그 답글 CS 전체 = CS 팀 사람 합(다른 부서 댓글 제외) + '점검' 중복 줄 삭제 + 인당 주 목표 소수 올림"

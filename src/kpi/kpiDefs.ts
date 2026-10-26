@@ -12,7 +12,7 @@
 export type KpiId =
   | "K1" | "K2" | "K3" | "K4" | "K7" | "K8" | "K10" | "K11" | "K12" | "K13" | "K14" | "K15"
   | "K16" | "K17" | "K18" | "K19" | "K20" | "K21"
-  | "K24" | "K25" | "K26" | "K27" | "K28" | "K29" | "K30" | "K31" | "K32" | "K33" | "K34";
+  | "K24" | "K25" | "K26" | "K27" | "K28" | "K29" | "K30" | "K31" | "K32" | "K33" | "K34" | "K35";
 
 export type KpiGroup = "현장 실행" | "고객가치·영업" | "응대 속도" | "성장·OKR";
 /** 기간 키 — 금일·이번 주(월~일, Q4)·이번 달·이번 분기 */
@@ -35,7 +35,9 @@ export type KpiSource =
   /** IT 학습 기록 표(2026-10-24, supabase/it-learning-logs-20261024.sql) — 표가 없으면 "준비 중" */
   | "itQuiz" | "itPractice"
   /** 오버홀 기록 구글 시트(overhaulSheet.loadOverhaulRows, 탭 = app_config OVERHAUL_SHEET_TAB, 기본 "리스트(26년)") — 2026-10-24 */
-  | "overhaul";
+  | "overhaul"
+  /** 워킨맵 재계약 지점(workin_map_places kind renewal, 분기) — K35 재계약 진행(2026-10-26) */
+  | "workinRenewal";
 /** 상태: 바로 됨 · 원본 표 실행 대기(표 없으면 "준비 중") · 원본 없음(회색 안내, 연결 필요) */
 export type KpiStatus = "ready" | "pending-table" | "unlinked";
 /** 셀 수 있는 범위 */
@@ -116,6 +118,14 @@ export const KPI_DEFS: KpiDef[] = [
     screen: { screen: "walkingMap", tab: "팀별 진행률" }, today: false,
   },
   {
+    // 2026-10-26 사용자: "홈 KPI에 재계약도 — G5 완료·G6 진행중·G7 전략영업(V·SS, 우리가 신경 안 써도 됨), G7 제외 전체와 G5 완료로 %". 달성표는 정의 순서라 K2(정기점검) 바로 밑
+    id: "K35", name: "재계약 진행", unit: "곳", group: "현장 실행", period: "quarter", periods: ["quarter"], scopes: AT,
+    widget: "ring", sizes: ["1x1", "2x1", "2x2"], basis: "워킨맵 재계약 · 이번 분기 지점 · 완료 = G5 · 대상 = G7(전략영업 V·SS, 관리 밖) 뺀 전부(G1·G2·G3 기존 색, G6 진행중, G12 포함) · 팀 = 워킨맵 팀",
+    source: "workinProgress.renewalProgress(workin_map_places kind renewal) — 색 기준 G5 완료 · G6 진행중 · G7 전략영업 제외", loads: ["workinRenewal"], status: "ready",
+    targetBasis: "workin", target: { value: 100, from: "분기 대상 100%(사용자 2026-10-26)" }, main: true, better: "up", teams: "A~E",
+    screen: { screen: "lookup", tab: "재계약" }, today: false,
+  },
+  {
     id: "K1", name: "점검", unit: "대", group: "현장 실행", period: "week", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1", "2x1", "2x2"],
     basis: `${FIELD_BASIS} · 기기 대수`, source: "workCount.countField(kind inspection) — 홈·조회 탭·팀 현황·순위표 공통", loads: ["field"], status: "ready",
     targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황" }, today: true, table: false,
@@ -169,7 +179,7 @@ export const KPI_DEFS: KpiDef[] = [
     targetBasis: "ratio", target: { value: 100, from: `${OKR_Q4} 4번("고객반응·조치내용 100% 기록")` }, main: false, better: "up", teams: "A~E", screen: { screen: "lookup", tab: "초과조정" }, today: false,
   },
   {
-    id: "K25", name: "재계약 진행", unit: "곳", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
+    id: "K25", name: "재계약 기록", unit: "곳", group: "고객가치·영업", period: "month", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],
     basis: "재계약 표(FIELD 웹앱·카톡 가져오기) · 같은 업체는 기간 안 1곳 · 오발송 삭제·팀장 제외 · 팀 = 지역 칸 → 출처 괄호 → 작성자 팀", source: "formCount.countForms(recontract) — 팀 현황·순위표·조회 탭 공통(2026-10-24, 활동 기록 대신)",
     loads: ["recontract"], status: "ready", targetBasis: "none", target: null, main: false, better: "up", teams: "A~E", screen: { screen: "weekly", tab: "팀 현황 › 재계약" }, today: true,
   },
@@ -240,8 +250,8 @@ export const KPI_DEFS: KpiDef[] = [
   // ── D. 성장·OKR ──
   {
     id: "K19", name: "OKR 달성률", unit: "%", group: "성장·OKR", period: "week", periods: ["week", "month"], scopes: AT, widget: "ring", sizes: ["1x1", "2x1", "2x2"],
-    basis: "이번 주(월~금 주차) 파트 판정 — 파트 종합 판정, 없으면 그 주 팀원 판정 중 가장 나쁜 것 · 완료·해당없음 / 판정 있는 목표 · A~D(E 제외) · 이번 주 판정이 없는 파트는 0% 가 아니라 '미작성' · [이번 달] = 월 파트 종합",
-    source: "okr.achievementRate·judgmentCounts(입력 = 이번 주 okr_reports, 2026-10-24 사용자 '프로들은 주만 쓴다') — 월은 OKR 월 통합집계 파트 카드와 같은 식", loads: ["okr"], status: "ready",
+    basis: "팀 달성률 = 팀원별 달성률 평균(미작성 0%) · 팀원 = 명단(팀장 제외) ∪ 그 달 개인 보고자 · 개인 = 그 기간 자기 판정 중 완료·해당없음 / 판정 있는 목표 · 전체 = A~D 팀원 전부 평균(E 제외) · 판정이 하나도 없는 파트는 0% 가 아니라 '미작성' · [이번 달] = 그 달 주차 전부(주차 기록 없는 옛 달은 월 파트 종합)",
+    source: "kpiCompute.okrMemberShares·okrShareAverage(입력 = okr_reports 주차 개인 행 + 명단, 2026-10-26 사용자 'A팀 1명만 썼는데 C팀보다 높다') — 판정 수는 okr.judgmentCounts(파트 판정 행)", loads: ["okr", "roster"], status: "ready",
     targetBasis: "ratio", target: { value: 100, from: `${OKR_Q4} 전 목표 100%` }, main: false, better: "up", teams: "A~D", screen: { screen: "okr", tab: "주차 기록" }, today: false,
   },
   {
@@ -260,7 +270,8 @@ export const KPI_DEFS: KpiDef[] = [
     id: "K34", name: "IT 퀴즈", unit: "회", group: "성장·OKR", period: "week", periods: ["week", "month", "quarter"], scopes: ATP, widget: "goal", sizes: ["1x1"],
     basis: "IT 학습 › 기술 퀴즈 완료 1번 = 1회(it_quiz_attempts) · 작성자 = 기기에서 고른 작성자 · 날짜 = KST · 팀장 제외 · 목표 = 인원 × 주 2회",
     source: "itLogs.loadItQuizAttempts(it_quiz_attempts, 2026-10-24) — 표가 없으면 준비 중", loads: ["itQuiz", "roster"], status: "ready", targetBasis: "perPersonWeek", target: { perPersonWeek: 2, from: "사용자 2026-10-23 'IT 퀴즈 주 2회'" },
-    main: true, better: "up", teams: "A~E", screen: { screen: "itHistory", tab: "기술 퀴즈" }, today: false,
+    // 2026-10-26 사용자 "IT 퀴즈는 주요 지표에서 빼고 재계약을 넣어" — 주요 목표 기본값 끔(관리 탭에서 다시 켤 수 있음)
+    main: false, better: "up", teams: "A~E", screen: { screen: "itHistory", tab: "기술 퀴즈" }, today: false,
   },
   {
     id: "K30", name: "받은 칭찬", unit: "건", group: "성장·OKR", period: "month", periods: ALL_P, scopes: ATP, widget: "number", sizes: ["1x1"],

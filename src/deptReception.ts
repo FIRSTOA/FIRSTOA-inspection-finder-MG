@@ -13,7 +13,7 @@ export const DEPT_TYPES = ["경영지원", "운영지원", "영업팀"] as const
 export type DeptType = (typeof DEPT_TYPES)[number];
 export const isDeptType = (t: unknown): t is DeptType => DEPT_TYPES.includes(String(t || "") as DeptType);
 
-export const DEPT_LABEL: Record<DeptType, string> = { 경영지원: "경영지원", 운영지원: "운영지원", 영업팀: "영업팀" };
+export const DEPT_LABEL: Record<DeptType, string> = { 경영지원: "경영지원", 운영지원: "운영지원", 영업팀: "전략영업" };
 const DEPT_SHORT: Record<DeptType, string> = { 경영지원: "경영", 운영지원: "운영", 영업팀: "영업" };
 export const deptShort = (t: string): string => (isDeptType(t) ? DEPT_SHORT[t] : t);
 // 목록 배지 색 — 기존 blue(복합기)·cyan(IT)·violet(원격)과 겹치지 않게. 디자인실 값이 오면 여기만 바꾼다.
@@ -228,7 +228,7 @@ export function deptRouteLabel(route: string, via?: string): string {
 export function buildDeptReport(row: Pick<DeptReceptionRow, "type" | "vendor" | "lease_no" | "region" | "grade" | "route" | "field" | "receiver_name" | "receiver_phone" | "symptom" | "notes" | "author"> & { remote_meta?: Partial<DeptMeta> | Record<string, string> }): string {
   const meta = (row.remote_meta || {}) as Partial<DeptMeta>;
   const lines = [
-    `[${row.type} 접수]`,
+    `[${DEPT_LABEL[row.type as DeptType] || row.type} 접수]`,
     `■ 업체: ${row.vendor}${row.lease_no ? ` (순 ${row.lease_no})` : " (신규)"}`,
     [row.region, row.grade].filter(Boolean).length ? `■ 지역/등급: ${[row.region, row.grade].filter(Boolean).join(" / ")}` : "",
     `■ 접수유형: ${row.route === "사내" ? `사내(${meta.via || "-"})` : row.route}`,

@@ -180,7 +180,8 @@ describe("위젯 보기 = kpiCompute 와 같은 값", () => {
     const missing = bundleOf(FACTS);
     missing.sources.itPractice = { status: "missing", at: 1, error: "표 없음" };
     const rows = tableRows(missing, ctx);
-    expect(rows.filter((r) => r.main).map((r) => r.id).sort()).toEqual(["K10", "K2", "K20", "K21", "K33", "K34", "K7"].sort());
+    // 2026-10-26: IT 퀴즈(K34) 빼고 재계약 진행(K35)
+    expect(rows.filter((r) => r.main).map((r) => r.id).sort()).toEqual(["K10", "K2", "K20", "K21", "K33", "K35", "K7"].sort());
     const k21 = rows.find((r) => r.id === "K21")!;
     expect(k21).toMatchObject({ cellState: "pending", pendingText: "준비 중 · SQL 실행 대기", status: "pending" });
     expect(k21.cells.every((c) => c.value === null)).toBe(true);
@@ -258,9 +259,10 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
   const rep = (cycle: string, team: string, member: string, js: string[]): OkrReport => ({ ...emptyReport(cycle, team, member), rows: js.map((j, i) => ({ no: i + 1, actual: "", judgment: j, reason: "", plan: "", evidence: "" })) });
   const weeks = [1, 2, 3, 4].map((n) => ({ id: `2026-10-W${n}`, weekNo: n, label: `${n}주` }));
   const reports = [
-    rep("2026-10-W3", "A", "", ["완료", "미흡"]), // 파트 종합
-    rep("2026-10-W3", "B", "이호준", ["완료", ""]), rep("2026-10-W3", "B", "박X", ["미착수", ""]), // 팀원만 — 가장 나쁜 판정
-    rep("2026-10-W2", "C", "", ["완료", "완료"]), // 지난주만
+    // 2026-10-26 팀 % = 팀원별 평균(파트 종합 행은 % 에 안 듦) — 그래서 A·C 는 파트 종합 대신 팀원 한 명(정X·최X) 행으로 같은 판정을 준다
+    rep("2026-10-W3", "A", "정X", ["완료", "미흡"]),
+    rep("2026-10-W3", "B", "이호준", ["완료", ""]), rep("2026-10-W3", "B", "박X", ["미착수", ""]), // 판정 수는 가장 나쁜 판정 행
+    rep("2026-10-W2", "C", "최X", ["완료", "완료"]), // 지난주만 — 이번 주엔 C 구성원 최X 미작성(0%)
   ];
   const okrBundle = bundleOf({ okr: { cycle: null, quarter: null, reports: [], week: { id: "2026-10-W3", weeks, goals, reports } } });
   const wk = (n: number, pct: number | null, o: { current?: boolean; selected?: boolean; future?: boolean } = {}) =>
@@ -268,22 +270,23 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
 
   it("이번 주 달성률·판정 수·미작성 파트·주별 막대(기본 = 이번 주, 4주는 아직 안 옴)", () => {
     const v = okrView(okrBundle)!;
-    expect(v.pct).toBe(33); // 완료 1 / 판정 3(A 완료·미흡, B 미착수)
+    expect(v.pct).toBe(38); // 구성원 4명 평균: 정X 50·이호준 100·박X 0·최X 미작성 0 → 37.5 (종전 판정 행 완료 1/3 = 33)
     expect(v.counts.find((c) => c.label === "미착수")?.value).toBe(1);
     expect(v.missingTeams).toEqual(["C", "D"]);
     expect(v.weekId).toBe("2026-10-W3");
-    expect(v.weeks).toEqual([wk(1, null), wk(2, 100), wk(3, 33, { current: true, selected: true }), wk(4, null, { future: true })]);
+    // 2주 = 최X 100 + 나머지 3명 미작성 0 → 25 (종전 C 판정 행만 100) · 3주 = 위와 같은 38
+    expect(v.weeks).toEqual([wk(1, null), wk(2, 25), wk(3, 38, { current: true, selected: true }), wk(4, null, { future: true })]);
   });
 
   it("범위 칩: 팀 하나 = 그 파트만, 개인 = 그 사람 행만(주별 막대도 같은 범위) · 머리 글 = 범위 · 몇 월 몇 주차(월~금)", () => {
     const all = okrView(okrBundle)!;
-    expect(all.scope).toEqual({ team: "ALL", members: ["박X", "이호준"] });
+    expect(all.scope).toEqual({ team: "ALL", members: ["박X", "이호준", "정X", "최X"] }); // 정X·최X = 파트 종합 대신 넣은 팀원
     expect(all.scopeLabel).toBe("CS 4파트 · 10월 3주차(10/19~10/23)");
     const a = okrView(okrBundle, { team: "A" })!;
-    expect(a.pct).toBe(50); // 완료 1 / 판정 2
+    expect(a.pct).toBe(50); // 정X 완료 1 / 판정 2
     expect(a.missingTeams).toEqual([]);
     expect(a.scopeLabel).toBe("A파트 · 10월 3주차(10/19~10/23)");
-    expect(a.scope.members).toEqual([]);
+    expect(a.scope.members).toEqual(["정X"]); // 파트 종합 대신 팀원 정X
     const me = okrView(okrBundle, { team: "B", member: "이호준" })!;
     expect(me.pct).toBe(100);
     expect(me.scope).toEqual({ team: "B", member: "이호준", members: ["박X", "이호준"] });
@@ -296,8 +299,8 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
   it("주차 고르기: 2주 = pct·판정 수·미작성 파트·팀 칩 %·머리 글 전부 2주 기준", () => {
     const v = okrView(okrBundle, { weekId: "2026-10-W2" })!;
     expect(v.weekId).toBe("2026-10-W2");
-    expect(v.pct).toBe(100); // C 완료 2
-    expect(v.allPct).toBe(100);
+    expect(v.pct).toBe(25); // 최X 100 + 정X·이호준·박X 그 주 미작성 0 → 25 (종전 C 판정 행만 100)
+    expect(v.allPct).toBe(25);
     expect(v.counts.find((c) => c.label === "완료")?.value).toBe(2);
     expect(v.missingTeams).toEqual(["A", "B", "D"]);
     expect(v.teamLines?.map((l) => [l.team, l.pct])).toEqual([["A", null], ["B", null], ["C", 100], ["D", null]]);
@@ -325,7 +328,7 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
 
   it("파트별 미니 바 teams — 전체 A~D, 팀 하나·개인은 그 파트만, 미작성 파트는 null", () => {
     expect(okrView(okrBundle)!.teams).toEqual([
-      { team: "A", pct: 50 }, { team: "B", pct: 0 }, { team: "C", pct: null }, { team: "D", pct: null },
+      { team: "A", pct: 50 }, { team: "B", pct: 50 }, { team: "C", pct: null }, { team: "D", pct: null }, // B = 이호준 100·박X 0 평균(종전 가장 나쁜 판정 0)
     ]);
     expect(okrView(okrBundle, { team: "A" })!.teams).toEqual([{ team: "A", pct: 50 }]);
     expect(okrView(okrBundle, { team: "B", member: "이호준" })!.teams).toEqual([{ team: "B", pct: 100 }]);
@@ -348,7 +351,7 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
       { name: "박X", pct: 0, counts: { done: 0, partial: 0, poor: 0, none: 1 }, missing: false, prevPct: null },
       { name: "김Y", pct: null, counts: { done: 0, partial: 0, poor: 0, none: 0 }, missing: true, prevPct: 50 },
     ]);
-    expect(okrView(withKim, { team: "A" })!.people).toEqual([]); // A 는 파트 종합만 — 팀원 행 없음(명단도 없음)
+    expect(okrView(withKim, { team: "A" })!.people.map((p) => p.name)).toEqual(["정X"]); // A 는 팀원 정X 한 명(파트 종합 대신, 2026-10-26)
   });
   it("팀 칩 B + 2주 고름 = 팀원 목록·prevPct 가 2주 기준(앞 주 = 1주)", () => {
     const b = okrView(withKim, { team: "B", weekId: "2026-10-W2" })!;
@@ -357,7 +360,7 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
       { name: "박X", pct: null, counts: { done: 0, partial: 0, poor: 0, none: 0 }, missing: true, prevPct: null },
       { name: "이호준", pct: null, counts: { done: 0, partial: 0, poor: 0, none: 0 }, missing: true, prevPct: null },
     ]);
-    expect(b.pct).toBe(50);
+    expect(b.pct).toBe(17); // B 팀 2주 = 김Y 50·박X 0·이호준 0 평균 (종전 판정 행 50)
     expect(okrPeopleForTeam(withKim, "B", "2026-10-W2")).toEqual(b.people);
     // 이번 주(3주)를 고르면 김Y 는 미작성 + 앞 주(2주) 50%
     expect(okrPeopleForTeam(withKim, "B", "2026-10-W3").find((p) => p.name === "김Y")?.prevPct).toBe(50);
@@ -369,20 +372,22 @@ describe("⑤ OKR 주 단위 — 이번 주 보고서, 없는 파트는 미작�
     const ppl = okrPeopleForTeam(withRoster, "B", "week");
     expect(ppl.map((p) => [p.name, p.missing])).toEqual([["이호준", false], ["박X", false], ["김Y", true], ["최Z", true]]);
     expect(ppl.find((p) => p.name === "최Z")).toEqual({ name: "최Z", pct: null, counts: { done: 0, partial: 0, poor: 0, none: 0 }, missing: true, prevPct: null });
-    expect(okrPeopleForTeam(withRoster, "A", "week").map((p) => p.name)).toEqual(["한A"]);
+    expect(okrPeopleForTeam(withRoster, "A", "week").map((p) => p.name)).toEqual(["정X", "한A"]); // 보고자 정X(작성) 위, 명단 한A(미작성) 아래
     expect(okrPeopleForTeam(withRoster, "B", "month")).toEqual([]); // 옛 호출 호환
-    expect(okrView(withRoster)!.teamLines?.map((l) => [l.team, l.missing])).toEqual([["A", 1], ["B", 2], ["C", 0], ["D", 0]]);
-    expect(okrView(withRoster, { weekId: "2026-10-W2" })!.teamLines?.map((l) => [l.team, l.missing])).toEqual([["A", 1], ["B", 3], ["C", 0], ["D", 0]]);
+    // C 1 = 최X(2주만 씀) 3주 미작성, 2주의 A 2 = 정X(3주만 씀)·한A — 파트 종합 대신 팀원 행이라 늘었다
+    expect(okrView(withRoster)!.teamLines?.map((l) => [l.team, l.missing])).toEqual([["A", 1], ["B", 2], ["C", 1], ["D", 0]]);
+    expect(okrView(withRoster, { weekId: "2026-10-W2" })!.teamLines?.map((l) => [l.team, l.missing])).toEqual([["A", 2], ["B", 3], ["C", 0], ["D", 0]]);
   });
   it("전체 칩 = 팀 4줄(%·미작성 n명), 칩 % 는 고른 범위와 상관없이 A~D 전체", () => {
     const all = okrView(withKim)!;
     expect(all.people).toEqual([]);
-    expect(all.allPct).toBe(33);
+    expect(all.allPct).toBe(30); // 5명 평균: 정X 50·이호준 100·박X 0·김Y 0·최X 0 (종전 판정 행 1/3 = 33)
     expect(all.teamLines).toEqual([
-      { team: "A", pct: 50, missing: 0 }, { team: "B", pct: 0, missing: 1 }, { team: "C", pct: null, missing: 0 }, { team: "D", pct: null, missing: 0 },
+      // B 33 = (100 + 0 + 0) / 3 (종전 0), C 미작성 1 = 최X
+      { team: "A", pct: 50, missing: 0 }, { team: "B", pct: 33, missing: 1 }, { team: "C", pct: null, missing: 1 }, { team: "D", pct: null, missing: 0 },
     ]);
     const b = okrView(withKim, { team: "B" })!;
-    expect(b.allPct).toBe(33);
+    expect(b.allPct).toBe(30);
     expect(b.teamLines).toEqual(all.teamLines);
     // (2026-10-25) 옛 period "month" 팀원·팀 4줄 기대는 삭제 — OKR 박스 월 보기 삭제
   });

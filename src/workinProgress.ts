@@ -32,3 +32,25 @@ export function teamWorkinProgress(places: WorkinPlaceLite[], teams: readonly st
 export function workinProgressQuery(quarter: number): string {
   return `select=team,label,kind&quarter=eq.${quarter}&kind=in.(quarter,monthly)&visible=not.is.false&order=id.asc`;
 }
+
+/**
+ * 재계약 진행(홈 KPI K35, 2026-10-26 사용자 지시) — 워킨맵 재계약(kind renewal) 분기 지점의 색(label) 기준.
+ *   · 완료 = G5 · 대상 = G7(전략영업 — 중요 거래처 V·SS, CS 관리 밖)을 뺀 전부(G1·G2·G3·G5·G6·G12 … 라벨 없음 포함)
+ *   · 팀 행이 없으면(A) 0/0 — 화면은 "대상 없음"(0% 아님)
+ */
+export type WorkinRenewalLite = { id?: number | string; team: string; label: string };
+export const RENEWAL_DONE_LABEL = "G5";
+export const RENEWAL_EXCLUDED_LABEL = "G7";
+
+export function renewalProgress(rows: WorkinRenewalLite[], teams: readonly string[] = WORKIN_TEAMS): Array<WorkinTeamProgress & { rate: number | null }> {
+  return teams.map((team) => {
+    const mine = rows.filter((w) => w.team === team && String(w.label || "").trim() !== RENEWAL_EXCLUDED_LABEL);
+    const done = mine.filter((w) => String(w.label || "").trim() === RENEWAL_DONE_LABEL).length;
+    return { team, done, total: mine.length, rate: mine.length ? Math.round((done / mine.length) * 100) : null };
+  });
+}
+
+/** workin_map_places 재계약 조회 쿼리(분기) — 재계약 준비 화면(recontract/api.ts)과 같은 조건(kind renewal·quarter, visible 거르지 않음) */
+export function workinRenewalQuery(quarter: number): string {
+  return `select=id,team,label&kind=eq.renewal&quarter=eq.${quarter}&order=id.asc`;
+}

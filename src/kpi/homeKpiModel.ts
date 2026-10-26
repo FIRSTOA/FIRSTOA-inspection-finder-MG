@@ -8,7 +8,7 @@
  */
 import { KPI_BY_ID, KPI_DEFS, mainKpiIds, type KpiId, type KpiPeriodKey, type KpiSource, type KpiTarget } from "./kpiDefs";
 import {
-  blogYearTotals, kpiCount, kpiLoadFrom, kpiProgress, kpiRangesAt, kpiRowStatus, KPI_TEAMS, okrWeekMembers, okrWeekResult, overhaulByPerson, pct,
+  blogYearTotals, kpiCount, kpiLoadFrom, kpiProgress, kpiRangesAt, kpiRowStatus, KPI_TEAMS, okrTeamMembers, okrWeekMembers, okrWeekResult, overhaulByPerson, pct,
   rangeOfPeriod, recontractOverdue, shiftYmd, workinPace,
   type KpiFacts, type KpiRange, type KpiRanges, type KpiRowStatus, type OkrScope, type OkrWeekFacts,
 } from "./kpiCompute";
@@ -54,7 +54,7 @@ export const HOME_WIDGETS: HomeWidgetDef[] = [
   { id: "table", title: "KPI 달성표", kind: "kpiTable", kpis: ALL_KPI_IDS, sizes: ["4x2", "4x1"], description: "지표별 달성·순항·부족 · CS 전체 → 팀 → 개인(행 펼치기, 분기 점검 진행은 K2 행 안)" },
   // 미처리(2026-10-24 하나로): 현황판 묶음의 unhandled(K16 = mergeUnhandled) + recontract(K12 = 재계약 확인 지남)를 그린다 — 따로 읽지 않는다
   { id: "unhandledPanel", title: "미처리", kind: "panel", kpis: ["K16", "K12"], sizes: ["2x2", "4x1"], description: "미처리 합계 · 팀 탭 · 종류 칸(CS 접수·원격·IT·경영·운영·영업·물류 — CS 접수 = 지난 날짜·미완료 일정, 일정리스트 미처리와 같은 수) · 재계약 확인 지남 · 목록" },
-  { id: "K19", title: "OKR 달성률", kind: "okr", kpis: ["K19"], sizes: ["2x2", "2x1", "1x1"], description: "이번 주 파트 판정 · 이번 달 주별 막대 · 미작성 파트 · 범위 칩(전체/A~D/개인)" },
+  { id: "K19", title: "OKR 달성률", kind: "okr", kpis: ["K19"], sizes: ["2x2", "2x1", "1x1"], description: "팀 달성률 = 팀원별 달성률 평균(미작성 0%) · 이번 달 주별 막대 · 미작성 파트 · 범위 칩(전체/A~D/개인)" },
 ];
 export const HOME_WIDGET_BY_ID: Record<HomeWidgetId, HomeWidgetDef> = Object.fromEntries(HOME_WIDGETS.map((w) => [w.id, w])) as Record<HomeWidgetId, HomeWidgetDef>;
 
@@ -142,9 +142,10 @@ export function splitSources(want: Set<KpiSource>, full: boolean): Set<KpiSource
 /**
  * 여러 쪽(1,000행 단위)으로 나눠 받는 무거운 원본(2026-10-24 실측, 8/31~분기 말):
  * 점검·AS 2,000행 3.6MB · 활동 기록 2,069행 3.7MB · 워킨맵 4,014행 · 방문 2,002행 · 재계약 1,200행 · 확장성.
+ * 워킨맵 재계약(workinRenewal, 약 280행)은 가볍지만 같은 워킨맵 표라 무거운 묶음에 같이 둔다(첫 숫자 단계는 워킨맵 표를 안 읽는다 — tests/homeSpeed).
  * 첫 로드는 이것들을 뒤로 미루고 나머지(한두 번 조회)로 먼저 그린다.
  */
-export const HEAVY_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>(["field", "expansion", "events", "workin", "visits", "recontract"]);
+export const HEAVY_SOURCES: ReadonlySet<KpiSource> = new Set<KpiSource>(["field", "expansion", "events", "workin", "workinRenewal", "visits", "recontract"]);
 
 /**
  * 바깥(구글 시트·엣지 함수)을 거치는 느린 원본(2026-10-24 실측): 블로그 시트 CSV 1.25MB 1,033ms(첫 단계 전체 1,241ms 중 이것 하나),
@@ -312,7 +313,7 @@ export function cursorPlan(main: KpiBundle, today: string, cursor: PeriodCursor,
     const okrKey = want.has("okr") && okrLoadKey(anchor) !== okrLoadKey(main.today) ? okrLoadKey(anchor) : null;
     return { kind: "derive", anchor, range, okrKey };
   }
-  const sources = new Set<KpiSource>([...want].filter((s) => PAST_LOAD_SOURCES.has(s) || (s === "workin" && cursor.period === "quarter")));
+  const sources = new Set<KpiSource>([...want].filter((s) => PAST_LOAD_SOURCES.has(s) || ((s === "workin" || s === "workinRenewal") && cursor.period === "quarter")));
   if (sources.has("events")) { sources.add("field"); sources.add("expansion"); }
   if (sources.size) sources.add("roster"); // 작성자 → 팀 판정은 명단을 다 읽은 뒤(로더 ROSTER_FIRST) — 그 기간 재직자 명단
   return { kind: "load", anchor, range, sources };
@@ -442,7 +443,7 @@ export function quarterGoalView(b: KpiBundle, basis: "end" | "early" = "end"): O
 
 /**
  * ⑤ OKR — 주차 단위(2026-10-25 사용자 "1,2,3,4주차 보이는 게 나을 듯, 달보단" → [주][월] 대신 주차 칩, 월 보기 삭제).
- * 셈법은 okrWeekResult 그대로. 판정이 하나도 없는 파트는 missingTeams — 0% 로 보이지 않는다(pct null).
+ * 셈법은 okrWeekResult 그대로 — 팀·전체 % = 팀원(명단 ∪ 보고자)별 달성률 평균, 미작성 0%(2026-10-26). 판정이 하나도 없는 파트는 missingTeams — pct null.
  * weeks = 이번 주가 든 달의 1~n주차(달성률·이번 주·고른 주·아직 안 온 주) — 고른 범위(팀·개인)와 같은 범위로 센다. 막대·칩 둘 다 이걸로 그린다.
  * 돌려주는 scope 에는 onScope 가 없다(순수·캐시용) — 컨테이너(HomeKpiBoard)가 onScope·onWeek 를 붙인다.
  * 홈 3차(팀 보드): allPct / teamLines = 칩 안 % 와 [전체] 칩의 팀 4줄(고른 주차, 늘 A~D) · people = 팀 칩을 고르면 그 팀원(고른 주차).
@@ -460,10 +461,9 @@ export function okrPeopleForTeam(b: KpiBundle, team: OkrTeam, weekId?: string): 
   const w = b.facts.okr?.week;
   if (!w || weekId === "month") return []; // "month" = 옛 호출 호환(개인 행 없음)
   const id = pickOkrWeekId(w, weekId);
-  const names = new Set<string>(okrWeekMembers(w, team));
-  for (const m of b.facts.roster ?? []) if (m.team === team && m.title !== "팀장" && m.name) names.add(m.name);
+  const names = okrTeamMembers(w, team, b.facts.roster); // 팀 달성률(okrWeekResult) 평균의 분모와 같은 집합
   const i = w.weeks.findIndex((x) => x.id === id);
-  const people = [...names].map((name): KpiOkrPerson => {
+  const people = names.map((name): KpiOkrPerson => {
     const r = okrWeekResult(w, id, { team, member: name });
     const judged = Object.values(r.counts).reduce((a, n) => a + n, 0);
     return {
@@ -508,10 +508,11 @@ export function okrView(b: KpiBundle, opts: { weekId?: string; team?: OkrScope["
   if (!w) return null;
   const sc: OkrScope = { team: opts.team ?? "ALL", ...(opts.member ? { member: opts.member } : {}) };
   const id = pickOkrWeekId(w, opts.weekId);
-  const r = okrWeekResult(w, id, sc);
+  const roster = b.facts.roster; // 팀·전체 % = 팀원별 달성률 평균(미작성 0%) — 분모 = 명단 ∪ 보고자(2026-10-26)
+  const r = okrWeekResult(w, id, sc, roster);
   const counts = r.counts;
   // 팀 칩 % · 팀 4줄 · 팀원 목록(홈 3차) — 고른 범위와 따로, 같은 주차
-  const all = okrWeekResult(w, id);
+  const all = okrWeekResult(w, id, undefined, roster);
   const teamLines: KpiOkrTeamLine[] = all.byTeam.map((t) => ({
     team: t.team, pct: t.pct,
     missing: okrPeopleForTeam(b, t.team as OkrTeam, id).filter((p) => p.missing).length,
@@ -529,7 +530,7 @@ export function okrView(b: KpiBundle, opts: { weekId?: string; team?: OkrScope["
       ...(counts["해당없음"] ? [{ label: "해당없음", value: counts["해당없음"], tone: "idle" }] : []),
     ],
     weeks: w.weeks.map((x, i) => ({
-      id: x.id, label: x.label, pct: okrWeekResult(w, x.id, sc).pct, current: x.id === w.id,
+      id: x.id, label: x.label, pct: okrWeekResult(w, x.id, sc, roster).pct, current: x.id === w.id,
       selected: x.id === id, future: curIdx >= 0 && i > curIdx,
     })),
     weekId: id,

@@ -35,7 +35,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("현황판 감싸개", () => {
   it("행 변환: 부서는 처리자·예정일·미룸 횟수, 현장은 빈값, 원격대기는 그대로, 모르는 종류 제외", () => {
-    const rows = toBoardRows(openRows);
+    const rows = toBoardRows(openRows, undefined, "2026-10-19"); // today 고정 — 기본값(오늘)이면 10/19 원격대기가 7일 뒤 빠져 날짜 지나면 깨지던 테스트(2026-10-27)
     expect(rows.map((r) => r.id)).toEqual(["d1", "f1", "r1"]);
     expect(rows[0]).toMatchObject({ handler: "박영업", scheduled_date: "2026-10-10", field: "해지문의", postponeCount: 2 });
     expect(rows[1]).toMatchObject({ handler: "", scheduled_date: null, field: "PC 느림", postponeCount: 0 });
@@ -112,7 +112,7 @@ describe("현황판 감싸개", () => {
       { id: "1", vendor: "a", scheduleType: "AS", team: "A", assignee: "", date: "2026-10-01", status: "접수" },
       { id: "2", vendor: "b", scheduleType: "물류", team: "C", assignee: "", date: "2026-10-18", status: "진행중" },
     ];
-    const s = summarizeForHome(toBoardRows(openRows), "2026-10-19", sched);
+    const s = summarizeForHome(toBoardRows(openRows, undefined, "2026-10-19"), "2026-10-19", sched);
     expect(s.scheduleOverdue).toBe(2);
     expect(summarizeForHome([], "2026-10-19").scheduleOverdue).toBe(0);
     // 접수 3건(영업팀·IT·원격) + 일정 2건; 지원 꺼지면 영업팀 1건 빠짐

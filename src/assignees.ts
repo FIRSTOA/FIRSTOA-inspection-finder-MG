@@ -5,8 +5,8 @@
  * 설계: docs/tasks/schedule-multi-assignee.md
  */
 
-/** 최대 인원(D1) — 넘으면 네이버 제목 머리가 너무 길어진다 */
-export const MAX_ASSIGNEES = 3;
+/** 인원 제한 없음(2026-10-26 사용자 지시, 예전 3명) — 제목 머리는 titleAssigneePrefix 가 줄인다 */
+export const MAX_ASSIGNEES = 99;
 
 const SEPARATORS = /[,，/·・]/;
 
@@ -20,7 +20,7 @@ export function parseAssignees(value: string | null | undefined): string[] {
   return out;
 }
 
-/** 이름 배열 → 저장값("김A,이B"). max 를 넘는 뒷사람은 버린다 */
+/** 이름 배열 → 저장값("김A,이B"). 중복만 제거(max 기본 = 제한 없음) */
 export function joinAssignees(names: string[], max: number = MAX_ASSIGNEES): string {
   const out: string[] = [];
   for (const raw of names) {
@@ -41,6 +41,13 @@ export function formatAssignees(value: string | null | undefined, opts: { short?
   const names = parseAssignees(value);
   if (names.length <= 1) return names[0] || "";
   return opts.short ? `${names[0]} 외 ${names.length - 1}` : names.join("·");
+}
+
+/** 네이버·카톡 제목 머리용 이름 — 3명까지는 저장값 그대로("김A,이B,박C"), 4명 이상은 "김A 외 3명". 저장값은 건드리지 않는다 */
+export function titleAssigneeLabel(value: string | null | undefined): string {
+  const names = parseAssignees(value);
+  if (names.length <= 3) return String(value ?? "").trim();
+  return `${names[0]} 외 ${names.length - 1}명`;
 }
 
 /** 대표(첫 사람) — 지도 핀 색·정렬처럼 한 사람만 고를 때 */

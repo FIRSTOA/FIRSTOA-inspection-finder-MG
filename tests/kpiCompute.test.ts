@@ -311,7 +311,7 @@ describe("목표(인당 × 인원) · 주요 목표 · 설정", () => {
     expect([v.target, v.extra.quarterTarget]).toEqual([10, 30]);
   });
   it("주요 목표 기본 7개, 설정으로 끄고 켬, 이상한 값은 버리고 알림", () => {
-    expect(mainKpiIds(parseKpiTargets("").targets)).toEqual(["K2", "K33", "K7", "K10", "K20", "K21", "K34"]);
+    expect(mainKpiIds(parseKpiTargets("").targets)).toEqual(["K2", "K35", "K33", "K7", "K10", "K20", "K21"]); // 2026-10-26 K34 → K35
     const s = parseKpiTargets(JSON.stringify({ K7: { main: false, perPersonBizDay: 2 }, K1: { main: true }, K99: {}, K10: { perTeamMonth: -1 }, holidays: ["2026-12-31", "x"] }));
     expect(mainKpiIds(s.targets)).toContain("K1");
     expect(mainKpiIds(s.targets)).not.toContain("K7");
@@ -430,15 +430,17 @@ describe("⑥ 오버홀(K33)만 직책자(팀장·파트장·부파트장) 제�
 });
 
 describe("⑤ OKR 주 단위 — okrWeekResult", () => {
-  it("파트 종합 판정 우선, 없으면 그 주 팀원 판정 중 가장 나쁜 것. 판정 없는 파트 = 미작성", () => {
+  it("판정 수·미작성 파트 = 파트 판정 행(종합 우선, 없으면 팀원 중 가장 나쁜 것) · % = 팀원별 평균(2026-10-26)", () => {
     const goals = [1, 2].map((no) => ({ no, pillar: "P", bottleneck: "", objective: `목표${no}`, criteria: "" }));
     const rep = (team: string, member: string, js: string[]): OkrReport => ({ ...emptyReport("2026-10-W3", team, member), rows: js.map((j, i) => ({ no: i + 1, actual: "", judgment: j, reason: "", plan: "", evidence: "" })) });
     const reports = [rep("A", "", ["완료", "완료"]), rep("A", "한X", ["미착수", "미착수"]), rep("B", "이호준", ["완료", "미흡"]), rep("B", "박X", ["부분달성", ""])];
     const r = okrWeekResult({ id: "2026-10-W3", weeks: [], goals, reports });
-    expect(r.byTeam).toEqual([{ team: "A", pct: 100 }, { team: "B", pct: 0 }, { team: "C", pct: null }, { team: "D", pct: null }]);
-    expect(r.pct).toBe(50);
+    // A: 파트 종합(100%)은 % 에 안 든다 → 팀원 한X 0/2 = 0% (종전 100). B: 이호준 1/2·박X 0/1 → 평균 25% (종전 = 가장 나쁜 판정 행 0%)
+    expect(r.byTeam).toEqual([{ team: "A", pct: 0 }, { team: "B", pct: 25 }, { team: "C", pct: null }, { team: "D", pct: null }]);
+    expect(r.pct).toBe(17); // 전체 = 세 사람 평균 (0 + 50 + 0) / 3 (종전 판정 행 2/4 = 50)
     expect(r.missingTeams).toEqual(["C", "D"]);
-    expect(kpiCount("K19", { okr: { cycle: null, quarter: null, reports: [], week: { id: "2026-10-W3", weeks: [], goals, reports } } }, {}, R.week, ctx)).toEqual({ n: 2, d: 4 });
+    // 달성표 K19 주 칸 = 같은 % 를 {n: %, d: 100} 로 (종전 판정 행 2/4)
+    expect(kpiCount("K19", { okr: { cycle: null, quarter: null, reports: [], week: { id: "2026-10-W3", weeks: [], goals, reports } } }, {}, R.week, ctx)).toEqual({ n: 17, d: 100 });
   });
   it("범위: 팀 하나 · 개인(member 행) · 범위 글자 · 개인 목록", () => {
     const goals = [1, 2].map((no) => ({ no, pillar: "P", bottleneck: "", objective: `목표${no}`, criteria: "" }));
@@ -448,7 +450,7 @@ describe("⑤ OKR 주 단위 — okrWeekResult", () => {
     const all = okrWeekResult(w);
     expect(okrWeekResult(w, w.id, { team: "ALL" })).toEqual(all); // 기존 그대로
     const b = okrWeekResult(w, w.id, { team: "B" });
-    expect([b.pct, b.missingTeams, b.byTeam]).toEqual([0, [], [{ team: "B", pct: 0 }]]);
+    expect([b.pct, b.missingTeams, b.byTeam]).toEqual([25, [], [{ team: "B", pct: 25 }]]); // 팀원 평균 (50 + 0) / 2 (종전 가장 나쁜 판정 행 0%)
     expect(okrWeekResult(w, w.id, { team: "C" }).missingTeams).toEqual(["C"]); // 이번 주 C 판정 없음
     const me = okrWeekResult(w, w.id, { team: "A", member: "한X" });
     expect([me.pct, me.missingTeams, me.byTeam]).toEqual([50, [], [{ team: "A", pct: 50 }]]);

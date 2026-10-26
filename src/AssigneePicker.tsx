@@ -20,8 +20,7 @@ export default function AssigneePicker({ names, value, max = MAX_ASSIGNEES, titl
   const [picked, setPicked] = useState<string[]>(() => parseAssignees(value).slice(0, max));
   // 지금 걸린 사람이 이 팀 명단에 없어도(다른 팀 지원 등) 칩으로 보여 준다 — 안 보이면 저장할 때 말없이 빠진다
   const candidates = [...names, ...parseAssignees(value).filter((n) => !names.includes(n))];
-  const full = picked.length >= max;
-  const toggle = (name: string) => setPicked((cur) => (cur.includes(name) ? cur.filter((n) => n !== name) : cur.length >= max ? cur : [...cur, name]));
+  const toggle = (name: string) => setPicked((cur) => (cur.includes(name) ? cur.filter((n) => n !== name) : [...cur, name]));
 
   return (
     <div className="fixed inset-0 z-[140] flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-4" onMouseDown={onClose}>
@@ -34,15 +33,13 @@ export default function AssigneePicker({ names, value, max = MAX_ASSIGNEES, titl
           </span>
           {!!picked.length && <button type="button" onClick={() => setPicked([])} className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-slate-500 hover:bg-slate-100">모두 해제</button>}
         </div>
-        {full && <div className="mt-2 text-xs font-bold text-amber-600">최대 {max}명까지 — 바꾸려면 켜진 사람을 먼저 끄세요. 따로 가는 일이면 일정을 나눠 만드세요.</div>}
         <div className="mt-3 grid grid-cols-2 gap-2">
           {candidates.map((name) => {
             const index = picked.indexOf(name);
             const on = index >= 0;
-            const locked = !on && full;
             return (
-              <button key={name} type="button" disabled={locked} onClick={() => toggle(name)} aria-pressed={on}
-                className={`relative rounded-full border px-3 py-3 text-sm font-black ${on ? "border-emerald-300 bg-emerald-50 text-emerald-700" : locked ? "cursor-not-allowed border-slate-100 text-slate-300" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
+              <button key={name} type="button" onClick={() => toggle(name)} aria-pressed={on}
+                className={`relative rounded-full border px-3 py-3 text-sm font-black ${on ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
                 {on && <span className="absolute left-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-600 text-[11px] text-white">{index + 1}</span>}
                 {name}
               </button>

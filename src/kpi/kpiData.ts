@@ -14,7 +14,7 @@ import { getActivityEvents, teamForAuthor } from "../operations";
 import { loadExpansionRows, loadFieldRows, loadFormRaw } from "../expansionSource";
 import { toFormTableRows } from "../formCount";
 import { countableEvents, mergeExpansionIntoEvents, mergeFieldIntoEvents } from "../workCount";
-import { workinProgressQuery, type WorkinPlaceLite } from "../workinProgress";
+import { workinProgressQuery, workinRenewalQuery, type WorkinPlaceLite, type WorkinRenewalLite } from "../workinProgress";
 import { fetchOpenReceptions } from "../deptReceptionApi";
 import { loadSheetOpen, markSheetMissing, mergeSheetAndDb } from "../receptionSheetOpen";
 import { mergeUnhandled, type TicketInput, type UnhandledRow } from "../homeUnhandled";
@@ -189,6 +189,8 @@ export async function loadKpiBundle(opts: LoadKpiBundleOpts = {}): Promise<KpiBu
     run("expansion", () => loadExpansionRows(from, to), (v) => { facts.expansion = v; }),
     run("events", () => getActivityEvents(from, to), (v) => { hold.activity = v; }),
     run("workin", () => selectAllRowsFast<WorkinPlaceLite>("workin_map_places", workinProgressQuery(ranges.quarterNo)), (v) => { facts.workin = v; }),
+    // K35 재계약 진행(2026-10-26) — 워킨맵 재계약 지점 분기분(4분기 실측 약 280행). 지난 분기 보기도 ranges.quarterNo 그대로
+    run("workinRenewal", () => selectAllRowsFast<WorkinRenewalLite>("workin_map_places", workinRenewalQuery(ranges.quarterNo)), (v) => { facts.workinRenewal = v; }),
     // 양식 표(초과조정·불만·물류)는 팀 현황·순위표와 같은 로더·같은 변환(expansionSource.loadFormRaw → formCount.toFormTableRows, 2026-10-24)
     run("overage", () => loadFormRaw("overage_adjust", from, to), (v) => { facts.overage = toFormTableRows("overage_adjust", v, teamForAuthor); }),
     run("logistics", () => loadFormRaw("logistics_records", from, to), (v) => { facts.logistics = toFormTableRows("logistics_records", v, teamForAuthor); }),

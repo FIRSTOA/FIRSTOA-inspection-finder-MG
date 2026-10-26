@@ -321,7 +321,10 @@ Deno.serve(async (req) => {
           }
           if (ev.title) {
             const assignee = String(linkedTicket.assignee || "");
-            const stripped = assignee && ev.title.startsWith(`${assignee}-`) ? ev.title.slice(assignee.length + 1) : ev.title;
+            // 제목 머리: 3명까지는 저장값 그대로, 4명 이상은 "김A 외 n명"(src/assignees.ts titleAssigneeLabel 과 같은 규칙)
+            const names = assignee.split(/[,，/·・]/).map((n) => n.trim()).filter((n, i, a) => n && a.indexOf(n) === i);
+            const head = names.length > 3 ? `${names[0]} 외 ${names.length - 1}명` : assignee;
+            const stripped = head && ev.title.startsWith(`${head}-`) ? ev.title.slice(head.length + 1) : ev.title;
             const current = (linkedTicket.calendarTitle || "").trim() || String(linkedTicket.vendor || "");
             if (stripped.trim() && stripped.trim() !== current.trim()) patchBody.calendarTitle = stripped.trim().slice(0, 200);
           }

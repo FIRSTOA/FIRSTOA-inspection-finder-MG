@@ -1,8 +1,9 @@
 /**
  * 홈 3차 팀 카드 5장(2026-10-25, docs/tasks/home-design-3-impl-2026-10-25.md 2번).
  * 원칙: 카드 본문은 무채색(white/[0.035]), 팀 색은 위 띠 4px + 팀명 글자에만. 본문 숫자·타일 배경은 상태색만(한 자리 한 뜻).
- * 폰(390px): 한 줄 가로 스크롤(카드 15rem) — 이 띠 안에서만 스크롤, 페이지 가로 스크롤 없음. xl 부터 5칸 격자.
+ * 폰(390px): 한 줄 가로 스크롤(카드 16.5rem) — 이 띠 안에서만 스크롤, 페이지 가로 스크롤 없음. xl 부터 5칸 격자.
  * 카드를 누르면 그 팀으로 거르기(파랑 ring), 다시 누르면 전체. 숫자는 teamBoard.ts 모델 그대로(여기서 세지 않음).
+ * 2026-10-26: 큰 숫자 4칸 — 미처리 · OKR 이번 주 · 정기점검 · 재계약(K35, 대상 0 이면 회색 "—"). 칸이 좁아져 큰 숫자 20→18px, 폰 카드 15→16.5rem.
  * 2026-10-25 밤: 칸마다 따로 — 아직 안 온 칸(c.wait·tile.wait)만 "…" 점선, 온 칸은 바로 숫자(카드 전체를 로딩으로 묶지 않음).
  */
 import { AlertTriangle } from "lucide-react";
@@ -35,7 +36,7 @@ function Big({ label, value, tone, wait = false, nowChip = false }: { label: str
       </div>
       {wait
         ? <div className="mt-0.5 inline-flex h-5.5 min-w-10 items-center justify-center rounded border border-dashed border-slate-600 font-mono text-[15px] font-black leading-none text-slate-500" aria-label={`${label} 불러오는 중`}>{WAIT_MARK}</div>
-        : <div className={`truncate font-mono text-[20px] font-black leading-6 tabular-nums ${tone || "text-white"}`}>{value}</div>}
+        : <div className={`truncate font-mono text-[18px] font-black leading-6 tabular-nums ${tone || "text-white"}`}>{value}</div>}
     </div>
   );
 }
@@ -43,7 +44,7 @@ function Big({ label, value, tone, wait = false, nowChip = false }: { label: str
 function TeamCard({ c, on, dim, onPick, nowChip = false }: { c: TeamCardModel; on: boolean; dim: boolean; onPick: () => void; nowChip?: boolean }) {
   const tc = TEAM_COLORS[c.team];
   const w = c.wait ?? NO_WAIT;
-  const aria = `${c.label}팀 ${say(w.pill, TEAM_PILL_LABEL[c.pill])} · 미처리 ${say(w.unhandled, num(c.unhandled))} · OKR ${c.okrApplies ? say(w.okr, num(c.okrPct, "%")) : "대상 아님"} · 정기점검 ${say(w.inspection, num(c.inspectionPct, "%"))}${c.stale ? " · 마지막 값(갱신 중)" : ""}${on ? " · 선택됨(다시 누르면 전체)" : ""}`;
+  const aria = `${c.label}팀 ${say(w.pill, TEAM_PILL_LABEL[c.pill])} · 미처리 ${say(w.unhandled, num(c.unhandled))} · OKR ${c.okrApplies ? say(w.okr, num(c.okrPct, "%")) : "대상 아님"} · 정기점검 ${say(w.inspection, num(c.inspectionPct, "%"))} · 재계약 ${say(Boolean(w.renewal), num(c.renewalPct ?? null, "%"))}${c.stale ? " · 마지막 값(갱신 중)" : ""}${on ? " · 선택됨(다시 누르면 전체)" : ""}`;
   return (
     <button
       type="button" onClick={onPick} aria-pressed={on} aria-label={aria}
@@ -56,10 +57,11 @@ function TeamCard({ c, on, dim, onPick, nowChip = false }: { c: TeamCardModel; o
           <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-400">{w.headcount ? `${WAIT_MARK}명 · ` : c.headcount === null ? "" : `${c.headcount}명 · `}{c.region}</span>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-black ${w.pill ? `${PILL.none} border border-dashed border-slate-600` : PILL[c.pill]}`}>{w.pill ? WAIT_MARK : TEAM_PILL_LABEL[c.pill]}</span>
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1">
           <Big label="미처리" nowChip={nowChip} wait={w.unhandled} value={num(c.unhandled)} tone={c.unhandled ? "text-rose-200" : c.unhandled === 0 ? "text-emerald-300" : "text-slate-500"} />
           <Big label="OKR 이번 주" wait={w.okr} value={c.okrApplies ? num(c.okrPct, "%") : "—"} tone={c.okrApplies && c.okrPct !== null ? undefined : "text-slate-500"} />
           <Big label="정기점검" wait={w.inspection} value={num(c.inspectionPct, "%")} tone={c.inspectionPct === null ? "text-slate-500" : undefined} />
+          <Big label="재계약" wait={Boolean(w.renewal)} value={num(c.renewalPct ?? null, "%")} tone={c.renewalPct == null ? "text-slate-500" : undefined} />
         </div>
         <div className="grid grid-cols-4 gap-1">
           {c.tiles.map((t) => (
@@ -84,7 +86,7 @@ export function TeamBoardStrip({ cards, selected, onSelect, periodLabel }: { car
   return (
     <section aria-label="팀 카드 — 누르면 아래 달성표·미처리·OKR 이 그 팀으로" className="mb-2 min-w-0">
       {periodLabel && <p className="mb-1 px-1 text-[11px] font-bold text-slate-400">{periodLabel}</p>}
-      <ul className="grid min-w-0 auto-cols-[15rem] grid-flow-col gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin] xl:auto-cols-auto xl:grid-flow-row xl:grid-cols-5 xl:overflow-visible xl:pb-0">
+      <ul className="grid min-w-0 auto-cols-[16.5rem] grid-flow-col gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin] xl:auto-cols-auto xl:grid-flow-row xl:grid-cols-5 xl:overflow-visible xl:pb-0">
         {cards.map((c) => (
           <li key={c.team} className="flex min-w-0">
             <TeamCard c={c} on={selected === c.team} dim={selected !== null && selected !== c.team} onPick={() => onSelect(c.team)} nowChip={Boolean(periodLabel)} />

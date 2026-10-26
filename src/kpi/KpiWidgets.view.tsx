@@ -1132,7 +1132,7 @@ function OkrBody({ v, size, theme, disabled }: { v: KpiOkrView; size?: KpiSize; 
       {/* 본문: 왼쪽 작은 칸(링 + 주별 막대, 고른 주차) · 오른쪽 팀원 목록(팀 칩·고른 주차) 또는 팀 4줄. 폰은 위아래로(1x1 은 링 + 주별 막대만) */}
       <div className={wide ? "grid gap-3 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-start" : "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3"}>
         <div className={wide ? "flex items-center gap-3 sm:flex-col sm:items-stretch" : "flex flex-col items-center gap-1"}>
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1" title={v.scope?.member ? "개인 = 그 주차 판정 중 완료·해당없음 비율" : "팀 달성률 = 팀원별 달성률 평균(미작성 0%) · 전체 = A~D 팀원 전부 평균"}>
             <Ring pct={v.pct} tone={okrTone(v.pct)} theme={theme} size={wide ? 96 : 88} textClass={wide ? "text-[24px]" : "text-[20px]"} />
             {v.pct === null && <span className={`max-w-28 text-center text-[11px] font-black leading-4 ${t.muted}`}>{whenWord} 판정 기록이 아직 없습니다</span>}
           </div>

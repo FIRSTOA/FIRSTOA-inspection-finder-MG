@@ -1,8 +1,8 @@
 /**
  * 내 일정 — 내게 배정된 하루 일정을 미니지도(절반) + 순서 리스트(절반)로 본다.
  * 좌표는 워킨맵 핀에서 업체명 매칭으로 가져온다 (워킨맵에 없는 곳은 리스트에만).
- * 순서: [고정]을 누른 순서대로 앞에 서고, 나머지는 마지막 고정 지점에서
- * 가까운 순(최근접 이웃)으로 자동 배치된다 — 동선 체크용.
+ * 순서: 줄을 끌거나 ▲▼ 로 옮기면 그 순서(명시 순서, PC·폰 공유)가 앞에 서고, 명시 순서에 없는 새 일정은
+ * 마지막 명시 지점에서 가까운 순(최근접 이웃)으로 뒤에 붙는다 — 동선 체크용(2026-10-27 [고정] 단추 대체).
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
@@ -22,9 +22,10 @@ import { geocodeKR } from "./geocode";
 import { addressCore, mapQuery } from "./address";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 import { useMembers } from "./authors";
-import { formatAssignees, hasAssignee, joinAssignees, MAX_ASSIGNEES, parseAssignees, primaryAssignee } from "./assignees";
+import { formatAssignees, hasAssignee, joinAssignees, parseAssignees, primaryAssignee } from "./assignees";
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
+import { mergeVisibleOrder, moveId, moveWithinGroup } from "./planOrder";
 
 // 목록 한 줄 안의 동작 단추 공통 모양(폰 44px, PC 36px) — card.ts 에 올릴 후보(btnRow)
 const ROW_BTN = "inline-flex min-h-11 flex-1 items-center justify-center rounded-lg px-3 text-center text-xs font-black transition sm:flex-none lg:min-h-9";
@@ -123,7 +124,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const savePinned = (next: string[]) => {
     setPinned(next);
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* 무시 */ }
-    if (author.trim()) void upsertRow("plan_memos", { author, ticket_id: orderKey, memo: JSON.stringify(next), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined);
+    // 서버 저장이 실패하면 폰·PC 순서가 갈린다 — 조용히 넘기지 않고 알린다(2026-10-27)
+    if (author.trim()) void upsertRow("plan_memos", { author, ticket_id: orderKey, memo: JSON.stringify(next), updated_at: new Date().toISOString() }, "author,ticket_id")
+      .catch(() => notify("순서를 서버에 저장하지 못했습니다 — 이 기기에만 바뀌었습니다", "error"));
   };
 
   // 일정별 개인 메모 — "까먹지 않게" 적어두는 것이라 폰·PC 어디서든 보여야 한다 → DB(plan_memos)
@@ -265,12 +268,12 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myTickets, lookupGeo]);
 
-  // 순서: 고정(클릭 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃
+  // 순서: 명시 순서(끌기·▲▼) 먼저 → 나머지는 마지막 명시 지점 기준 최근접 이웃
   const infoOverlayRef = useRef<KakaoNS | null>(null);   // 열려 있는 말풍선
   const drawSigRef = useRef("");                          // 마지막으로 그린 마커 구성 — 같으면 다시 그리지 않는다(60초 새로고침마다 확대가 풀리던 것, 2026-10-13)
   const boundsKeyRef = useRef("");                        // 범위를 맞춘 일정 구성 — 일정이 바뀔 때만 다시 맞춘다
   const colorFor = useCallback((name: string) => (people.includes(name) ? colorOf(name) : "#64748b"), [people, colorOf]);
-  // 한 사람의 동선: 고정(누른 순) 먼저 → 나머지는 마지막 고정 지점 기준 최근접 이웃. 팀 일정은 사람마다 이 규칙을 따로 돌린다(2026-10-12)
+  // 한 사람의 동선: 명시 순서(끌기·▲▼) 먼저 → 나머지는 마지막 명시 지점 기준 최근접 이웃. 팀 일정은 사람마다 이 규칙을 따로 돌린다(2026-10-12)
   const routeOf = useCallback((list: MyPlanTicket[]): MyPlanTicket[] => {
     const byId = new Map(list.map((t) => [t.id, t]));
     const head = pinned.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
@@ -301,7 +304,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   }, [pinned, getGeo, noMap]);
   const ordered = useMemo(() => {
     if (scope === "team") {
-      // 사람별로 묶고(미배정은 맨 뒤), 사람마다 고정→가까운 순. 범례에서 끈 사람은 뺀다
+      // 사람별로 묶고(미배정은 맨 뒤), 사람마다 명시 순서→가까운 순. 범례에서 끈 사람은 뺀다
       const groups = new Map<string, MyPlanTicket[]>();
       for (const t of myTickets) { const k = primaryAssignee(t.assignee) || "미배정"; if (hiddenPeople.has(k)) continue; groups.set(k, [...(groups.get(k) || []), t]); }
       const keys = Array.from(groups.keys()).sort((a, b) => (a === "미배정" ? 1 : b === "미배정" ? -1 : a.localeCompare(b)));
@@ -503,15 +506,14 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
           const menu = document.createElement("div");
           menu.setAttribute("data-assign-menu", "1");
           menu.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px;pointer-events:auto";
-          // 여러 명(2026-10-22): 칩은 켜고 끄기, [확인]으로 저장 — 일정리스트 배정 시트와 같은 규칙(번호 1이 대표, 최대 인원 잠금)
+          // 여러 명(2026-10-22): 칩은 켜고 끄기, [확인]으로 저장 — 일정리스트 배정 시트와 같은 규칙(번호 1이 대표)
           let picked = parseAssignees(t.assignee);
           const chips: Array<{ b: HTMLButtonElement; name: string; label: string }> = [];
           const confirmBtn = document.createElement("button");
           const paint = () => {
-            const full = picked.length >= MAX_ASSIGNEES;
             for (const c of chips) {
               const idx = picked.indexOf(c.name);
-              const locked = idx < 0 && full;
+              const locked = false;
               c.b.textContent = idx >= 0 && picked.length > 1 ? `${idx + 1} ${c.label}` : c.label;
               c.b.disabled = locked;
               c.b.style.border = `2px solid ${idx >= 0 ? "#0f172a" : "transparent"}`;
@@ -526,7 +528,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
             b.style.cssText = `cursor:pointer;border:2px solid transparent;border-radius:999px;padding:3px 10px;background:${color};color:#fff;font-weight:900;font-size:11px`;
             b.addEventListener("click", (e2) => {
               e2.stopPropagation();
-              picked = picked.includes(name) ? picked.filter((x) => x !== name) : picked.length >= MAX_ASSIGNEES ? picked : [...picked, name];
+              picked = picked.includes(name) ? picked.filter((x) => x !== name) : [...picked, name];
               paint();
             });
             chips.push({ b, name, label });
@@ -601,9 +603,92 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
     marker.openPopup();
   };
 
-  const togglePin = (id: string) => {
-    savePinned(pinned.includes(id) ? pinned.filter((p) => p !== id) : [...pinned, id]);
+  // ── 순서 바꾸기(2026-10-27, [고정] 단추 대체): 끌어 놓기·▲▼ → 지금 보이는 순서 전체를 명시 순서로 저장 ──
+  // 팀 일정은 같은 사람 묶음 안에서만(사람 사이로 끌면 원래 자리). 저장은 savePinned 그대로(기기 + plan_memos __order__)
+  const groupOfId = useMemo(() => {
+    const m = new Map(ordered.map((t) => [t.id, scope === "team" ? (primaryAssignee(t.assignee) || "미배정") : ""]));
+    return (id: string) => m.get(id) ?? "";
+  }, [ordered, scope]);
+  /** id 를 (id 를 뺀 목록의) toIndex 자리로 옮긴 결과 — 막히거나 제자리면 null */
+  const reorderResult = (id: string, toIndex: number): string[] | null => {
+    const ids = ordered.map((t) => t.id);
+    const next = scope === "team" ? moveWithinGroup(ids, groupOfId, id, toIndex) : moveId(ids, id, toIndex);
+    if (next === ids || next.every((x, k) => x === ids[k])) return null;
+    return [...next];
   };
+  const moveTo = (id: string, toIndex: number) => {
+    const next = reorderResult(id, toIndex);
+    if (next) savePinned(mergeVisibleOrder(next, pinned));
+  };
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const dragRef = useRef<{ id: string; pointerId: number; x: number; y: number; timer: number | null; active: boolean } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; to: number | null } | null>(null);
+  /** 손가락 높이 → 놓일 자리(끄는 줄을 뺀 목록의 번호): 줄 가운데보다 아래면 그 줄 뒤 */
+  const dropIndexAt = (clientY: number, id: string) => {
+    let k = 0;
+    for (const t of ordered) {
+      if (t.id === id) continue;
+      const r = rowRefs.current.get(t.id)?.getBoundingClientRect();
+      if (r && clientY > r.top + r.height / 2) k++;
+    }
+    return k;
+  };
+  const endDrag = () => {
+    const cur = dragRef.current;
+    if (cur?.timer) window.clearTimeout(cur.timer);
+    dragRef.current = null;
+    setDrag(null);
+  };
+  // 손잡이에서만 시작(touch-action:none) — 목록 스크롤과 안 부딪친다. 폰·펜은 250ms 길게 누른 뒤, 마우스는 바로
+  const onHandleDown = (e: React.PointerEvent<HTMLElement>, id: string) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.stopPropagation();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* 일부 브라우저 */ }
+    const start = () => {
+      const cur = dragRef.current;
+      if (!cur || cur.id !== id) return;
+      cur.active = true; cur.timer = null;
+      setDrag({ id, to: null });
+      try { navigator.vibrate?.(15); } catch { /* 진동 없음 */ }
+    };
+    dragRef.current = { id, pointerId: e.pointerId, x: e.clientX, y: e.clientY, timer: null, active: false };
+    if (e.pointerType === "mouse") start();
+    else dragRef.current.timer = window.setTimeout(start, 250);
+  };
+  const onHandleMove = (e: React.PointerEvent<HTMLElement>) => {
+    const cur = dragRef.current;
+    if (!cur || cur.pointerId !== e.pointerId) return;
+    if (!cur.active) {
+      // 길게 누르기 전에 밀면 끌기 아님(쓸어 넘기려던 것)
+      if (Math.abs(e.clientY - cur.y) > 10 || Math.abs(e.clientX - cur.x) > 10) endDrag();
+      return;
+    }
+    e.preventDefault();
+    // 화면 위·아래 끝에 가까우면 조금씩 굴린다 — 긴 목록을 폰에서 옮길 때
+    if (e.clientY < 70) window.scrollBy(0, -14);
+    else if (e.clientY > window.innerHeight - 70) window.scrollBy(0, 14);
+    const to = dropIndexAt(e.clientY, cur.id);
+    setDrag((d) => (d && d.to === to ? d : { id: cur.id, to }));
+  };
+  const onHandleUp = (e: React.PointerEvent<HTMLElement>) => {
+    const cur = dragRef.current;
+    if (!cur || cur.pointerId !== e.pointerId) return;
+    const to = cur.active ? dropIndexAt(e.clientY, cur.id) : null;
+    const id = cur.id;
+    endDrag();
+    if (to === null) return;
+    if (reorderResult(id, to)) { moveTo(id, to); return; }
+    // 팀 일정에서 다른 사람 자리로 놓았으면 원래 자리 + 안내(제자리 놓기는 조용히)
+    const rest = ordered.filter((t) => t.id !== id);
+    const near = [rest[to - 1], rest[to]].filter(Boolean).map((t) => groupOfId(t.id));
+    if (scope === "team" && near.length && !near.includes(groupOfId(id))) notify("팀 일정은 같은 사람 안에서만 순서를 바꿀 수 있습니다", "info");
+  };
+  // 놓일 자리 선: 끄는 줄을 뺀 목록의 to 번째 줄 앞(끝이면 맨 뒤). 막힌 자리·제자리면 안 그린다
+  const dropLineBefore = (() => {
+    if (!drag || drag.to === null || !reorderResult(drag.id, drag.to)) return null;
+    const rest = ordered.filter((t) => t.id !== drag.id);
+    return rest[drag.to]?.id ?? "__end__";
+  })();
 
   // FIELD 양식 불러오기 — ①시리얼·자산기번 ②업체명(정확→토큰 축소)으로 자동 목록,
   // 그래도 없으면 같은 모달에서 직접 검색(필드탭과 동일)으로 전환
@@ -756,7 +841,25 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 <span className="h-2.5 w-2.5 rounded-full" style={t.assignee ? { background: colorOf(who) } : { border: "1.5px dashed #64748b", background: "#fff" }} />{who} <span className="font-bold text-slate-400">{groupCount}건</span>
               </div>
             )}
-            <div onClick={() => focusTicket(t.id)} className={`relative flex flex-wrap items-center gap-2 px-3 py-2.5 pr-14 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
+            {dropLineBefore === t.id && <div className="h-0.5 bg-blue-600" aria-hidden />}
+            <div ref={(el) => { if (el) rowRefs.current.set(t.id, el); else rowRefs.current.delete(t.id); }} className={`flex items-stretch ${drag?.id === t.id ? "bg-blue-50 opacity-50" : ""}`}>
+            {/* 순서 바꾸기(2026-10-27): ▲ · 손잡이(끌기) · ▼ — 팀 일정은 같은 사람 안에서만 */}
+            {(() => {
+              const canUp = i > 0 && groupOfId(ordered[i - 1].id) === groupOfId(t.id);
+              const canDown = i < ordered.length - 1 && groupOfId(ordered[i + 1].id) === groupOfId(t.id);
+              const arrow = "flex min-h-9 w-9 flex-1 items-center justify-center text-[11px] font-black text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:text-slate-200 disabled:hover:bg-transparent";
+              return (
+                <span className="flex w-9 shrink-0 flex-col border-r border-slate-100" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" disabled={!canUp} onClick={() => moveTo(t.id, i - 1)} aria-label={`${t.vendor} 위로`} className={arrow}>▲</button>
+                  <span role="button" tabIndex={-1} aria-label={`${t.vendor} 끌어서 순서 바꾸기`} title="끌어서 순서 바꾸기(폰은 길게 누른 뒤)"
+                    onPointerDown={(e) => onHandleDown(e, t.id)} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={endDrag} onContextMenu={(e) => e.preventDefault()}
+                    style={{ touchAction: "none", WebkitTouchCallout: "none" }}
+                    className={`flex min-h-11 w-9 flex-1 cursor-grab select-none items-center justify-center text-base font-black leading-none active:cursor-grabbing ${drag?.id === t.id ? "text-blue-600" : "text-slate-400"}`}>⋮⋮</span>
+                  <button type="button" disabled={!canDown} onClick={() => moveTo(t.id, i + 1)} aria-label={`${t.vendor} 아래로`} className={arrow}>▼</button>
+                </span>
+              );
+            })()}
+            <div onClick={() => focusTicket(t.id)} className={`relative flex min-w-0 flex-1 flex-wrap items-center gap-2 px-3 py-2.5 pr-14 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
               <span className="min-w-0 flex-1 basis-[55%] overflow-hidden">
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black" style={scope === "team" ? (t.assignee ? { background: colorOf(who), color: "#fff" } : { border: "1.5px dashed #64748b", color: "#334155", background: "#fff" }) : { background: isPinned ? "#2563eb" : "#0f172a", color: "#fff" }}>{labelNo(t, i)}</span>
@@ -814,10 +917,6 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 {/* 전화 체크만 하면 되는 건처럼 지도에 안 보여도 되는 일정 — 목록엔 남는다 */}
                 <button type="button" onClick={() => toggleNoMap(t.id)} title={noMap.includes(t.id) ? "지도에 다시 표시" : "지도·동선에서 빼기(목록엔 남음)"}
                   className={`${ROW_BTN} ${noMap.includes(t.id) ? "bg-slate-700 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>{noMap.includes(t.id) ? "지도 표시" : "지도 제외"}</button>
-                <button type="button" onClick={() => togglePin(t.id)}
-                  className={`${ROW_BTN} ${isPinned ? "bg-blue-600 text-white" : "border border-slate-300 bg-white text-slate-500 hover:bg-slate-50"}`}>
-                  {isPinned ? `고정 ${pinned.filter((id) => (scope === "team" ? ordered.filter((x) => (primaryAssignee(x.assignee) || "미배정") === who) : ordered).some((x) => x.id === id)).indexOf(t.id) + 1}` : "고정"}
-                </button>
               </span>
               {rowMenu?.id === t.id && rowMenu.kind === "nav" && (
                 <span className="flex w-full items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -833,27 +932,27 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                   {/* 여러 명(2026-10-22): 눌러서 켜고 끄기 + [확인]. 번호 1이 대표, 최대 인원이면 남은 칩 잠금 */}
                   {(() => {
                     const picked = assignPick?.id === t.id ? assignPick.names : parseAssignees(t.assignee);
-                    const full = picked.length >= MAX_ASSIGNEES;
                     const options = [...assignOptions, ...parseAssignees(t.assignee).filter((n) => !assignOptions.includes(n))];
                     return (<>
                       {options.map((n) => {
                         const idx = picked.indexOf(n);
-                        const locked = idx < 0 && full;
+                        const locked = false;
                         return <button key={n} type="button" disabled={locked} aria-pressed={idx >= 0}
                           onClick={() => setAssignPick({ id: t.id, names: idx >= 0 ? picked.filter((x) => x !== n) : [...picked, n] })}
                           className={`inline-flex min-h-11 items-center rounded-full px-3 text-xs font-black lg:min-h-9 ${idx >= 0 ? "text-white" : locked ? "border border-slate-200 bg-white text-slate-300" : "border border-slate-300 bg-white text-slate-700"}`} style={idx >= 0 ? { background: colorOf(n) } : undefined}>{idx >= 0 && picked.length > 1 ? `${idx + 1} ` : ""}{n === author ? `나(${n})` : n}</button>;
                       })}
                       {t.assignee && <button type="button" onClick={() => { onAssign(t, ""); setRowMenu(null); setAssignPick(null); }} className="inline-flex min-h-11 items-center rounded-full border border-dashed border-slate-400 bg-white px-3 text-xs font-black text-slate-500 lg:min-h-9">배정 해제</button>}
                       <button type="button" onClick={() => { const next = joinAssignees(picked); if (next !== t.assignee) onAssign(t, next); setRowMenu(null); setAssignPick(null); }} className="ml-auto inline-flex min-h-11 items-center rounded-full bg-emerald-600 px-4 text-xs font-black text-white lg:min-h-9">확인{picked.length > 1 ? ` (${picked.length}명)` : ""}</button>
-                      {full && <span className="w-full text-[11px] font-bold text-amber-600">최대 {MAX_ASSIGNEES}명</span>}
                     </>);
                   })()}
                 </span>
               )}
             </div>
+            </div>
             </Fragment>
           );
         })}
+        {dropLineBefore === "__end__" && <div className="h-0.5 bg-blue-600" aria-hidden />}
         {!ordered.length && <StateBox inside kind="empty" message={`${date}에 ${author}님께 배정된 일정이 없습니다.`} />}
       </div>
       {fieldPick && (() => {

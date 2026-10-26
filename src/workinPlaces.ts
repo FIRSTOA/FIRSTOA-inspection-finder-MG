@@ -12,16 +12,19 @@
 export type Quarter = 1 | 2 | 3 | 4;
 export type WorkinPlaceLike = { name: string; memos: string[] };
 
-/** 재계약 라벨 뜻 — G5·G6·G7·G12는 CS가 이번 분기에 방문할 대상이 아니다 */
+/**
+ * 재계약 라벨 뜻(2026-10-26 사용자 색 기준): G1·G2·G3 기존대로, G5 = 완료, G6 = 진행중, G7 = 전략영업(중요 거래처 V·SS — CS 관리 밖).
+ * 홈 KPI K35 재계약 진행 = G5 개수 / G7 을 뺀 전체(workinProgress.renewalProgress).
+ */
 export const RENEWAL_LABEL_DESC: Record<string, string> = {
   G5: "재계약 완료",
-  G6: "영업부 관할",
-  G7: "영업부 관할",
+  G6: "진행중",
+  G7: "전략영업(관리 밖)",
   G12: "이관",
 };
 
-/** 방문 대상에서 빠지는 라벨 (완료·영업부·이관) */
-export const RENEWAL_DONE_LABELS = new Set(["G5", "G6", "G7", "G12"]);
+/** 방문 대상에서 빠지는 라벨 (완료·전략영업·이관). G6(진행중)은 2026-10-26 부터 방문 대상에 남는다 */
+export const RENEWAL_DONE_LABELS = new Set(["G5", "G7", "G12"]);
 
 /** 재계약 분기 월 배정 — 종료월 기준으로 한 달 앞서 도는 관행 (1Q=2·3·4월) */
 export function renewalQuarterMonths(quarter: Quarter): number[] {

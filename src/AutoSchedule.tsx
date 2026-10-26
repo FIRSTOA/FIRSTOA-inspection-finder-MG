@@ -1,6 +1,7 @@
 import { teamLabel, useAuthorBook } from "./authors";
 import { AUTO_SCHEDULE_TEAMS, defaultAutoScheduleTeam } from "./autoScheduleTeam";
 import { loadPicksFrom, pickTeam, picksAfterRegister, picksFor, picksForAuthor, picksKey, type OwnedPicks } from "./autoSchedulePicks";
+import { indexOpenChecks, markPlanned, moveNotice, moveOpenCheck, planRegister, skipNotice, type MovedPick, type OpenCheckTicket, type SkippedPick } from "./autoScheduleSkip";
 /**
  * 자동 일정 짜기 (1차 시안)
  * CS팀 실무 순서 그대로: ① 그날 필수 스케줄을 놓고 → ② 마지막 일정(앵커) 좌표에서
@@ -304,19 +305,29 @@ export default function AutoSchedule({ author }: { author: string }) {
     const saveMemo = async (ticketId: string, memo: string) => { if (memo.trim()) await upsertRow("plan_memos", { author, ticket_id: ticketId, memo: memo.trim(), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined); };
     try {
       // 그 달에 이미 열려 있는 점검 일정이 있는 업체는 건너뛴다 — 같은 업체가 3번 잡혀 완료 때 '3건 처리'로 뜨던 것(2026-09-24 제이엘케이)
+      // 단 지난 날짜의 미완료 행은 어디서도 안 보이는 행이라 건너뛰지 않고 고른 날짜로 옮긴다(2026-10-26, src/autoScheduleSkip.ts)
       const monthStart = `${date.slice(0, 7)}-01`;
       const monthEnd = `${date.slice(0, 7)}-31`;
-      const openRows = await selectRows<{ vendor: string; date: string }>("as_tickets", `select=vendor,date&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent("매월점검")}&status=neq.${encodeURIComponent("완료")}&date=gte.${monthStart}&date=lte.${monthEnd}&limit=500`).catch(() => [] as Array<{ vendor: string; date: string }>);
-      const openByKey = new Map(openRows.map((t) => [vendorMatchKey(fieldTicketVendor(t.vendor).vendor || t.vendor), t.date]));
-      const skipped: string[] = [];
+      const openRows = await selectRows<OpenCheckTicket>("as_tickets", `select=id,vendor,date,assignee,team&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent("매월점검")}&status=neq.${encodeURIComponent("완료")}&date=gte.${monthStart}&date=lte.${monthEnd}&limit=500`).catch(() => [] as OpenCheckTicket[]);
+      const openByKey = indexOpenChecks(openRows, (v) => fieldTicketVendor(v).vendor);
+      const skipped: SkippedPick[] = [];
+      const moved: MovedPick[] = [];
+      const today = kstDate();
       for (const group of chosenGroups) {
         // 같은 회사 기기 여러 대 = 방문 1건 — 일정 1개로 등록하고 기기 목록은 메모에 (FIELD 점검 양식이 여러 대를 지원한다)
         const first = group.members[0];
         const eq = parseEquipComment(first.comment);
         const multi = group.members.length > 1;
         const vendorName = multi ? group.rep : (first.vendor || first.place_name);
-        const dupDate = openByKey.get(vendorMatchKey(vendorName));
-        if (dupDate) { skipped.push(`${vendorName}(${dupDate.slice(5)})`); continue; }
+        const plan = planRegister(vendorName, openByKey, today);
+        if (plan.kind === "skip") { skipped.push({ name: vendorName, open: plan.open }); continue; }
+        if (plan.kind === "move") {
+          const after = await moveOpenCheck(plan.open, { date, assignee: author, team: group.team }, upsertRow);
+          markPlanned(openByKey, vendorName, after);
+          moved.push({ name: vendorName, from: plan.open, date, assignee: author });
+          await saveMemo(plan.open.id, group.memo);
+          continue;
+        }
         const machineNote = multi
           ? `워킨맵 등록 ${group.members.length}곳 — ${group.members.map((m) => { const meq = parseEquipComment(m.comment); return `${memberTail(group, m)}${meq.model ? `: ${meq.model}` : ""}${meq.serial ? `/${meq.serial}` : ""}`; }).join(" · ")}`.slice(0, 400)
           : "";
@@ -331,6 +342,7 @@ export default function AutoSchedule({ author }: { author: string }) {
           note: machineNote, assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
           receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${vendorName}`, source: "autoplan",
         }, "id");
+        markPlanned(openByKey, vendorName, { id: ticketId, vendor: vendorName, date, assignee: author, team: group.team });
         await saveMemo(ticketId, group.memo);
       }
       // 직접 추가한 일정 — 워킨맵에 없는 곳(마감 방문 등). 내 일정에서 '직접 등록'으로 보인다
@@ -343,7 +355,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         await saveMemo(ticketId, m.memo);
       }
       setSaved((cur) => picksAfterRegister(cur, date, regTeam)); // 다른 팀에서 고른 건 남긴다
-      setNotice(`${chosenGroups.length - skipped.length + manualPicks.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${skipped.length ? ` · 이미 이달 점검 일정에 있어 건너뜀 ${skipped.length}곳: ${skipped.join(", ")}` : ""}`);
+      setNotice(`${chosenGroups.length - skipped.length + manualPicks.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${moved.length ? ` · ${moveNotice(moved)}` : ""}${skipped.length ? ` · ${skipNotice(skipped, today)}` : ""}`);
       void loadTickets();
     } catch (e) {
       setNotice(`등록 실패: ${(e as Error).message}`);

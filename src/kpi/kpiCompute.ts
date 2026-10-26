@@ -21,7 +21,7 @@ import {
   countExpansion, countField, kstDayOf,
   type ExpansionKind, type ExpansionRow, type FieldKind, type FieldRow,
 } from "../workCount";
-import { teamWorkinProgress, type WorkinPlaceLite } from "../workinProgress";
+import { renewalProgress, teamWorkinProgress, type WorkinPlaceLite, type WorkinRenewalLite } from "../workinProgress";
 import { countUnhandledTabs, rowsForTab, UNHANDLED_TABS, type UnhandledRow, type UnhandledTab } from "../homeUnhandled";
 import {
   OKR_TEAMS, achievementRate, emptyResultRow, findReport, goalsApplyingTo, goalsForTeamTotal, isAlert, isLegacyMonthId, judgmentCounts, monthScreenGoals, normalizeJudgment, resultRowFor, worstOfJudgments,
@@ -232,6 +232,8 @@ export type KpiFacts = Partial<{
   /** loadWorkEvents 결과에 팀장 제외 + countableEvents 를 건 것(팀 현황과 같은 입구) — 이제 교체양식(K28)만 센다 */
   events: ActivityEvent[];
   workin: WorkinPlaceLite[];
+  /** 워킨맵 재계약 지점(kind renewal, 분기) — K35 원본(2026-10-26) */
+  workinRenewal: WorkinRenewalLite[];
   overage: FormRow[];
   recontract: FormRow[];
   bulman: FormRow[];
@@ -346,6 +348,12 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
       const teams = teamWorkinProgress(f.workin).filter((t) => teamOk(t.team));
       return { n: teams.reduce((a, t) => a + t.done, 0), d: teams.reduce((a, t) => a + t.total, 0) };
     }
+    case "K35": {
+      // 재계약 진행 = G5 / G7 뺀 전부(workinProgress.renewalProgress). 개인 칸 없음(워킨맵은 팀 단위)
+      if (!f.workinRenewal || s.author) return null;
+      const teams = renewalProgress(f.workinRenewal).filter((t) => teamOk(t.team));
+      return { n: teams.reduce((a, t) => a + t.done, 0), d: teams.reduce((a, t) => a + t.total, 0) };
+    }
     case "K4": {
       if (!f.visits) return null;
       const keys = new Set(f.visits.filter((v) => v.visited && v.workDate >= r.from && v.workDate <= r.to && !isMgr(v.author)
@@ -392,12 +400,21 @@ export function kpiCount(id: KpiId, f: KpiFacts, s: KpiScope, r: KpiRange, ctx: 
       const weekMode = dayDiff(r.from, r.to) <= 6;
       if (weekMode && !w) return null;
       if (s.author) {
-        // 개인 = 그 주 그 사람 okr_reports member 행의 판정(주 단위만 — 달은 파트 종합뿐)
+        // 개인 = 그 주 그 사람 okr_reports member 행의 판정(주 단위만)
         if (!weekMode || !w) return null;
         const mine = okrWeekMemberRows(w.goals, w.reports, w.id, s.author, s.team);
         return { n: mine.filter((x) => ["완료", "해당없음"].includes(normalizeJudgment(x.judgment))).length, d: mine.filter((x) => normalizeJudgment(x.judgment)).length };
       }
-      const rows = OKR_TEAMS.filter((t) => teamOk(t)).flatMap((t) => (weekMode && w ? okrWeekTeamRows(w.goals, w.reports, w.id, t) : okrTeamRows(f.okr!.cycle, f.okr!.quarter, f.okr!.reports, t)));
+      // 팀·전체 = 팀원별 달성률 평균(미작성 0%, 2026-10-26) — {n: %, d: 100}. 아무도 안 썼으면 {0, 0}(종전처럼 목표 없는 0)
+      const teams = OKR_TEAMS.filter((t) => teamOk(t)) as string[];
+      const mw = weekMode ? w : okrMonthWeekFacts(f.okr);
+      if (mw) {
+        const ids = weekMode ? [mw.id] : mw.weeks.map((x) => x.id);
+        const avg = okrShareAverage(teams.flatMap((t) => okrMemberShares(mw, t, f.roster, ids)));
+        return avg === null ? { n: 0, d: 0 } : { n: avg, d: 100 };
+      }
+      // 주차 기록이 없는 달(8·9월 옛 구조) = 월 파트 종합 판정 비율(종전)
+      const rows = teams.flatMap((t) => okrTeamRows(f.okr!.cycle, f.okr!.quarter, f.okr!.reports, t));
       return { n: rows.filter((x) => ["완료", "해당없음"].includes(normalizeJudgment(x.judgment))).length, d: rows.filter((x) => normalizeJudgment(x.judgment)).length };
     }
     case "K20": {
@@ -546,7 +563,8 @@ export function kpiProgress(id: KpiId, f: KpiFacts, opts: { ranges: KpiRanges; p
     const c = kpiCount(id, f, s, range, ctx);
     counts.set(`${scope}|${key}`, c);
     const tg = ratio ? { full: c?.d ?? null, toDate: null } : kpiTargetFor(id, opts.settings.targets[id], { range, period: opts.period, today: ctx.today, scope, headcount, teamCount: teams.length, holidays: opts.settings.holidays });
-    const actual = c ? c.n : null;
+    // K35 재계약: 팀에 대상 지점이 없으면(0/0, 4분기 A팀) "대상 없음" = 값 null(0% 도 달성도 아님 — 칸 "—")
+    const actual = c ? (id === "K35" && scope !== "all" && !c.d ? null : c.n) : null;
     const rate = actual === null || !tg.full ? null : pct(actual, tg.full);
     return {
       scope, key, label, team, headcount, actual, target: tg.full, targetToDate: tg.toDate, rate,
@@ -671,6 +689,20 @@ export function workinKpi(places: WorkinPlaceLite[], r: KpiRanges, target?: KpiT
   });
 }
 
+/* K35 재계약 진행 — workinProgress.renewalProgress(G5 완료 / G7 뺀 전부). 대상 없는 팀은 value null */
+export function renewalKpi(rows: WorkinRenewalLite[], r: KpiRanges, target?: KpiTarget): KpiValue {
+  const teams = renewalProgress(rows);
+  const done = teams.reduce((n, t) => n + t.done, 0), total = teams.reduce((n, t) => n + t.total, 0);
+  const value = pct(done, total);
+  const goal = target?.value ?? 100;
+  return finish("K35", {
+    value, numerator: done, denominator: total, target: goal, targetRate: value === null ? null : pct(value, goal),
+    range: r.quarter, empty: total === 0,
+    byTeam: teams.map((t) => ({ team: t.team, value: t.rate, numerator: t.done, denominator: t.total, target: t.total ? goal : null, rate: t.rate })),
+    extra: { elapsed: r.quarterElapsedRate, ahead: value === null ? 0 : value - r.quarterElapsedRate },
+  });
+}
+
 /* K10 초과사용 제안 방문 — 파트당 월 목표 */
 export function overageKpi(rows: FormRow[], r: KpiRanges, target?: KpiTarget): KpiValue {
   const t = target || {};
@@ -736,7 +768,7 @@ export function unhandledKpis(rows: UnhandledRow[], target16?: KpiTarget, target
 /* K18 키맨 변경 인사 — 홈 '키맨 변경 7일' 칸과 같은 조건 */
 export const KEYMAN_GREET_CATEGORY = /담당|키맨|명의/;
 
-/* K19 OKR 달성률 — OKR 월 통합집계 파트 카드와 같은 식 */
+/* K19 OKR 달성률 — 월: 그 달 주차 기록이 있으면 팀원별 평균(okrMemberShares), 없는 옛 달은 OKR 월 통합집계 파트 카드와 같은 식 */
 /** 그 달 화면 목표(새 구조 = monthScreenGoals, 옛 달 = 달 goals) × 파트 종합 행(member '') */
 export function okrTeamRows(cycle: OkrCycle | null, quarter: OkrCycle | null, reports: OkrReport[], team: string): OkrResultRow[] {
   if (!cycle) return [];
@@ -745,8 +777,33 @@ export function okrTeamRows(cycle: OkrCycle | null, quarter: OkrCycle | null, re
   return goalsForTeamTotal(goals, team).map((g) => resultRowFor(rep, g.no));
 }
 
-export function okrKpi(okr: OkrFacts, r: KpiRanges, target?: KpiTarget): KpiValue {
+export function okrKpi(okr: OkrFacts, r: KpiRanges, target?: KpiTarget, roster?: RosterMember[]): KpiValue {
   const goal = target?.value ?? 100;
+  // 그 달 주차 기록이 있으면 팀 = 팀원별 그 달 달성률 평균(미작성 0%), 전체 = A~D 구성원 전부 평균(2026-10-26)
+  const mw = okrMonthWeekFacts(okr);
+  if (mw) {
+    const ids = mw.weeks.map((x) => x.id);
+    const per = OKR_TEAMS.map((team) => {
+      const shares = okrMemberShares(mw, team, roster, ids);
+      const rows = ids.flatMap((id) => okrWeekTeamRows(mw.goals, mw.reports, id, team));
+      return { team, shares, rows, value: okrShareAverage(shares) };
+    });
+    const allShares = per.flatMap((p) => p.shares);
+    const value = okrShareAverage(allShares);
+    const done = allShares.reduce((a, x) => a + x.done, 0), judged = allShares.reduce((a, x) => a + x.judged, 0);
+    const all = per.flatMap((p) => p.rows);
+    const counts = judgmentCounts(all);
+    return finish("K19", {
+      value, numerator: done, denominator: judged, target: goal, targetRate: value === null ? null : pct(value, goal),
+      range: r.month, empty: judged === 0,
+      byTeam: per.map((p) => ({
+        team: p.team, value: p.value, target: goal, rate: p.value,
+        numerator: p.shares.reduce((a, x) => a + x.done, 0), denominator: p.shares.reduce((a, x) => a + x.judged, 0),
+      })),
+      extra: { 미흡: counts["미흡"], 미착수: counts["미착수"], alerts: all.filter((x) => isAlert(x.judgment)).length, goals: all.length, people: allShares.length },
+    });
+  }
+  // 주차 기록이 없는 달(8·9월 옛 구조) = 월 파트 종합 판정 비율(종전)
   const per = OKR_TEAMS.map((team) => ({ team, rows: okrTeamRows(okr.cycle, okr.quarter, okr.reports, team) }));
   const all = per.flatMap((p) => p.rows);
   const value = achievementRate(all);
@@ -782,7 +839,7 @@ export function okrWeekTeamRows(goals: OkrGoal[], reports: OkrReport[], weekId: 
 }
 
 export type OkrWeekResult = {
-  /** A~D 전체 달성률(판정 없는 칸 분모 제외). 판정이 하나도 없으면 null(0% 아님) */
+  /** A~D 전체 달성률 = 구성원(명단 ∪ 보고자) 개인 달성률 평균, 미작성 0%(2026-10-26). 판정이 하나도 없으면 null(0% 아님) */
   pct: number | null;
   counts: Record<OkrJudgment, number>;
   /** 그 주 판정이 하나도 없는 파트 — "이번 주 OKR 미작성 n팀" */
@@ -808,6 +865,45 @@ export function okrWeekMembers(w: OkrWeekFacts, team: OkrScopeTeam = "ALL"): str
   return [...names].sort((a, b) => a.localeCompare(b, "ko"));
 }
 
+/* ── 팀 달성률 = 팀원별 달성률 평균(2026-10-26 사용자 "A팀은 1명만 썼는데 C팀(2명 작성)보다 높다 · 3명인 팀과 4명인 팀의 차이" → 팀장 결정) ──
+ * 구성원 = 명단(그 팀·팀장 제외) ∪ 그 달 주차 기록에 그 팀으로 개인 보고를 낸 사람(homeKpiModel.okrPeopleForTeam 과 같은 집합).
+ * 개인 = 그 기간 자기 판정 행 중 완료·해당없음 비율, 판정 0 = 미작성 = 0%. 팀 = 평균, 전체 = A~D 구성원 전부 평균(사람마다 같은 무게).
+ * 그 범위에 판정이 하나도 없으면 null("미작성", 0% 로 그리지 않는다 — 종전 규칙 유지). */
+
+/** 팀 구성원 이름(순서 = 보고자 이름순 → 명단 순) */
+export function okrTeamMembers(w: OkrWeekFacts, team: string, roster?: RosterMember[] | null): string[] {
+  const names = new Set<string>((OKR_TEAMS as readonly string[]).includes(team) ? okrWeekMembers(w, team as OkrScopeTeam) : []);
+  for (const m of roster ?? []) if (m.team === team && m.title !== "팀장" && m.name) names.add(m.name);
+  return [...names];
+}
+
+/** 한 사람 몫 — done/judged 는 판정 개수(완료·해당없음 / 판정 있는 목표), judged 0 = 미작성 */
+export type OkrMemberShare = { team: string; name: string; done: number; judged: number };
+
+/** 그 팀 구성원 각자의 weekIds(주 하나 또는 그 달 주차 전부) 판정 몫 */
+export function okrMemberShares(w: OkrWeekFacts, team: string, roster: RosterMember[] | null | undefined, weekIds: string[]): OkrMemberShare[] {
+  return okrTeamMembers(w, team, roster).map((name) => {
+    const rows = weekIds.flatMap((id) => okrWeekMemberRows(w.goals, w.reports, id, name, team));
+    const judged = rows.filter((x) => normalizeJudgment(x.judgment));
+    return { team, name, done: judged.filter((x) => ["완료", "해당없음"].includes(normalizeJudgment(x.judgment))).length, judged: judged.length };
+  });
+}
+
+/** 구성원 평균 %(반올림) — 미작성 0%. 아무도 판정이 없으면 null */
+export function okrShareAverage(shares: OkrMemberShare[]): number | null {
+  if (!shares.some((x) => x.judged > 0)) return null;
+  return Math.round((shares.reduce((a, x) => a + (x.judged ? x.done / x.judged : 0), 0) / shares.length) * 100);
+}
+
+/** 월 범위에 쓸 주차 기록 — 그 달(okr.cycle) 주차이고 개인 보고가 하나라도 있을 때만. 아니면 null(옛 월 파트 종합으로) */
+export function okrMonthWeekFacts(okr: OkrFacts | undefined): OkrWeekFacts | null {
+  const w = okr?.week;
+  if (!w || !okr?.cycle) return null;
+  const mine = (id: string) => id.startsWith(`${okr.cycle!.id}-W`);
+  if (!w.weeks.length ? !mine(w.id) : !w.weeks.every((x) => mine(x.id))) return null;
+  return w.reports.some((r) => r.member && mine(r.cycle_id)) ? w : null;
+}
+
 /** 머리 범위 글자 — "CS 4파트(A~D) · 이번 주" · "A파트 · 이번 주" · "홍길동(A) · 이번 주" */
 export function okrScopeLabel(scope: OkrScope | undefined, period: "week" | "month"): string {
   const when = period === "week" ? "이번 주" : "이번 달";
@@ -816,23 +912,25 @@ export function okrScopeLabel(scope: OkrScope | undefined, period: "week" | "mon
 }
 
 /**
- * 주 OKR 결과. scope 없음/ALL = A~D 전체(기존 그대로). 팀 = 그 파트만(파트 종합 → 없으면 팀원 중 가장 나쁜 것).
+ * 주 OKR 결과. scope 없음/ALL = A~D 전체. 팀 = 그 파트만. pct·byTeam = 팀원별 달성률 평균(미작성 0%, roster = 명단 — 없으면 보고자만),
+ * counts·missingTeams = 파트 판정 행(파트 종합 → 없으면 팀원 중 가장 나쁜 것, 종전).
  * member = 그 사람 member 행 판정만(missingTeams 는 비고, 판정 없으면 pct null).
  */
-export function okrWeekResult(w: OkrWeekFacts, weekId: string = w.id, scope?: OkrScope): OkrWeekResult {
+export function okrWeekResult(w: OkrWeekFacts, weekId: string = w.id, scope?: OkrScope, roster?: RosterMember[] | null): OkrWeekResult {
   if (scope?.member) {
     const rows = okrWeekMemberRows(w.goals, w.reports, weekId, scope.member, scope.team);
     const team = w.reports.find((r) => r.cycle_id === weekId && r.member === scope.member)?.team ?? (scope.team === "ALL" ? "" : scope.team);
     return { pct: achievementRate(rows), counts: judgmentCounts(rows), missingTeams: [], byTeam: team ? [{ team, pct: achievementRate(rows) }] : [] };
   }
   const teams = !scope || scope.team === "ALL" ? [...OKR_TEAMS] as string[] : [scope.team];
-  const per = teams.map((team) => ({ team, rows: okrWeekTeamRows(w.goals, w.reports, weekId, team) }));
+  // 판정 개수·미작성 팀은 파트 판정 행(종전), % 는 팀원별 달성률 평균(미작성 0%, 2026-10-26)
+  const per = teams.map((team) => ({ team, rows: okrWeekTeamRows(w.goals, w.reports, weekId, team), shares: okrMemberShares(w, team, roster, [weekId]) }));
   const all = per.flatMap((p) => p.rows);
   return {
-    pct: achievementRate(all),
+    pct: okrShareAverage(per.flatMap((p) => p.shares)),
     counts: judgmentCounts(all),
     missingTeams: per.filter((p) => !p.rows.some((x) => normalizeJudgment(x.judgment))).map((p) => p.team),
-    byTeam: per.map((p) => ({ team: p.team, pct: achievementRate(p.rows) })),
+    byTeam: per.map((p) => ({ team: p.team, pct: okrShareAverage(p.shares) })),
   };
 }
 

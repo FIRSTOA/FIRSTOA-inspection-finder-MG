@@ -2,7 +2,7 @@
  * 일정 담당자 여러 명(쉼표 목록) 공용 함수 — docs/tasks/schedule-multi-assignee.md
  */
 import { describe, expect, it } from "vitest";
-import { addedAssignees, formatAssignees, hasAssignee, joinAssignees, MAX_ASSIGNEES, parseAssignees, primaryAssignee } from "../src/assignees";
+import { addedAssignees, formatAssignees, hasAssignee, joinAssignees, MAX_ASSIGNEES, parseAssignees, primaryAssignee, titleAssigneeLabel } from "../src/assignees";
 
 describe("parseAssignees", () => {
   it("1명은 그대로 1개", () => {
@@ -31,8 +31,8 @@ describe("joinAssignees", () => {
     expect(joinAssignees(["이B", " 김A ", "이B"])).toBe("이B,김A");
   });
   it("최대 인원을 넘는 뒷사람은 버린다", () => {
-    expect(MAX_ASSIGNEES).toBe(3);
-    expect(joinAssignees(["a", "b", "c", "d"])).toBe("a,b,c");
+    expect(MAX_ASSIGNEES).toBeGreaterThanOrEqual(99);
+    expect(joinAssignees(["a", "b", "c", "d", "e"])).toBe("a,b,c,d,e");
     expect(joinAssignees(["a", "b", "c"], 2)).toBe("a,b");
   });
   it("아무도 없으면 빈 문자열(미배정)", () => {
@@ -67,6 +67,13 @@ describe("formatAssignees·primaryAssignee", () => {
     expect(formatAssignees("김A,이B")).toBe("김A·이B");
     expect(formatAssignees("김A,이B,박C", { short: true })).toBe("김A 외 2");
     expect(formatAssignees("")).toBe("");
+    expect(formatAssignees("김A,이B,박C,최D,정E", { short: true })).toBe("김A 외 4");
+  });
+  it("제목 머리: 3명까지 그대로, 4명 이상은 외 n명(저장값은 그대로)", () => {
+    expect(titleAssigneeLabel("김A")).toBe("김A");
+    expect(titleAssigneeLabel("김A,이B,박C")).toBe("김A,이B,박C");
+    expect(titleAssigneeLabel("김A,이B,박C,최D")).toBe("김A 외 3명");
+    expect(titleAssigneeLabel("")).toBe("");
   });
   it("대표는 첫 사람", () => {
     expect(primaryAssignee("이B,김A")).toBe("이B");

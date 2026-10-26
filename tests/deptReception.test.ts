@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEPT_FIELD_CHIPS, DEPT_SHEET_CATEGORY, aggregateVendor, ageDays, boardBuckets, buildDeptReceptionRow, buildDeptSheetPayload,
-  buildDeptTitle, defaultHandler, deptDupKey, deptListState, deptMissing, deptShort, isDeptType, isStaleRemote, normalizeRegion,
+  buildDeptTitle, DEPT_LABEL, defaultHandler, deptDupKey, deptListState, deptMissing, deptShort, isDeptType, isStaleRemote, normalizeRegion,
   scheduledOverdue, weekCompletionRate, type DeptReceptionInput,
 } from "../src/deptReception";
 
@@ -18,6 +18,8 @@ describe("부서 종류·상수", () => {
     expect(deptShort("IT")).toBe("IT");
     expect(DEPT_SHEET_CATEGORY.운영지원).toBeNull();
     expect(DEPT_SHEET_CATEGORY.영업팀).toBe("reception_sales");
+    expect(DEPT_LABEL.영업팀).toBe("전략영업"); // 표시만 — DB 값은 영업팀 그대로
+    expect(buildDeptReceptionRow(base).type).toBe("영업팀");
     expect(DEPT_SHEET_CATEGORY.경영지원).toBe("reception_mgmt");
   });
   it("접수분야 칩 수(영업·경영 13 + 기타, 운영 4)", () => {
@@ -73,7 +75,7 @@ describe("buildDeptReceptionRow", () => {
     expect(row.title).toBe("렌탈문의 · 복합기 한 대 추가 렌탈 문의");
     expect(row.symptom).toContain("견적 요청");
     expect(row.status).toBe("접수");
-    expect(row.report_text).toContain("[영업팀 접수]");
+    expect(row.report_text).toContain("[전략영업 접수]");
     expect(row.remote_meta).toEqual({
       handler: "이정현", via: "", outside: "외근요청", contract_kind: "", progress: "", handled: "", sheet_seq: "",
       sheet_state: "queued", schedule_date: "2026-10-25", calendar_id: "", kakao: "", vendor_code: "",

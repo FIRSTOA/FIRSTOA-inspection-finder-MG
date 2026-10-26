@@ -14,13 +14,15 @@ describe("홈 OKR % — 행의 주인(층)", () => {
   const common = [g(1), g(2)];
   const reports = [rep("A", "", [[1, "완료"], [2, "완료"]]), rep("B", "", [[1, "완료"], [2, "완료"]])];
 
+  // 2026-10-26 팀 % = 팀원별 평균 — 파트 종합(member '') 행은 % 에 안 든다. 그래서 1·2번 칸은 같은 판정을 팀원 한 명(갑·을) 행으로 준다
+  const memberReports = [rep("A", "갑", [[1, "완료"], [2, "완료"]]), rep("B", "을", [[1, "완료"], [2, "완료"]])];
   it("공통 행만 있으면 결과 불변", () => {
-    const r = okrWeekResult({ id: W, weeks: [], goals: common, reports });
+    const r = okrWeekResult({ id: W, weeks: [], goals: common, reports: memberReports });
     expect(r.byTeam).toEqual([{ team: "A", pct: 100 }, { team: "B", pct: 100 }, { team: "C", pct: null }, { team: "D", pct: null }]);
   });
   it("A 전용 행 판정은 A % 에만 들어가고 B 에는 안 들어간다", () => {
     const goals = [...common, g(101, { team: "A" })];
-    const rs = [rep("A", "", [[1, "완료"], [2, "완료"], [101, "미흡"]]), reports[1]];
+    const rs = [rep("A", "갑", [[1, "완료"], [2, "완료"], [101, "미흡"]]), memberReports[1]]; // 파트 종합 → 팀원 갑(2026-10-26 팀원 평균)
     const r = okrWeekResult({ id: W, weeks: [], goals, reports: rs });
     expect(r.byTeam.find((x) => x.team === "A")?.pct).toBe(67);
     expect(r.byTeam.find((x) => x.team === "B")?.pct).toBe(100);
