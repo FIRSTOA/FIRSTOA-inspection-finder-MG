@@ -37,7 +37,7 @@ export type KpiSourceStatus =
   | { status: "error"; at: number; error: string }
   | { status: "missing"; at: number; error: string };
 
-export type KpiUnhandledInfo = { sheetMode: boolean; notice: string; over90: number };
+export type KpiUnhandledInfo = { sheetMode: boolean; notice: string; over90: number; /** 접수일을 못 읽은 시트 행(칸 숫자 밖) */ noDate?: number };
 
 export type KpiBundle = {
   /** 진짜 오늘(kstDate) — anchor 를 줘도 바뀌지 않는다 */
@@ -96,7 +96,7 @@ export async function loadUnhandledRows(today: string = kstDate()): Promise<{ ro
     // 방금 [완료]·[보류]·[배정]한 줄(unhandledPending, 5분) — 원본(시트 60초 캐시·기입 37초)이 따라올 때까지 내 화면에서 먼저 반영. 전부 읽었을 때만 정리(prune)
     // 시트에 짝 없는 영업·경영 DB 접수(기입 전·시트 행 지워짐)는 남기고 '시트에 없음' 표시(2026-10-25 밤)
     const rows = markSheetMissing(mergeUnhandled(merged.db, tickets, today, merged.sheet), merged.sheetMissing);
-    return { rows: applyPending(rows, { prune: !partialError && !merged.notice }), info: { sheetMode: merged.sheetKinds.length > 0, notice: merged.notice, over90: merged.over90.length }, partialError };
+    return { rows: applyPending(rows, { prune: !partialError && !merged.notice }), info: { sheetMode: merged.sheetKinds.length > 0, notice: merged.notice, over90: merged.over90.length, noDate: merged.noDate.length }, partialError };
   }
   return { rows: applyPending(mergeUnhandled(dbRows, tickets, today), { prune: !partialError }), info: { sheetMode: false, notice: "", over90: 0 }, partialError };
 }

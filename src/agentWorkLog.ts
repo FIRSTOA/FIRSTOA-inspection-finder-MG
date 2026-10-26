@@ -3,6 +3,36 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-27",
+    "hash": "130210e4f5",
+    "agent": "developer",
+    "summary": "홈 재계약 KPI(워킨맵 G5÷G7제외) + OKR 달성률 팀원 평균(미작성 0%) + 자동 일정 지난 미완료 일정 옮김 + 일정 배정 인원 제한 해제 + 내 일정 순서 끌기·▲▼ + 영업팀→전략영업 표시"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "130210e4f5",
+    "agent": "debugger",
+    "summary": "홈 재계약 KPI(워킨맵 G5÷G7제외) + OKR 달성률 팀원 평균(미작성 0%) + 자동 일정 지난 미완료 일정 옮김 + 일정 배정 인원 제한 해제 + 내 일정 순서 끌기·▲▼ + 영업팀→전략영업 표시"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "130210e4f5",
+    "agent": "qa-checker",
+    "summary": "홈 재계약 KPI(워킨맵 G5÷G7제외) + OKR 달성률 팀원 평균(미작성 0%) + 자동 일정 지난 미완료 일정 옮김 + 일정 배정 인원 제한 해제 + 내 일정 순서 끌기·▲▼ + 영업팀→전략영업 표시"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "130210e4f5",
+    "agent": "field-deploy-check",
+    "summary": "홈 재계약 KPI(워킨맵 G5÷G7제외) + OKR 달성률 팀원 평균(미작성 0%) + 자동 일정 지난 미완료 일정 옮김 + 일정 배정 인원 제한 해제 + 내 일정 순서 끌기·▲▼ + 영업팀→전략영업 표시"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "130210e4f5",
+    "agent": "ops-monitor",
+    "summary": "홈 재계약 KPI(워킨맵 G5÷G7제외) + OKR 달성률 팀원 평균(미작성 0%) + 자동 일정 지난 미완료 일정 옮김 + 일정 배정 인원 제한 해제 + 내 일정 순서 끌기·▲▼ + 영업팀→전략영업 표시"
+  },
+  {
     "date": "2026-10-26",
     "hash": "33cb094804",
     "agent": "feature-planner",

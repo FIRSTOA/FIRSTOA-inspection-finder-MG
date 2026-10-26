@@ -2007,7 +2007,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
   const renewalLabelMonths = useMemo(() => {
     const tally = new Map<string, Map<number, number>>();
     for (const place of places) {
-      if (place.kind !== "renewal" || !place.label) continue;
+      if (place.kind !== "renewal" || !place.label || RENEWAL_LABEL_DESC[place.label]) continue; // 뜻이 정해진 라벨은 월을 세지 않는다
       const match = place.name.match(/^\s*(\d{2})(\d{2})\s*\//);
       const month = match ? Number(match[2]) : 0;
       if (month < 1 || month > 12) continue;
@@ -2027,7 +2027,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
     const k = kind && kind !== "ALL" ? kind : kindFilter !== "ALL" ? kindFilter : "";
     if (k === "quarter") return QUARTER_LABEL_DESC[code] || "";
     if (k === "monthly") return MONTHLY_LABEL_DESC[code] || "";
-    if (k === "renewal") return renewalLabelMonths[code] || RENEWAL_LABEL_DESC[code] || "";
+    if (k === "renewal") return RENEWAL_LABEL_DESC[code] || renewalLabelMonths[code] || ""; // 뜻이 정해진 G5 완료·G6 진행중·G7 전략영업·G12 이관이 우선(2026-10-27 사용자 "G5·G6·G7 이름도 바꿔야") — 월은 G1~G4 만
     return labelMeta(code).name;
   }, [kindFilter, renewalLabelMonths]);
 

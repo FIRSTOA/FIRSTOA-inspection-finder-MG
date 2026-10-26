@@ -69,6 +69,78 @@ export function sheetDate(yymm: unknown, md: unknown): string {
   return validYmd(y, m, d);
 }
 
+/** B열 "M월 d일"·"M/d" → [월, 일] (연도 없는 꼴만). 못 읽으면 null */
+const monthDayOf = (md: unknown): [number, number] | null => {
+  const b = String(md ?? "").trim();
+  if (/^\d{4}\s*[-./년]/.test(b)) return null;
+  const m = b.match(/^(\d{1,2})\s*[월/.-]\s*(\d{1,2})/);
+  if (!m) return null;
+  const mm = Number(m[1]);
+  const dd = Number(m[2]);
+  return mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 ? [mm, dd] : null;
+};
+
+/**
+ * C열 년월이 빈 행의 연도 추정(2026-10-27 경영지원접수: 사람이 넣은 행은 C열을 비우고 B열에 "10월 26일"만 적어 425행 날짜가 비었다).
+ * 시트는 아래가 최신이므로 아래 → 위로 걸으며 연도를 붙인다.
+ *  - 시작 = KST 올해·이번 달. 맨 아래(처음 만나는) 달이 이번 달보다 크면 작년.
+ *  - 위 행의 달이 아래 행보다 6 넘게 크면(1월 → 12월 경계) 연도 −1. 단 바로 위 행도 같은 쪽이어야(한 줄만 튄 순서 어긋남으로 연도가 밀리지 않게).
+ *  - 아래 행과 6달 넘게 차이 나는데 경계가 아닌 행(순서 어긋남)은 기준 달을 바꾸지 않는다.
+ *  - 날짜가 이미 있는 행(C열 있음 = 앱이 쓴 행)은 기준(연도·달)을 그 값으로 다시 맞춘다.
+ *  - 오늘(KST)보다 뒤 날짜는 버린다(""). C열 오타로 미래가 된 날짜(예 "9912" → 2099-12-30, 10-25 사본 9행)도 C열을 버리고 다시 추정한다.
+ * items[i].date 가 "" 이고 yymmEmpty 인 것, 또는 date 가 오늘 뒤인 것만 채운다. 순수 함수 — 고친 date 배열을 돌려준다.
+ */
+export function inferMissingYears(items: Array<{ date: string; md: string; yymmEmpty: boolean }>, now: Date = new Date()): string[] {
+  const out = items.map((it) => it.date);
+  const kst = new Date(now.getTime() + 9 * 3600_000);
+  const today = kst.toISOString().slice(0, 10);
+  let year = kst.getUTCFullYear();
+  let prev = kst.getUTCMonth() + 1;
+  let started = false;
+  const known = (i: number) => Boolean(items[i].date) && items[i].date <= today;
+  const monthAt = (i: number) => (known(i) ? Number(items[i].date.slice(5, 7)) : monthDayOf(items[i].md)?.[0] ?? 0);
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (known(i)) {
+      year = Number(it.date.slice(0, 4));
+      prev = Number(it.date.slice(5, 7));
+      started = true;
+      continue;
+    }
+    if (!it.yymmEmpty && !it.date) continue;
+    const md = monthDayOf(it.md);
+    if (!md) { out[i] = ""; continue; }
+    const [m, d] = md;
+    if (!started) {
+      if (m > prev) year -= 1;
+      prev = m;
+      started = true;
+    } else if (m - prev > 6) {
+      let above = 0;
+      for (let k = i - 1; k >= 0 && !above; k--) above = monthAt(k);
+      if (!above || above - prev > 6) { year -= 1; prev = m; }
+    } else if (prev - m <= 6) {
+      prev = m;
+    }
+    const ymd = validYmd(year, m, d);
+    out[i] = ymd && ymd <= today ? ymd : "";
+  }
+  return out;
+}
+
+// ── 전화번호 가림(2026-10-27: 공개 엣지 응답에 키맨·접수내용 속 고객 번호가 그대로 나갔다) ──
+// 휴대·유선(0으로 시작, 지역번호 2~3자리) → 가운데만 "****"(카톡 수집 _shared/kakao-parse.ts 휴대폰 가림과 같은 꼴: 010-****-5678),
+// 대표번호(15xx·16xx·18xx-xxxx) → 뒤 4자리 "****". 영문·숫자에 붙은 숫자열(기기 시리얼)·"숫자-" 뒤(계좌·사업자 번호 조각)는 건드리지 않는다.
+// 글자 뒤 하이픈은 가린다("케이웨이컴퍼니-010-…" 꼴, 2026-10-27 영업 시트 실측).
+const PHONE = /(?<![\dA-Za-z])(?<!\d-)(0\d{1,2})([-.\s]?)(\d{3,4})([-.\s]?)(\d{4})(?![\dA-Za-z])/g;
+const REP_PHONE = /(?<![\dA-Za-z-])(1[5-9]\d{2})-(\d{4})(?![\dA-Za-z-])/g;
+/** 글 속 전화번호 가림 */
+export function maskPhones(v: unknown): string {
+  return String(v ?? "")
+    .replace(PHONE, (_m, a: string, s1: string, _mid: string, s2: string, b: string) => `${a}${s1 || "-"}****${s2 || "-"}${b}`)
+    .replace(REP_PHONE, (_m, a: string) => `${a}-****`);
+}
+
 // ── 탭 배치(열 번호는 1부터) ─────────────────────────
 export type SheetLayout = {
   source: SheetSource;
@@ -176,11 +248,13 @@ export function headerError(layout: SheetLayout, header: string[]): string {
  * 읽은 값(범위 첫 행 = layout.firstRow) → 행 목록. 머리가 다르면 error 를 주고 행은 비운다(그 탭만 빠짐 — 조용히 틀리지 않게).
  * 마커 열이 모두 비면 행이 아니다(맨 끝 순번만 있는 빈 줄 제외).
  */
-export function parseSheetRows(layout: SheetLayout, values: string[][]): { rows: ParsedSheetRow[]; error: string } {
+export function parseSheetRows(layout: SheetLayout, values: string[][], now: Date = new Date()): { rows: ParsedSheetRow[]; error: string } {
   const header = values[layout.headerRow - layout.firstRow] || [];
   const headErr = headerError(layout, header);
   if (headErr) return { rows: [], error: headErr };
   const rows: ParsedSheetRow[] = [];
+  const dateIn: Array<{ date: string; md: string; yymmEmpty: boolean }> = [];
+  const txt = (row: string[], col: number | undefined) => maskPhones(cell(row, col));
   for (let i = layout.dataStart - layout.firstRow; i < values.length; i++) {
     const row = values[i] || [];
     if (!layout.markerCols.some((c) => cell(row, c))) continue;
@@ -193,18 +267,20 @@ export function parseSheetRows(layout: SheetLayout, values: string[][]): { rows:
       sheetRow: layout.firstRow + i,
       seq: cell(row, layout.seqCol),
       date: sheetDate(cell(row, layout.yymmCol), cell(row, layout.dateCol)),
-      author: cell(row, layout.authorCol),
-      handler: cell(row, layout.handlerCol),
-      state,
+      author: txt(row, layout.authorCol),
+      handler: txt(row, layout.handlerCol),
+      state: maskPhones(state),
       cls: sheetStateClass(state),
-      vendor: clip(cell(row, layout.vendorCol), 40),
-      field: clip(cell(row, layout.fieldCol), 30),
-      region: cell(row, layout.regionCol),
-      summary: clip(cell(row, layout.summaryCol), 40),
+      vendor: clip(txt(row, layout.vendorCol), 40),
+      field: clip(txt(row, layout.fieldCol), 30),
+      region: txt(row, layout.regionCol),
+      summary: clip(txt(row, layout.summaryCol), 40),
     });
-    const content = listContent(row[layout.summaryCol - 1] ?? "");
+    dateIn.push({ date: rows[rows.length - 1].date, md: cell(row, layout.dateCol), yymmEmpty: !squeeze(cell(row, layout.yymmCol)) });
+    const content = listContent(maskPhones(row[layout.summaryCol - 1] ?? ""));
     if (content) rows[rows.length - 1].content = content;
   }
+  inferMissingYears(dateIn, now).forEach((d, i) => { rows[i].date = d; });
   return { rows, error: "" };
 }
 
@@ -300,7 +376,7 @@ export function kstMonth(now: Date = new Date()): string {
 /** 칸 하나 최대 글자(접수내용·처리내용 포함) */
 export const DETAIL_TEXT_MAX = 4000;
 /** 돌려주지 않는 열(고객 전화번호 — 이 엣지는 공개 호출) */
-const PRIVATE_HEADER = /전화|연락처|휴대|핸드폰|폰번호|팩스|phone|tel/i;
+const PRIVATE_HEADER = /전화|연락처|휴대|핸드폰|폰번호|팩스|phone|tel/i; // 키맨 열은 이름이 쓸모 있어 남기고 번호만 maskPhones 로 가린다(2026-10-27)
 
 export type SheetCell = { label: string; value: string };
 export type SheetRowDetail = {
@@ -333,7 +409,7 @@ export function sheetRowDetail(layout: SheetLayout, header: string[], row: strin
     let label = headLabel(header[c - 1]);
     if (!label || PRIVATE_HEADER.test(label.replace(/\s/g, ""))) continue;
     if (c === layout.statusCol && layout.source !== "remote") label = "상태";
-    const value = keepText(row[c - 1]);
+    const value = maskPhones(keepText(row[c - 1]));
     if (!value) continue;
     const k = `${label}|${value}`;
     if (seen.has(k)) continue;
@@ -343,6 +419,6 @@ export function sheetRowDetail(layout: SheetLayout, header: string[], row: strin
   const state = cell(row, layout.statusCol);
   return {
     source: layout.source, sheetRow, seq: cell(row, layout.seqCol), state, cls: sheetStateClass(state), cells,
-    contentLabel: headLabel(header[layout.summaryCol - 1]) || "내용", content: keepText(row[layout.summaryCol - 1]),
+    contentLabel: headLabel(header[layout.summaryCol - 1]) || "내용", content: maskPhones(keepText(row[layout.summaryCol - 1])),
   };
 }

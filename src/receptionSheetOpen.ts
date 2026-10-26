@@ -14,6 +14,8 @@
  * - 운영지원·복합기 AS: 시트를 읽지 않는다 — DB 그대로.
  * - 시트(탭)를 못 읽으면 그 종류는 DB 만으로 보여 주고 안내 한 줄(숫자를 0으로 만들지 않는다).
  * - 기간(D1): 최근 90일만 칸 숫자에, 90일 넘은 시트 행은 over90 으로 따로.
+ * - 날짜 모름(2026-10-27): 엣지가 접수일을 끝내 못 읽은 시트 행은 칸 숫자에 넣지 않고 noDate 로 따로("날짜 모름 n" 칩).
+ *   예전엔 칸 안에 넣었는데, 경영지원 시트 C열(년월) 빈 행 425건이 2025년 것까지 전부 미처리 숫자에 들어갔다.
  */
 import { getConfig, invokeEdgeFunction } from "./supabase";
 import { ageDays } from "./deptReception";
@@ -123,10 +125,12 @@ type DbLike = { id: string; type: string; sheet_row?: number | null; remote_meta
 export type SheetMerge<T> = {
   /** 남길 DB 행 */
   db: T[];
-  /** 칸 숫자에 넣을 시트 행(최근 90일, 날짜 모르는 행 포함) */
+  /** 칸 숫자에 넣을 시트 행(최근 90일) */
   sheet: SheetOpenRow[];
   /** 90일 넘은 시트 행(따로 접어 둠) */
   over90: SheetOpenRow[];
+  /** 접수일을 못 읽은 시트 행(따로 접어 둠 — 칸 숫자 밖) */
+  noDate: SheetOpenRow[];
   /** 화면 안내 한 줄(없으면 "") */
   notice: string;
   /** 시트 기준으로 센 종류 */
@@ -145,7 +149,7 @@ export const SHEET_MISSING_HINT = "앱 접수는 열려 있는데 시트에 이 
  */
 export function mergeSheetAndDb<T extends DbLike>(db: T[], resp: SheetOpenResponse | null, today: string, error = "", days = SHEET_DAYS): SheetMerge<T> {
   if (!resp) {
-    return { db, sheet: [], over90: [], sheetKinds: [], sheetMissing: [], notice: `시트를 못 읽어 영업·경영·원격 숫자가 빠졌을 수 있음 — 앱 접수(DB) 기준으로 표시${error ? ` (${error})` : ""}` };
+    return { db, sheet: [], over90: [], noDate: [], sheetKinds: [], sheetMissing: [], notice: `시트를 못 읽어 영업·경영·원격 숫자가 빠졌을 수 있음 — 앱 접수(DB) 기준으로 표시${error ? ` (${error})` : ""}` };
   }
   const okSources = resp.okSources;
   const sheetKinds = okSources.flatMap((s) => SOURCE_KINDS[s]);
@@ -166,16 +170,18 @@ export function mergeSheetAndDb<T extends DbLike>(db: T[], resp: SheetOpenRespon
   });
   const sheet: SheetOpenRow[] = [];
   const over90: SheetOpenRow[] = [];
+  const noDate: SheetOpenRow[] = [];
   for (const row of resp.rows) {
     if (!okSources.includes(row.source)) continue;
-    if (row.date && ageDays(row.date, today) > days) over90.push(row);
+    if (!row.date) noDate.push(row);
+    else if (ageDays(row.date, today) > days) over90.push(row);
     else sheet.push(row);
   }
   const missing = (["sales", "mgmt", "remote"] as SheetSource[]).filter((s) => !okSources.includes(s));
   const notes: string[] = [];
   if (missing.length) notes.push(`시트를 못 읽어 ${missing.map((s) => SOURCE_NAME[s]).join("·")} 숫자는 앱 접수(DB) 기준`);
   if (resp.errors.length) notes.push(resp.errors.join(" / ").slice(0, 200));
-  return { db: keptDb, sheet, over90, sheetKinds, sheetMissing, notice: notes.join(" — ") };
+  return { db: keptDb, sheet, over90, noDate, sheetKinds, sheetMissing, notice: notes.join(" — ") };
 }
 
 /**

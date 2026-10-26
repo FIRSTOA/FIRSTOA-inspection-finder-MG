@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as front from "../src/receptionSheetState";
 import {
   healCandidates, linkRows, openRowsOf, parseSheetRows, receptionIdOfDupKey, SHEET_LAYOUTS, sheetDate, sheetStateClass,
-  syncedReceptionIds, isCancelState,
+  syncedReceptionIds, isCancelState, maskPhones, sheetRowDetail,
 } from "../supabase/functions/reception-sheet-open/state.ts";
 
 // 2026-10-22 실측 상태 값(설계안 4절)
@@ -118,5 +118,75 @@ describe("엣지 순수 로직", () => {
     expect(healCandidates([...rows, ...remoteRows], links)).toEqual([{ id: "rec-1", to: "완료" }, { id: "rem-1", to: "완료" }]);
     // 돌려주는 행: 미처리·보류만
     expect(openRowsOf(rows, links).map((r) => r.sheetRow)).toEqual([8, 9]);
+  });
+});
+
+// 2026-10-27 경영지원접수 실측: 사람이 넣은 행은 C열(년월)이 비고 B열에 "10월 26일"·"12/5" 만 → 425행 날짜가 비어
+// '90일 넘음'으로 접히지 않고 2025년 행까지 미처리 숫자에 들어갔다. 아래(최신) → 위로 연도를 붙인다.
+const NOW = new Date("2026-10-27T03:00:00Z"); // KST 2026-10-27 12:00
+function mgmtRow(cells: Record<number, string>): string[] {
+  const row = Array(26).fill("");
+  for (const [c, v] of Object.entries(cells)) row[Number(c) - 1] = v;
+  return row;
+}
+const mgmtValues = (rows: Array<Record<number, string>>): string[][] => [
+  mgmtRow({ 1: "-", 2: "날짜", 3: "년월", 5: "접수자", 7: "진행중/처리완료/보류/취소" }),
+  mgmtRow({}),
+  ...rows.map((r) => mgmtRow({ 5: "박민", ...r })),
+];
+const datesOf = (bs: Array<string | [string, string]>, now = NOW) =>
+  parseSheetRows(SHEET_LAYOUTS.mgmt, mgmtValues(bs.map((b) => (Array.isArray(b) ? { 2: b[0], 3: b[1] } : { 2: b }))), now).rows.map((r) => r.date);
+
+describe("경영지원 C열 빈 행 연도 추정", () => {
+  it("12월 → 1월 경계·'12/5'·앱 행(C열 있음)·맨 아래 10월 26일", () => {
+    expect(datesOf(["12/5", "12월 22일", "1월 5일", "7월 13일", ["10월 20일", "2610"], "10월 26일"]))
+      .toEqual(["2025-12-05", "2025-12-22", "2026-01-05", "2026-07-13", "2026-10-20", "2026-10-26"]);
+  });
+  it("두 해 걸친 시트(달마다 행이 있음): 2025-05 → 2026-10", () => {
+    const months = [5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const want = months.map((m, i) => `${i < 8 ? 2025 : 2026}-${String(m).padStart(2, "0")}-05`);
+    expect(datesOf(months.map((m) => `${m}월 5일`))).toEqual(want);
+  });
+  it("맨 아래 달이 이번 달보다 크면 작년, 오늘 뒤 날짜는 버림", () => {
+    expect(datesOf(["11월 3일"])).toEqual(["2025-11-03"]);
+    expect(datesOf(["10월 26일", "10월 30일"])).toEqual(["2026-10-26", ""]);
+  });
+  it("한 줄만 순서가 어긋나도 위 행 연도가 밀리지 않는다", () => {
+    expect(datesOf(["10월 1일", "3월 5일", "10월 10일"])).toEqual(["2026-10-01", "2026-03-05", "2026-10-10"]);
+    expect(datesOf(["2월 1일", "12월 3일", "2월 10일"])).toEqual(["2026-02-01", "", "2026-02-10"]);
+  });
+  it("C열 오타로 미래가 된 날짜(9912 → 2099)는 C열을 버리고 다시 추정", () => {
+    expect(datesOf([["12월 30일", "9912"], ["1월 5일", "2601"]])).toEqual(["2025-12-30", "2026-01-05"]);
+  });
+  it("읽을 수 없는 B열은 그대로 빈칸, C열이 있으면 기존 규칙", () => {
+    expect(datesOf(["접수", "10월 26일"])).toEqual(["", "2026-10-26"]);
+    expect(datesOf([["10월 20일", "26년"]])).toEqual([""]);
+  });
+});
+
+describe("전화번호 가림(공개 엣지 응답)", () => {
+  it("휴대·유선·대표번호는 가운데(대표번호는 뒤) 가림, 시리얼·금액·날짜는 그대로", () => {
+    expect(maskPhones("김담당대리 010-1234-5678")).toBe("김담당대리 010-****-5678");
+    expect(maskPhones("01012345678 / 02-123-4567 / 031 234 5678 / 070.1234.5678")).toBe("010-****-5678 / 02-****-4567 / 031 **** 5678 / 070.****.5678");
+    expect(maskPhones("대표 1588-1234")).toBe("대표 1588-****");
+    expect(maskPhones("가나컴퍼니-010-1234-5678 ID문의")).toBe("가나컴퍼니-010-****-5678 ID문의"); // 업체명에 하이픈으로 붙은 번호(영업 시트 실측 꼴)
+    for (const keep of ["0A6XBJKRC000B6B", "X0101234567", "₩ 59,000", "2026-10-26", "22454 22455", "순 7222,7351", "26.10.26~29.10.25"]) expect(maskPhones(keep)).toBe(keep);
+  });
+  it("목록 행: 업체·요약·내용 원문에 번호가 남지 않는다", () => {
+    const long = "재계약 요청\n담당 김담당대리 010-1234-5678\n메일 ys_bycon@naver.com 길게 길게 길게 길게 길게 길게";
+    const { rows } = parseSheetRows(SHEET_LAYOUTS.mgmt, mgmtValues([{ 2: "10월 26일", 16: "가나상사 02-123-4567", 25: long }]), NOW);
+    const json = JSON.stringify(rows);
+    expect(json).not.toMatch(/1234-5678|123-4567/);
+    expect(rows[0].vendor).toBe("가나상사 02-****-4567");
+    expect(rows[0].content).toContain("010-****-5678");
+  });
+  it("상세 한 행: 키맨 열은 이름은 남기고 번호만 가림, 전화 열은 통째로 뺌", () => {
+    const header = mgmtRow({ 1: "-", 2: "날짜", 7: "진행중/처리완료/보류/취소", 16: "업체명", 20: "키맨", 24: "전화번호", 25: "접수내용" });
+    const row = mgmtRow({ 1: "1781", 2: "10월 26일", 16: "민원119", 20: "010-9876-5432 박대표대표이사", 24: "02-555-1234", 25: "연락 031-777-8888" });
+    const d = sheetRowDetail(SHEET_LAYOUTS.mgmt, header, row, 1787);
+    expect(d.cells.find((c) => c.label === "키맨")?.value).toBe("010-****-5432 박대표대표이사");
+    expect(d.cells.some((c) => c.label === "전화번호")).toBe(false);
+    expect(d.content).toBe("연락 031-****-8888");
+    expect(JSON.stringify(d)).not.toMatch(/9876-5432|555-1234|777-8888/);
   });
 });

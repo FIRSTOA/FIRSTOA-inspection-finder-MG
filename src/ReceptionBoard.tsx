@@ -76,6 +76,8 @@ type Props = {
   sheetNotice?: string;
   /** 90일 넘은 시트 미처리 — 열마다 "90일 넘음 n" 칩으로 접어 둔다 */
   over90Rows?: ReceptionRow[];
+  /** 접수일을 못 읽은 시트 미처리 — 열마다 "날짜 모름 n" 칩으로 접어 둔다(칸 숫자 밖, 2026-10-27) */
+  noDateRows?: ReceptionRow[];
   /** 카드 윗줄(업체·분야)을 누르면 — 상세 팝업 열기(2026-10-25 밤, 홈 미처리와 같은 UnhandledDetail). 없으면 누를 수 없는 글 */
   onOpenRow?: (row: ReceptionRow) => void;
   /** 윗줄에 손을 올리면(마우스·터치 시작·포커스) — 팝업 본문 미리 읽기(2026-10-25 밤). 실패는 부르는 쪽이 무시 */
@@ -87,6 +89,7 @@ const STAT_COLS = ["접수", "진행중", "보류"] as const;
 const PAGE = 20;
 const SCHEDULE_KEY = "__schedule";
 const OLD_KEY = (t: string) => `__old:${t}`;
+const NODATE_KEY = (t: string) => `__nodate:${t}`;
 
 /** YYYY-MM-DD 두 날짜의 일수 차(UTC 기준이라 시간대 영향 없음). 파싱 실패면 0. */
 export function daysBetween(from: string, to: string): number {
@@ -115,7 +118,7 @@ function SheetBadge({ sheet, compact }: { sheet: SheetRowInfo; compact: boolean 
   );
 }
 
-export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, onOpenRow, onWarmRow }: Props) {
+export default function ReceptionBoard({ rows, today, onSelectType, renderActions, loading, error, todayCount, weekDoneRate, selectedType, deptEnabled = true, compact = false, scheduleRows, sheetMode = false, sheetNotice, over90Rows, noDateRows, onOpenRow, onWarmRow }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [sortOrder, setSortOrder] = useUnhandledSort(); // 오래된 순(기본)·최근 순 — 토글은 종류·물류·90일 묶음 머리 오른쪽(값은 하나, 홈과 공유)
   const [folded, setFolded] = useState<Record<string, boolean>>({}); // compact: 사용자가 직접 접거나 펼친 열(true=펼침)
@@ -232,25 +235,28 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     </div>
   );
 
-  // ---- 90일 넘은 시트 미처리: 칸 숫자 밖, 칩을 눌러야 펼친다(오래된 순, 20장씩) ----
-  const oldOf = (type: ReceptionType) => sortRows((over90Rows ?? []).filter((r) => r.type === type), pickReception);
+  // ---- 90일 넘은·날짜 모름 시트 미처리: 칸 숫자 밖, 칩을 눌러야 펼친다(오래된 순, 20장씩) ----
   const oldBody = (type: ReceptionType) => {
-    const old = oldOf(type);
+    const a = foldBody(type, over90Rows, OLD_KEY(type), "90일 넘음", "칸 숫자에 넣지 않은 오래된 시트 건입니다. 처리했으면 시트 상태를 바꿔 주세요.");
+    const b = foldBody(type, noDateRows, NODATE_KEY(type), "날짜 모름", "시트 접수일(B·C열)을 읽지 못해 칸 숫자에 넣지 않은 건입니다. 처리했으면 시트 상태를, 아니면 접수일을 고쳐 주세요.");
+    return a || b ? <>{a}{b}</> : null;
+  };
+  const foldBody = (type: ReceptionType, list: ReceptionRow[] | undefined, key: string, label: string, hint: string) => {
+    const old = sortRows((list ?? []).filter((r) => r.type === type), pickReception);
     if (!old.length) return null;
-    const key = OLD_KEY(type);
     const isOpen = Boolean(folded[key]);
     const shown = expanded[key] ? old : old.slice(0, PAGE);
     return (
       <div className={compact ? "border-t border-slate-100 px-3 py-1.5" : ""}>
         <div className="flex items-center justify-between gap-2">
         <button type="button" aria-expanded={isOpen} onClick={() => setFolded((f) => ({ ...f, [key]: !isOpen }))} className="inline-flex min-h-8 items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 text-[11px] font-black text-slate-600 transition hover:border-slate-400">
-          {isOpen ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}90일 넘음 <span className="tabular-nums">{old.length}</span>
+          {isOpen ? <ChevronDown size={12} aria-hidden /> : <ChevronRight size={12} aria-hidden />}{label} <span className="tabular-nums">{old.length}</span>
         </button>
         <span className="shrink-0"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} /></span>
         </div>
         {isOpen && (
           <>
-            <p className="mt-1 text-[11px] font-bold text-slate-500">칸 숫자에 넣지 않은 오래된 시트 건입니다. 처리했으면 시트 상태를 바꿔 주세요.</p>
+            <p className="mt-1 text-[11px] font-bold text-slate-500">{hint}</p>
             <ul className={compact ? "mt-1 divide-y divide-slate-100" : "mt-1 space-y-2"}>{shown.map(renderCard)}</ul>
             {old.length > shown.length && <button type="button" onClick={() => setExpanded((e) => ({ ...e, [key]: true }))} className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 bg-white text-[12px] font-black text-slate-600 transition hover:bg-slate-100">더 보기 {old.length - shown.length}</button>}
           </>

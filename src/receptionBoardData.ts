@@ -71,6 +71,8 @@ export type BoardData = {
   sheetNotice?: string;
   /** 90일 넘은 시트 미처리(칸 숫자 밖, "90일 넘음 n" 칩) */
   over90?: BoardRow[];
+  /** 접수일을 못 읽은 시트 미처리(칸 숫자 밖, "날짜 모름 n" 칩) */
+  noDate?: BoardRow[];
   /** 시트 완료로 DB 접수를 맞춘 건수(엣지 자가 치유, 스위치 켜졌을 때만) */
   sheetHealed?: number;
 };
@@ -218,6 +220,7 @@ export function applySheetToBoard(data: BoardData, sheet: SheetOpenResult, today
     sheetMode: merge.sheetKinds.length > 0,
     sheetNotice: merge.notice,
     over90: merge.over90.map(sheetToBoardRow),
+    noDate: merge.noDate.map(sheetToBoardRow),
     sheetHealed: sheet.data?.healed || 0,
   };
 }

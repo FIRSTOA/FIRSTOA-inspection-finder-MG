@@ -179,6 +179,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
         <p className="mt-1.5 text-[10.5px] font-bold text-slate-500">
           영업·경영·원격·IT 는 시트 상태 열 기준 · 최근 90일
           {info.over90 > 0 && <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-black text-slate-300">90일 넘음 {info.over90}</span>}
+          {(info.noDate ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-white/[0.06] px-2 py-0.5 font-black text-slate-300" title="시트 접수일을 읽지 못한 행 — 미처리 숫자에 넣지 않음">날짜 모름 {info.noDate}</span>}
         </p>
       )}
       <div className="mt-2 flex justify-end"><UnhandledSortToggle order={sortOrder} onChange={setSortOrder} dark /></div>

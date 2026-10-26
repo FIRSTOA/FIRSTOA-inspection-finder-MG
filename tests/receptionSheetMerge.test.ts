@@ -32,7 +32,7 @@ const resp: SheetOpenResponse = {
     sr({ sheetRow: 8, state: "진행중" }),
     sr({ sheetRow: 9, cls: "hold", state: "보류" }),
     sr({ sheetRow: 10, date: "2026-06-01" }), // 90일 넘음
-    sr({ sheetRow: 11, date: "" }), // 날짜 모름 → 칸 안
+    sr({ sheetRow: 11, date: "" }), // 날짜 모름 → 칸 밖 noDate(2026-10-27, 경영 C열 빈 행 425건이 숫자에 들어간 사건)
     sr({ source: "mgmt", kind: "경영지원", sheetRow: 20 }),
     sr({ source: "remote", kind: "IT", sheetRow: 7, region: "강남구" }),
     sr({ source: "remote", kind: "원격이관", sheetRow: 6, region: "부산", receptionId: "remote-linked" }),
@@ -49,8 +49,9 @@ describe("합치기 규칙", () => {
     const m = mergeSheetAndDb(db, resp, TODAY);
     expect(m.db.map((r) => r.id)).toEqual(["sales-queued", "sales-synced-meta", "ops-1", "copier-1", "remote-free"]);
     expect(m.sheetMissing).toEqual(["sales-queued", "sales-synced-meta"]);
-    expect(m.sheet.map((r) => `${r.source}:${r.sheetRow}`)).toEqual(["sales:8", "sales:9", "sales:11", "mgmt:20", "remote:7", "remote:6"]);
+    expect(m.sheet.map((r) => `${r.source}:${r.sheetRow}`)).toEqual(["sales:8", "sales:9", "mgmt:20", "remote:7", "remote:6"]);
     expect(m.over90.map((r) => r.sheetRow)).toEqual([10]);
+    expect(m.noDate.map((r) => r.sheetRow)).toEqual([11]);
     expect(m.notice).toBe("");
   });
 
@@ -128,6 +129,8 @@ describe("현황판·홈 연결", () => {
     expect(out.rows.find((r) => r.id === "sheet:sales:9")?.status).toBe("보류");
     expect(out.rows.find((r) => r.id === "sheet:sales:8")?.sheet).toMatchObject({ linked: false, sheetRow: 8 });
     expect(out.over90?.map((r) => r.id)).toEqual(["sheet:sales:10"]);
+    expect(out.noDate?.map((r) => r.id)).toEqual(["sheet:sales:11"]);
+    expect(ids).not.toContain("sheet:sales:11");
     expect(out.weekDoneRate).toBe(50);
   });
 
@@ -137,7 +140,7 @@ describe("현황판·홈 연결", () => {
     const sheetRows = rows.filter((r) => r.key.startsWith("s:"));
     expect(sheetRows.find((r) => r.key === "s:remote:6")?.team).toBe("E");
     expect(sheetRows.find((r) => r.key === "s:mgmt:20")?.team).toBe("경영");
-    expect(sheetRows.filter((r) => r.team === "영업")).toHaveLength(3);
+    expect(sheetRows.filter((r) => r.team === "영업")).toHaveLength(2); // 8·9 (11 = 날짜 모름 → 칸 밖)
     const c = countUnhandledTabs(rows);
     const teamSum = (["A", "B", "C", "D", "E", "경영", "운영", "영업"] as const).reduce((n, t) => n + c[t], 0);
     expect(teamSum).toBe(c["전체"]);

@@ -24,6 +24,17 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(off).toContain("CS 접수"); // 2026-10-25 표시 이름만 CS 접수(값은 복합기 AS 그대로)
   });
 
+  it("현황판: 날짜 모름 시트 건은 칸 숫자 밖 '날짜 모름 n' 칩(90일 넘음 칩 옆, 2026-10-27)", () => {
+    const mg = (id: string, receipt_date: string): ReceptionRow => ({ id, type: "경영지원", vendor: "민원119", field: "계약서요청", author: "김수인", handler: "", status: "접수", receipt_date });
+    const html = renderToString(createElement(ReceptionBoard, {
+      rows, today: "2026-10-27", onSelectType: noop, renderActions: () => null, sheetMode: true, // 경영지원 열은 비어 있음
+      over90Rows: [mg("o1", "2025-07-22")], noDateRows: [mg("n1", ""), mg("n2", "")],
+    }));
+    expect(html).toMatch(/90일 넘음(<!-- -->)? <span[^>]*>1</);
+    expect(html).toMatch(/날짜 모름(<!-- -->)? <span[^>]*>2</);
+    expect(html).not.toContain("민원119"); // 접힌 채(칩을 눌러야 펼침)
+  });
+
   it("현황판: 경과일·빈 열·상태 3종", () => {
     expect(daysBetween("2026-10-05", "2026-10-19")).toBe(14);
     const html = renderToString(createElement(ReceptionBoard, { rows, today: "2026-10-19", onSelectType: noop, renderActions: () => "단추" }));

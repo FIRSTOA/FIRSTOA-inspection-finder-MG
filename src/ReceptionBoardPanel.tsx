@@ -153,6 +153,11 @@ export default function ReceptionBoardPanel({ onSelectType, onChanged, author, o
     const list = pendingVer >= 0 ? applyBoardPending(data.over90) : data.over90;
     return deptEnabled ? list : list.filter((r) => !isDeptType(r.type));
   }, [data, deptEnabled, pendingVer]);
+  const noDateRows = useMemo(() => {
+    if (!data?.noDate) return undefined;
+    const list = pendingVer >= 0 ? applyBoardPending(data.noDate) : data.noDate;
+    return deptEnabled ? list : list.filter((r) => !isDeptType(r.type));
+  }, [data, deptEnabled, pendingVer]);
 
   const unhandledOf = (row: ReceptionRow): UnhandledRow | null => csByKey.get(row.id) ?? boardRowToUnhandled(row, today);
   const renderActions = (row: ReceptionRow): ReactNode => {
@@ -196,6 +201,7 @@ export default function ReceptionBoardPanel({ onSelectType, onChanged, author, o
       sheetMode={Boolean(data?.sheetMode)}
       sheetNotice={notice || undefined}
       over90Rows={over90Rows}
+      noDateRows={noDateRows}
       onOpenRow={openDetail}
       onWarmRow={warmDetail}
     />
