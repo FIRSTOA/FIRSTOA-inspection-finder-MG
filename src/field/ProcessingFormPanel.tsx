@@ -3,7 +3,7 @@
  * App.tsx에서 글자 그대로 옮겨 왔고(2026-10-24, docs/tasks/field-form-tidy.md S5), S6 에서 겉모양만 "한 장의 종이"로 정돈했다
  * (카드 1장 + 구분선 + 글자 라벨, 칸마다 회색 바탕 없음). 값·콜백·보내는 글자는 그대로다.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UI } from "../ui/card";
 import { authorLocked } from "../sso";
 import ReportTypeSelector from "../ReportTypeSelector";
@@ -16,6 +16,7 @@ import { GradeCustomInput, GradeSelect } from "./GradeSelect";
 import { applyGradeEverywhere, gradeChoice, hasGradeLine, readGradeLine, type GradeSetters } from "./gradeField";
 import { DURATION_STEPS, HANTIN_OPTIONS, HOUR_OPTIONS, LEVEL_OPTIONS, MINUTE_OPTIONS, PARKING_OPTIONS, SHIP_OPTIONS, TONER_COLORS, type DeviceInfo, type PerItemForm, type SharedForm } from "./fieldFormModel";
 import { Field, FieldFormCard, FieldFormHead, FieldSection, FIELD_TEXTAREA } from "./FieldFormShell.view";
+import { nowRoundedDown5, suggestDuration } from "./arrivalTime";
 
 export type ProcessingFormPanelProps = {
   itemForm: PerItemForm;
@@ -78,6 +79,31 @@ export function ProcessingFormPanel({
   const showGrade = grade !== undefined && !!onGrade;
   const gradeCustomOpen = showGrade && grade !== null && (gradeCustomPicked || gradeChoice(grade).custom);
   const [selfExpanded, setSelfExpanded] = useState(false);
+  // 소요 시간 "지금까지 n분" 제안 — 1분마다 지금 시각을 다시 읽는다(F-1, 2026-10-27)
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const durationSuggest = shared.duration ? null : suggestDuration(shared.arrivalHour, shared.arrivalMinute, now);
+  // [지금] — App 의 setSharedF 는 그 렌더의 sharedForm 으로 미리보기 '도착시간' 줄을 고치므로, 한 번에 두 번 부르면
+  // 두 번째가 옛 시를 쓴다. 시를 먼저 넣고, 새 시가 그려진 뒤(아래 effect) 분을 넣는다.
+  const pendingArrivalMinute = useRef<{ hour: string; minute: string } | null>(null);
+  useEffect(() => {
+    const p = pendingArrivalMinute.current;
+    if (!p || shared.arrivalHour !== p.hour) return;
+    pendingArrivalMinute.current = null;
+    if (shared.arrivalMinute !== p.minute) setSharedF("arrivalMinute", p.minute);
+  });
+  const fillArrivalNow = () => {
+    const t = nowRoundedDown5(new Date());
+    if (shared.arrivalHour === t.hour) {
+      if (shared.arrivalMinute !== t.minute) setSharedF("arrivalMinute", t.minute);
+      return;
+    }
+    pendingArrivalMinute.current = t;
+    setSharedF("arrivalHour", t.hour);
+  };
   const chip = (active: boolean) => ({ background: active ? accent : "#F1F5F9", color: active ? "white" : "#334155" });
 
   return (
@@ -358,23 +384,36 @@ export function ProcessingFormPanel({
               {shared.arrivalHour}:{shared.arrivalMinute || "00"}
             </span>
           ) : null}>
-            <div className="grid grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] gap-1.5">
-              <NumSelect
-                value={shared.arrivalHour}
-                onChange={(v) => setSharedF("arrivalHour", v)}
-                options={HOUR_OPTIONS}
-                placeholder="시"
-                accent={accent}
-                suffix="시"
-              />
-              <NumSelect
-                value={shared.arrivalMinute}
-                onChange={(v) => setSharedF("arrivalMinute", v)}
-                options={MINUTE_OPTIONS}
-                placeholder="분"
-                accent={accent}
-                suffix="분"
-              />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="min-w-0 flex-[0.7_1_4.5rem]">
+                <NumSelect
+                  value={shared.arrivalHour}
+                  onChange={(v) => setSharedF("arrivalHour", v)}
+                  options={HOUR_OPTIONS}
+                  placeholder="시"
+                  accent={accent}
+                  suffix="시"
+                />
+              </div>
+              <div className="min-w-0 flex-[1.3_1_6rem]">
+                <NumSelect
+                  value={shared.arrivalMinute}
+                  onChange={(v) => setSharedF("arrivalMinute", v)}
+                  options={MINUTE_OPTIONS}
+                  placeholder="분"
+                  accent={accent}
+                  suffix="분"
+                />
+              </div>
+              {/* [지금] — 누른 시각(KST)을 5분 단위로 내려 시·분에 넣는다. 값이 있어도 덮어쓴다 */}
+              <button
+                type="button"
+                onClick={fillArrivalNow}
+                className="min-h-11 shrink-0 rounded-lg border bg-white px-3 text-sm font-bold transition active:scale-95"
+                style={{ color: accent, borderColor: accent }}
+              >
+                지금
+              </button>
             </div>
           </Field>
 
@@ -394,6 +433,18 @@ export function ProcessingFormPanel({
               )}
             </span>
           }>
+            {durationSuggest !== null && (
+              <div className="mb-1.5 flex flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setSharedF("duration", String(durationSuggest))}
+                  className="min-h-11 max-w-full rounded-lg border bg-white px-3 text-left text-sm font-semibold text-slate-700 transition active:scale-95"
+                  style={{ borderColor: accent }}
+                >
+                  도착 {shared.arrivalHour}:{shared.arrivalMinute || "00"} → <span className="font-bold" style={{ color: accent }}>지금까지 {durationSuggest}분</span> 넣기
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-5 gap-1.5">
               {DURATION_STEPS.map((step: number) => (
                 <button

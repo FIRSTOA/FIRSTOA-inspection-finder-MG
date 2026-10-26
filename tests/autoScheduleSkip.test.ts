@@ -12,10 +12,10 @@ const JAMSIL = "주식회사 휴메이크 짐잠실전 위메이크홀딩스, �
 const TODAY = "2026-10-26";
 
 const rows: OpenCheckTicket[] = [
-  { id: "as-1792578813110-4k7du", vendor: SEOKCHON, date: "2026-10-22", assignee: "한왕주", team: "C" },
-  { id: "as-1792578813187-e134y", vendor: "권's독한과학학원", date: "2026-10-22", assignee: "한왕주", team: "C" },
-  { id: "as-1793008126158-e5bkq", vendor: "주식회사 비에이컴퍼니", date: "2026-10-27", assignee: "한왕주", team: "C" },
-  { id: "as-empty", vendor: "", date: "2026-10-05", assignee: "누구", team: "C" },
+  { id: "as-1792578813110-4k7du", vendor: SEOKCHON, date: "2026-10-22", assignee: "한왕주", team: "C", source: "autoplan" },
+  { id: "as-1792578813187-e134y", vendor: "권's독한과학학원", date: "2026-10-22", assignee: "한왕주", team: "C", source: "autoplan" },
+  { id: "as-1793008126158-e5bkq", vendor: "주식회사 비에이컴퍼니", date: "2026-10-27", assignee: "한왕주", team: "C", source: "autoplan" },
+  { id: "as-empty", vendor: "", date: "2026-10-05", assignee: "누구", team: "C", source: "autoplan" },
 ];
 
 describe("등록 방식 판단", () => {
@@ -25,17 +25,36 @@ describe("등록 방식 판단", () => {
   });
   it("오늘·미래 열린 행이 있으면 → 건너뜀(skip)", () => {
     expect(planRegister("주식회사 비에이컴퍼니", indexOpenChecks(rows), TODAY)).toEqual({ kind: "skip", open: rows[2] });
-    const sameDay = indexOpenChecks([{ id: "x", vendor: "에스아이피홀딩스", date: TODAY, assignee: "한왕주" }]);
+    const sameDay = indexOpenChecks([{ id: "x", vendor: "에스아이피홀딩스", date: TODAY, assignee: "한왕주", source: "autoplan" }]);
     expect(planRegister("에스아이피홀딩스", sameDay, TODAY).kind).toBe("skip");
   });
   it("지난 행과 미래 행이 같이 있으면 미래 행 기준으로 건너뜀(같은 달 두 번 만들지 않음)", () => {
-    const both = indexOpenChecks([rows[0], { id: "f", vendor: SEOKCHON, date: "2026-10-29", assignee: "이민구" }]);
+    const both = indexOpenChecks([rows[0], { id: "f", vendor: SEOKCHON, date: "2026-10-29", assignee: "이민구", source: "workin" }]);
     expect(planRegister(SEOKCHON, both, TODAY)).toMatchObject({ kind: "skip", open: { id: "f" } });
   });
   it("둘 다 없으면 → 새로 만듦(new) — 휴메이크 다른 지점(잠실)·에스아이피홀딩스는 안 걸린다", () => {
     const index = indexOpenChecks(rows);
     expect(planRegister(JAMSIL, index, TODAY).kind).toBe("new");
     expect(planRegister("에스아이피홀딩스", index, TODAY).kind).toBe("new");
+  });
+  it("source 가 빈 문자열·null·naver 인 확인용 표시 행은 같은 업체여도 영향 없음 → 새로 만듦", () => {
+    const marks: OpenCheckTicket[] = [
+      { id: "m1", vendor: SEOKCHON, date: "2026-10-22", assignee: "누구", source: "" },
+      { id: "m2", vendor: SEOKCHON, date: "2026-10-29", assignee: "누구", source: null },
+      { id: "m3", vendor: SEOKCHON, date: "2026-10-30", assignee: "누구", source: "naver" },
+      { id: "m4", vendor: SEOKCHON, date: "2026-10-31", assignee: "누구" },
+    ];
+    const index = indexOpenChecks(marks);
+    expect(index.size).toBe(0);
+    expect(planRegister(SEOKCHON, index, TODAY)).toEqual({ kind: "new" });
+  });
+  it("확인용 표시가 섞여 있어도 autoplan 지난 행은 옮김, workin·manual 행도 대상", () => {
+    const mixed = indexOpenChecks([{ id: "m1", vendor: SEOKCHON, date: "2026-10-29", source: "" }, rows[0]]);
+    expect(planRegister(SEOKCHON, mixed, TODAY)).toEqual({ kind: "move", open: rows[0] });
+    for (const source of ["workin", "manual"]) {
+      const idx = indexOpenChecks([{ id: "w", vendor: "에스아이피홀딩스", date: "2026-10-28", source }]);
+      expect(planRegister("에스아이피홀딩스", idx, TODAY).kind).toBe("skip");
+    }
   });
   it("빈 업체명 일정은 색인하지 않는다", () => {
     expect(indexOpenChecks(rows).has("")).toBe(false);
@@ -62,14 +81,14 @@ describe("옮김 = 같은 id 행 upsert(새 행 없음)", () => {
 });
 
 describe("안내 문구", () => {
-  it("옮김: 「업체」 10/22 미완료 일정을 10/27로 옮김(담당 한왕주→이민구)", () => {
-    const text = moveNotice([{ name: SEOKCHON, from: rows[0], date: "2026-10-27", assignee: "이민구" }]);
-    expect(text).toContain(`「${SEOKCHON}」 10/22 미완료 일정을 10/27로 옮김(담당 한왕주→이민구)`);
+  it("옮김: 「업체」 자동 일정이 만든 10/22 미완료 일정을 10/27로 옮김(담당 한왕주→이민구)", () => {
+    const text = moveNotice([{ name: SEOKCHON, from: rows[0], date: "2026-10-27", assignee: "이민구", source: "workin" }]);
+    expect(text).toContain(`「${SEOKCHON}」 자동 일정이 만든 10/22 미완료 일정을 10/27로 옮김(담당 한왕주→이민구)`);
     expect(moveNotice([{ name: "권's독한과학학원", from: rows[1], date: "2026-10-27", assignee: "한왕주" }])).toContain("(담당 한왕주)");
   });
   it("건너뜀: 「」로 감싸고 날짜·담당을 알려준다", () => {
     const text = skipNotice([{ name: "주식회사 비에이컴퍼니", open: rows[2] }], TODAY);
-    expect(text).toContain("「주식회사 비에이컴퍼니」 이미 10/27 한왕주 점검 일정 있음(예정)");
+    expect(text).toContain("「주식회사 비에이컴퍼니」 이미 자동 일정이 만든 10/27 한왕주 점검 일정 있음(예정)");
     expect(skipNotice([], TODAY)).toBe("");
     expect(moveNotice([])).toBe("");
   });

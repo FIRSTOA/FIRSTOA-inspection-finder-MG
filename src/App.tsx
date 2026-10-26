@@ -8,7 +8,7 @@ import CopierExpansionForm, { EMPTY_COPIER_EXPANSION_FORM, buildCopierExpansionT
 import CategoryForm from "./CategoryForm";
 import { buildCatText, emptyCatForm } from "./categoryForms";
 import { searchIconLabel } from "./fieldSearchIcon";
-import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, vendorMatchKey , extractCompanyForTemplate} from "./ids";
+import { fieldTicketVendor, historyCoreName, logisticsTicketInfo,  extractCompanyForTemplate} from "./ids";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { ToastHost } from "./toast";
 import { authorLocked, getSsoSession, ssoRequiredCached } from "./sso";
@@ -33,6 +33,7 @@ import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus, sendServiceReception } from "./api";
 import { checkSendRooms } from "./api";
 import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
+import { findTicketToFinish } from "./field/ticketMatchOffer"; import { sameVendorBranch } from "./field/ticketMatch"; // 전송 뒤 일정 맞춤(2026-10-27)
 import { normalizeLogisticsKind, saveActivityEvent, teamForAuthor, type ActivityKind } from "./operations";
 
 // 이미지 파일을 긴 변 maxDim 이하로 축소해 dataURL(JPEG)로. (전송량·비용 절감)
@@ -3841,7 +3842,7 @@ export default function App() {
     if (picked.self) await handleSendAll("자가", undefined, true);
     if (picked.parts) await handleSendAll("부품", undefined, true);
   };
-  const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string; matched?: boolean } | null>(null);
+  const [ticketDonePrompt, setTicketDonePrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string; matched?: boolean; detail?: string } | null>(null);
   const praiseSubmitRef = useRef<(() => void) | null>(null); // 칭찬 폼 제출 — 미리보기 버튼줄 [보내기]가 호출
   const [praiseReady, setPraiseReady] = useState(false);
   const [ticketDeferPrompt, setTicketDeferPrompt] = useState<{ id: string; receptionId: string; vendor: string; sentText?: string } | null>(null);
@@ -4508,7 +4509,7 @@ export default function App() {
     // 대신 팝업에 왜 떴는지·[그대로 두기]가 있다는 설명을 붙였다.
     // 일정리스트에서 넘어온 건은 위에서 이미 물었으니 중복으로 묻지 않는다.
     if (res.ok && kind === "normal" && !pendingAsTicketRef.current) {
-      void offerTicketMatchAfterSend(target);
+      void offerTicketMatchAfterSend(target, destination);
     }
     if (res.ok && kind === "normal" && !["inspection", "blank-report", "logistics", "replacement", "praise"].includes(mode)) {
       resetAfterSend();
@@ -4767,57 +4768,9 @@ export default function App() {
   const appendTicketNote = (existing: unknown, formText: string) =>
     `${String(existing || "").trim() ? `${String(existing).trim()}\n\n` : ""}[${kstDate()} 전송 양식]\n${formText}`;
 
-  // 복붙 전송(일정 연결 없음) → 일정리스트에서 같은 업체의 미완료 AS 일정을 찾아 완료 처리를 제안.
-  // 자동 완료는 안 한다(다른 건일 수 있음) — 정확히 1건일 때만 물어보고, 여러 건이면 안내만.
-  // manual: 매칭이 없을 때도 결과 토스트를 띄우는 옵션 (전송 후 자동 호출은 조용히 — 현재 호출부는 자동 경로만)
-  const offerTicketMatchAfterSend = async (formText: string, opts: { manual?: boolean } = {}) => {
-    try {
-      const vendorLine = extractVendorFromText(formText);
-      const core = historyCoreName(vendorLine) || vendorLine.trim();
-      const key = vendorMatchKey(core);
-      if (!key || key.length < 2) { if (opts.manual) showToast("양식에서 업체명을 읽지 못했어요 — 업체명 줄을 확인해 주세요", "error"); return; }
-      // KST 자정 경계(00~09시) 보정 — UTC 그대로 자르면 하루 어긋난다
-      const from = new Date(Date.now() + 9 * 3600000 - 14 * 86400000).toISOString().slice(0, 10);
-      const until = new Date(Date.now() + 9 * 3600000 + 2 * 86400000).toISOString().slice(0, 10);
-      const statusList = ["접수", "배정", "익일"].map(encodeURIComponent).join(",");
-      const typeList = ["AS", "익일AS"].map(encodeURIComponent).join(",");
-      const rows = await selectRows<Record<string, unknown>>("as_tickets",
-        `select=id,vendor,date,team,status,scheduleType,receptionId,serial,asset&date=gte.${from}&date=lte.${until}&status=in.(${statusList})&scheduleType=in.(${typeList})&limit=200`).catch(() => []);
-      // 양식의 기번·자산번호 — 있으면 업체명보다 확실한 열쇠다
-      const idsInForm = new Set(
-        Array.from(String(formText).matchAll(/(?:시리얼넘버|자산기번|기번|자산번호)\s*:?\s*([A-Za-z0-9-]{5,})/g))
-          .map((m) => m[1].replace(/[^0-9A-Za-z]/g, "").toUpperCase())
-          .filter((v) => v.length >= 5),
-      );
-      const nameMatches = rows.filter((row) => {
-        const cleanVendor = fieldTicketVendor(String(row.vendor || "")).vendor;
-        const rowKey = vendorMatchKey(historyCoreName(cleanVendor) || cleanVendor);
-        if (rowKey.length < 3 || key.length < 3) return false;
-        if (rowKey === key) return true;
-        // 부분일치는 양쪽이 5자 이상일 때만 — "한국"·"주식" 같은 짧은 키가 엉뚱한 업체를 잡는다
-        return rowKey.length >= 5 && key.length >= 5 && (rowKey.includes(key) || key.includes(rowKey));
-      });
-      const idMatches = idsInForm.size
-        ? rows.filter((row) => {
-            const rowIds = [String(row.serial || ""), String(row.asset || "")]
-              .map((v) => v.replace(/[^0-9A-Za-z]/g, "").toUpperCase()).filter((v) => v.length >= 5);
-            return rowIds.some((v) => idsInForm.has(v));
-          })
-        : [];
-      // 기번이 맞는 건이 있으면 그것만 본다 (한 업체에 여러 대여도 정확히 그 기기)
-      const matches = idMatches.length ? idMatches : nameMatches;
-      if (matches.length === 1) {
-        const matchRow = matches[0];
-        setTicketDonePrompt({
-          id: String(matchRow.id), receptionId: String(matchRow.receptionId || ""),
-          vendor: String(matchRow.vendor || ""), sentText: formText, matched: true,
-        });
-      } else if (matches.length > 1) {
-        showToast(`일정리스트에 이 업체 미완료 일정이 ${matches.length}건 있어요 — 일정리스트에서 완료 처리해 주세요`, "warning", { duration: 7000 });
-      } else if (opts.manual) {
-        showToast(`일정리스트에 "${core}"의 미완료 AS 일정이 없어요 (최근 2주~내일)`, "warning");
-      }
-    } catch { /* 매칭은 부가 기능 — 실패해도 전송 흐름에 영향 없음 */ }
+  // 복붙 전송(일정 연결 없음) → 같은 업체·같은 지점·같은 종류의 미완료 일정을 찾아 정리를 제안. 규칙·고르기 창은 src/field/ticketMatch.ts·ticketMatchOffer.tsx
+  const offerTicketMatchAfterSend = async (formText: string, destination?: SendDestination) => {
+    const hit = await findTicketToFinish({ formText, destination, mode, author, today: kstDate() }); if (hit) setTicketDonePrompt({ ...hit, sentText: formText, matched: true });
   };
 
   const finishTicket = async (ticket: { id: string; receptionId: string; sentText?: string }, patch: Record<string, unknown>, receptionStatus: string, deferReason = "") => {
@@ -4908,10 +4861,7 @@ export default function App() {
       const monthEnd = `${today.slice(0, 7)}-31`;
       const rows = await selectRows<Record<string, unknown>>("as_tickets",
         `select=*&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent("매월점검")}&date=gte.${monthStart}&date=lte.${monthEnd}&status=neq.${encodeURIComponent("완료")}`);
-      const matched = rows.filter((row) => {
-        const rowKey = matchVendor(String(row["vendor"] || ""));
-        return rowKey.length >= 3 && (rowKey.includes(vendorKey) || vendorKey.includes(rowKey));
-      });
+      const matched = rows.filter((row) => sameVendorBranch(String(row["vendor"] || ""), vendor)); // 같은 지점만 — 이름 포함 비교는 체인 다른 지점(디쉐어 김포사우점→디쉐어)을 닫았다(2026-10-27)
       for (const row of matched) {
         await updateRows("as_tickets", `id=eq.${encodeURIComponent(String(row["id"]))}`, {
           status: "완료",
@@ -5365,7 +5315,7 @@ export default function App() {
                 <b>✓ 완료</b> → 일정 완료 + 네이버 일정이 팀 완료 캘린더로 이동·완료 체크<br />
                 <b>→ 익일로</b> → 방금 보낸 양식은 그대로 두고, 사유를 <b>두 번째 메시지</b>로 같은 AS방에 보냅니다. 네이버 일정은 날짜가 옮겨지고 양식+사유가 기록됩니다
                 </>}
-                {ticketDonePrompt.matched && <><br /><span className="font-semibold text-emerald-700">방금 보낸 양식과 같은 업체의 미완료 일정이라 묻는 것 — 관계없는 일정이면 [그대로 두기]</span></>}
+                {ticketDonePrompt.matched && <><br /><span className="font-semibold text-emerald-700">방금 보낸 양식과 같은 업체의 미완료 일정이라 묻는 것 — 관계없는 일정이면 [그대로 두기]</span>{ticketDonePrompt.detail && <><br /><span className="font-black text-slate-900">정리할 일정: {ticketDonePrompt.detail}</span></>}</>}
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => { const t = ticketDonePrompt; setTicketDonePrompt(null); setPendingTicket(null); void finishTicket(t, { status: "완료" }, "완료"); }} className="rounded-full bg-blue-600 py-3 text-sm font-black text-white">✓ 완료</button>

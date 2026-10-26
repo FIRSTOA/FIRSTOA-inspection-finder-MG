@@ -73,6 +73,10 @@ describe("CategoryForm 날짜 칸", () => {
     expect(renderToString(createElement(CategoryForm, props("recontract", emptyCatForm("recontract"))))).toContain("날짜 고르기");
     expect(renderToString(createElement(CategoryForm, props("recontract", { ...emptyCatForm("recontract"), 다음확인일: "2026-10-29" })))).toContain("10/29(목)");
   });
+  it("재계약 다음 확인일은 '필수' 표시(날짜만, 2026-10-27)", () => {
+    expect(renderToString(createElement(CategoryForm, props("recontract", emptyCatForm("recontract"))))).toContain("필수");
+    expect(renderToString(createElement(CategoryForm, props("bulman", emptyCatForm("bulman"))))).not.toContain("필수");
+  });
   it("재계약 옛 글자값은 그 글자를 그대로 보여 줌", () => {
     expect(renderToString(createElement(CategoryForm, props("recontract", { ...emptyCatForm("recontract"), 다음확인일: "차주 중" })))).toContain("차주 중");
   });

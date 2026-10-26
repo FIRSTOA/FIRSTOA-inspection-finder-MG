@@ -3,7 +3,7 @@
  *  - buildCatText: 폼 → 카톡 전송 텍스트(■ 양식)
  */
 import { GRADE_OPTIONS, REGION_OPTIONS } from "./formOptions";
-import { formatYmdKo } from "./recontractSchedule";
+import { formatYmdKo, isYmd } from "./recontractSchedule";
 import { DATE_TEXT_COLUMNS, normalizeDateKeep, type DateNormOptions } from "./dateNorm";
 
 export type FieldType = "text" | "textarea" | "select" | "date"; // date: 값은 YYYY-MM-DD(글자값도 허용 — [미정·글로 쓰기])
@@ -127,6 +127,20 @@ export function emptyCatForm(schemaKey: string): Record<string, string> {
   const o: Record<string, string> = {};
   if (s) for (const sec of s.sections) for (const f of sec.fields) o[f.key] = "";
   return o;
+}
+
+/**
+ * 날짜로만 받는 칸(2026-10-27 사용자 "무조건 날짜로") — 재계약 다음확인일.
+ * 이 칸은 [미정·글로 쓰기] 비상구가 없고, 비어 있거나 날짜가 아니면 보내기를 막는다.
+ */
+export function isStrictDateKey(schemaKey: string, key: string): boolean {
+  return schemaKey === "recontract" && key === "다음확인일";
+}
+
+/** 보내기 전 막을 이유(빈 문자열이면 통과). */
+export function categoryFormBlock(schemaKey: string, form: Record<string, string>): string {
+  if (schemaKey === "recontract" && !isYmd(String(form?.["다음확인일"] || "").trim())) return "다음 확인일을 고르세요";
+  return "";
 }
 
 /** 이 양식의 날짜 칸인가(글자 칸이라도 이름이 날짜 칸이면 — 계약종료일·방문일·입력일·약속일·다음확인일, src/dateNorm.ts) */

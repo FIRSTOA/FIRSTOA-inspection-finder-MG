@@ -6,19 +6,25 @@
  *  - 지난 날짜(date < 오늘)의 열린 행 → 새로 만들지 않고 그 행을 고른 날짜·등록자·팀으로 옮긴다(move)
  *  - 오늘·미래에 이미 열린 행 → 건너뛴다(skip) — 같은 날 같은 업체 포함
  *  - 없으면 새로 만든다(new)
+ * 색인·옮김 대상은 자동 일정 화면이 만든 행(source autoplan/manual/workin)만.
  * 안내 문구는 업체명을 「」로 감싼다 — "…위메이크홀딩스, 주식회사 휴메이크"처럼 이름 속 쉼표가 목록 구분과 섞이지 않게.
  */
 import { vendorMatchKey } from "./ids";
 
-export type OpenCheckTicket = { id: string; vendor: string; date: string; assignee?: string | null; team?: string | null };
+export type OpenCheckTicket = { id: string; vendor: string; date: string; assignee?: string | null; team?: string | null; source?: string | null };
 export type SkippedPick = { name: string; open: OpenCheckTicket };
 export type MovedPick = { name: string; from: OpenCheckTicket; date: string; assignee: string };
 export type RegisterPlan = { kind: "new" } | { kind: "skip"; open: OpenCheckTicket } | { kind: "move"; open: OpenCheckTicket };
+
+/** 자동 일정 화면이 만든 행의 source — 그 밖(빈 문자열=웹 캘린더 '확인용 표시', naver 등)은 관리 대상이 아니라 건너뛰지도 옮기지도 않는다(2026-10-27 사용자 결정) */
+export const AUTO_SCHEDULE_SOURCES = ["autoplan", "manual", "workin"] as const;
+export const isAutoScheduleRow = (row: { source?: string | null }) => (AUTO_SCHEDULE_SOURCES as readonly string[]).includes(String(row.source ?? ""));
 
 /** 업체 비교키 → 그 달 열린 점검 일정들(날짜순). vendorOf 는 원본 vendor 에서 업체명을 꺼낸다 */
 export function indexOpenChecks(rows: OpenCheckTicket[], vendorOf: (raw: string) => string = (v) => v): Map<string, OpenCheckTicket[]> {
   const map = new Map<string, OpenCheckTicket[]>();
   for (const row of rows) {
+    if (!isAutoScheduleRow(row)) continue; // 확인용 표시 등은 색인 제외
     const key = vendorMatchKey(vendorOf(row.vendor) || row.vendor);
     if (!key) continue; // 빈 키끼리 엉뚱하게 겹치지 않게
     const list = map.get(key) || [];
@@ -65,13 +71,13 @@ export function moveNotice(moved: MovedPick[]): string {
   if (!moved.length) return "";
   return `지난 미완료 일정 ${moved.length}곳은 옮김 — ${moved.map(({ name, from, date, assignee }) => {
     const before = who(from.assignee);
-    return `「${name}」 ${md(from.date)} 미완료 일정을 ${md(date)}로 옮김(담당 ${before === assignee ? assignee : `${before}→${assignee}`})`;
+    return `「${name}」 자동 일정이 만든 ${md(from.date)} 미완료 일정을 ${md(date)}로 옮김(담당 ${before === assignee ? assignee : `${before}→${assignee}`})`;
   }).join(" / ")}`;
 }
 
 /** 건너뜀 안내 — 업체마다: 「업체」 이미 10/27 한왕주 점검 일정 있음(예정) */
 export function skipNotice(skipped: SkippedPick[], today: string): string {
   if (!skipped.length) return "";
-  const lines = skipped.map(({ name, open }) => `「${name}」 이미 ${md(open.date)} ${who(open.assignee)} 점검 일정 있음(${open.date === today ? "오늘" : "예정"})`);
+  const lines = skipped.map(({ name, open }) => `「${name}」 이미 자동 일정이 만든 ${md(open.date)} ${who(open.assignee)} 점검 일정 있음(${open.date === today ? "오늘" : "예정"})`);
   return `새로 만들지 않은 ${skipped.length}곳 — ${lines.join(" / ")}. 같은 달에 같은 곳을 두 번 만들지 않습니다 — 날짜·담당을 바꾸려면 일정리스트에서 그 날짜의 일정을 고치세요.`;
 }

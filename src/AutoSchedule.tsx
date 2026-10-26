@@ -308,7 +308,7 @@ export default function AutoSchedule({ author }: { author: string }) {
       // 단 지난 날짜의 미완료 행은 어디서도 안 보이는 행이라 건너뛰지 않고 고른 날짜로 옮긴다(2026-10-26, src/autoScheduleSkip.ts)
       const monthStart = `${date.slice(0, 7)}-01`;
       const monthEnd = `${date.slice(0, 7)}-31`;
-      const openRows = await selectRows<OpenCheckTicket>("as_tickets", `select=id,vendor,date,assignee,team&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent("매월점검")}&status=neq.${encodeURIComponent("완료")}&date=gte.${monthStart}&date=lte.${monthEnd}&limit=500`).catch(() => [] as OpenCheckTicket[]);
+      const openRows = await selectRows<OpenCheckTicket>("as_tickets", `select=id,vendor,date,assignee,team,source&source=in.(autoplan,manual,workin)&${encodeURIComponent("scheduleType")}=eq.${encodeURIComponent("매월점검")}&status=neq.${encodeURIComponent("완료")}&date=gte.${monthStart}&date=lte.${monthEnd}&limit=500`).catch(() => [] as OpenCheckTicket[]);
       const openByKey = indexOpenChecks(openRows, (v) => fieldTicketVendor(v).vendor);
       const skipped: SkippedPick[] = [];
       const moved: MovedPick[] = [];

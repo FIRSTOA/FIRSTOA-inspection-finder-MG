@@ -9,7 +9,8 @@ import { CheckCircle2, CircleAlert, Info, X } from "lucide-react";
  * 어느 컴포넌트에서든 notify()로 부를 수 있게 모듈 함수로 둔다.
  */
 export type ToastKind = "success" | "error" | "info";
-type Toast = { id: number; message: string; kind: ToastKind };
+export type ToastAction = { label: string; onClick: () => void };
+type Toast = { id: number; message: string; kind: ToastKind; action?: ToastAction };
 
 let seq = 0;
 let listeners: Array<(toasts: Toast[]) => void> = [];
@@ -19,17 +20,18 @@ function emit() {
   listeners.forEach((listener) => listener([...items]));
 }
 
-export function notify(message: string, kind: ToastKind = "info") {
+/** opts.action: 알림 안 단추 1개(예: [취소]) — 누르면 알림을 닫고 실행. opts.ms: 보이는 시간(기본 성공 3.5초·오류 7초). */
+export function notify(message: string, kind: ToastKind = "info", opts: { action?: ToastAction; ms?: number } = {}) {
   const text = String(message || "").trim();
   if (!text) return;
-  const toast: Toast = { id: ++seq, message: text, kind };
+  const toast: Toast = { id: ++seq, message: text, kind, action: opts.action };
   items = [...items.slice(-3), toast];   // 4개까지만 쌓는다
   emit();
   // 오류는 읽을 시간이 더 필요하다
   window.setTimeout(() => {
     items = items.filter((item) => item.id !== toast.id);
     emit();
-  }, kind === "error" ? 7000 : 3500);
+  }, opts.ms ?? (kind === "error" ? 7000 : 3500));
 }
 
 export function ToastHost() {
@@ -51,6 +53,11 @@ export function ToastHost() {
             className={`pointer-events-auto flex w-full max-w-md items-start gap-2 rounded-xl border px-4 py-3 text-[13px] font-bold shadow-[0_10px_30px_rgba(15,23,42,0.16)] ${tone}`}>
             <Icon size={17} className="mt-0.5 shrink-0" />
             <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">{toast.message}</span>
+            {toast.action && (
+              <button type="button"
+                onClick={() => { const run = toast.action?.onClick; items = items.filter((item) => item.id !== toast.id); emit(); run?.(); }}
+                className="shrink-0 rounded-lg border border-current px-2.5 py-1 text-xs font-black">{toast.action.label}</button>
+            )}
             <button type="button" aria-label="닫기"
               onClick={() => { items = items.filter((item) => item.id !== toast.id); emit(); }}
               className="shrink-0 rounded-full p-0.5 opacity-50 transition hover:opacity-100"><X size={15} /></button>

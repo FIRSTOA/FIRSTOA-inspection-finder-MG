@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-27",
+    "hash": "3e1bf17057",
+    "agent": "feature-planner",
+    "summary": "공개 엣지 고객 전화번호 가림 + 경영지원 시트 날짜 연도 추정·\"날짜 모름\" 묶음(미처리 426→180) + 워킨맵 재계약 G5·G6·G7 뜻 + 내 일정 지도 안내서(실제 캡처)"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "3e1bf17057",
+    "agent": "debugger",
+    "summary": "공개 엣지 고객 전화번호 가림 + 경영지원 시트 날짜 연도 추정·\"날짜 모름\" 묶음(미처리 426→180) + 워킨맵 재계약 G5·G6·G7 뜻 + 내 일정 지도 안내서(실제 캡처)"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "3e1bf17057",
+    "agent": "field-deploy-check",
+    "summary": "공개 엣지 고객 전화번호 가림 + 경영지원 시트 날짜 연도 추정·\"날짜 모름\" 묶음(미처리 426→180) + 워킨맵 재계약 G5·G6·G7 뜻 + 내 일정 지도 안내서(실제 캡처)"
+  },
+  {
+    "date": "2026-10-27",
     "hash": "130210e4f5",
     "agent": "developer",
     "summary": "홈 재계약 KPI(워킨맵 G5÷G7제외) + OKR 달성률 팀원 평균(미작성 0%) + 자동 일정 지난 미완료 일정 옮김 + 일정 배정 인원 제한 해제 + 내 일정 순서 끌기·▲▼ + 영업팀→전략영업 표시"

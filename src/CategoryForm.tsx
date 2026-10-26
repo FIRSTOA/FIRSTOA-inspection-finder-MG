@@ -2,17 +2,33 @@
  *  - [점검/AS 불러오기]: 작성자·업체명·지역·키맨 가져옴(키맨 다중→드롭다운).
  *  - 작성자는 author 상태 사용. 나머지는 form 상태.
  */
-import { useEffect, useState, type FocusEvent } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type FocusEvent } from "react";
 import { createPortal } from "react-dom";
 import { useAuthorBook } from "./authors";
 import { authorLocked } from "./sso";
-import { CATEGORY_SCHEMAS, isCatDateKey, type FieldDef } from "./categoryForms";
+import { CATEGORY_SCHEMAS, isCatDateKey, isStrictDateKey, type FieldDef } from "./categoryForms";
 import { kstYear, normalizeDateKeep } from "./dateNorm";
 import DatePickSheet from "./DatePickSheet";
 import RecontractScheduleSheet from "./RecontractScheduleSheet";
 import { onCategorySent } from "./categorySentEvent";
-import { formatYmdShort, isYmd, readScheduleOffer, shouldOfferSchedule, type ScheduleOffer } from "./recontractSchedule";
+import { clearScheduleOffer, formatYmdShort, isYmd, readScheduleOffer, shouldOfferSchedule, type ScheduleOffer } from "./recontractSchedule";
+import { AUTO_UNDO_MS, autoCreatedMessage, autoCreateRecontractSchedule, cancelRecontractSchedule } from "./recontractAutoSchedule";
+import { leaseAddressOf } from "./api";
+import { notify } from "./toast";
 import { kstDate } from "./visits";
+
+type SheetState = { offer: ScheduleOffer; initial?: ComponentProps<typeof RecontractScheduleSheet>["initial"] };
+
+/** 자동으로 만든 재계약 일정 [취소] — 일정리스트 삭제 + 네이버 삭제. 실패는 알림으로 알린다. */
+async function undoAutoSchedule(ticketId: string) {
+  try {
+    const r = await cancelRecontractSchedule(ticketId);
+    if (r.naverError) notify(`일정리스트·캘린더에서는 지웠습니다. 네이버 삭제는 실패했으니 네이버 캘린더에서 직접 지워 주세요 (${r.naverError})`, "error");
+    else notify("재계약 확인 일정을 지웠습니다", "success");
+  } catch (e) {
+    notify(`일정 삭제 실패 — 일정리스트에서 직접 지워 주세요 (${(e as Error).message || "네트워크 오류"})`, "error");
+  }
+}
 
 type Keyman = { label: string; name: string; phone: string };
 type LoadResult = { grade: string; company: string; region: string; keymen: Keyman[]; author: string };
@@ -71,13 +87,37 @@ ${src === "inspection" ? "점검" : "AS"} 탭의 업체: ${incoming}
 export default function CategoryForm({ schemaKey, form, setForm, author, setAuthor, onLoad, onError }: Props) {
   const [keymen, setKeymen] = useState<Keyman[]>([]);
   const { authors, book } = useAuthorBook();
-  // 날짜 칸(재계약 다음확인일): 시트로 고르기, [미정·글로 쓰기]면 글자 입력 칸으로
+  // 날짜 칸: 시트로 고르기, [미정·글로 쓰기]면 글자 입력 칸으로 — 재계약 다음확인일은 날짜만(비상구 없음, 2026-10-27)
   const [picking, setPicking] = useState("");
   const [textKeys, setTextKeys] = useState<Record<string, boolean>>({});
-  // 재계약 보낸 뒤 "다음 확인일로 일정 만들까요?" — api.ts 저장 성공 신호(창 이벤트) + 기기에 남은 제안(24시간)
-  const [offer, setOffer] = useState<ScheduleOffer | null>(() => readScheduleOffer());
+  // 재계약 보낸 뒤 다음 확인일 일정 — 보내기 성공 신호(창 이벤트)를 받으면 바로 만든다(2026-10-27).
+  // 창(RecontractScheduleSheet)은 같은 업체 열린 일정이 있을 때·자동 실패·테스트 모드·기기에 남은 제안(24시간)일 때만 뜬다.
+  const [sheet, setSheet] = useState<SheetState | null>(() => { const o = readScheduleOffer(); return o ? { offer: o } : null; });
+  const peopleRef = useRef({ book, authors });
+  useEffect(() => { peopleRef.current = { book, authors }; }, [book, authors]);
+  const runningRef = useRef(new Set<string>());
   useEffect(() => onCategorySent((d) => {
-    if (shouldOfferSchedule(d)) setOffer({ dupKey: d.dupKey, form: { ...d.form }, author: d.author, text: d.text, testMode: d.testMode, at: Date.now() });
+    if (!shouldOfferSchedule(d)) return;
+    const offer: ScheduleOffer = { dupKey: d.dupKey, form: { ...d.form }, author: d.author, text: d.text, testMode: d.testMode, at: Date.now() };
+    if (d.testMode) { setSheet({ offer }); return; } // 테스트 모드는 예전처럼 창으로 묻는다
+    if (runningRef.current.has(offer.dupKey)) return;
+    runningRef.current.add(offer.dupKey);
+    const { book: b, authors: names } = peopleRef.current;
+    void autoCreateRecontractSchedule(offer, { today: kstDate(), book: b, names, findAddress: leaseAddressOf, writtenOn: kstDate(new Date(offer.at)) })
+      .then((r) => {
+        if (r.kind === "skip") return;
+        if (r.kind === "sheet") { setSheet({ offer }); return; }
+        if (r.kind === "duplicate") { setSheet({ offer, initial: { phase: "dup", duplicates: r.existing } }); return; }
+        if (r.kind === "failed") {
+          notify(`일정 자동 만들기 실패 — 창에서 확인해 주세요 (${r.error})`, "error");
+          setSheet({ offer });
+          return;
+        }
+        clearScheduleOffer(offer.dupKey); // 일정은 저장됨 — 다음 진입 때 다시 묻지 않는다
+        notify(autoCreatedMessage(r.date, r.naver), "success", { ms: AUTO_UNDO_MS, action: { label: "취소", onClick: () => void undoAutoSchedule(r.ticketId) } });
+        if (r.naver === "failed" && r.naverJob) setSheet({ offer, initial: { phase: "naverFailed", naverJob: r.naverJob, naverError: r.naverError || "" } });
+      })
+      .finally(() => { runningRef.current.delete(offer.dupKey); });
   }), []);
   const schema = CATEGORY_SCHEMAS[schemaKey];
   if (!schema) return null;
@@ -119,10 +159,11 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
     }
     if (f.type === "date") {
       const v = String(form[f.key] || "");
-      const asText = textKeys[f.key];
+      const strict = isStrictDateKey(schemaKey, f.key);
+      const asText = !strict && textKeys[f.key];
       return (
         <div key={f.key} className="block">
-          <span className="text-xs font-medium text-slate-500">{f.label}</span>
+          <span className="text-xs font-medium text-slate-500">{f.label}{strict && <span className="ml-1 text-rose-500">필수</span>}</span>
           {asText ? (
             <div className="mt-0.5 flex gap-2">
               <input value={v} onChange={(e) => set(f.key, e.target.value)} onBlur={(e) => { const n = normalizeDateKeep(e.target.value, { baseYear: kstYear() }); if (n !== e.target.value) set(f.key, n); }} placeholder="예: 차주 중" autoFocus
@@ -203,12 +244,12 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
         <DatePickSheet title={schema.sections.flatMap((sec) => sec.fields).find((f) => f.key === picking)?.label || "날짜 고르기"}
           subtitle={String(form["업체명"] || "") || undefined} value={String(form[picking] || "")} today={kstDate()}
           onPick={(ymd) => { set(picking, ymd); setPicking(""); }}
-          onText={() => { setTextKeys({ ...textKeys, [picking]: true }); setPicking(""); }}
+          onText={isStrictDateKey(schemaKey, picking) ? undefined : () => { setTextKeys({ ...textKeys, [picking]: true }); setPicking(""); }}
           onClose={() => setPicking("")} />,
         document.body,
       )}
-      {offer && schemaKey === "recontract" && typeof document !== "undefined" && createPortal(
-        <RecontractScheduleSheet key={offer.dupKey} offer={offer} book={book} names={authors} onDone={() => setOffer(null)} />,
+      {sheet && schemaKey === "recontract" && typeof document !== "undefined" && createPortal(
+        <RecontractScheduleSheet key={`${sheet.offer.dupKey}:${sheet.initial?.phase || "form"}`} offer={sheet.offer} initial={sheet.initial} book={book} names={authors} onDone={() => setSheet(null)} />,
         document.body,
       )}
     </div>

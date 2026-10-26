@@ -20,9 +20,11 @@ type Props = {
   book: Partial<Record<string, string[]>>;
   names: string[];
   onDone: () => void;
+  /** 자동 만들기(CategoryForm) 뒤에 열 때 — 같은 업체 열린 일정이 있으면 "dup", 네이버만 실패면 "naverFailed" 로 바로 연다 */
+  initial?: { phase: "dup"; duplicates: OpenRecontractTicket[] } | { phase: "naverFailed"; naverJob: NaverJob; naverError: string };
 };
 
-export default function RecontractScheduleSheet({ offer, book, names, onDone }: Props) {
+export default function RecontractScheduleSheet({ offer, book, names, onDone, initial }: Props) {
   const today = kstDate();
   const vendor = vendorOf(offer.form);
   const writtenOn = kstDate(new Date(offer.at));
@@ -32,11 +34,11 @@ export default function RecontractScheduleSheet({ offer, book, names, onDone }: 
   const [address, setAddress] = useState("");
   const [noteEdit, setNoteEdit] = useState<string | null>(null); // null = 기본 문장(날짜 바꾸면 같이 바뀜)
   const [naverOn, setNaverOn] = useState<boolean | null>(null);
-  const [phase, setPhase] = useState<ScheduleSheetPhase>("form");
+  const [phase, setPhase] = useState<ScheduleSheetPhase>(initial?.phase || "form");
   const [busy, setBusy] = useState(false);
-  const [dups, setDups] = useState<OpenRecontractTicket[]>([]);
-  const [naverJob, setNaverJob] = useState<NaverJob | null>(null);
-  const [naverError, setNaverError] = useState("");
+  const [dups, setDups] = useState<OpenRecontractTicket[]>(initial?.phase === "dup" ? initial.duplicates : []);
+  const [naverJob, setNaverJob] = useState<NaverJob | null>(initial?.phase === "naverFailed" ? initial.naverJob : null);
+  const [naverError, setNaverError] = useState(initial?.phase === "naverFailed" ? initial.naverError : "");
 
   const note = noteEdit ?? buildRecontractSummary(offer.form, offer.author, date, offer.text, writtenOn);
 

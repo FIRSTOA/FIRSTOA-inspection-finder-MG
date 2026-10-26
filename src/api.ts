@@ -13,7 +13,7 @@ import { enqueueFieldSheetSyncJob, enqueueOutbox, getConfig, getRoomMap, insertR
 import type { PcFormState } from "./PcForm";
 import type { CopierExpansionFormState } from "./CopierExpansionForm";
 import type { ContactChangeFormState } from "./contactChange";
-import { CATEGORY_SCHEMAS } from "./categoryForms";
+import { CATEGORY_SCHEMAS, categoryFormBlock } from "./categoryForms";
 import { emitCategorySent } from "./categorySentEvent";
 import { normRegion } from "./region";
 import { normalizeId as normId, vendorMatchKey, vendorNameCore } from "./ids";
@@ -1057,6 +1057,8 @@ export async function sendCategoryForm(schemaKey: string, form: Record<string, s
     const regionKey = fields.find((f) => f.fill === "region")?.key;
     const vendor = String((companyKey && form[companyKey]) || "").trim();
     if (!vendor) return { ok: false, error: "업체명을 입력하세요." };
+    const block = categoryFormBlock(schemaKey, form); // 재계약 다음 확인일 필수(2026-10-27) — 저장·카톡 전에 막는다
+    if (block) return { ok: false, error: block };
 
     const row: Record<string, unknown> = {};
     for (const f of fields) row[f.key] = f.fill === "author" ? author : (form[f.key] || "");
