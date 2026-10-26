@@ -17,6 +17,10 @@ r"""
   · 파일 이름 칸에는 클립보드 붙여넣기만(창 메시지로 글 넣기 금지 — 규칙 6). 붙여 넣은 뒤 클립보드를 비운다.
   · 같은 이름 파일이 있으면 덮어쓰지 않는다(미리 건너뛰고, 그래도 덮어쓰기 확인창이 뜨면 Esc).
   · Ctrl+A/F/E 를 쓰지 않는다. 파일 이름 칸 전체 선택은 End → Shift+Home 으로 한다(표준 Edit 칸에서만).
+  · 천천히, 한 번에 한 방(2026-10-27 사용자 실측: 큰 방은 기다려야 대화가 다 불러와지고, 여러 방을 한꺼번에 열면 튕긴다).
+    방마다 창을 앞으로 → 불러오기 대기 10초 + 카톡 응답 확인(없으면 5초 간격 최대 60초) → Ctrl+S → 저장 창(최대 15초)
+    → 파일 크기가 10초 동안 안 변할 때까지(최대 180초) → 방 사이 20초 → 다음 방. 전체 상한 60분(새 방을 시작하지 않는 기준).
+    조정: FIRSTOA_KAKAO_EXPORT_LOAD_WAIT · _DIALOG_WAIT · _GAP · _LIMIT (초). 동시에 두 개 안 돈다(뮤텍스 Local\FIRSTOA-KakaoExport).
 
 사용법 (노트북 D6110 에서만 — 데스크톱에서 돌리지 않는다)
   python tools\kakao-pc\export_rooms.py --probe --room "방이름"     기본. Ctrl+S 뒤 뜨는 창만 기록하고 Esc (저장 안 함)
@@ -41,9 +45,31 @@ DIALOG_CLASS = "#32770"  # 윈도 표준 대화 상자(다른 이름으로 저�
 # 저장 창 제목 — 노트북 probe 로 확인 전엔 추정값. 다르면 환경 변수 FIRSTOA_KAKAO_SAVE_TITLE 에 실제 제목(일부)을 넣는다
 SAVE_TITLES = ("다른 이름으로 저장", "save as", "대화 내용 저장", "대화내용 저장")
 PROBE_WAIT = 1.5   # 초 — Ctrl+S 뒤 창을 기다리는 시간(probe)
-EXPORT_WAIT = 3.0  # 초 — 실제 저장 때는 조금 넉넉히
-ROOM_GAP = 3.0     # 방 사이 텀
 MAX_FAILS = 3      # 실패 3번이면 그날은 중단
+
+
+def env_seconds(name: str, default: float, lo: float = 0.0, hi: float = 3600.0) -> float:
+    """환경 변수의 초 값 — 비었거나 숫자가 아니면 기본값, 범위 밖이면 lo~hi 로 자른다"""
+    try:
+        v = float(str(os.environ.get(name, "")).strip())
+    except ValueError:
+        return default
+    if v != v:  # NaN
+        return default
+    return max(lo, min(hi, v))
+
+
+# 2026-10-27 사용자 실측: "방마다 데이터가 커서 버벅이고, 조금 기다려야 전체 대화가 불러와진다. 한 번에 여러 방을 열면 분명히 튕긴다.
+# 한 방을 천천히 끝내고 다음 방." → 불러오기 대기·저장 완료(파일 크기 멈춤) 확인·방 사이 텀을 넉넉히, 한 번에 한 방만.
+LOAD_WAIT = env_seconds("FIRSTOA_KAKAO_EXPORT_LOAD_WAIT", 10.0, 0, 300)  # 창을 앞으로 가져온 뒤 Ctrl+S 전 대기(대화 불러오기)
+RESPOND_MAX = 60.0       # 카톡 응답 없음이면 최대 이만큼 더 기다린다
+RESPOND_EVERY = 5.0      # 그 사이 재확인 간격
+EXPORT_WAIT = env_seconds("FIRSTOA_KAKAO_EXPORT_DIALOG_WAIT", 15.0, 3, 120)  # Ctrl+S 뒤 저장 창이 뜨기를 기다리는 시간(옛 3초)
+SETTLE_STABLE = 10.0     # 저장 뒤 파일 크기가 이만큼 안 변해야 "쓰기 끝"
+SETTLE_MAX = 180.0       # 저장 뒤 파일 확정까지 최대 대기
+ROOM_GAP = env_seconds("FIRSTOA_KAKAO_EXPORT_GAP", 20.0, 3, 600)  # 방 사이 텀(옛 3초)
+RUN_LIMIT = env_seconds("FIRSTOA_KAKAO_EXPORT_LIMIT", 3600.0, 60, 4 * 3600)  # 전체 상한 60분(옛 8분) — 실행기가 별도 프로세스로 띄워 심박은 계속 찍힌다(2026-10-27)
+EXPORT_MUTEX = "Local\\FIRSTOA-KakaoExport"  # 한 번에 하나만 — worker.py 도 이 이름으로 "내보내기 중"을 안다
 # 수집 표가 없을 때(404)·비었을 때 room_map 폴백으로 거르는 업무 종류 — 마감·부품·자가(토너)·칭찬 등은 수집 대상이 아니다(2026-10-24 설계)
 DEFAULT_CATEGORIES = ("점검", "AS", "물류", "미수", "불만", "재계약")
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -107,6 +133,33 @@ def pick_collect_rooms(rows: list, categories: list | None = None) -> list:
     return out
 
 
+def size_settled(samples: list, stable_secs: float = SETTLE_STABLE) -> bool:
+    """[(시각, 크기)] — 크기가 0보다 크고 마지막 stable_secs 초 동안 그대로면 True. 파일이 없을 때 크기는 -1"""
+    if not samples:
+        return False
+    last_t, last_size = samples[-1]
+    if last_size <= 0:
+        return False
+    run_start = last_t
+    for t, size in reversed(samples):
+        if size != last_size:
+            break
+        run_start = t
+    return last_t - run_start >= stable_secs
+
+
+def fmt_kb(size: int) -> str:
+    return f"{max(0, size) / 1024:,.0f} KB" if size >= 1024 else f"{max(0, size)} B"
+
+
+def estimate_minutes(n_rooms: int, load: float = LOAD_WAIT, dialog: float = EXPORT_WAIT, gap: float = ROOM_GAP,
+                     write: float = SETTLE_STABLE + 5.0) -> float:
+    """대략 걸리는 분 — 방마다 불러오기 + 저장 창(최대치) + 쓰기·확정 + 다음 방까지 텀(마지막 방 제외)"""
+    if n_rooms <= 0:
+        return 0.0
+    return round((n_rooms * (load + dialog + write) + (n_rooms - 1) * gap) / 60.0, 1)
+
+
 def is_save_dialog(cls: str, title: str, extra_titles: tuple = ()) -> bool:
     """윈도 표준 저장 창인가 — 클래스 #32770 + 제목에 저장 창 이름이 들어 있어야"""
     if cls != DIALOG_CLASS:
@@ -150,6 +203,24 @@ def selftest() -> int:
     assert not is_save_dialog("EVA_Window_Dblclk", "다른 이름으로 저장")
     assert not is_save_dialog("#32770", "채팅방 나가기")
     assert is_save_dialog("#32770", "내보내기", ("내보내기",))
+    assert not size_settled([])
+    assert not size_settled([(0, -1), (5, -1), (20, -1)])  # 파일 없음
+    assert not size_settled([(0, 0), (20, 0)])  # 0바이트는 확정 아님
+    assert size_settled([(0, 100), (5, 200), (10, 200), (15, 200)], 10)
+    assert not size_settled([(0, 100), (5, 200), (10, 200), (14, 200)], 10)  # 9초만 멈춤
+    assert not size_settled([(0, 200), (5, 300), (10, 300)], 10)  # 아직 크는 중
+    assert size_settled([(0, -1), (3, 50), (13, 50)], 10)
+    assert fmt_kb(2048) == "2 KB" and fmt_kb(10) == "10 B"
+    assert estimate_minutes(0) == 0.0
+    assert estimate_minutes(2, 10, 15, 20, 15) == round((2 * 40 + 20) / 60, 1)
+    os.environ["FIRSTOA_KAKAO_TEST_SEC"] = "abc"
+    assert env_seconds("FIRSTOA_KAKAO_TEST_SEC", 7.0) == 7.0
+    os.environ["FIRSTOA_KAKAO_TEST_SEC"] = "9999"
+    assert env_seconds("FIRSTOA_KAKAO_TEST_SEC", 7.0, 0, 300) == 300
+    os.environ["FIRSTOA_KAKAO_TEST_SEC"] = " 25 "
+    assert env_seconds("FIRSTOA_KAKAO_TEST_SEC", 7.0) == 25.0
+    del os.environ["FIRSTOA_KAKAO_TEST_SEC"]
+    assert env_seconds("FIRSTOA_KAKAO_TEST_SEC", 7.0) == 7.0
     print("selftest OK")
     return 0
 
@@ -443,8 +514,48 @@ def probe(room: str) -> int:
 
 
 # ── export ───────────────────────────────────────────────────────
+def _wait_loaded(room: str, hwnd: int):
+    """방 창을 앞으로 가져온 뒤 대화가 다 불러와지기를 기다린다(LOAD_WAIT) → 카톡 응답 확인(없으면 5초 간격 최대 60초).
+    → (hwnd 또는 0/음수, 실제 기다린 초, 실패 이유)"""
+    from open_room import kakao_responding
+
+    t0 = time.time()
+    time.sleep(LOAD_WAIT)
+    end = time.time() + RESPOND_MAX
+    while not kakao_responding(hwnd):
+        if time.time() >= end:
+            return -1, time.time() - t0, "카톡 응답 없음"
+        time.sleep(RESPOND_EVERY)
+    # 기다리는 사이 다른 창이 앞으로 왔을 수 있다 — 누르기 직전 다시 맨 앞·제목 확인(이미 열린 창을 앞으로만, 새로 열지 않는다)
+    if _fg()[0] != hwnd:
+        h2 = _front_room(room)
+        if h2 <= 0:
+            return -1, time.time() - t0, "불러오기 대기 뒤 맨 앞 창 확인 실패"
+        hwnd = h2
+    return hwnd, time.time() - t0, ""
+
+
+def _wait_file_settled(path: str):
+    """저장 창이 닫힌 뒤 파일이 생기고 크기가 SETTLE_STABLE 초 동안 안 변할 때까지(최대 SETTLE_MAX) → (확정 여부, 크기, 걸린 초)"""
+    t0 = time.time()
+    samples = []
+    while True:
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            size = -1
+        now = time.time()
+        samples.append((now, size))
+        if size_settled(samples, SETTLE_STABLE):
+            return True, size, now - t0
+        if now - t0 >= SETTLE_MAX:
+            return False, size, now - t0
+        time.sleep(1.0)
+
+
 def export_one(room: str, folder: str, ymd: str) -> str:
-    """한 방 저장 → 'ok' / 'skip:이유' / 'fail:이유'"""
+    """한 방 저장 → 'ok:진행 요약' / 'skip:이유' / 'fail:이유'.
+    한 번에 한 방만 — 창은 절대 새로 열지 않는다(이미 열린 방 창만 앞으로). 여러 방을 한꺼번에 열면 카톡이 튕긴다(2026-10-27 사용자 실측)"""
     import pyautogui
     import win32gui
 
@@ -458,15 +569,22 @@ def export_one(room: str, folder: str, ymd: str) -> str:
         return "skip:창 안 열림"
     if hwnd < 0:
         return "fail:맨 앞 창 확인 실패"
+    hwnd, waited, why = _wait_loaded(room, hwnd)
+    steps = f"불러오기 대기 {waited:.0f}초"
+    if hwnd <= 0:
+        return f"fail:{why}({steps})"
     pid = _pid(hwnd)
     before = _visible_windows_of(pid)
     pyautogui.hotkey("ctrl", "s")
+    t_s = time.time()
     dlg, cls, title = _wait_new_window(pid, before, hwnd, EXPORT_WAIT)
+    steps += " → Ctrl+S"
     if not dlg:
-        return "fail:Ctrl+S 뒤 창이 안 뜸"
+        return f"fail:Ctrl+S 뒤 {EXPORT_WAIT:.0f}초 안에 창이 안 뜸({steps})"
     if not is_save_dialog(cls, title, extra_save_titles()):
         _esc_if_front(dlg, "저장 창 아님")
         return f"fail:저장 창 아님('{title}' {cls})"
+    steps += f" → 저장 창 {time.time() - t_s:.1f}초"
     try:
         # 파일 이름 칸에 포커스가 있어야만 쓴다
         fh = _fg()[0]
@@ -513,16 +631,31 @@ def export_one(room: str, folder: str, ymd: str) -> str:
         if win32gui.IsWindow(dlg) and win32gui.IsWindowVisible(dlg):
             _esc_if_front(dlg, "오류")
         return f"fail:{e}"
-    # 파일 생성 확인 — 큰 방은 쓰는 데 시간이 걸린다
-    for _ in range(40):  # 최대 20초
-        try:
-            if os.path.getsize(path) > 0:
-                time.sleep(1.0)
-                return "ok"
-        except OSError:
-            pass
-        time.sleep(0.5)
-    return "fail:파일이 안 생김(또는 0바이트)"
+    # 저장 완료 확인 — 큰 방은 쓰는 데 시간이 걸린다. 크기가 SETTLE_STABLE 초 멈출 때까지 다음 방으로 가지 않는다
+    done, size, took = _wait_file_settled(path)
+    if done:
+        return f"ok:{steps} → 파일 {fmt_kb(size)} 확정({took:.0f}초)"
+    if size <= 0:
+        return f"fail:파일이 안 생김(또는 0바이트) {took:.0f}초({steps})"
+    # 반쪽 파일이 수신함에 남으면 GAS 가 그대로 적재한다 — 이름을 .partial 로 바꿔 적재에서 뺀다(다음 날 같은 날짜 파일명으로 다시 시도됨)
+    moved = "→ .partial 로 치움"
+    try:
+        os.replace(path, path + ".partial")
+    except OSError:
+        moved = "→ 치우지 못함(카톡이 아직 쓰는 중?) 수신함에서 수동 확인"  # 거짓 로그를 남기지 않는다(방지훈 2026-10-27)
+    return f"fail:파일 쓰기가 {SETTLE_MAX:.0f}초 안에 안 끝남({fmt_kb(size)}, 일부만 저장됐을 수 있음 {moved} · {steps})"
+
+
+def _acquire_mutex():
+    """한 번에 하나만 — 이미 다른 내보내기가 돌고 있으면 0. 프로세스가 끝나면 윈도가 알아서 푼다"""
+    import ctypes
+
+    k32 = ctypes.windll.kernel32
+    h = k32.CreateMutexW(None, False, EXPORT_MUTEX)
+    if k32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        k32.CloseHandle(h)
+        return 0
+    return h
 
 
 def export(rooms: list, folder: str) -> int:
@@ -533,30 +666,37 @@ def export(rooms: list, folder: str) -> int:
 
     pyautogui.FAILSAFE = False
     ymd = kst_today()
+    if not _acquire_mutex():
+        log("[내보내기] 이미 다른 내보내기가 실행 중 — 이번엔 건너뜀")
+        return 0
+    t_start = time.time()
     log("=" * 64)
-    log(f"[내보내기] 시작 — 대상 {len(rooms)}방 · 폴더 {folder}")
+    log(f"[내보내기] 시작 — 대상 {len(rooms)}방 · 폴더 {folder} · 한 번에 한 방(불러오기 {LOAD_WAIT:.0f}초·저장 창 {EXPORT_WAIT:.0f}초·"
+        f"파일 {SETTLE_STABLE:.0f}초 멈춤 확인(최대 {SETTLE_MAX:.0f}초)·방 사이 {ROOM_GAP:.0f}초·상한 {RUN_LIMIT / 60:.0f}분) · 예상 약 {estimate_minutes(len(rooms))}분")
     if not _kakao_ready():
         return 2
     if close_popup_windows():
         log("    [내보내기] 떠 있던 팝업을 닫았습니다")
     ok = skip = fails = 0
     pressed = False
-    deadline = time.time() + 480  # 실행기 한 바퀴가 너무 오래 멈추면 심박 파수꾼(15분)이 "실행기 멈춤"을 보낸다 — 8분 넘으면 그날은 그만(방지훈 검토 2026-10-23)
-    for room in rooms:
+    # 상한: 실행기(worker.py)가 이 스크립트를 별도 프로세스로 띄우고 심박은 계속 찍으므로 8분 → 60분(05:30 시작 창 안에서 끝나게, 2026-10-27).
+    # 상한은 "새 방을 시작하지 않는" 기준 — 진행 중인 방은 끝까지(최대 약 5분 더)
+    deadline = t_start + RUN_LIMIT
+    for room in rooms:  # 차례대로 한 방씩 — 동시에 여러 방을 다루지 않는다
         if fails >= MAX_FAILS:
             log(f"    [내보내기] 실패 {fails}번 — 남은 방은 오늘 건너뜀")
             break
         if time.time() > deadline:
-            log("    [내보내기] 8분 상한 — 남은 방은 오늘 건너뜀")
+            log(f"    [내보내기] {RUN_LIMIT / 60:.0f}분 상한 — 남은 방은 오늘 건너뜀")
             break
         if pressed:
-            time.sleep(ROOM_GAP)
+            time.sleep(ROOM_GAP)  # 앞 방 저장이 끝나고 카톡이 숨 돌릴 텀
         res = export_one(room, folder, ymd)
         kind, _, why = res.partition(":")
         if kind == "ok":
             ok += 1
             pressed = True
-            log(f"    [내보내기] ✓ [{room}] 저장 → {export_file_name(room, ymd)}")
+            log(f"    [내보내기] ✓ [{room}] {why} → {export_file_name(room, ymd)}")
         elif kind == "skip":
             skip += 1
             log(f"    [내보내기] - [{room}] 건너뜀: {why}")
@@ -564,7 +704,8 @@ def export(rooms: list, folder: str) -> int:
             fails += 1
             pressed = True
             log(f"    [내보내기] ✗ [{room}] {why}")
-    log(f"[내보내기] 끝 · 저장 {ok} · 건너뜀 {skip} · 실패 {fails}")
+    took = time.time() - t_start
+    log(f"[내보내기] 끝 · 저장 {ok} · 건너뜀 {skip} · 실패 {fails} · 소요 {int(took // 60)}분 {int(took % 60)}초")
     return 0 if fails == 0 else 2
 
 

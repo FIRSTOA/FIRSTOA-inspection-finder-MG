@@ -18,7 +18,7 @@
 | 카톡 PC 발송 중계 | 1분마다 | 봇이 **2분 넘게** 못 가져간 `outbox` 를 카톡 PC 방 창에 붙여 넣어 대신 보냄(`tools/kakao-pc/outbox_relay.py`). 보낸 행은 삭제, `room_activity` 에 `pc_send` 기록 |
 | 야간 발송 금지 | **22:00~08:00 KST** | 중계는 보내지 않고 들고 있다가 08:00 이후 첫 1분에 보냄(한 번에 3방 상한). **예외: 테스트 전용방 글은 밤에도 바로 보냄**(2026-10-27, 밤에 앱 테스트하려고) |
 | 월요 키맨 포스터 | **월요일 10시대** (`POSTER_HOUR = 10`) | `poster_send.py --weekly` — 사진으로 보냄. 서버 안전망 cron 은 10:30 |
-| 카톡 대화 내용 저장 | **스위치 켤 때만**(`FIRSTOA_KAKAO_EXPORT=1`, 기본 꺼짐) 매일 **05:30~06:50 KST** 첫 바퀴 1회(Apps Script 수집 트리거 07시보다 먼저 파일이 도착해야 하루 늦게 적재되지 않는다) | `tools/kakao-pc/export_rooms.py --export` — Supabase `kakao_collect_rooms` 의 `enabled`·`export`=true 방 중(표가 없거나 비면 `room_map` 의 점검·AS·물류·미수·불만·재계약 방만 — 마감·부품·자가 제외) **창이 열려 있는 방만** Ctrl+S → 저장 창에 `<방이름>_YYYYMMDD.txt` 경로 붙여넣기 → 구글 드라이브 `카톡 자동적재 수신함`. 뒤는 Apps Script `Drive.gs` 가 적재(아래 절) |
+| 카톡 대화 내용 저장 | **스위치 켤 때만**(`FIRSTOA_KAKAO_EXPORT=1`, 기본 꺼짐) 매일 **05:30~06:50 KST** 첫 바퀴 1회(Apps Script 수집 트리거 07시보다 먼저 파일이 도착해야 하루 늦게 적재되지 않는다) | `tools/kakao-pc/export_rooms.py --export` — Supabase `kakao_collect_rooms` 의 `enabled`·`export`=true 방 중(표가 없거나 비면 `room_map` 의 점검·AS·물류·미수·불만·재계약 방만 — 마감·부품·자가 제외) **창이 열려 있는 방만, 한 방씩 천천히**(불러오기 10초 → Ctrl+S → 저장 창 최대 15초 → 파일 크기 10초 멈춤 확인 최대 180초 → 방 사이 20초, 상한 60분) 저장 창에 `<방이름>_YYYYMMDD.txt` 경로 붙여넣기 → 구글 드라이브 `카톡 자동적재 수신함`. 실행기는 이걸 **별도 프로세스**로 띄워 심박은 계속 찍히고, 도는 동안 중계·포스터·카톡 사진 일감은 쉰다. 뒤는 Apps Script `Drive.gs` 가 적재(아래 절) |
 | 일감 | 들어올 때 | `worker_jobs` 의 `status=queued` 행: `ping` `backup` `relay` `poster` `kakao_photo` (음성·OCR 은 자리만) |
 
 > 파일 불일치: `tools/worker/README.md` 표에는 "월 08시"로 적혀 있지만 코드(`worker.py` POSTER_HOUR)는 10시다(2026-10-21 변경). 코드가 사실. `tools/kakao-pc/README.md` 의 `C:\firstoa\` 경로·"월요일 08:00 작업 등록"도 옛 설치 방식이다(지금은 실행기가 부른다).
@@ -68,7 +68,7 @@ python ..\kakao-pc\poster_send.py --check      # 열린 방 창과 이번 주 �
 ## 카톡 대화 내용 매일 저장 (export_rooms.py, 2026-10-23 · 기본 꺼짐)
 뒤쪽은 이미 있다: 구글 드라이브 `카톡 자동적재 수신함` 에 카톡 TXT 가 들어오면 Apps Script `apps-script/first-data/src/Drive.gs` 의 시간 트리거 `ingestFromDriveFolder` 가 파일 첫 줄의 방 이름으로 분류·증분 적재하고 `처리됨`/`확인필요` 로 옮긴다. 이 스크립트는 "저장 버튼을 누르는 손"만 한다.
 
-안전 원칙: **메뉴·좌표 클릭 없음**(채팅방 메뉴에 "채팅방 나가기"가 있다 — `docs/tasks/tab-search-kakao-history.md` 5-1). 단축키 Ctrl+S 하나와 윈도 표준 저장 창만 쓴다. 검색으로 방을 열지 않는다(열린 창만). 키 누르기 전마다 맨 앞 창 확인, Esc 는 카톡이 새로 띄운 창이 맨 앞일 때만, 파일 이름은 클립보드 붙여넣기 뒤 클립보드 비움(WM_SETTEXT·Ctrl+A 없음), 같은 이름 파일은 덮어쓰지 않음, 방 사이 3초, 실패 3번이면 그날 중단.
+안전 원칙: **메뉴·좌표 클릭 없음**(채팅방 메뉴에 "채팅방 나가기"가 있다 — `docs/tasks/tab-search-kakao-history.md` 5-1). 단축키 Ctrl+S 하나와 윈도 표준 저장 창만 쓴다. 검색으로 방을 열지 않는다(열린 창만). 키 누르기 전마다 맨 앞 창 확인, Esc 는 카톡이 새로 띄운 창이 맨 앞일 때만, 파일 이름은 클립보드 붙여넣기 뒤 클립보드 비움(WM_SETTEXT·Ctrl+A 없음), 같은 이름 파일은 덮어쓰지 않음, 실패 3번이면 그날 중단. **천천히 한 방씩**(2026-10-27 사용자 실측 "큰 방은 기다려야 전체 대화가 불러와지고, 여러 방을 한꺼번에 열면 튕긴다"): 불러오기 대기 10초 + 카톡 응답 확인(없으면 5초 간격 최대 60초, 그래도 없으면 그 방 실패) → Ctrl+S → 저장 창 최대 15초 → 파일 크기가 10초 동안 안 변할 때까지(최대 180초) → 방 사이 20초. 창은 새로 열지 않는다. 조정 환경 변수(초): `FIRSTOA_KAKAO_EXPORT_LOAD_WAIT`(10) · `FIRSTOA_KAKAO_EXPORT_DIALOG_WAIT`(15) · `FIRSTOA_KAKAO_EXPORT_GAP`(20) · `FIRSTOA_KAKAO_EXPORT_LIMIT`(3600). 로그는 방마다 `불러오기 대기 n초 → Ctrl+S → 저장 창 n초 → 파일 n KB 확정(n초)` 한 줄, 끝에 소요 시간. 실행기 출력은 `tools\worker\logs\kakao-export-<날짜>.txt`.
 
 켜는 순서 (노트북에서, **데스크톱에서 돌리지 않는다**):
 1. 시험할 업무방 하나를 카톡 PC 에서 더블클릭해 창으로 열어 둔다.

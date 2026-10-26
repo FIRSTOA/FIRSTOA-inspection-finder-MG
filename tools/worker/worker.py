@@ -10,6 +10,7 @@ FIRSTOA 작업 실행기 — 노트북(사무실 상시 PC)에서 24시간 도�
   ② 일감: worker_jobs 에서 queued 를 하나씩 잡아(claim) 처리한다 — ping · backup · relay · poster. (음성·OCR 은 자리만 있다)
   ③ 시계: 매일 02:30 KST 전체 표 백업, 5분마다 카톡 PC 발송 중계(봇이 못 보낸 outbox), 월요일 10시 키맨 포스터,
           (스위치 FIRSTOA_KAKAO_EXPORT=1 일 때만) 매일 05:30~06:50 카톡 PC 대화 내용 저장 → 드라이브 수신함.
+          카톡 저장은 별도 프로세스(비차단, 최대 약 60분)라 그동안도 심박은 1분마다 찍히고, 중계·포스터·카톡 사진 일감은 끝날 때까지 쉰다.
 
 설치·운영은 README.md. 수동 확인: python worker.py --once (한 바퀴) · python worker.py --job ping · python worker.py --backup
 """
@@ -25,7 +26,7 @@ from datetime import timedelta
 
 from config import HOST, KAKAO_PC_DIR, LOG_DIR, RestError, kst_now, load_state, log, rest, save_state
 
-VERSION = "2026-10-24a"
+VERSION = "2026-10-27a"
 WORKER_NAME = os.environ.get("FIRSTOA_WORKER_NAME", f"worker@{HOST}")
 LOOP_SECONDS = 60
 BACKUP_AT = (2, 30)            # KST 02:30 이후 그날 첫 바퀴에
@@ -82,12 +83,68 @@ def job_poster(payload: dict) -> str:
     return f"exit {run.returncode} · " + " / ".join(tail)
 
 
+# 카톡 저장은 방마다 불러오기·저장 확인을 천천히 하느라 수십 분 걸린다(2026-10-27 사용자 실측 반영) — 실행기 루프를 막으면 심박 파수꾼(15분)이
+# "실행기 멈춤"을 보내므로 별도 프로세스로 띄우고(비차단) 바퀴마다 끝났는지만 본다. export_rooms.py 자체 상한 60분 + 진행 중 방 마무리.
+KAKAO_EXPORT_KILL_AFTER = 75 * 60  # 초 — 이만큼 넘게 안 끝나면 멈춘 것으로 보고 종료
+KAKAO_EXPORT_MUTEX = "Local\\FIRSTOA-KakaoExport"  # export_rooms.py EXPORT_MUTEX 와 같은 이름(실행기 재시작·손으로 돌린 것도 감지)
+_kakao_export = {"proc": None, "started": 0.0, "log": ""}
+
+
+def kakao_export_running() -> bool:
+    """카톡 저장이 돌고 있나 — 이 실행기가 띄운 프로세스 또는 (재시작 전에 띄웠거나 손으로 돌린) 같은 이름 뮤텍스"""
+    p = _kakao_export["proc"]
+    if p is not None and p.poll() is None:
+        return True
+    try:
+        h = ctypes.windll.kernel32.OpenMutexW(0x00100000, False, KAKAO_EXPORT_MUTEX)  # SYNCHRONIZE
+        if h:
+            ctypes.windll.kernel32.CloseHandle(h)
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def job_kakao_export(payload: dict) -> str:
-    """카톡 PC 대화 내용 저장 → 구글 드라이브 '카톡 자동적재 수신함' (tools/kakao-pc/export_rooms.py --export). 창이 열린 방만"""
+    """카톡 PC 대화 내용 저장 → 구글 드라이브 '카톡 자동적재 수신함' (tools/kakao-pc/export_rooms.py --export). 창이 열린 방만.
+    시작만 하고 바로 돌아온다 — 결과는 poll_kakao_export 가 state['kakao_export_last'] 에 적는다"""
+    if kakao_export_running():
+        return "건너뜀: 이미 실행 중"
+    os.makedirs(LOG_DIR, exist_ok=True)
+    out_path = os.path.join(LOG_DIR, f"kakao-export-{kst_now():%Y-%m-%d}.txt")
     args = [sys.executable, os.path.join(KAKAO_PC_DIR, "export_rooms.py"), "--export"]  # --category 없음: 대상은 표(export=true)가 정한다
-    run = subprocess.run(args, cwd=KAKAO_PC_DIR, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=540)  # 9분 — 심박 파수꾼 15분 안쪽(export_rooms 자체 상한 8분)
-    tail = (run.stdout or "").strip().splitlines()[-4:]
-    return f"exit {run.returncode} · " + " / ".join(tail)
+    with open(out_path, "a", encoding="utf-8") as out:  # 파이프 대신 파일 — 읽는 쪽이 없어도 버퍼가 차서 멈추지 않는다
+        proc = subprocess.Popen(args, cwd=KAKAO_PC_DIR, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
+    _kakao_export.update(proc=proc, started=time.time(), log=out_path)
+    log(f"카톡 저장 시작 (pid {proc.pid}, 출력 {out_path})")
+    return f"실행 중 (pid {proc.pid}, {kst_now():%H:%M} 시작)"
+
+
+def poll_kakao_export(state: dict) -> None:
+    """바퀴마다 — 끝났으면 출력 끝 4줄을 state 에 적고, 너무 오래면 종료"""
+    p = _kakao_export["proc"]
+    if p is None:
+        return
+    rc = p.poll()
+    took = time.time() - _kakao_export["started"]
+    if rc is None:
+        if took < KAKAO_EXPORT_KILL_AFTER:
+            return
+        p.terminate()
+        try:
+            rc = p.wait(30)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            rc = -1
+        log(f"카톡 저장 {KAKAO_EXPORT_KILL_AFTER // 60}분 넘어 종료")
+    try:
+        with open(_kakao_export["log"], encoding="utf-8", errors="replace") as f:
+            tail = f.read().strip().splitlines()[-4:]
+    except OSError:
+        tail = []
+    state["kakao_export_last"] = f"exit {rc} · {int(took // 60)}분 · " + " / ".join(tail)
+    log(f"카톡 저장 끝 — {state['kakao_export_last'][:160]}")
+    _kakao_export["proc"] = None
 
 
 def job_kakao_photo(payload: dict) -> str:
@@ -131,6 +188,8 @@ def claim_and_run_jobs() -> int:
     jobs = rest(f"/worker_jobs?select=id,kind,payload&status=eq.queued&run_at=lte.{q(now)}&order=run_at.asc&limit=5") or []
     done = 0
     for job in jobs:
+        if job.get("kind") in ("relay", "poster", "kakao_photo") and kakao_export_running():
+            continue  # 카톡 저장 중 — 카톡 PC 일감은 줄에 둔 채 다음 바퀴로(저장 중인 방 창을 뺏지 않게)
         got = rest(f"/worker_jobs?id=eq.{job['id']}&status=eq.queued", "PATCH",
                    {"status": "running", "claimed_at": now, "claimed_by": WORKER_NAME}, prefer="return=representation")
         if not got:
@@ -172,7 +231,9 @@ def scheduled(state: dict) -> list:
             state["backup_last"] = f"실패: {e}"
             log(f"백업 실패 — {e}")
         ran.append("backup")
-    if RELAY_ENABLED and time.time() - state.get("relay_at", 0) >= RELAY_EVERY:
+    poll_kakao_export(state)
+    exporting = kakao_export_running()  # 카톡 저장 중엔 다른 카톡 PC 작업(중계·포스터)이 창을 앞으로 끌어오지 않게 쉰다 — 한 번에 한 방
+    if RELAY_ENABLED and not exporting and time.time() - state.get("relay_at", 0) >= RELAY_EVERY:
         state["relay_at"] = time.time()
         try:
             job_relay({})
@@ -180,7 +241,7 @@ def scheduled(state: dict) -> list:
             log(f"중계 오류 — {e}")
         ran.append("relay")
     week = now.strftime("%G-W%V")
-    if POSTER_ENABLED and now.weekday() == 0 and now.hour == POSTER_HOUR and state.get("poster_week") != week:
+    if POSTER_ENABLED and not exporting and now.weekday() == 0 and now.hour == POSTER_HOUR and state.get("poster_week") != week:
         state["poster_week"] = week
         try:
             state["poster_last"] = job_poster({})
@@ -229,6 +290,8 @@ def cycle(state: dict) -> None:
     except Exception as e:
         log(f"일감 처리 오류 — {e}")
     note = f"backup {state.get('backup_date', '-')} · {str(state.get('backup_last', ''))[:80]}"
+    if kakao_export_running():
+        note = "카톡 저장 중 · " + note
     try:
         heartbeat(note)
     except RestError as e:
