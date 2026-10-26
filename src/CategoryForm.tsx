@@ -163,7 +163,7 @@ export default function CategoryForm({ schemaKey, form, setForm, author, setAuth
       const asText = !strict && textKeys[f.key];
       return (
         <div key={f.key} className="block">
-          <span className="text-xs font-medium text-slate-500">{f.label}{strict && <span className="ml-1 text-rose-500">필수</span>}</span>
+          <span className="text-xs font-medium text-slate-500">{f.label}{strict && <span className="ml-1 text-slate-400">날짜만</span>}</span>
           {asText ? (
             <div className="mt-0.5 flex gap-2">
               <input value={v} onChange={(e) => set(f.key, e.target.value)} onBlur={(e) => { const n = normalizeDateKeep(e.target.value, { baseYear: kstYear() }); if (n !== e.target.value) set(f.key, n); }} placeholder="예: 차주 중" autoFocus

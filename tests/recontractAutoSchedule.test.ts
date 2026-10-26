@@ -1,5 +1,5 @@
 /**
- * 재계약 다음 확인일 = 날짜 필수 + 보내기 성공 시 일정 바로 만들기(2026-10-27).
+ * 재계약 다음 확인일 = 날짜만(비워도 됨, 2026-10-27 사용자 "필수는 아니지만 날짜로만") + 날짜가 있으면 보내기 성공 시 일정 바로 만들기.
  * 지키는 것: 날짜 없음/글자값 → 보내기 막힘 · 날짜 있음 → 자동 생성 인자(팀·제목·날짜) · 열린 일정 있음 → 창(duplicate)
  *          · 실패 → 창(failed) · 테스트 모드 → 창(sheet) · [취소] → 일정리스트 삭제 + 네이버 삭제.
  */
@@ -21,10 +21,10 @@ type Create = typeof createRecontractSchedule;
 const deps = (create: Create, findAddress: AutoScheduleDeps["findAddress"] = async () => "서울 중구 1"): AutoScheduleDeps =>
   ({ today: "2026-10-27", book: {}, names: ["이민구"], writtenOn: "2026-10-27", findAddress, create });
 
-describe("다음 확인일 = 날짜만·필수", () => {
+describe("다음 확인일 = 날짜만(비워도 됨)", () => {
   it("비었거나 글자값이면 보내기 막힘, 날짜면 통과", () => {
-    expect(categoryFormBlock("recontract", { ...FORM, 다음확인일: "" })).toBe("다음 확인일을 고르세요");
-    expect(categoryFormBlock("recontract", { ...FORM, 다음확인일: "차주 중" })).toBe("다음 확인일을 고르세요");
+    expect(categoryFormBlock("recontract", { ...FORM, 다음확인일: "" })).toBe(""); // 비워도 보내진다(일정은 안 만듦)
+    expect(categoryFormBlock("recontract", { ...FORM, 다음확인일: "차주 중" })).toBe("다음 확인일은 날짜로 고르세요");
     expect(categoryFormBlock("recontract", FORM)).toBe("");
   });
   it("다른 양식(불만)은 막지 않고, 글로 쓰기 막는 칸은 재계약 다음확인일만", () => {

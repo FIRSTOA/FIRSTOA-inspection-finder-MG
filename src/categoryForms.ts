@@ -131,7 +131,7 @@ export function emptyCatForm(schemaKey: string): Record<string, string> {
 
 /**
  * 날짜로만 받는 칸(2026-10-27 사용자 "무조건 날짜로") — 재계약 다음확인일.
- * 이 칸은 [미정·글로 쓰기] 비상구가 없고, 비어 있거나 날짜가 아니면 보내기를 막는다.
+ * 이 칸은 [미정·글로 쓰기] 비상구가 없다. **비워도 된다**(사용자 "필요 없을 수도 있으니 필수는 아님") — 적으면 날짜(YYYY-MM-DD)만.
  */
 export function isStrictDateKey(schemaKey: string, key: string): boolean {
   return schemaKey === "recontract" && key === "다음확인일";
@@ -139,7 +139,8 @@ export function isStrictDateKey(schemaKey: string, key: string): boolean {
 
 /** 보내기 전 막을 이유(빈 문자열이면 통과). */
 export function categoryFormBlock(schemaKey: string, form: Record<string, string>): string {
-  if (schemaKey === "recontract" && !isYmd(String(form?.["다음확인일"] || "").trim())) return "다음 확인일을 고르세요";
+  const next = String(form?.["다음확인일"] || "").trim();
+  if (schemaKey === "recontract" && next && !isYmd(next)) return "다음 확인일은 날짜로 고르세요";
   return "";
 }
 
