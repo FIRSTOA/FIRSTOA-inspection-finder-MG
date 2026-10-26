@@ -95,7 +95,7 @@ export function noteBlockLineFlags(lines: string[]): boolean[] {
  * (2026-09-17 그루젠 실사고 — 최근 40건 중 5건이 이 모양). 새 접수는 "A/S⇥…"·"IT A/S⇥…"·"여분요청⇥…"처럼
  * 접수분야 토큰 + 탭으로 시작하는 줄에서만 시작한다.
  */
-const TABLE_RECEPTION_HEAD_RE = /^(?:IT\s*)?A\/S\t|^(?:점검|여분요청|불만|샘플전달|셋팅|세팅|납품|철수|교체|기타)\t/;
+const TABLE_RECEPTION_HEAD_RE = /^(?:IT\s*)?A\/S\t|^IT\tA\/?S\t|^(?:점검|여분요청|불만|샘플전달|셋팅|세팅|납품|철수|교체|기타)\t/;
 
 export function isTableReceptionHead(line: string): boolean {
   return TABLE_RECEPTION_HEAD_RE.test(line);

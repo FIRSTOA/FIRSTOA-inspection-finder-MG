@@ -8,6 +8,7 @@
 import { md5 } from "./md5";
 import { regionLetter } from "./region";
 import { kstDate } from "./visits";
+import { buildDeptKakaoText } from "./receptionKakaoCard";
 
 export const DEPT_TYPES = ["경영지원", "운영지원", "영업팀"] as const;
 export type DeptType = (typeof DEPT_TYPES)[number];
@@ -143,7 +144,8 @@ export type DeptReceptionInput = {
   contractKind?: string;    // 경영만
   progress?: string;
   scheduleDate?: string;    // yyyy-MM-dd
-  reportText?: string;      // 카톡·기록 양식(없으면 buildDeptReport 로 만든다)
+  reportText?: string;      // 카톡·기록 양식(없으면 buildDeptKakaoText 로 만든다)
+  lease?: Record<string, string> | null; // 고른 임대리스트 행(LeaseHit) — 카톡 카드의 임대리스트 칸. 신규면 null
 };
 
 /** 필수 점검 — 빈 항목 이름 목록(화면의 필수 칩 줄과 저장 차단에 같이 쓴다) */
@@ -215,34 +217,13 @@ export function buildDeptReceptionRow(input: DeptReceptionInput): DeptReceptionR
     status: "접수",
     remote_meta: meta,
   };
-  row.report_text = t(input.reportText) || buildDeptReport(row);
+  row.report_text = t(input.reportText) || buildDeptKakaoText(row, input.lease ?? null); // 각 방 실물 양식(2026-10-27)
   return row;
 }
 
 /** 시트 '접수유형' 칸 값 — 사내 요청이면 이름(시트 관행) */
 export function deptRouteLabel(route: string, via?: string): string {
   return route === "사내" ? (String(via || "").trim() || "사내") : route;
-}
-
-/** 카톡·기록 양식 */
-export function buildDeptReport(row: Pick<DeptReceptionRow, "type" | "vendor" | "lease_no" | "region" | "grade" | "route" | "field" | "receiver_name" | "receiver_phone" | "symptom" | "notes" | "author"> & { remote_meta?: Partial<DeptMeta> | Record<string, string> }): string {
-  const meta = (row.remote_meta || {}) as Partial<DeptMeta>;
-  const lines = [
-    `[${DEPT_LABEL[row.type as DeptType] || row.type} 접수]`,
-    `■ 업체: ${row.vendor}${row.lease_no ? ` (순 ${row.lease_no})` : " (신규)"}`,
-    [row.region, row.grade].filter(Boolean).length ? `■ 지역/등급: ${[row.region, row.grade].filter(Boolean).join(" / ")}` : "",
-    `■ 접수유형: ${row.route === "사내" ? `사내(${meta.via || "-"})` : row.route}`,
-    `■ 접수분야: ${row.field}`,
-    row.receiver_name || row.receiver_phone ? `■ 업체담당자: ${[row.receiver_name, row.receiver_phone].filter(Boolean).join(" ")}` : "",
-    `■ 접수내용: ${row.symptom}`,
-    row.notes ? `■ 특이사항: ${row.notes}` : "",
-    meta.contract_kind ? `■ 계약서구분: ${meta.contract_kind}` : "",
-    meta.outside ? "■ 외근요청" : "",
-    meta.schedule_date ? `■ 예정일: ${meta.schedule_date}` : "",
-    `■ 처리자: ${meta.handler || "미정"}`,
-    `■ 접수자: ${row.author}`,
-  ];
-  return lines.filter(Boolean).join("\n");
 }
 
 // ── 시트 잡 payload ───────────────────────────────

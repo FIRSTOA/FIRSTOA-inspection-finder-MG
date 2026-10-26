@@ -4,6 +4,24 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-27",
+    "hash": "6b923f73a8",
+    "agent": "developer",
+    "summary": "카톡 대화 저장 매크로: 한 방씩 천천히(불러오기 대기·저장 완료 확인·20초 텀·60분) + 실행기에서 별도 프로세스로(심박 유지, 저장 중 중계 보류)"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "6b923f73a8",
+    "agent": "kakao-pc-rules",
+    "summary": "카톡 대화 저장 매크로: 한 방씩 천천히(불러오기 대기·저장 완료 확인·20초 텀·60분) + 실행기에서 별도 프로세스로(심박 유지, 저장 중 중계 보류)"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "47ec11a294",
+    "agent": "kakao-pc-rules",
+    "summary": "카톡 야간 발송 금지(22~08시)에 테스트 전용방 예외 — 노트북 중계·봇 스크립트(2026-10-27판)"
+  },
+  {
+    "date": "2026-10-27",
     "hash": "5ec88130e4",
     "agent": "developer",
     "summary": "전송 뒤 일정 완료 제안을 양식 종류·지점·날짜·담당 기준으로(오완료 방지) + 도착 [지금]·소요 자동 제안 + 재계약 확인일 필수·일정 자동 생성 + 자동 일정 중복 규칙은 자동 일정 행만"

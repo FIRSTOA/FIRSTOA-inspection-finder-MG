@@ -75,7 +75,9 @@ describe("buildDeptReceptionRow", () => {
     expect(row.title).toBe("렌탈문의 · 복합기 한 대 추가 렌탈 문의");
     expect(row.symptom).toContain("견적 요청");
     expect(row.status).toBe("접수");
-    expect(row.report_text).toContain("[전략영업 접수]");
+    // 2026-10-27 카톡 글이 영업 방 실물 양식으로 바뀌어 "[전략영업 접수]" 머리가 없어졌다 — 머리 셀 줄(등급⇥분야…)·본문 쌍으로 확인
+    expect(row.report_text.startsWith("S\t렌탈문의\t")).toBe(true);
+    expect(row.report_text).toContain("상호:   퍼스트오에이   /   임대리스트순번:   1234");
     expect(row.remote_meta).toEqual({
       handler: "이정현", via: "", outside: "외근요청", contract_kind: "", progress: "", handled: "", sheet_seq: "",
       sheet_state: "queued", schedule_date: "2026-10-25", calendar_id: "", kakao: "", vendor_code: "",

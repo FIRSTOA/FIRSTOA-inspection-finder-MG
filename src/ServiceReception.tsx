@@ -14,6 +14,7 @@ import { createAlbum, deleteRows, getConfig, invokeEdgeFunction, selectAllRows, 
 import { readOrStop } from "./ticketGuard";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { sheetVendorName } from "./vendorName";
+import { buildItKakaoCard, legacyItHeadLine, receptionTitleLine } from "./receptionKakaoCard";
 import { prepareImageForUpload, type PreparedImage } from "./imageUpload";
 import { useAuthorBook } from "./authors";
 import { getServiceReceptionById } from "./api";
@@ -809,6 +810,10 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
 
   const report = useMemo(() => {
     if (!reportSource) return "";
+    if (type === "IT") { // IT 방("신)it접수 as") 실물 카드(2026-10-27, receptionKakaoCard.ts) — 아래 CS(복합기 AS) 경로는 그대로
+      const photoLines = photos.length ? [`📷 증상사진 ${photos.length}장 모아보기:`, photoAlbum?.key === photoKey ? `${window.location.origin}/?album=${photoAlbum.id}` : `${window.location.origin}/?photo=${encodeURIComponent(photos[0].url)}`] : [];
+      return buildItKakaoCard({ lease: reportSource, manual, route, region, author, paid: paidFinal, photoLines });
+    }
     // 시트 원문 업체명(지점 표기 포함, 등급 접두는 양식이 따로 붙이므로 뗀다) → 회사명만. 워킨맵 이름은 쓰지 않는다(지점 오선택 실사고)
     const 업체명 = sheetVendorName(reportSource);
     const 등급 = pick(reportSource, "등급");
@@ -839,7 +844,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     const 마감구분 = 마감구분Raw ? (마감구분Raw.endsWith("마감") ? 마감구분Raw : `${마감구분Raw}마감`) : "";
     const 사용개월 = 계약일 ? monthsBetween(계약일, kstDate()) : "";
     const 교체일로부터 = /\d{4}[.\-/]/.test(교체일) ? `${monthsBetween(교체일, kstDate())}사용중` : "";
-    const 구분 = type === "IT" ? "IT A/S" : fieldFinal;
+    const 구분 = fieldFinal; // IT 는 위 분기(buildItKakaoCard)로 빠져 여기선 CS 만 — 예전 "IT A/S" 갈래는 타입상 도달 불가
     // AS이력: 이 기기(시리얼/자산기번 일치)만 우선. 기기교체 등으로 일치가 없으면 업체기준으로 폴백해 표기.
     const serialEntries = asHistory.filter((h) => h.serialMatch);
     const basisEntries = serialEntries.length ? serialEntries : asHistory;
@@ -1186,12 +1191,12 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   // IT 접수 캘린더 id — 관리 탭 "네이버 팀 완료 캘린더"의 IT 칸(app_config NAVER_TEAM_CALENDAR_IT). 비어 있으면 기본(익일통합as)으로 간다
   const itCalendarId = async () => String((await getConfig()).NAVER_TEAM_CALENDAR_IT || "").trim();
   const pushNaverCalendar = async (
-    row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null; type?: string },
+    row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "title" | "symptom" | "model" | "address"> & { report_text?: string | null; type?: string; title_line?: string },
     opts: { stableKey?: string; forceDefaultCal?: boolean; header?: string } = {},
   ) => {
     const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00", E: "21:00" };
     const reportText = String(row.report_text || "").replace(/\t/g, " ");
-    const firstLine = reportText.split("\n")[0]?.trim() || ""; // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로
+    const firstLine = receptionTitleLine(row.report_text, row.title_line); // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로(IT 는 새 카드여도 옛 제목 모양, 2026-10-27)
     // IT 접수는 IT 캘린더로(2026-09-17) — CS 이관 복제(forceDefaultCal)는 익일통합as로
     const calId = !opts.forceDefaultCal && row.type === "IT" ? await itCalendarId() : "";
     const description = reportText || [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : ""].filter(Boolean).join("\n");
@@ -1207,7 +1212,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   };
 
   const createTicketFromReception = async (
-    row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address"> & { report_text?: string | null; type?: string },
+    row: Pick<ServiceReceptionRow, "id" | "vendor" | "region" | "model" | "serial" | "asset_no" | "grade" | "keyman_info" | "receiver_name" | "receiver_phone" | "title" | "symptom" | "address"> & { report_text?: string | null; type?: string; title_line?: string },
     confirmDup: boolean, pushNaver = true, opts: { csTransfer?: boolean } = {},
   ) => {
     const today = kstDate();
@@ -1233,7 +1238,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
       model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade, keyman: row.keyman_info || "",
       issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
       note: String(row.report_text || ""), // 카톡 보고양식 전문 — 일정에서도 원문 확인 가능
-      calendarTitle: String(row.report_text || "").replace(/\t/g, " ").split("\n")[0]?.trim().slice(0, 120) || "", // 네이버 제목과 동일 (배정 시 이름 접두사)
+      calendarTitle: receptionTitleLine(row.report_text, row.title_line).slice(0, 120) || "", // 네이버 제목과 동일 (배정 시 이름 접두사) — IT 는 옛 제목 모양(2026-10-27)
       assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
       ...(source ? { source } : {}),
     }, "id");
@@ -1310,6 +1315,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     title: manual.제목, symptom: manual.증상,
     address: manual.주소.trim() || pick(reportSource, "주소(실납품주소,도로명주소)", "주소"),
     report_text: report, // 네이버 캘린더 제목·설명은 보고양식(수기 등록과 동일 형식)을 그대로 쓴다
+    title_line: type === "IT" && reportSource ? legacyItHeadLine(reportSource, region) : "", // IT 본문은 새 카드, 제목은 옛 첫 줄 그대로(2026-10-27)
   });
 
   // 새 주소를 앱 데이터(워킨맵 + Supabase 임대리스트)에 자동 반영.
