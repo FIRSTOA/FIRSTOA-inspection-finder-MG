@@ -15,6 +15,8 @@ import {
   saveDeptReception, sendDeptReceptionKakao, setDeptSheetRow, softDeleteDeptReception, updateDeptCalEvent,
   updateDeptHandling, updateDeptReceptionFields, upsertDeptCalendar,
 } from "./deptReceptionApi";
+import type { DeptKakaoResult } from "./deptReceptionApi";
+import { buildDeptFollowupText, type DeptFollowupDetail, type DeptFollowupKind } from "./receptionKakaoCard";
 import type { DeptCalEvent, DeptCalPatch, DeptCalTeam } from "./deptCalendarView";
 import { getServiceReceptionById } from "./api";
 import { getSsoSession, ssoRequiredCached } from "./sso";
@@ -186,7 +188,30 @@ export async function runDeptSave(input: DeptReceptionInput, extraMeta: Record<s
 export type DeptActionKind = "done" | "tomorrow" | "date" | "hold" | "memo" | "assign";
 /** handler: kind "assign" 의 새 처리자(빈 문자열 = 미배정, 1명) */
 export type DeptActionOpts = { by: string; date?: string; text?: string; handled?: string; progress?: string; today?: string; handler?: string };
-export type DeptActionResult = { row: DeptRowLike; warnings: string[] };
+/** 후속 카톡 알림 결과 — none: 보낼 일이 없었음(메모·같은 상태 저장 등) */
+export type DeptFollowupKakao = DeptKakaoResult["kakao"] | "failed" | "none";
+/** kakao·summary: 후속 카톡 알림(처리 단추·처리 저장만 채운다). summary 가 비면 화면에 덧붙일 말 없음 */
+export type DeptActionResult = { row: DeptRowLike; warnings: string[]; kakao?: DeptFollowupKakao; summary?: string };
+
+/** 후속 알림 → 결과 요약 한 마디. 방 미정(no_room)·보낼 일 없음은 조용히 빈 글자 */
+export function followupSummary(k: DeptFollowupKakao): string {
+  return k === "sent" ? "카톡 알림 보냄" : k === "test" ? "카톡 알림 테스트방" : k === "failed" ? "카톡 알림 실패" : "";
+}
+
+/**
+ * 처리 뒤 같은 부서 방에 후속 글(2026-10-27 사용자 "처리완료 하면 카톡방에도"). 접수 카톡과 같은 전송 함수 —
+ * TEST_MODE 면 테스트방, 방 매핑 없으면 보내지 않고 no_room(경고 없음). 실패는 throw 하지 않고 warnings 에 "카톡 알림 실패".
+ */
+async function sendDeptFollowup(dept: DeptType, row: DeptRowLike, kind: DeptFollowupKind, detail: DeptFollowupDetail, warnings: string[]): Promise<DeptFollowupKakao> {
+  try {
+    const k = await sendDeptReceptionKakao(dept, buildDeptFollowupText(row, kind, detail));
+    return k.kakao;
+  } catch (e) {
+    warnings.push(`카톡 알림 실패: ${(e as Error).message}`);
+    return "failed";
+  }
+}
+const withKakao = (res: DeptActionResult, kakao: DeptFollowupKakao): DeptActionResult => ({ ...res, kakao, summary: followupSummary(kakao) });
 
 async function freshRow(row: DeptRowLike): Promise<DeptRowLike> {
   // 메모·미룸 횟수는 다른 사람이 방금 바꿨을 수 있다 — 최신 행을 읽고 그 위에 더한다
@@ -234,6 +259,7 @@ export async function runDeptAction(row0: DeptRowLike, kind: DeptActionKind, opt
   if (!dept) throw new Error("부서 접수가 아닙니다");
 
   if (kind === "done") {
+    if (row.status === "완료") return withKakao({ row, warnings }, "none"); // 이미 완료 — 다시 완료해도 방에 또 알리지 않는다
     const patch: Record<string, string> = {};
     if (opts.handled !== undefined && opts.handled.trim()) patch.handled = opts.handled.trim();
     const at = new Date().toISOString();
@@ -243,13 +269,16 @@ export async function runDeptAction(row0: DeptRowLike, kind: DeptActionKind, opt
       try { await completeDeptCalendar(row.id); } catch (e) { warnings.push(`달력 완료 표시 실패: ${(e as Error).message}`); }
     }
     await pushSheetUpdate(next, warnings);
-    return { row: next, warnings };
+    const kakao = await sendDeptFollowup(dept, next, "done", { handler: meta.handler || by, handled: patch.handled || meta.handled }, warnings);
+    return withKakao({ row: next, warnings }, kakao);
   }
 
   if (kind === "tomorrow" || kind === "date") {
     const date = kind === "tomorrow" ? nextWeekday(opts.today || kstDate()) : String(opts.date || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("날짜를 골라 주세요");
     const patch: Record<string, string> = { schedule_date: date, postpone_count: String((Number(meta.postpone_count) || 0) + 1) };
+    const dateReason = String(opts.text || "").trim();
+    if (kind === "date" && dateReason) patch.memo_log = prependMemo(meta.memo_log, memoLine(by, `일정 변경 사유: ${dateReason}`)); // 사유는 메모 기록에도(시트엔 안 씀)
     const status = kind === "tomorrow" && (row.status || "접수") === "접수" ? "진행중" : undefined;
     await updateDeptHandling(row.id, patch, status);
     const next: DeptRowLike = { ...row, status: status || row.status, remote_meta: { ...meta, ...patch } };
@@ -260,7 +289,10 @@ export async function runDeptAction(row0: DeptRowLike, kind: DeptActionKind, opt
         next.remote_meta = { ...(next.remote_meta || {}), calendar_id: calId };
       }
     } catch (e) { warnings.push(`부서 달력 반영 실패: ${(e as Error).message}`); }
-    return { row: next, warnings }; // 시트에는 예정일 칸이 없다 — 갱신 없음
+    // 시트에는 예정일 칸이 없다 — 갱신 없음. 날짜가 실제로 바뀐 때만 방에 "일정 변경"(사유는 opts.text 가 있을 때)
+    if (date === (meta.schedule_date || "")) return withKakao({ row: next, warnings }, "none");
+    const kakao = await sendDeptFollowup(dept, next, "date", { from: meta.schedule_date || "", to: date, reason: opts.text }, warnings);
+    return withKakao({ row: next, warnings }, kakao);
   }
 
   if (kind === "assign") {
@@ -274,15 +306,21 @@ export async function runDeptAction(row0: DeptRowLike, kind: DeptActionKind, opt
       catch (e) { warnings.push(`부서 달력 반영 실패: ${(e as Error).message}`); }
     }
     await pushSheetUpdate(next, warnings);
-    return { row: next, warnings };
+    const kakao = await sendDeptFollowup(dept, next, "assign", { handler }, warnings);
+    return withKakao({ row: next, warnings }, kakao);
   }
 
   if (kind === "hold") {
     const status = row.status === "보류" ? "진행중" : "보류";
-    await updateDeptHandling(row.id, {}, status);
-    const next: DeptRowLike = { ...row, status };
+    const holdReason = String(opts.text || "").trim();
+    const holdPatch: Record<string, string> = {};
+    if (status === "보류" && holdReason) holdPatch.memo_log = prependMemo(meta.memo_log, memoLine(by, `보류 사유: ${holdReason}`));
+    await updateDeptHandling(row.id, holdPatch, status);
+    const next: DeptRowLike = { ...row, status, remote_meta: { ...meta, ...holdPatch } };
     await pushSheetUpdate(next, warnings);
-    return { row: next, warnings };
+    if (status !== "보류") return withKakao({ row: next, warnings }, "none"); // 보류 풀기는 방에 알리지 않는다
+    const kakao = await sendDeptFollowup(dept, next, "hold", { reason: opts.text }, warnings);
+    return withKakao({ row: next, warnings }, kakao);
   }
 
   // memo
@@ -323,8 +361,14 @@ export async function saveDeptHandlingForm(
   const sheetChanged = deptSheetStateLabel(row.status || "") !== deptSheetStateLabel(form.status)
     || (meta.handler || "") !== patch.handler || (meta.handled || "") !== patch.handled || (patch.progress !== undefined && (meta.progress || "") !== patch.progress);
   if (sheetChanged) await pushSheetUpdate(next, warnings);
-  return { row: next, warnings };
+  // 방 알림: 상태가 완료·보류·취소로 "바뀐" 때만(같은 상태 재저장·처리자/진행 메모만 바뀐 건 보내지 않음)
+  const followKind = FORM_FOLLOWUP[form.status];
+  const dept = isDeptType(row.type) ? (row.type as DeptType) : null;
+  if (!followKind || !dept || (row.status || "접수") === form.status) return withKakao({ row: next, warnings }, "none");
+  const kakao = await sendDeptFollowup(dept, next, followKind, { handler: patch.handler || by, handled: patch.handled }, warnings);
+  return withKakao({ row: next, warnings }, kakao);
 }
+const FORM_FOLLOWUP: Record<string, DeptFollowupKind | undefined> = { 완료: "done", 보류: "hold", 취소: "cancel" };
 
 /** 시트 미반영 [다시 보내기] — 같은 append 잡(dupKey dept:<id>:append)을 다시 쌓는다. 이미 쌓여 있으면 대기로 본다. */
 export async function retryDeptSheetAppend(row0: DeptRowLike): Promise<DeptActionResult> {

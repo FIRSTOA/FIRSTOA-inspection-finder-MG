@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDeptReceptionRow, type DeptReceptionInput } from "../src/deptReception";
 import {
-  buildDeptKakaoText, buildItKakaoCard, cardDate, cardDateYY, cardWon, korDayWithWeekday, monthsLeft, monthsUsed, serializeCard,
+  buildDeptFollowupText, buildDeptKakaoText, buildItKakaoCard, cardDate, cardDateYY, cardWon, korDayWithWeekday, monthsLeft, monthsUsed, serializeCard,
   KAKAO_CARD_MAX,
 } from "../src/receptionKakaoCard";
 import { isTableReceptionHead } from "../src/inspectionBlocks";
@@ -302,5 +302,33 @@ describe("네 부서 공통: 둘째 줄이 작성자(AS방 CS 카드와 같은 �
     const row = rowOf({ dept: "경영지원", author: "홍길동", route: "카카오", vendor: "가짜업체", region: "C", field: "기타", content: "내용" });
     expect(row.remote_meta.handler).toBe("");
     expect(buildDeptKakaoText(row, null, NOW).split("\n")[1]).toBe(`작성자${T}홍길동`);
+  });
+});
+
+describe("부서 접수 후속 글(buildDeptFollowupText, 2026-10-27)", () => {
+  const row = { vendor: "가나상사", field: "해지문의", receipt_date: "2026-10-24" };
+  it("처리완료: 처리자 + 처리내용(없으면 줄 생략)", () => {
+    expect(buildDeptFollowupText(row, "done", { handler: "김수인", handled: "해지 방어 성공" }))
+      .toBe("[처리완료] 가나상사 · 접수 10/24 해지문의\n처리자 김수인\n처리내용: 해지 방어 성공");
+    expect(buildDeptFollowupText(row, "done", { handler: "김수인" })).toBe("[처리완료] 가나상사 · 접수 10/24 해지문의\n처리자 김수인");
+  });
+  it("보류: 사유 있을 때만 둘째 줄", () => {
+    expect(buildDeptFollowupText(row, "hold", { reason: "고객 회신 대기" })).toBe("[보류] 가나상사 · 접수 10/24 해지문의\n사유: 고객 회신 대기");
+    expect(buildDeptFollowupText(row, "hold")).toBe("[보류] 가나상사 · 접수 10/24 해지문의");
+  });
+  it("배정: 처리자(비면 미정)", () => {
+    expect(buildDeptFollowupText(row, "assign", { handler: "이정현" })).toBe("[배정] 가나상사 · 접수 10/24 해지문의\n처리자 이정현");
+    expect(buildDeptFollowupText(row, "assign", { handler: "" })).toBe("[배정] 가나상사 · 접수 10/24 해지문의\n처리자 미정");
+  });
+  it("일정 변경: 이전 → 새(요일) + 사유", () => {
+    expect(buildDeptFollowupText(row, "date", { from: "2026-10-27", to: "2026-10-28", reason: "고객 부재" }))
+      .toBe("[일정 변경] 가나상사 · 접수 10/24 해지문의\n10/27(화) → 10/28(수)\n사유: 고객 부재");
+    expect(buildDeptFollowupText(row, "date", { from: "", to: "2026-11-02" })).toBe("[일정 변경] 가나상사 · 접수 10/24 해지문의\n미정 → 11/2(월)");
+  });
+  it("취소: 머리 한 줄", () => {
+    expect(buildDeptFollowupText(row, "cancel")).toBe("[취소] 가나상사 · 접수 10/24 해지문의");
+  });
+  it("접수일이 없으면 created_at 의 KST 날짜(아침 9시 전도 그날)", () => {
+    expect(buildDeptFollowupText({ vendor: "가나상사", field: "", created_at: "2026-10-26T23:30:00Z" }, "cancel")).toBe("[취소] 가나상사 · 접수 10/27");
   });
 });

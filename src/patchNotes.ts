@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "e2e961338b",
+    "date": "2026-10-27",
+    "note": "부서 접수 처리자 '미정' 고르면 지역 기본값(이정현 등)으로 덮지 않음"
+  },
+  {
     "hash": "b2d1a92c49",
     "date": "2026-10-27",
     "note": "부서 카드 2차(둘째 줄 작성자·운영 카드·접수유형 보존) + 시트 배열 수식 보호(A열 순번은 시트가, 머리 ARRAYFORMULA 열엔 값 안 씀) + 처리 패널 세로 정렬"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "35e43eca41",
     "date": "2026-10-01",
     "note": "OKR 주차 기록 정리 단추(SQL 없이 브라우저에서 옛 번호 행을 새 번호로 옮기고 같은 사람 행은 번호별 병합) + 주차 저장 id를 기간(월요일)으로 찾기"
-  },
-  {
-    "hash": "3cd9b819a6",
-    "date": "2026-10-01",
-    "note": "OKR 주차 번호 옮기기 SQL(월요일 기준 전환 뒤 서버 기록 이동·병합) — 사용자가 SQL Editor에서 실행"
   }
 ];

@@ -1,6 +1,6 @@
 // 부서 접수 저장 6단계·처리 단추 흐름 — fetch 모킹으로 호출 순서와 분기를 확인한다(src/deptReceptionFlow.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { deleteDeptReception, formatPhone, memoLine, nextWeekday, pickVendorAlias, prependMemo, resolveReceiver, retryDeptSheetAppend, runDeptAction, runDeptSave, saveDeptReceptionEdit } from "../src/deptReceptionFlow";
+import { deleteDeptReception, followupSummary, formatPhone, memoLine, nextWeekday, pickVendorAlias, prependMemo, resolveReceiver, retryDeptSheetAppend, runDeptAction, runDeptSave, saveDeptHandlingForm, saveDeptReceptionEdit } from "../src/deptReceptionFlow";
 import { isCheckConstraintError } from "../src/deptReceptionApi";
 import { kstDate } from "../src/visits";
 import { invalidateConfigCaches } from "../src/supabase";
@@ -260,5 +260,108 @@ describe("순수 도우미", () => {
     expect(formatPhone("01012345678")).toBe("010-1234-5678");
     expect(formatPhone("0212345678")).toBe("02-1234-5678");
     expect(formatPhone("내선 12")).toBe("내선 12");
+  });
+});
+
+// 2026-10-27 사용자 "처리완료 하면 완료한 내용이 카톡방에도 가야지. 익일로 미루면 날짜 변경됐다고도 뜨고."
+describe("처리 뒤 부서 방 후속 글", () => {
+  const ops = { id: "r5", type: "운영지원", status: "진행중", vendor: "가나상사", author: "박민", field: "토너요청", symptom: "토너 2개",
+    receipt_date: "2026-10-24", remote_meta: { handler: "이정현", schedule_date: "2026-10-27", handled: "" } };
+  const ROOM = [{ category: "운영접수", region: "*", room: "운영방" }];
+  const withRow = (row: Record<string, unknown>, extra?: Handler): Handler => (c) =>
+    extra?.(c) ?? (c.method === "GET" && c.table === "service_receptions" ? { body: [row] } : undefined);
+  const outboxPosts = () => calls.filter((c) => c.method === "POST" && c.table === "outbox").map((c) => c.body as { room: string; text: string });
+  const arg = { id: "r5", type: "운영지원", vendor: "가나상사", author: "박민" };
+
+  it("완료: 운영방에 [처리완료] 글, 결과 요약에 카톡 알림", async () => {
+    mockFetch(standard(ROOM, withRow(ops)));
+    const res = await runDeptAction(arg, "done", { by: "최영지", handled: "토너 교체" });
+    expect(outboxPosts()).toEqual([{ room: "운영방", text: "[처리완료] 가나상사 · 접수 10/24 토너요청\n처리자 이정현\n처리내용: 토너 교체" }]);
+    expect(res.kakao).toBe("sent");
+    expect(res.summary).toBe("카톡 알림 보냄");
+    expect(res.warnings).toEqual([]);
+  });
+
+  it("내일로: 날짜가 바뀌면 [일정 변경] 이전 → 새", async () => {
+    mockFetch(standard(ROOM, withRow(ops)));
+    await runDeptAction(arg, "tomorrow", { by: "최영지", today: "2026-10-27" });
+    expect(outboxPosts()[0].text).toBe("[일정 변경] 가나상사 · 접수 10/24 토너요청\n10/27(화) → 10/28(수)");
+  });
+
+  it("보류: 사유가 후속 글 '사유:' 줄과 메모 기록('보류 사유:')에 실린다", async () => {
+    mockFetch(standard(ROOM, withRow(ops)));
+    const res = await runDeptAction(arg, "hold", { by: "최영지", text: "고객 부재" });
+    expect(outboxPosts()[0].text).toBe("[보류] 가나상사 · 접수 10/24 토너요청\n사유: 고객 부재");
+    expect(String(res.row.remote_meta?.memo_log)).toContain("보류 사유: 고객 부재");
+  });
+
+  it("날짜 고르기: 사유가 후속 글과 메모 기록에 실린다", async () => {
+    mockFetch(standard(ROOM, withRow(ops)));
+    const res = await runDeptAction(arg, "date", { by: "최영지", date: "2026-10-30", text: "부품 입고 대기" });
+    expect(outboxPosts()[0].text).toBe("[일정 변경] 가나상사 · 접수 10/24 토너요청\n10/27(화) → 10/30(금)\n사유: 부품 입고 대기");
+    expect(String(res.row.remote_meta?.memo_log)).toContain("일정 변경 사유: 부품 입고 대기");
+  });
+
+  it("이미 완료된 접수를 다시 완료해도 후속 글 안 보냄", async () => {
+    mockFetch(standard(ROOM, withRow({ ...ops, status: "완료" })));
+    const res = await runDeptAction(arg, "done", { by: "최영지" });
+    expect(outboxPosts()).toEqual([]);
+    expect(res.kakao).toBe("none");
+  });
+
+  it("배정: 처리자가 이전과 같으면 후속 글 안 보냄", async () => {
+    mockFetch(standard(ROOM, withRow(ops)));
+    await runDeptAction(arg, "assign", { by: "최영지", handler: "이정현" });
+    expect(outboxPosts()).toEqual([]);
+  });
+
+  it("방 매핑이 없으면 조용히(전송·경고 없음, 요약 빈 글자)", async () => {
+    mockFetch(standard([], withRow(ops)));
+    const res = await runDeptAction(arg, "done", { by: "최영지" });
+    expect(outboxPosts()).toEqual([]);
+    expect(res.kakao).toBe("no_room");
+    expect(res.summary).toBe("");
+    expect(res.warnings).toEqual([]);
+    expect(res.row.status).toBe("완료");
+  });
+
+  it("전송 실패는 액션을 실패로 만들지 않고 warning '카톡 알림 실패'", async () => {
+    mockFetch(standard(ROOM, withRow(ops, (c) => (c.method === "POST" && c.table === "outbox" ? { status: 500, body: "boom" } : undefined))));
+    const res = await runDeptAction(arg, "hold", { by: "최영지", text: "고객 부재" });
+    expect(res.row.status).toBe("보류");
+    expect(res.kakao).toBe("failed");
+    expect(res.warnings.some((w) => w.startsWith("카톡 알림 실패"))).toBe(true);
+    expect(res.summary).toBe(followupSummary("failed"));
+  });
+
+  it("보류 풀기·메모는 보내지 않는다", async () => {
+    mockFetch(standard(ROOM, withRow({ ...ops, status: "보류" })));
+    await runDeptAction(arg, "hold", { by: "최영지" });
+    await runDeptAction(arg, "memo", { by: "최영지", text: "전화함" });
+    expect(outboxPosts()).toEqual([]);
+  });
+
+  it("처리 저장: 상태가 안 바뀌면(진행 메모·처리자만 바뀌어도) 안 보냄", async () => {
+    mockFetch(standard(ROOM, withRow(ops)));
+    const res = await saveDeptHandlingForm(arg, { status: "진행중", handler: "박지은", progress: "견적", handled: "" }, "최영지");
+    expect(outboxPosts()).toEqual([]);
+    expect(res.kakao).toBe("none");
+    mockFetch(standard(ROOM, withRow({ ...ops, status: "완료" })));
+    await saveDeptHandlingForm(arg, { status: "완료", handler: "이정현", progress: "", handled: "다시 저장" }, "최영지");
+    expect(outboxPosts()).toEqual([]);
+  });
+
+  it("처리 저장: 진행중 → 취소로 바뀌면 [취소] 글", async () => {
+    mockFetch(standard(ROOM, withRow(ops)));
+    const res = await saveDeptHandlingForm(arg, { status: "취소", handler: "이정현", progress: "", handled: "" }, "최영지");
+    expect(outboxPosts()).toEqual([{ room: "운영방", text: "[취소] 가나상사 · 접수 10/24 토너요청" }]);
+    expect(res.summary).toBe("카톡 알림 보냄");
+  });
+
+  it("TEST_MODE 면 매핑과 상관없이 테스트방", async () => {
+    mockFetch(standard(ROOM, withRow(ops, (c) => (c.table === "app_config" ? { body: [{ key: "TEST_MODE", value: "true" }, { key: "TEST_ROOM", value: "테스트방" }] } : undefined))));
+    const res = await runDeptAction(arg, "assign", { by: "최영지", handler: "박지은" });
+    expect(outboxPosts()).toEqual([{ room: "테스트방", text: "[배정] 가나상사 · 접수 10/24 토너요청\n처리자 박지은" }]);
+    expect(res.summary).toBe("카톡 알림 테스트방");
   });
 });

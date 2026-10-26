@@ -464,3 +464,59 @@ export function receptionTitleLine(reportText: string | null | undefined, legacy
   const first = (legacyHead && legacyHead.trim()) || itCardToLegacyHead(text) || text.split("\n")[0] || "";
   return first.replace(/\t/g, " ").trim();
 }
+
+// ── 부서 접수 후속 글(처리완료·보류·배정·일정 변경·취소, 2026-10-27) ─────
+/** 후속 글 종류 */
+export type DeptFollowupKind = "done" | "hold" | "assign" | "date" | "cancel";
+/** 후속 글이 읽는 접수 행 칸 */
+export type DeptFollowupRow = { vendor: string; field?: string; receipt_date?: string; created_at?: string };
+/** handler: 처리자 · handled: 처리내용 · reason: 사유 · from/to: 이전·새 예정일(YYYY-MM-DD) */
+export type DeptFollowupDetail = { handler?: string; handled?: string; reason?: string; from?: string; to?: string };
+
+const FOLLOWUP_TAG: Record<DeptFollowupKind, string> = { done: "처리완료", hold: "보류", assign: "배정", date: "일정 변경", cancel: "취소" };
+const FOLLOWUP_MAX = 1000;
+
+/** "2026-10-27" → "10/27". 날짜가 아니면 빈 글자 */
+function mdSlash(ymd: string): string {
+  const m = str(ymd).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${Number(m[2])}/${Number(m[3])}` : "";
+}
+/** 접수일 M/D — receipt_date(YYYY-MM-DD) 우선, 없으면 created_at 의 KST 날짜 */
+function receiptSlash(row: DeptFollowupRow): string {
+  const r = mdSlash(str(row.receipt_date));
+  if (r) return r;
+  const at = new Date(str(row.created_at));
+  return Number.isNaN(at.getTime()) ? "" : mdSlash(kstDate(at));
+}
+/** "10/27(화)" — 날짜가 아니면 "미정" */
+const mdDow = (ymd: string): string => (mdSlash(ymd) ? `${mdSlash(ymd)}${korWeekday(ymd)}` : "미정");
+
+/**
+ * 부서 접수 처리 뒤 같은 방에 보내는 짧은 후속 글(카드 아님, 탭 없음).
+ * 첫 줄 = `[종류] 업체명 · 접수 M/D 접수분야` — 방에서 원 접수 카드를 알아보는 머리.
+ * 값이 빈 줄(처리내용·사유)은 뺀다. 처리자가 비면 "미정".
+ */
+export function buildDeptFollowupText(row: DeptFollowupRow, kind: DeptFollowupKind, detail: DeptFollowupDetail = {}): string {
+  const md = receiptSlash(row);
+  const tail = [md ? `접수 ${md}` : "", oneLine(row.field)].filter(Boolean).join(" ");
+  const head = `[${FOLLOWUP_TAG[kind]}] ${spaceLine(row.vendor) || "업체 미상"}${tail ? ` · ${tail}` : ""}`;
+  const handler = oneLine(detail.handler) || "미정";
+  const reason = oneLine(detail.reason);
+  const lines = [head];
+  if (kind === "done") {
+    lines.push(`처리자 ${handler}`);
+    const handled = str(detail.handled);
+    if (handled) lines.push(`처리내용: ${handled}`);
+  } else if (kind === "hold") {
+    if (reason) lines.push(`사유: ${reason}`);
+  } else if (kind === "assign") {
+    lines.push(`처리자 ${handler}`);
+  } else if (kind === "date") {
+    lines.push(`${mdDow(str(detail.from))} → ${mdDow(str(detail.to))}`);
+    if (reason) lines.push(`사유: ${reason}`);
+  } else if (kind === "cancel") {
+    if (reason) lines.push(`사유: ${reason}`);
+  }
+  const text = lines.join("\n");
+  return text.length > FOLLOWUP_MAX ? `${text.slice(0, FOLLOWUP_MAX - CUT_SUFFIX.length)}${CUT_SUFFIX}` : text;
+}

@@ -7,7 +7,7 @@ import { countRows, selectRows, SUPABASE_ANON, SUPABASE_URL, invokeEdgeFunction 
 import { setActivityEventsCancelledByKey, setActivityEventsCancelledBySource, setActivityEventsCancelledByVendor, teamForAuthor } from "./operations";
 import { EXPANSION_BASIS_TEXT, EXPANSION_SOURCES, countExpansion, countField, expansionTally, FIELD_BASIS_TEXT, FIELD_SOURCES, fieldTally, kstDayOf, kstTextRange, toExpansionRows, toFieldRows, UTC_TEXT_DATE_TABLES, type ExpansionRaw, type ExpansionTable, type FieldRaw, type FieldTable } from "./workCount";
 import { loadExpansionRaw, loadFieldRaw, loadFormRaw } from "./expansionSource";
-import { CONTACT_BASIS_TEXT, contactTeamQuery, FORM_BASIS_TEXT, FORM_LABELS, FORM_SOURCES, formTally, isFormTable, toFormTableRows, type FormRaw } from "./formCount";
+import { CONTACT_BASIS_TEXT, contactTeamQuery, FORM_BASIS_TEXT, FORM_LABELS, FORM_SOURCES, formTally, isFormTable, regionTeamRegex, toFormTableRows, type FormRaw } from "./formCount";
 import { setVisitsCancelledBySource, setVisitsCancelledByVendor } from "./visits";
 import { LOOKUP_CATEGORIES, LOOKUP_GROUPS, type LookupCategory, type LookupColumn } from "./lookupCatalog";
 import { MisuBoard, OverageBoard } from "./MisuOverageBoards";
@@ -172,7 +172,11 @@ export default function DataLookup({ author = "" }: { author?: string }) {
       const authorField = expansionAuthorField(category.table);
       const teamNames = authorField ? teamBookNames : [];
       const namesIn = teamNames.length ? teamNames.map((n) => `"${n.replace(/"/g, "")}"`).join(",") : `"__없음__"`;
-      if (category.teamField && category.table !== "mfp_expansion") conds.push(`"${category.teamField}".ilike."*${team}*"`);
+      if (category.teamField && category.table !== "mfp_expansion") {
+        conds.push(`"${category.teamField}".ilike."*${team}*"`);
+        // 'C,D'·'D(성남)' 같은 값은 위 글자 포함으로, '지방'·'CSS'(=E) 는 regionTeam 과 같은 판정으로 — 접수 E 칩 0건 버그(2026-10-27)
+        conds.push(`"${category.teamField}".imatch."${regionTeamRegex(team)}"`);
+      }
       if (category.teamSourceParen) conds.push(`"_출처".ilike."*(*${team}*)*"`);
       if (category.table === "mfp_expansion") conds.push(`"${authorField}".in.(${namesIn})`);
       else if (authorField && category.teamField) conds.push(`and(or("${category.teamField}".is.null,"${category.teamField}".eq.""),"${authorField}".in.(${namesIn}))`);

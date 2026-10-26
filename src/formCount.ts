@@ -173,14 +173,21 @@ export function csOnlyTeam(author: string, region: unknown, teamOf: (author: str
 const WS = "[[:space:]]*";
 const teamAlt = (t: string) => `${t}${WS}([^A-Za-z[:space:]]|$)`;
 const E_ALT = `C${WS}S${WS}S|지${WS}방`;
+const REGION_HEAD = `^${WS}(수도권|지역)?${WS}`;
+/**
+ * workCount.regionTeam(value) === team 을 Postgres 정규식(imatch)으로 — 조회 탭 팀 칩이 지역 칸을 볼 때 쓰는 단 하나의 판정.
+ * E(화면 CSS)는 'E'·'수도권E'만이 아니라 '지방'·'CSS' 표기도 E 다(서비스접수 region 은 E 를 '지방'으로 저장, 2026-10-27 실측 78행).
+ */
+export function regionTeamRegex(team: string): string {
+  return `${REGION_HEAD}(${teamAlt(team)}${team === "E" ? `|${E_ALT}` : ""})`;
+}
 export type ContactTeamSpec = { csNames: string[]; teamNames: string[]; teamRegex: string; anyRegex: string };
 export function contactTeamSpec(team: string, book: Partial<Record<string, string[]>>): ContactTeamSpec {
   const csNames = [...new Set([...CS_TEAMS].flatMap((t) => book[t] || []))];
-  const head = `^${WS}(수도권|지역)?${WS}`;
   return {
     csNames, teamNames: [...(book[team] || [])],
-    teamRegex: `${head}(${teamAlt(team)}${team === "E" ? `|${E_ALT}` : ""})`,
-    anyRegex: `${head}([A-E]${WS}([^A-Za-z[:space:]]|$)|${E_ALT})`,
+    teamRegex: regionTeamRegex(team),
+    anyRegex: `${REGION_HEAD}([A-E]${WS}([^A-Za-z[:space:]]|$)|${E_ALT})`,
   };
 }
 /** contactTeamSpec → 'or=(…)' 한 조각(인코딩 포함). 이름 목록이 비면 아무 행도 안 걸리게 "__없음__" */

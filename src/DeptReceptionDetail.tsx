@@ -61,7 +61,7 @@ export default function DeptReceptionDetail({ row, onChanged, onDeleted, author 
       const res = await saveDeptHandlingForm(row, { status, handler, progress, handled }, resolveActor(author));
       onChanged(res.row);
       res.warnings.forEach((w) => notify(w, warnTone(w)));
-      if (!res.warnings.some((w) => warnTone(w) === "error")) notify("처리 내용을 저장했습니다.", "success");
+      if (!res.warnings.some((w) => warnTone(w) === "error")) notify(`처리 내용을 저장했습니다.${res.summary ? ` · ${res.summary}` : ""}`, "success");
     } catch (e) {
       notify(isCheckConstraintError(e) ? "저장이 막혔습니다 — 관리자에게 'reception-dept-types.sql 실행 필요'를 알려 주세요." : `처리 저장 실패: ${(e as Error).message}`, "error");
     } finally { setSaving(false); }

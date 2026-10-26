@@ -34,6 +34,11 @@ export function sheetRefOf(row: Pick<UnhandledRow, "key" | "sheet" | "vendor">):
   return m ? { source: m[1] as "sales" | "mgmt" | "remote", row: Number(m[2]), seq: "", author: "", vendor: row.vendor } : null;
 }
 
+/** [보류]에 사유가 필수인 줄 — 부서 접수(DB·후속 글에 사유가 남는다)이고 아직 보류가 아닐 때(풀기는 불필요). 시트만 있는 줄은 사유를 적을 칸이 없다 */
+export function holdNeedsReason(row: Pick<UnhandledRow, "key" | "source" | "kind" | "receptionId" | "sheet" | "vendor" | "status">): boolean {
+  return unhandledRoute(row) === "dept" && String(row.status || "").replace(/\s+/g, "") !== "보류";
+}
+
 /** 줄 → 처리 경로(순수) */
 export function unhandledRoute(row: Pick<UnhandledRow, "key" | "source" | "kind" | "receptionId" | "sheet" | "vendor">): UnhandledRoute {
   if (row.source === "ticket") return "ticket";
@@ -78,7 +83,7 @@ export const friendlyError = (e: unknown) => { const m = msg(e); return isNetwor
 /**
  * 부서·원격·시트 줄 처리(네트워크). 일정 줄은 performTicketDone. DB·잡 실패는 throw, 뒷단계 실패는 warnings.
  */
-export async function runUnhandledAction(row: UnhandledRow, action: UnhandledActionKind, opts: { by: string; handler?: string }): Promise<UnhandledActionOutcome> {
+export async function runUnhandledAction(row: UnhandledRow, action: UnhandledActionKind, opts: { by: string; handler?: string; reason?: string }): Promise<UnhandledActionOutcome> {
   const route = unhandledRoute(row);
   const btn = unhandledButtons(row);
   if (!route || route === "ticket") throw new Error("이 줄은 여기서 처리할 수 없습니다");
@@ -94,9 +99,10 @@ export async function runUnhandledAction(row: UnhandledRow, action: UnhandledAct
 
   if (route === "dept") {
     const { runDeptAction } = await import("./deptReceptionFlow");
-    const res = await runDeptAction({ id: String(row.receptionId), type: row.kind, vendor: row.vendor, author: "", status: row.status }, action, { by: opts.by, handler: opts.handler });
+    const res = await runDeptAction({ id: String(row.receptionId), type: row.kind, vendor: row.vendor, author: "", status: row.status }, action, { by: opts.by, handler: opts.handler, text: opts.reason });
     const deptSheet = row.kind !== "운영지원" ? " — 부서 시트 처리자 칸에 적힘" : "";
-    return { warnings: res.warnings, message: action === "done" ? "처리완료로 바꿨습니다" : action === "hold" ? `${res.row.status === "보류" ? "보류" : "진행중"}로 바꿨습니다` : (opts.handler ? `${opts.handler} 에게 배정${deptSheet}` : "처리자를 비웠습니다") };
+    const kakaoTail = res.summary ? ` · ${res.summary}` : "";
+    return { warnings: res.warnings, message: (action === "done" ? "처리완료로 바꿨습니다" : action === "hold" ? `${res.row.status === "보류" ? "보류" : "진행중"}로 바꿨습니다` : (opts.handler ? `${opts.handler} 에게 배정${deptSheet}` : "처리자를 비웠습니다")) + kakaoTail };
   }
 
   if (route === "remote") {
@@ -132,7 +138,7 @@ const toneOf = (w: string): "error" | "info" => (/실패|미반영|못 /.test(w)
  * 누름 → 줄 먼저 가리기 → 처리 → 결과 토스트. 실패면 되살리고 빨간 토스트. 화면(컴포넌트)이 사라져도 끝까지 돈다.
  * 돌려주는 값: 성공 true / 실패 false.
  */
-export async function performUnhandledAction(row: UnhandledRow, action: UnhandledActionKind, opts: { by: string; handler?: string }, notify: Notify): Promise<boolean> {
+export async function performUnhandledAction(row: UnhandledRow, action: UnhandledActionKind, opts: { by: string; handler?: string; reason?: string }, notify: Notify): Promise<boolean> {
   markPending(row.key, action, pendingValueFor(action, row, opts.handler));
   const viaSheet = unhandledRoute(row) === "sheet" || (unhandledRoute(row) === "remote" && !!sheetRefOf(row));
   if (viaSheet) notify("시트 반영 중…", "info");
@@ -274,13 +280,14 @@ export function confirmTextFor(row: UnhandledRow, action: "done" | "hold", opts:
  * 돌려주는 값: 취소 = null, 그 밖 = performUnhandledAction 결과.
  */
 export async function confirmAndPerform(
-  row: UnhandledRow, action: UnhandledActionKind, opts: { by: string; handler?: string; copierNoTicket?: boolean },
+  row: UnhandledRow, action: UnhandledActionKind, opts: { by: string; handler?: string; copierNoTicket?: boolean; reason?: string },
   ask: (text: string) => Promise<boolean>, notify: Notify, onGo?: () => void,
 ): Promise<boolean | null> {
+  if (action === "hold" && holdNeedsReason(row) && !String(opts.reason || "").trim()) { notify("보류 사유를 적어 주세요", "error"); return false; }
   if (action !== "assign") {
     const text = confirmTextFor(row, action, { copierNoTicket: opts.copierNoTicket });
     if (text && !(await ask(text))) return null;
   }
   onGo?.();
-  return performUnhandledAction(row, action, { by: opts.by, handler: opts.handler }, notify);
+  return performUnhandledAction(row, action, { by: opts.by, handler: opts.handler, reason: opts.reason }, notify);
 }

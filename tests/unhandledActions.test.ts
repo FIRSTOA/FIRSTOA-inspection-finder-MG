@@ -1,7 +1,7 @@
 // 미처리 [완료]·[보류]·[배정](2026-10-25) — 낙관 제거(pending 5분·실패 복원)·단추 노출 규칙·statusOnly 계약·표시 이름
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyPending, clearPending, markPending, PENDING_TTL_MS, readPending, resetPending } from "../src/unhandledPending";
-import { applyBoardPending, boardRowToUnhandled, confirmAndPerform, confirmTextFor, performUnhandledAction, sheetStatusFor, unhandledButtons, unhandledRoute, pendingValueFor } from "../src/unhandledActions";
+import { applyBoardPending, boardRowToUnhandled, confirmAndPerform, confirmTextFor, holdNeedsReason, performUnhandledAction, sheetStatusFor, unhandledButtons, unhandledRoute, pendingValueFor } from "../src/unhandledActions";
 import type { ReceptionRow } from "../src/ReceptionBoard";
 import { buildSheetStatusPayload, sheetVendorHead } from "../src/deptReceptionApi";
 import { RECEPTION_TYPE_META, RECEPTION_TYPES } from "../src/ReceptionTypePicker";
@@ -168,6 +168,19 @@ describe("현황판 카드 → 미처리 줄(boardRowToUnhandled)·확인창", (
     expect(readPending()).toEqual({});
     expect(notify).not.toHaveBeenCalled();
     expect(onGo).not.toHaveBeenCalled();
+  });
+
+  it("부서 접수 [보류]는 사유 필수(없으면 처리 안 하고 빨간 토스트), 보류 풀기·시트 줄은 불필요", async () => {
+    expect(holdNeedsReason(row({}))).toBe(true);
+    expect(holdNeedsReason(row({ status: "보류" }))).toBe(false);
+    expect(holdNeedsReason(row({ key: "s:sales:5", receptionId: undefined, kind: "영업팀" }))).toBe(false);
+    const notify = vi.fn();
+    const ask = vi.fn(async () => true);
+    const res = await confirmAndPerform(row({}), "hold", { by: "나", reason: "  " }, ask, notify);
+    expect(res).toBe(false);
+    expect(ask).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith("보류 사유를 적어 주세요", "error");
+    expect(readPending()).toEqual({});
   });
 
   it("배정은 확인창 없이 바로(이름 고르기 창이 확인 역할)", async () => {

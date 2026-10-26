@@ -23,10 +23,11 @@ export type DeptActionBarProps = {
 
 export default function DeptActionBar({ row, compact = false, author, onChanged, onDone }: DeptActionBarProps) {
   const [busy, setBusy] = useState<DeptActionKind | null>(null);
-  const [panel, setPanel] = useState<"done" | "date" | "memo" | null>(null);
+  const [panel, setPanel] = useState<"done" | "date" | "hold" | "memo" | null>(null);
   const [handled, setHandled] = useState("");
   const [date, setDate] = useState("");
   const [memo, setMemo] = useState("");
+  const [reason, setReason] = useState(""); // [보류]·[날짜 고르기] 사유(필수, 2026-10-27)
   const [progress, setProgress] = useState<string | undefined>(undefined);
   const emit = (r: DeptRowLike) => { onChanged?.(r); onDone?.(r); };
   const closed = row.status === "완료" || row.status === "취소";
@@ -48,10 +49,10 @@ export default function DeptActionBar({ row, compact = false, author, onChanged,
       const res = await runDeptAction(row, kind, { by, today, ...opts });
       emit(res.row);
       res.warnings.forEach((w) => notify(w, warnTone(w)));
-      setPanel(null); setHandled(""); setMemo(""); setDate(""); setProgress(undefined);
+      setPanel(null); setHandled(""); setMemo(""); setDate(""); setReason(""); setProgress(undefined);
       if (!res.warnings.some((w) => warnTone(w) === "error")) {
-        notify(kind === "done" ? "완료 처리했습니다." : kind === "tomorrow" ? `예정일을 ${String(res.row.remote_meta?.schedule_date || "").slice(5)}로 옮겼습니다.`
-          : kind === "date" ? "예정일을 바꿨습니다." : kind === "hold" ? (res.row.status === "보류" ? "보류로 바꿨습니다." : "보류를 풀었습니다.") : "메모를 남겼습니다.", "success");
+        notify((kind === "done" ? "완료 처리했습니다." : kind === "tomorrow" ? `예정일을 ${String(res.row.remote_meta?.schedule_date || "").slice(5)}로 옮겼습니다.`
+          : kind === "date" ? "예정일을 바꿨습니다." : kind === "hold" ? (res.row.status === "보류" ? "보류로 바꿨습니다." : "보류를 풀었습니다.") : "메모를 남겼습니다.") + (res.summary ? ` · ${res.summary}` : ""), "success");
       }
     } catch (e) {
       emit(row); // 되돌림
@@ -78,10 +79,10 @@ export default function DeptActionBar({ row, compact = false, author, onChanged,
         <button type="button" disabled={!!busy || closed} onClick={() => void run("tomorrow")} className={`${btn} ${plain}`} title="다음 영업일(토·일 건너뜀)로 예정일을 옮깁니다">
           {spin("tomorrow") || <ChevronsRight size={icon} aria-hidden />}내일로
         </button>
-        <button type="button" disabled={!!busy || closed} onClick={() => { setDate(meta.schedule_date || ""); setPanel(panel === "date" ? null : "date"); }} className={`${btn} ${plain}`}>
+        <button type="button" disabled={!!busy || closed} onClick={() => { setDate(meta.schedule_date || ""); setReason(""); setPanel(panel === "date" ? null : "date"); }} className={`${btn} ${plain}`}>
           {spin("date") || <CalendarDays size={icon} aria-hidden />}날짜 고르기
         </button>
-        <button type="button" disabled={!!busy || closed} onClick={() => void run("hold")} aria-pressed={row.status === "보류"}
+        <button type="button" disabled={!!busy || closed} onClick={() => { if (row.status === "보류") void run("hold"); else { setReason(""); setPanel(panel === "hold" ? null : "hold"); } }} aria-pressed={row.status === "보류"}
           className={`${btn} ${row.status === "보류" ? "border-amber-400 bg-amber-100 text-amber-800" : plain}`}>
           {spin("hold") || <Pause size={icon} aria-hidden />}{row.status === "보류" ? "보류 풀기" : "보류"}
         </button>
@@ -102,9 +103,27 @@ export default function DeptActionBar({ row, compact = false, author, onChanged,
       )}
 
       {panel === "date" && (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-          <input type="date" value={date} min={kstDate()} onChange={(e) => setDate(e.target.value)} aria-label="예정일" onClick={openNativePicker} className={`${input} w-auto flex-1`} />
-          <button type="button" disabled={!!busy || !date} onClick={() => void run("date", { date })} className={`${btn} border-slate-900 bg-slate-900 text-white`}>{spin("date")}예정일 저장</button>
+        <div className="space-y-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+          <input type="date" value={date} min={kstDate()} onChange={(e) => setDate(e.target.value)} aria-label="예정일" onClick={openNativePicker} className={input} />
+          <input value={reason} onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && date && reason.trim()) void run("date", { date, text: reason.trim() }); }}
+            placeholder="사유(필수)" aria-label="예정일 변경 사유" className={input} />
+          {!reason.trim() && <p className="text-[11px] font-bold text-amber-700">사유를 적어야 저장할 수 있습니다.</p>}
+          <div className="flex justify-end gap-1.5">
+            <button type="button" onClick={() => setPanel(null)} className={`${btn} ${plain}`}>닫기</button>
+            <button type="button" disabled={!!busy || !date || !reason.trim()} onClick={() => void run("date", { date, text: reason.trim() })} className={`${btn} border-slate-900 bg-slate-900 text-white`}>{spin("date")}예정일 저장</button>
+          </div>
+        </div>
+      )}
+
+      {panel === "hold" && (
+        <div className="space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
+          <input value={reason} onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && reason.trim()) void run("hold", { text: reason.trim() }); }}
+            placeholder="사유(필수)" aria-label="보류 사유" className={input} />
+          {!reason.trim() && <p className="text-[11px] font-bold text-amber-700">사유를 적어야 보류할 수 있습니다.</p>}
+          <div className="flex justify-end gap-1.5">
+            <button type="button" onClick={() => setPanel(null)} className={`${btn} ${plain}`}>닫기</button>
+            <button type="button" disabled={!!busy || !reason.trim()} onClick={() => void run("hold", { text: reason.trim() })} className={`${btn} border-amber-500 bg-amber-500 text-white`}>{spin("hold")}보류 확정</button>
+          </div>
         </div>
       )}
 

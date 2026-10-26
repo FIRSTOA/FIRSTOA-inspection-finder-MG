@@ -9,7 +9,7 @@
  * - 달력 = DeptCalendarPanel compact(그 부서 달력 추가·수정·삭제).
  * - 60초마다·창 복귀 때 다시 읽는다. 화면이 숨어 있으면(useScreenActive) 쉰다. 실패는 빨간 줄로 보이고 이전 값은 둔다.
  *   view 가 plan·cal 이 아니어도(접수리스트·미처리 현황 보기 중) 탭 숫자를 위해 계속 읽는다.
- * 배정 = remote_meta.handler 1명(runDeptAction "assign" → 시트 처리자 칸 갱신). 알림은 보내지 않는다(Q6).
+ * 배정 = remote_meta.handler 1명(runDeptAction "assign" → 시트 처리자 칸 갱신). 푸시 알림은 보내지 않는다(Q6). 부서 방에는 [배정] 후속 글이 간다(2026-10-27, deptReceptionFlow).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ExternalLink, Loader2, Plus } from "lucide-react";
@@ -138,7 +138,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
       const res = await runDeptAction(row, "assign", { by: resolveActor(author), handler });
       patchRow(res.row);
       res.warnings.forEach((w) => notify(w, warnTone(w)));
-      if (!res.warnings.some((w) => warnTone(w) === "error")) notify(handler ? `처리자를 ${handler}(으)로 배정했습니다.` : "처리자를 비웠습니다(미배정).", "success");
+      if (!res.warnings.some((w) => warnTone(w) === "error")) notify(`${handler ? `처리자를 ${handler}(으)로 배정했습니다.` : "처리자를 비웠습니다(미배정)."}${res.summary ? ` · ${res.summary}` : ""}`, "success");
       settle();
     } catch (e) {
       patchRow(prev); // 되돌림

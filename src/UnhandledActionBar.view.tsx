@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import { Check, ExternalLink, Loader2, Pause, UserRound } from "lucide-react";
 import type { UnhandledRow } from "./homeUnhandled";
 import {
-  confirmAndPerform, findOpenCopierTicket, loadTicketForDone, performTicketDone, sheetRefOf, unhandledButtons, unhandledRoute,
+  confirmAndPerform, findOpenCopierTicket, holdNeedsReason, confirmTextFor, loadTicketForDone, performTicketDone, sheetRefOf, unhandledButtons, unhandledRoute,
   friendlyError, type TicketForDone, type UnhandledActionKind,
 } from "./unhandledActions";
 import { sheetRowUrl } from "./receptionSheetOpen";
@@ -110,6 +110,8 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
   const [busy, setBusy] = useState<UnhandledActionKind | "">("");
   const [assignOpen, setAssignOpen] = useState(false);
   const [freeName, setFreeName] = useState("");
+  const [holdOpen, setHoldOpen] = useState(false); // 보류 사유 창(부서 접수 줄, 2026-10-27)
+  const [holdReason, setHoldReason] = useState("");
   const [ticket, setTicket] = useState<TicketForDone | null>(null);
   const members = useMembers();
   const { book } = useAuthorBook();
@@ -120,10 +122,11 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
   }, [route, row.kind, book, members]);
 
   // 확인창(완료·보류) → 처리. 취소면 busy·pending·토스트 모두 그대로(아무 변화 없음)
-  const run = async (action: UnhandledActionKind, handler?: string, extra: { copierNoTicket?: boolean } = {}) => {
+  const run = async (action: UnhandledActionKind, handler?: string, extra: { copierNoTicket?: boolean; reason?: string } = {}) => {
     if (busy) return;
     const ok = await confirmAndPerform(row, action, { by: resolveActor(author), handler, ...extra },
-      (text) => askConfirm(text, { okLabel: action === "done" ? "완료" : String(row.status || "").replace(/\s+/g, "") === "보류" ? "보류 풀기" : "보류" }),
+      (text) => extra.reason ? Promise.resolve(true) : // 사유 창이 확인 역할을 이미 했다
+ askConfirm(text, { okLabel: action === "done" ? "완료" : String(row.status || "").replace(/\s+/g, "") === "보류" ? "보류 풀기" : "보류" }),
       notify, () => { setBusy(action); onStarted?.(action); });
     if (ok === null) return;
     setBusy("");
@@ -174,12 +177,14 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
     onFinished?.("done", ok);
   };
 
+  const onHold = () => { if (holdNeedsReason(row)) { setHoldReason(""); setHoldOpen(true); } else void run("hold"); };
+  const saveHold = () => { const reason = holdReason.trim(); if (!reason) return; setHoldOpen(false); void run("hold", undefined, { reason }); };
   const openAssign = () => { setFreeName(String(row.assignee || "").split(/[,·]/)[0].trim()); setAssignOpen(true); };
   const saveAssign = (v: string) => { setAssignOpen(false); void run("assign", String(v || "").split(/[,·]/)[0].trim()); };
 
   return (
     <>
-      <UnhandledActionButtons row={row} busy={busy} onDone={() => void onDone()} onHold={() => void run("hold")} onAssign={openAssign} onOpenSchedule={onOpenSchedule} />
+      <UnhandledActionButtons row={row} busy={busy} onDone={() => void onDone()} onHold={onHold} onAssign={openAssign} onOpenSchedule={onOpenSchedule} />
       {assignOpen && layer(names.length ? (
         <AssigneePicker names={names} value={String(row.assignee || "")} max={1} title="처리자 배정"
           subtitle={`${row.vendor || "업체 미정"} · 1명${sheetRefOf(row) || route === "remote" || (route === "dept" && row.kind !== "운영지원") ? " · 저장하면 시트 처리자 칸에 적힘" : ""}`}
@@ -196,6 +201,19 @@ export default function UnhandledActionBar({ row, author, onStarted, onFinished,
             placeholder="처리자 이름" aria-label="처리자 이름" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none focus:border-blue-500" />
         </FormModal>
       ))}
+      {holdOpen && layer(
+        <FormModal title="보류" subtitle={confirmTextFor(row, "hold") || row.vendor || ""} onClose={() => setHoldOpen(false)}
+          footer={(
+            <div className="flex w-full justify-end gap-2">
+              <button type="button" onClick={() => setHoldOpen(false)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 text-xs font-black text-slate-700 sm:min-h-9">닫기</button>
+              <button type="button" disabled={!holdReason.trim()} onClick={saveHold} className="min-h-11 rounded-lg bg-amber-500 px-4 text-xs font-black text-white hover:bg-amber-600 disabled:opacity-40 sm:min-h-9">보류 확정</button>
+            </div>
+          )}>
+          <input value={holdReason} autoFocus onChange={(e) => setHoldReason(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveHold(); }}
+            placeholder="사유(필수)" aria-label="보류 사유" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-bold outline-none focus:border-blue-500" />
+          {!holdReason.trim() && <p className="mt-1.5 text-[11px] font-bold text-amber-700">사유를 적어야 보류할 수 있습니다.</p>}
+        </FormModal>,
+      )}
       {ticket && layer(
         <Suspense fallback={null}>
           <DoneReasonModal ticket={ticket} onClose={() => setTicket(null)} onApply={(reason, mode) => void applyTicket(reason, mode)} />
