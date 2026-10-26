@@ -139,7 +139,8 @@ export type DeptReceptionInput = {
   notes?: string;           // 특이사항(DB만)
   receiverName?: string;
   receiverPhone?: string;
-  handler?: string;         // 비우면 defaultHandler
+  handler?: string;         // 비우면 defaultHandler — 단 handlerExplicit 이면 빈값(미정) 그대로
+  handlerExplicit?: boolean; // 사용자가 처리자 칸을 직접 골랐다(미정 포함) — 지역 기본값으로 덮지 않는다(2026-10-27 사용자 "미정으로 했는데 이정현으로 자꾸 뜸")
   outside?: boolean;        // 외근요청
   contractKind?: string;    // 경영만
   progress?: string;
@@ -181,7 +182,7 @@ export function buildDeptReceptionRow(input: DeptReceptionInput): DeptReceptionR
   const region = normalizeRegion(input.region);
   const leaseNo = t(input.leaseNo);
   const meta: DeptMeta = {
-    handler: t(input.handler) || defaultHandler(input.dept, region),
+    handler: input.handlerExplicit ? t(input.handler) : (t(input.handler) || defaultHandler(input.dept, region)),
     via: input.route === "사내" ? t(input.via) : "",
     outside: input.outside ? "외근요청" : "",
     contract_kind: input.dept === "경영지원" ? t(input.contractKind) : "",

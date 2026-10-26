@@ -235,3 +235,12 @@ describe("isStaleRemote", () => {
     expect(isStaleRemote({ type: "IT", status: "원격대기", receipt_date: "2026-08-25" }, "2026-10-20")).toBe(false);
   });
 });
+
+describe("처리자 미정 유지(2026-10-27)", () => {
+  it("handlerExplicit 이면 빈 처리자(미정)를 지역 기본값으로 덮지 않는다", async () => {
+    const { buildDeptReceptionRow: buildDeptRow } = await import("../src/deptReception");
+    const base = { dept: "영업팀" as const, author: "홍길동", route: "카카오", field: "해지문의", vendor: "가짜상사", region: "수도권C", content: "x" };
+    expect((buildDeptRow({ ...base, handler: "" }).remote_meta as Record<string, string>).handler).toBe("이정현"); // 안 건드리면 지역 기본값
+    expect((buildDeptRow({ ...base, handler: "", handlerExplicit: true }).remote_meta as Record<string, string>).handler).toBe(""); // 미정 고르면 미정
+  });
+});

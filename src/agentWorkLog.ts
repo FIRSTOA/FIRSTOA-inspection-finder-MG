@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-27",
+    "hash": "b2d1a92c49",
+    "agent": "developer",
+    "summary": "부서 카드 2차(둘째 줄 작성자·운영 카드·접수유형 보존) + 시트 배열 수식 보호(A열 순번은 시트가, 머리 ARRAYFORMULA 열엔 값 안 씀) + 처리 패널 세로 정렬"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "b2d1a92c49",
+    "agent": "debugger",
+    "summary": "부서 카드 2차(둘째 줄 작성자·운영 카드·접수유형 보존) + 시트 배열 수식 보호(A열 순번은 시트가, 머리 ARRAYFORMULA 열엔 값 안 씀) + 처리 패널 세로 정렬"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "b2d1a92c49",
+    "agent": "qa-checker",
+    "summary": "부서 카드 2차(둘째 줄 작성자·운영 카드·접수유형 보존) + 시트 배열 수식 보호(A열 순번은 시트가, 머리 ARRAYFORMULA 열엔 값 안 씀) + 처리 패널 세로 정렬"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "b2d1a92c49",
+    "agent": "field-deploy-check",
+    "summary": "부서 카드 2차(둘째 줄 작성자·운영 카드·접수유형 보존) + 시트 배열 수식 보호(A열 순번은 시트가, 머리 ARRAYFORMULA 열엔 값 안 씀) + 처리 패널 세로 정렬"
+  },
+  {
+    "date": "2026-10-27",
     "hash": "b86eca3f8e",
     "agent": "feature-planner",
     "summary": "부서 접수 카톡 글을 각 방에서 쓰던 접수 카드 양식으로 — 경영·전략영업·IT 카드, 운영 자유 글"

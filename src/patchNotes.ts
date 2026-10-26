@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b2d1a92c49",
+    "date": "2026-10-27",
+    "note": "부서 카드 2차(둘째 줄 작성자·운영 카드·접수유형 보존) + 시트 배열 수식 보호(A열 순번은 시트가, 머리 ARRAYFORMULA 열엔 값 안 씀) + 처리 패널 세로 정렬"
+  },
+  {
     "hash": "b86eca3f8e",
     "date": "2026-10-27",
     "note": "부서 접수 카톡 글을 각 방에서 쓰던 접수 카드 양식으로 — 경영·전략영업·IT 카드, 운영 자유 글"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "3cd9b819a6",
     "date": "2026-10-01",
     "note": "OKR 주차 번호 옮기기 SQL(월요일 기준 전환 뒤 서버 기록 이동·병합) — 사용자가 SQL Editor에서 실행"
-  },
-  {
-    "hash": "ae69892ca0",
-    "date": "2026-10-01",
-    "note": "OKR 주차는 월요일이 든 달 기준(9/28~10/2 = 9월 4주차) + 전주 달성기준은 그대로 전부 가져오기 + 10월부터 '월 종합' 숨김 + 셀 Ctrl+Z/Ctrl+Y 되돌리기 + 모아보기 기본 분기·드롭다운 겹침 수정 + 워킨맵 빠른 색칠 G5/G12 표기·가볍게"
   }
 ];

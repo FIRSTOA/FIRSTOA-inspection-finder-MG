@@ -87,7 +87,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
     model: !isNew ? pickLease(lease, "모델명", "기종") : "",
     address: isNew ? "" : pickLease(lease, "주소(실납품주소,도로명주소)", "주소"),
     field: fieldFinal, content: symptom, notes, receiverName, receiverPhone,
-    handler: effectiveHandler, outside, contractKind: dept === "경영지원" ? contractKind : "", scheduleDate,
+    handler: effectiveHandler, handlerExplicit: handlerTouched, outside, contractKind: dept === "경영지원" ? contractKind : "", scheduleDate,
     lease: isNew ? null : lease, // 카톡 카드의 임대리스트 칸(2026-10-27)
   };
   const missing = deptMissing(input);
