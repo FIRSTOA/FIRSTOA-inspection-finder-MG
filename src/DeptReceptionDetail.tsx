@@ -213,11 +213,12 @@ export default function DeptReceptionDetail({ row, onChanged, onDeleted, author 
             {DEPT_STATUSES.map((s) => <button key={s} type="button" aria-pressed={status === s} onClick={() => setStatus(s)} className={chip(status === s)}>{s}</button>)}
           </div>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div><div className={label}>처리자</div><div className="mt-1"><PortalSelect value={handler} onChange={setHandler} options={handlerOptions} placeholder="처리자" width={200} className="w-full" /></div></div>
+        {/* 처리자 → 진행 메모 → 처리내용을 한 줄씩 세로로 — 두 칸 나란히 두면 처리자 아래가 비어 어긋나 보였다(2026-10-27 사용자) */}
+        <div className="space-y-2">
+          <div><div className={label}>처리자</div><div className="mt-1"><PortalSelect value={handler} onChange={setHandler} options={handlerOptions} placeholder="처리자" width={200} className="w-full sm:w-[200px]" /></div></div>
           {dept === "영업팀" && (
             <div>
-              <div className={label}>진행 메모</div>
+              <div className={label}>진행 메모 <span className="font-medium text-slate-400">(영업 시트 승인여부 칸)</span></div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {DEPT_PROGRESS_CHIPS.map((c) => <button key={c} type="button" aria-pressed={progress === c} onClick={() => setProgress(progress === c ? "" : c)} className={chip(progress === c)}>{c}</button>)}
               </div>

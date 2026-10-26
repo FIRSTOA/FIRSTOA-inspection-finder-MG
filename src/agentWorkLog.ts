@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-27",
+    "hash": "b86eca3f8e",
+    "agent": "feature-planner",
+    "summary": "부서 접수 카톡 글을 각 방에서 쓰던 접수 카드 양식으로 — 경영·전략영업·IT 카드, 운영 자유 글"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "b86eca3f8e",
+    "agent": "developer",
+    "summary": "부서 접수 카톡 글을 각 방에서 쓰던 접수 카드 양식으로 — 경영·전략영업·IT 카드, 운영 자유 글"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "b86eca3f8e",
+    "agent": "qa-checker",
+    "summary": "부서 접수 카톡 글을 각 방에서 쓰던 접수 카드 양식으로 — 경영·전략영업·IT 카드, 운영 자유 글"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "b86eca3f8e",
+    "agent": "field-deploy-check",
+    "summary": "부서 접수 카톡 글을 각 방에서 쓰던 접수 카드 양식으로 — 경영·전략영업·IT 카드, 운영 자유 글"
+  },
+  {
+    "date": "2026-10-27",
     "hash": "6b923f73a8",
     "agent": "developer",
     "summary": "카톡 대화 저장 매크로: 한 방씩 천천히(불러오기 대기·저장 완료 확인·20초 텀·60분) + 실행기에서 별도 프로세스로(심박 유지, 저장 중 중계 보류)"

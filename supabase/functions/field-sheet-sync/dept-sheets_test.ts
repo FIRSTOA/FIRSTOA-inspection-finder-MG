@@ -6,7 +6,8 @@ const assertThrows = (fn: () => unknown, _type: unknown, includes: string) =>
   assert.throws(fn, (e: unknown) => e instanceof Error && e.message.includes(includes));
 import {
   buildAppendValues, buildLeaseValues, buildUpdateValues, DEPT_SHEET_SPECS, fingerprintCols, kstStamp,
-  lastFilledRow, nextSeq, normFingerprint, parseSourceIndex, sheetStatusText, verifyDeptHeaders,
+  isSpillFormula, lastFilledRow, nextSeq, normFingerprint, parseSeq, parseSourceIndex, seqBySheet, sheetStatusText,
+  spillCols, verifyDeptHeaders,
 } from "./dept-sheet-spec.ts";
 
 const sales = DEPT_SHEET_SPECS.reception_sales;
@@ -155,4 +156,60 @@ Deno.test("영업 spec 의 src 와 실측 6행이 일치", () => {
     if (c.kind === "lease") assertEquals(parsed, c.src, `열 ${c.col} ${c.header}`);
     else assertEquals(parsed, 0, `열 ${c.col} ${c.header} 은 6행 번호가 없어야 함`);
   }
+});
+
+// 2026-10-27 사고: 영업 A7 머리 ARRAYFORMULA 가 채우는 A 칸(대상 칸 FORMULA 읽기 = 빈칸)에 앱이 순번을 써서 #REF!
+const ARRAY_A = '=ARRAYFORMULA(IF(B7:B="","",ROW(B7:B)-6))';
+const ARRAY_C = '=ARRAYFORMULA(IF(B6:B="","",TEXT(B6:B,"yymm")))';
+const seqAt = new Date("2026-10-26T17:32:00Z");
+const seqData = { leaseNo: "11110", route: "전화", symptom: "테스트" };
+
+Deno.test("순번: 두 부서 시트 모두 seqMode sheet — A열을 쓰지 않는다", () => {
+  for (const spec of [sales, mgmt]) {
+    assertEquals(spec.seqMode, "sheet");
+    const bySheet = seqBySheet(spec, { targetA: "" });
+    assertEquals(bySheet, true);
+    const v = buildAppendValues(spec, { data: seqData, author: "이민기", submittedAt: seqAt, seq: 1785 }, { seqBySheet: bySheet });
+    assertEquals(v[1], undefined, `${spec.label} A열`);
+    assertEquals(v[2], "10월 27일");
+  }
+});
+
+Deno.test("순번 자동 판정 표본1: 머리 ARRAYFORMULA + 대상 A 빈 셀 → 시트가 매김", () => {
+  const appSpec = { seqMode: "app" as const };
+  const aColumn = ["경영지원 요청업무 리스트", "", "순번", "=MAX(A7:A)", "-", "", ARRAY_A, "", ""];
+  assertEquals(seqBySheet(appSpec, { targetA: "", aboveA: "", aColumnFormulas: aColumn }), true);
+  // 6·7행 FORMULA: C6·A7 배열 수식 → A·C 를 수식 칸으로 본다(값을 쓰면 배열이 깨진다)
+  const head = [["", "", ARRAY_C, "", "", "", "", "", "", "", "", "=MATCH(L5,'임대리스트'!$1:$1,0)"], [ARRAY_A, "4월 29일", "", "11:06"]];
+  const cols = spillCols(head);
+  assertEquals([...cols].sort((x, y) => x - y), [1, 3]);
+  const v = buildAppendValues(sales, { data: seqData, author: "이민기", submittedAt: seqAt, seq: 5923 }, { formulaCols: cols, seqBySheet: true });
+  assertEquals(v[1], undefined);
+  assertEquals(v[3], undefined);
+});
+
+Deno.test("순번 자동 판정 표본2: 행별 수식(위 행 A 가 수식) + 대상 A 빈 셀 → 시트가 매김", () => {
+  const appSpec = { seqMode: "app" as const };
+  assertEquals(seqBySheet(appSpec, { targetA: "", aboveA: "=A1788+1", aColumnFormulas: ["", "", "", "", "-", "", "1", "=A7+1"] }), true);
+  assertEquals(isSpillFormula("=A1788+1"), false); // 배열 아님 → 위 행 수식 복사 경로
+  assertEquals(seqBySheet(appSpec, { targetA: "=ROW()-6" }), true);
+  // 전부 값이면 앱이 매긴다(옛 동작)
+  assertEquals(seqBySheet(appSpec, { targetA: "", aboveA: "1783", aColumnFormulas: ["", "-", "1", "2"] }), false);
+});
+
+Deno.test("배열 수식 판정: 다른 시트 범위·가로 범위·행별 수식은 아니다", () => {
+  assertEquals(isSpillFormula(ARRAY_A), true);
+  assertEquals(isSpillFormula("=arrayformula(row(A7:A)-6)"), true);
+  assertEquals(isSpillFormula("=FILTER(B:B, B:B<>\"\")"), true);
+  assertEquals(isSpillFormula("=ARRAYFORMULA(VLOOKUP(K7,'임대리스트'!A:Z,3,0))"), false);
+  assertEquals(isSpillFormula("=ARRAYFORMULA(MATCH(L5:BE5,임대리스트!1:1,0))"), false);
+  assertEquals(isSpillFormula("=VLOOKUP(K7,임대리스트!A:Z,3,0)"), false);
+  assertEquals(isSpillFormula("1784"), false);
+});
+
+Deno.test("기입 뒤 A 표시값 → 순번(빈칸·#REF! 은 null)", () => {
+  assertEquals(parseSeq("1784"), 1784);
+  assertEquals(parseSeq("1,784"), 1784);
+  assertEquals(parseSeq(""), null);
+  assertEquals(parseSeq("#REF!"), null);
 });

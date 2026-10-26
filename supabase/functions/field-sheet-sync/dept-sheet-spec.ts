@@ -44,6 +44,12 @@ export type DeptSheetSpec = {
   markerCols: number[];  // 마지막 데이터 행 판단(사람이 적는 열)
   fingerprintKeys: DeptValueKey[];
   columns: DeptColumn[];
+  /**
+   * 순번(A열)을 누가 매기나. "sheet" = 시트 수식이 매긴다 — 앱은 A열을 절대 쓰지 않고 기입 뒤 A 표시값을 읽어 돌려준다.
+   * 2026-10-27 실측(공개 CSV): 영업 A7 이 '#REF!'·A8 아래 빈칸·앱이 쓴 A5929='5923' — A7 머리 ARRAYFORMULA 가
+   * 앱 값과 부딪혀 열 전체가 깨졌다. 경영은 파트장 지시(시트 수식이 매김). 둘 다 "sheet".
+   */
+  seqMode: "sheet" | "app";
 };
 
 const SALES_COLUMNS: DeptColumn[] = [
@@ -147,13 +153,13 @@ export const DEPT_SHEET_SPECS: Record<DeptSheetCategory, DeptSheetSpec> = {
     category: "reception_sales", label: "영업팀", headerRow: 5, indexRow: 6, dataStart: 7,
     lastCol: 33, markerCols: [2, 4, 5],
     fingerprintKeys: ["date", "time", "author", "leaseNo", "symptom"],
-    columns: SALES_COLUMNS,
+    columns: SALES_COLUMNS, seqMode: "sheet",
   },
   reception_mgmt: {
     category: "reception_mgmt", label: "경영지원", headerRow: 5, indexRow: 6, dataStart: 7,
     lastCol: 57, markerCols: [2, 4, 5],
     fingerprintKeys: ["date", "time", "author", "leaseNo", "symptom"],
-    columns: MGMT_COLUMNS,
+    columns: MGMT_COLUMNS, seqMode: "sheet",
   },
 };
 
@@ -217,6 +223,47 @@ export function nextSeq(aColumn: unknown[]): number {
   return max + 1;
 }
 
+const isFormula = (v: unknown) => String(v ?? "").trim().startsWith("=");
+
+/**
+ * 아래로 퍼지는 배열 수식인가 — ARRAYFORMULA(또는 FILTER·QUERY·SORT·UNIQUE·SEQUENCE·BYROW·MAP·SCAN·MAKEARRAY)이면서
+ * 같은 시트의 끝이 열린 열 범위(B7:B, B:B)를 참조한다. 이 수식이 채우는 칸은 FORMULA 렌더로 읽어도 빈칸/값이라
+ * 대상 칸만 보면 수식인 줄 모른다 — 거기에 값을 쓰면 배열 전체가 #REF! 가 된다(2026-10-27 영업 A·C, 경영 C).
+ * 다른 시트 범위(임대리스트!A:Z)와 가로 범위(L5:BE5)는 세지 않는다(행별 VLOOKUP·6행 번호 수식 오판 방지).
+ */
+export function isSpillFormula(v: unknown): boolean {
+  const f = String(v ?? "").trim();
+  if (!f.startsWith("=")) return false;
+  if (!/\b(ARRAYFORMULA|FILTER|QUERY|SORT|UNIQUE|SEQUENCE|BYROW|MAP|SCAN|MAKEARRAY)\s*\(/i.test(f)) return false;
+  return /(?<![!\w'$])\$?[A-Z]{1,3}\$?\d*\s*:\s*\$?[A-Z]{1,3}(?![\w$(!])/i.test(f);
+}
+
+/** FORMULA 렌더로 읽은 행들(각 행은 A열부터)에서 아래로 퍼지는 배열 수식이 있는 열 번호(1부터) */
+export function spillCols(formulaRows: unknown[][]): Set<number> {
+  const out = new Set<number>();
+  for (const row of formulaRows) (row || []).forEach((v, i) => { if (isSpillFormula(v)) out.add(i + 1); });
+  return out;
+}
+
+/**
+ * 순번을 시트가 매기는가. spec 이 "sheet" 이거나, 자동 판정 — 대상 행 A 가 수식 / 바로 위 데이터 행 A 가 수식 /
+ * A1~A{row-1} 에 아래로 퍼지는 배열 수식이 있음. 하나라도 맞으면 앱은 A열을 쓰지 않는다.
+ */
+export function seqBySheet(
+  spec: Pick<DeptSheetSpec, "seqMode">,
+  probe: { targetA?: unknown; aboveA?: unknown; aColumnFormulas?: unknown[] },
+): boolean {
+  if (spec.seqMode === "sheet") return true;
+  if (isFormula(probe.targetA) || isFormula(probe.aboveA)) return true;
+  return (probe.aColumnFormulas || []).some(isSpillFormula);
+}
+
+/** 기입 뒤 읽은 A 표시값 → 순번. 빈칸·#REF! 등은 null */
+export function parseSeq(shown: unknown): number | null {
+  const n = Number(String(shown ?? "").replace(/[,\s]/g, ""));
+  return String(shown ?? "").trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** 마커 열들(데이터 시작 행부터 읽은 열 값)에서 마지막으로 값이 있는 행 번호. 없으면 0 */
 export function lastFilledRow(dataStart: number, markerValues: unknown[][]): number {
   let last = 0;
@@ -278,11 +325,12 @@ export function pickData(data: Record<string, unknown>, key: DeptValueKey): stri
  * 접수 행의 앱 값(열 번호 → 값). 임대리스트 고정 값은 따로(dept-sheets.ts) 덮는다.
  * - formulaCols: 대상 행에서 수식이 들어 있는 열 — app·fixed·fallback 값은 쓰지 않는다
  * - leaseFilled: 임대리스트 값을 실제로 얻었는지. 얻었으면 lease 열의 fallback 은 쓰지 않는다
+ * - seqBySheet: 순번을 시트 수식이 매긴다(seqBySheet()) — 순번 열은 쓰지 않는다
  */
 export function buildAppendValues(
   spec: DeptSheetSpec,
   input: { data: Record<string, unknown>; author: string; submittedAt: Date; seq: number },
-  opts: { formulaCols?: Set<number>; leaseFilled?: boolean } = {},
+  opts: { formulaCols?: Set<number>; leaseFilled?: boolean; seqBySheet?: boolean } = {},
 ): Record<number, string> {
   const { data, author, submittedAt, seq } = input;
   const stamp = kstStamp(submittedAt);
@@ -303,6 +351,7 @@ export function buildAppendValues(
   const out: Record<number, string> = {};
   for (const c of spec.columns) {
     if (formula.has(c.col)) continue;
+    if (opts.seqBySheet && c.kind === "app" && c.key === "seq") continue; // 시트가 매기는 순번 — 앱은 쓰지 않는다
     let v = "";
     if (c.kind === "app" && c.key) v = value(c.key);
     else if (c.kind === "fixed") v = c.fixed || "";

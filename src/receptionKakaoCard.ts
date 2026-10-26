@@ -2,8 +2,8 @@
  * 접수 카톡 글 = 각 방에서 사람이 붙여 오던 실물 양식 그대로(2026-10-27).
  * 설계: docs/tasks/dept-kakao-card-2026-10-27.md
  *
- * - 카드(경영지원·전략영업·IT): 시트 "접수 카드" 범위를 복사해 붙인 글자 배열 — 공통 직렬화 serializeCard + 양식별 칸 목록(MGMT_CARD·SALES_CARD·IT_CARD).
- * - 자유 글 틀(운영지원): buildOpsText — 있는 값만, 빈 값이면 그 줄을 뺀다.
+ * - 카드(경영지원·전략영업·운영지원·IT): 시트 "접수 카드" 범위를 복사해 붙인 글자 배열 — 공통 직렬화 serializeCard + 양식별 칸 목록(MGMT_CARD·SALES_CARD·IT_CARD).
+ * - 운영지원도 카드(OPS_CARD, 경영 틀 기반 — 2026-10-27 자유 글 틀 폐기). 카드 칸에 없는 폼 값(예정일·외근요청 등)은 접수내용 뒤 한 줄씩.
  * 값은 임대리스트 행(LeaseHit = vendor_info._raw 키)과 폼 값(DeptReceptionRow)에서. 시트 수식 오류(28000개월·76. 8. 28)는 재현하지 않는다.
  *
  * 순수 모듈 — ServiceReception.tsx 의 포맷터(fmtDot·fmtWon)를 import 하지 않는다(순환 import·큰 화면 파일 끌어옴). 같은 규칙을 옮기고 tests 로 고정.
@@ -28,7 +28,7 @@ const CUT_SUFFIX = "…(앱 접수에 전체)";
 export type CardCell = string | { v: string };
 export type CardLineSpec =
   | { kind: "cells"; cells: CardCell[] }
-  | { kind: "pairs"; pairs: Array<[label: string, value: CardCell, lv?: string]> } // lv 를 주면 그 쌍만 라벨·값 사이 글자를 바꾼다(영업 "접수자연락처" 콜론 없음)
+  | { kind: "pairs"; pairs: Array<[label: CardCell, value: CardCell, lv?: string]> } // 라벨이 빈 글자로 풀리면 그 쌍은 뺀다. lv 를 주면 그 쌍만 라벨·값 사이 글자를 바꾼다(영업 "접수자연락처" 콜론 없음)
   | { kind: "blank" }
   | { kind: "text"; prefix: string; value: CardCell };
 export type CardLine =
@@ -43,7 +43,7 @@ const cellValue = (c: CardCell, values: Record<string, string>): string => (type
 export function resolveCard(spec: readonly CardLineSpec[], values: Record<string, string>): CardLine[] {
   return spec.map((line): CardLine => {
     if (line.kind === "cells") return { kind: "cells", cells: line.cells.map((c) => cellValue(c, values)) };
-    if (line.kind === "pairs") return { kind: "pairs", pairs: line.pairs.map(([l, v, lv]) => [l, cellValue(v, values), lv]) };
+    if (line.kind === "pairs") return { kind: "pairs", pairs: line.pairs.map(([l, v, lv]): [string, string, string?] => [cellValue(l, values), cellValue(v, values), lv]).filter(([l]) => l) };
     if (line.kind === "text") return { kind: "text", prefix: line.prefix, value: cellValue(line.value, values) };
     return { kind: "blank" };
   });
@@ -166,9 +166,10 @@ const misuOf = (v: string) => (str(v) === "0" ? "" : oneLine(v));
 const v = (key: string) => ({ v: key });
 const row4 = (a: string, b: string, c: string, d: string): CardLineSpec => ({ kind: "cells", cells: [a, v(b), c, v(d)] });
 
-/** 경영지원 — 시트 "접수 카드" A1:M15 (B1:D1 병합, J1 방문주기 값은 빈칸 Q9) + Q7 꼬리 줄 */
+/** 경영지원 — 시트 "접수 카드" A1:M15 (B1:D1 병합, J1 방문주기 값은 빈칸 Q9). 둘째 줄 작성자(AS방 CS 카드와 같은 자리, 2026-10-27 사용자) */
 export const MGMT_CARD: readonly CardLineSpec[] = [
   { kind: "cells", cells: [v("field"), v("vendor"), "", "", "종료일", v("endYY"), "지역", v("region"), "방문주기", v("visitCycle"), "", "접수일", v("receipt")] },
+  { kind: "cells", cells: ["작성자", v("author"), v("handlerLabel"), v("handlerText")] },
   row4("기번", "serial", "급한여부", "urgent"),
   row4("임대여부", "leaseState", "접수분야", "field"),
   row4("임대리스트순번", "seq", "장비소유주", "owner"),
@@ -183,13 +184,13 @@ export const MGMT_CARD: readonly CardLineSpec[] = [
   row4("주소", "address", "확장성", "expand"),
   row4("기종", "model", "기번", "serial"),
   { kind: "cells", cells: ["접수내용", v("content")] },
-  { kind: "text", prefix: "", value: v("tail") },
 ];
 
 /** 전략영업 — 머리 줄은 셀 복사(탭), 본문은 "라벨:   값   /   라벨:   값" */
 export const SALES_CARD: readonly CardLineSpec[] = [
   { kind: "cells", cells: [v("grade"), v("field"), v("model"), v("vendor"), "종료일", v("endYY"), "지역", v("region"), "접수일", v("receipt")] },
   { kind: "blank" },
+  { kind: "pairs", pairs: [["작성자", v("author")], [v("handlerLabel"), v("handlerText")]] },
   { kind: "pairs", pairs: [["임대여부", v("leaseState")], ["접수분야", v("field")]] },
   { kind: "pairs", pairs: [["상호", v("vendor")], ["임대리스트순번", v("seq")]] },
   { kind: "pairs", pairs: [["계약일", v("contract")], ["종료일", v("end")]] },
@@ -199,12 +200,32 @@ export const SALES_CARD: readonly CardLineSpec[] = [
   { kind: "pairs", pairs: [["미수개월", v("misu")], ["남은개월", v("left")]] },
   { kind: "pairs", pairs: [["주소", v("address")]] },
   { kind: "text", prefix: "🔹 접수내용", value: v("content") },
-  { kind: "text", prefix: "", value: v("tail") },
+];
+
+/**
+ * 운영지원 — 경영 카드 틀을 운영 양식에 맞춘 것(2026-10-27 사용자 "양식을 만들어 그냥", 자유 글 틀 폐기).
+ * 값이 빈 칸은 라벨만 두고 값은 빈칸. 운영 폼에 없는 칸(방문주기·급한여부 등)은 넣지 않는다.
+ */
+export const OPS_CARD: readonly CardLineSpec[] = [
+  { kind: "cells", cells: [v("field"), v("vendor"), "", "", "종료일", v("endYY"), "지역", v("region"), "접수일", v("receipt")] },
+  { kind: "cells", cells: ["작성자", v("author"), v("handlerLabel"), v("handlerText")] },
+  row4("접수유형", "route", "접수분야", "field"),
+  row4("예정일", "schedule", "외근요청", "outside"),
+  row4("임대여부", "leaseState", "임대리스트순번", "seq"),
+  row4("계약일", "contract", "종료일", "end"),
+  row4("기본임대료", "baseRent", "기본매수", "baseCount"),
+  row4("설치업체", "installer", "유지보수업체", "maintainer"),
+  row4("업체담당자", "receiverName", "연락처", "receiverPhone"),
+  { kind: "cells", cells: ["★키맨성함/번호", v("keyman")] },
+  row4("주소", "address", "확장성", "expand"),
+  row4("기종", "model", "기번", "serial"),
+  { kind: "cells", cells: ["접수내용", v("content")] },
 ];
 
 /** IT — 방 "신)it접수 as" 실물. 난이도·긴급도·이관여부·사양·처리내용은 앱 폼에 없어 빈칸(Q12) */
 export const IT_CARD: readonly CardLineSpec[] = [
   { kind: "cells", cells: ["IT", v("kind"), v("grade"), v("item"), v("vendor")] },
+  { kind: "cells", cells: ["작성자", v("author")] },
   { kind: "cells", cells: ["난이도", "", "긴급도"] },
   row4("자산번호", "assetNo", "시리얼번호", "serial"),
   { kind: "cells", cells: ["지역", v("region"), "이관여부"] },
@@ -266,24 +287,15 @@ export type DeptCardRow = {
   type: string; author: string; route: string; vendor: string; grade: string; region: string;
   lease_no: string; serial: string; model: string; address: string; field: string; symptom: string;
   receiver_name: string; receiver_phone: string;
-  remote_meta?: Partial<Record<"handler" | "via" | "outside" | "contract_kind" | "schedule_date", string>>;
+  remote_meta?: Partial<Record<"handler" | "via" | "outside" | "contract_kind" | "schedule_date" | "progress", string>>;
 };
 
-const routeText = (row: DeptCardRow) =>
-  row.route === "사내" ? (str(row.remote_meta?.via) ? `사내(${str(row.remote_meta?.via)})` : "사내") : row.route;
-
-/** Q7 꼬리 줄 — 접수자 · 처리자 · 접수유형 (+ 계약서구분·외근요청·예정일 있으면) */
-function deptTail(row: DeptCardRow): string {
-  const m = row.remote_meta || {};
-  const sched = str(m.schedule_date).match(/^\d{4}-(\d{2})-(\d{2})$/);
-  return [
-    str(row.author) ? `접수자 ${str(row.author)}` : "",
-    str(m.handler) ? `처리자 ${str(m.handler)}` : "",
-    routeText(row),
-    str(m.contract_kind) ? `계약서 ${str(m.contract_kind)}` : "",
-    str(m.outside),
-    sched ? `예정일 ${Number(sched[1])}. ${Number(sched[2])}` : "",
-  ].filter(Boolean).join(" · ");
+/** 작성자 줄의 처리자 칸 — 사내 요청자는 처리자 뒤 괄호로만(2026-10-27 사용자). 처리자가 비면 칸째 뺀다 */
+function handlerText(row: DeptCardRow): string {
+  const handler = str(row.remote_meta?.handler);
+  if (!handler) return "";
+  const via = row.route === "사내" ? str(row.remote_meta?.via) : "";
+  return via ? `${handler}(사내 ${via})` : handler;
 }
 
 function deptValues(row: DeptCardRow, lease: Lease, now: Date): Record<string, string> {
@@ -304,39 +316,55 @@ function deptValues(row: DeptCardRow, lease: Lease, now: Date): Record<string, s
     receiverName: oneLine(row.receiver_name),
     receiverPhone: oneLine(row.receiver_phone),
     address: oneLine(row.address || L("주소(실납품주소,도로명주소)", "주소")),
-    tail: deptTail(row),
+    author: str(row.author),
+    handlerText: handlerText(row),
+    handlerLabel: handlerText(row) ? "처리자" : "",
   };
 }
 
-/** 운영지원 — 자유 글 틀. 빈 값이면 그 줄을 통째로 뺀다. 예정일은 폼에서 사람이 넣은 값만 */
-export function buildOpsText(row: DeptCardRow): string {
-  const build = (content: string) => {
-    const date = korDayWithWeekday(str(row.remote_meta?.schedule_date));
-    const contact = [oneLine(row.receiver_name), oneLine(row.receiver_phone)].filter(Boolean).join(" ");
-    const body = [
-      date ? `날짜(요일) : ${date}` : "",
-      str(row.vendor) ? `업체명 : ${spaceLine(row.vendor)}` : "",
-      str(row.address) ? `주소 : ${oneLine(row.address)}` : "",
-      contact ? `ㄴ 담당자 : ${contact}` : "",
-      content ? `품목/요청 : ${content}` : "",
-    ].filter(Boolean);
-    const field = oneLine(row.field);
-    const parts = [
-      field ? `안녕하세요 퍼스트에서 ${field} 접수 부탁드립니다.` : "안녕하세요 퍼스트에서 접수 부탁드립니다.",
-      body.length ? `\n${body.join("\n")}` : "",
-      str(row.author) ? `\n접수자 ${str(row.author)}` : "",
-    ].filter(Boolean);
-    return parts.join("\n").split("\n").map((s) => s.trimEnd()).join("\n");
-  };
-  return withCap(build, String(row.symptom ?? "").trim());
+/**
+ * 카드 칸에 대응이 없는 폼 값 — 실물 양식엔 없지만 기재한 값은 버리지 않는다(2026-10-27 사용자).
+ * 접수내용 줄 다음에 한 줄씩. 값이 있는 것만.
+ */
+function deptExtras(row: DeptCardRow): Array<[string, string]> {
+  const m = row.remote_meta || {};
+  const sched = cardDate(str(m.schedule_date));
+  const via = row.route === "사내" ? str(m.via) : "";
+  const out: Array<[string, string]> = [];
+  if (row.type !== "운영지원") { // 운영 카드는 접수유형·예정일·외근요청 칸이 본문에 있다
+    if (str(row.route)) out.push(["접수유형", str(row.route)]); // 경영·영업 카드엔 칸이 없다 — 접수내용 다음 첫 줄
+    if (sched) out.push(["예정일", `${sched}${korWeekday(str(m.schedule_date))}`]);
+    if (str(m.outside)) out.push(["외근요청", "예"]);
+  }
+  if (str(m.contract_kind)) out.push(["계약서구분", str(m.contract_kind)]);
+  if (str(m.progress)) out.push(["진행메모", oneLine(m.progress)]);
+  if (via && !str(m.handler)) out.push(["사내 요청자", via]); // 처리자가 있으면 처리자 칸 괄호에 이미 있다
+  return out;
 }
 
-/** 부서 접수 카톡 글 — 경영지원·영업팀 = 카드, 운영지원 = 자유 글 틀 */
+/** "(월)" — 날짜가 아니면 빈 글자 */
+function korWeekday(ymd: string): string {
+  const k = korDayWithWeekday(ymd);
+  const m = k.match(/\(.\)$/);
+  return m ? m[0] : "";
+}
+
+/** 부서 접수 카톡 글 — 경영지원·전략영업·운영지원 모두 카드 */
 export function buildDeptKakaoText(row: DeptCardRow, lease: Lease, now: Date = new Date()): string {
-  if (row.type === "운영지원") return buildOpsText(row);
-  const spec = row.type === "경영지원" ? MGMT_CARD : SALES_CARD;
-  const values = deptValues(row, lease, now);
-  return withCap((content) => serializeCard(resolveCard(spec, { ...values, content })), String(row.symptom ?? "").trim());
+  const spec = row.type === "경영지원" ? MGMT_CARD : row.type === "운영지원" ? OPS_CARD : SALES_CARD;
+  const m = row.remote_meta || {};
+  const values = {
+    ...deptValues(row, lease, now),
+    route: row.route === "사내" ? "사내" : str(row.route),
+    schedule: cardDate(str(m.schedule_date)) ? `${cardDate(str(m.schedule_date))}${korWeekday(str(m.schedule_date))}` : "",
+    outside: str(m.outside) ? "예" : "",
+  };
+  const extras = deptExtras(row);
+  const sep = spec === SALES_CARD ? SEP_LV : SEP_CELL; // 영업 본문은 "라벨:   값" 꼴
+  return withCap((content) => {
+    const card = serializeCard(resolveCard(spec, { ...values, content }));
+    return [card, ...extras.map(([l, val]) => `${l}${sep}${val}`)].join("\n");
+  }, String(row.symptom ?? "").trim());
 }
 
 // ── IT 접수 ────────────────────────────────────────
@@ -351,7 +379,7 @@ export type ItCardSource = {
   kind?: string;             // 종류(기본 "AS")
 };
 
-/** IT 카드 — 실물 "IT⇥AS⇥등급⇥장비종류⇥업체명" 틀 + 사진 링크 + Q7 꼬리 줄(작성자·유상/무상·참고사항, 값 있는 것만) */
+/** IT 카드 — 실물 "IT⇥AS⇥등급⇥장비종류⇥업체명" 틀(둘째 줄 작성자) + 사진 링크 + 끝 줄(유상/무상·참고사항, 값 있는 것만) */
 export function buildItKakaoCard(src: ItCardSource, now: Date = new Date()): string {
   const { lease, manual } = src;
   const L = (...keys: string[]) => pickRaw(lease, ...keys);
@@ -371,9 +399,9 @@ export function buildItKakaoCard(src: ItCardSource, now: Date = new Date()): str
     receiver: [oneLine(manual.접수자성함), oneLine(manual.접수자연락처)].filter(Boolean).join(" / "),
     model: oneLine(modelName && options ? `${modelName}/${options}` : modelName || options),
     address: oneLine(str(manual.주소) || L("주소(실납품주소,도로명주소)", "주소")),
+    author: str(src.author),
   };
   const tail = [
-    str(src.author) ? `작성자 ${str(src.author)}` : "",
     str(src.paid) ? `유상/무상 ${str(src.paid)}` : "",
     oneLine(manual.참고사항) ? `참고사항 ${oneLine(manual.참고사항)}` : "",
   ].filter(Boolean).join(" · ");

@@ -32,6 +32,7 @@ describe("경영지원 카드(A1:M15)", () => {
   it("실물과 같은 15줄 + 꼬리 줄", () => {
     expect(buildDeptKakaoText(row, lease, NOW)).toBe([
       `청구관련${T}30㈜올림커뮤니케이션중곡동 현장위탁품목매월마감${T}${T}${T}종료일${T}${T}지역${T}수도권C${T}방문주기${T}${T}${T}접수일${T}10. 26`,
+      `작성자${T}홍길동${T}처리자${T}김슬기(사내 이윤아)`,
       `기번${T}${T}급한여부`,
       `임대여부${T}임대중${T}접수분야${T}청구관련`,
       `임대리스트순번${T}22454${T}장비소유주`,
@@ -46,7 +47,7 @@ describe("경영지원 카드(A1:M15)", () => {
       `주소${T}서울 광진구 중곡동 93-11 6층(엘베유)${T}확장성`,
       `기종${T}${T}기번`,
       `접수내용${T}22454 22455 마지막 청구 명세서 해당 메일로 발송 및 안내 부탁드립니다.`,
-      "접수자 홍길동 · 처리자 김슬기 · 사내(이윤아)",
+      `접수유형${T}사내`,
     ].join("\n"));
   });
   it("buildDeptReceptionRow 가 lease 를 받아 카드로 report_text 를 만든다", () => {
@@ -71,6 +72,7 @@ describe("전략영업 카드", () => {
     expect(buildDeptKakaoText(row, lease, NOW)).toBe([
       `N${T}현장/단기 철수${T}SL-X4220RX${T}17N메이크건설양평현장매월마감${T}종료일${T}26. 11. 17${T}지역${T}수도권D${T}접수일${T}10. 26`,
       "",
+      "작성자:   홍길동   /   처리자:   김수인",
       "임대여부:   임대중   /   접수분야:   현장/단기 철수",
       "상호:   17N메이크건설양평현장매월마감   /   임대리스트순번:   22343",
       "계약일:   2026. 8. 18   /   종료일:   2026. 11. 17",
@@ -81,7 +83,7 @@ describe("전략영업 카드", () => {
       "주소:   경기 양평군 양서면 양수로 93 1층 컨테이너",
       "🔹 접수내용:   양평현장/ 3개월 선결제(8/18~11/17)/ 11월 17일까지만 하고 기기 철수요청",
       "*현장상황에 따라 앞당겨 질 수도 있다고 하심",
-      "접수자 홍길동 · 처리자 김수인 · 카카오",
+      "접수유형:   카카오",
     ].join("\n"));
   });
   it("신규 업체(lease null) — 임대리스트 칸은 빈칸, 순번은 신규, '개월'만 남지 않는다", () => {
@@ -106,6 +108,7 @@ describe("IT 카드", () => {
   it("실물 틀 그대로", () => {
     expect(buildItKakaoCard({ lease, manual, route: "카카오", region: "수도권C", author: "홍길동", paid: "무상" }, NOW)).toBe([
       `IT${T}AS${T}V${T}노트북${T}주식회사 유디임팩트 패스트파이브`,
+      `작성자${T}홍길동`,
       `난이도${T}${T}긴급도`,
       `자산번호${T}IT-0001${T}시리얼번호${T}SN0001`,
       `지역${T}수도권C${T}이관여부`,
@@ -122,7 +125,7 @@ describe("IT 카드", () => {
       `★키맨성함/번호${T}김인실 팀장 010-0000-4045 (결제/계약, 키맨-부) / 안항선 그룹장 010-0000-4046`,
       `주소${T}서울 강남구 테헤란로 1${T}확장성`,
       `증상${T}특정 키보드 타이핑이 안됨${T}처리내용`,
-      "작성자 홍길동 · 유상/무상 무상",
+      "유상/무상 무상",
     ].join("\n"));
   });
   it("사진 링크는 카드 뒤·꼬리 줄 앞, 제목은 '제목 / 증상'", () => {
@@ -130,7 +133,7 @@ describe("IT 카드", () => {
       lease, manual: { ...manual, 제목: "키보드", 참고사항: "오후 방문" }, route: "전화", region: "수도권C", author: "홍길동",
       photoLines: ["📷 증상사진 2장 모아보기:", "https://example.test/?album=x"],
     }, NOW);
-    expect(text).toContain(`증상${T}키보드 / 특정 키보드 타이핑이 안됨${T}처리내용\n📷 증상사진 2장 모아보기:\nhttps://example.test/?album=x\n작성자 홍길동 · 참고사항 오후 방문`);
+    expect(text).toContain(`증상${T}키보드 / 특정 키보드 타이핑이 안됨${T}처리내용\n📷 증상사진 2장 모아보기:\nhttps://example.test/?album=x\n참고사항 오후 방문`);
   });
   it("새 IT 머리는 붙여넣기 분할이 접수 시작으로 본다", () => {
     expect(isTableReceptionHead(`IT${T}AS${T}V${T}노트북${T}업체`)).toBe(true);
@@ -139,29 +142,73 @@ describe("IT 카드", () => {
   });
 });
 
-describe("운영지원 자유 글 틀", () => {
-  const base: DeptReceptionInput = {
-    dept: "운영지원", author: "홍길동", route: "전화", vendor: "알스퀘어디자인-울산대학교병원별관1암병원공사",
-    address: "울산 동구 대학병원로 25", receiverName: "이성민", receiverPhone: "010-0000-8971",
-    field: "배송/택배", content: "SL-X4220RX 1대, 데탑 5대", scheduleDate: "2026-08-24",
+describe("운영지원 카드(경영 틀 기반, 2026-10-27 자유 글 틀 폐기)", () => {
+  const lease = {
+    업체명: "12S알스퀘어디자인울산현장매월마감", 임대여부: "임대중", 순: "11110", 계약일: "2026-08-01", 종료일: "2027-07-31",
+    기본금액: "150000", "기본(흑)": "3000", 납품담당: "알앤텍", "위탁/유지보수및기타사항": "알앤텍",
+    세금계산서: "010-0000-1111 김키맨", 확장성: "가능", 모델명: "SL-X4220RX", "시리얼번호(기번)": "SN-1", "관리 담당자": "수도권D",
   };
-  it("실물 말투 틀", () => {
-    expect(rowOf(base).report_text).toBe([
-      "안녕하세요 퍼스트에서 배송/택배 접수 부탁드립니다.",
-      "",
-      "날짜(요일) : 8월 24일(월)",
-      "업체명 : 알스퀘어디자인-울산대학교병원별관1암병원공사",
-      "주소 : 울산 동구 대학병원로 25",
-      "ㄴ 담당자 : 이성민 010-0000-8971",
-      "품목/요청 : SL-X4220RX 1대, 데탑 5대",
-      "",
-      "접수자 홍길동",
+  it("모든 칸을 채운 표본", () => {
+    const row = rowOf({
+      dept: "운영지원", author: "홍길동", route: "사내", via: "이윤아", handler: "박운영", outside: true, progress: "안내완",
+      vendor: "알스퀘어디자인", leaseNo: "11110", region: "D", address: "울산 동구 대학병원로 25",
+      receiverName: "이성민", receiverPhone: "010-0000-8971", field: "배송/택배",
+      content: "SL-X4220RX 1대, 데탑 5대\n싣는 곳 1층", scheduleDate: "2026-08-24", lease,
+    });
+    expect(buildDeptKakaoText(row, lease, NOW)).toBe([
+      `배송/택배${T}12S알스퀘어디자인울산현장매월마감${T}${T}${T}종료일${T}27. 7. 31${T}지역${T}수도권D${T}접수일${T}10. 26`,
+      `작성자${T}홍길동${T}처리자${T}박운영(사내 이윤아)`,
+      `접수유형${T}사내${T}접수분야${T}배송/택배`,
+      `예정일${T}2026. 8. 24(월)${T}외근요청${T}예`,
+      `임대여부${T}임대중${T}임대리스트순번${T}11110`,
+      `계약일${T}2026. 8. 1${T}종료일${T}2027. 7. 31`,
+      `기본임대료${T}₩150,000${T}기본매수${T}흑백3000`,
+      `설치업체${T}알앤텍${T}유지보수업체${T}알앤텍`,
+      `업체담당자${T}이성민${T}연락처${T}010-0000-8971`,
+      `★키맨성함/번호${T}010-0000-1111 김키맨`,
+      `주소${T}울산 동구 대학병원로 25${T}확장성${T}가능`,
+      `기종${T}SL-X4220RX${T}기번${T}SN-1`,
+      `접수내용${T}SL-X4220RX 1대, 데탑 5대`,
+      "싣는 곳 1층",
+      `진행메모${T}안내완`,
     ].join("\n"));
   });
-  it("빈 예정일·빈 주소는 그 줄이 없다", () => {
-    const text = rowOf({ ...base, scheduleDate: "", address: "" }).report_text;
-    expect(text).not.toContain("날짜(요일)");
-    expect(text).not.toContain("주소 :");
+  it("일부만 채운 표본(신규 업체·예정일·처리자 없음) — 라벨은 두고 값만 빈칸", () => {
+    const row = rowOf({
+      dept: "운영지원", author: "홍길동", route: "전화", vendor: "새운영업체", receiverName: "이성민", receiverPhone: "010-0000-8971",
+      field: "배송/택배", content: "택배 2건",
+    });
+    expect(buildDeptKakaoText(row, null, NOW)).toBe([
+      `배송/택배${T}새운영업체${T}${T}${T}종료일${T}${T}지역${T}${T}접수일${T}10. 26`,
+      `작성자${T}홍길동`,
+      `접수유형${T}전화${T}접수분야${T}배송/택배`,
+      `예정일${T}${T}외근요청`,
+      `임대여부${T}${T}임대리스트순번${T}신규`,
+      `계약일${T}${T}종료일`,
+      `기본임대료${T}${T}기본매수`,
+      `설치업체${T}${T}유지보수업체`,
+      `업체담당자${T}이성민${T}연락처${T}010-0000-8971`,
+      "★키맨성함/번호",
+      `주소${T}${T}확장성`,
+      `기종${T}${T}기번`,
+      `접수내용${T}택배 2건`,
+    ].join("\n"));
+  });
+});
+
+describe("경영·영업 카드: 칸 없는 폼 값은 접수내용 뒤 한 줄씩(기재한 값 유실 금지)", () => {
+  it("경영 — 예정일·외근요청·계약서구분·진행메모", () => {
+    const row = rowOf({ dept: "경영지원", author: "홍길동", route: "카카오", handler: "김슬기", vendor: "가짜업체", field: "기타", content: "내용",
+      scheduleDate: "2026-10-30", outside: true, contractKind: "전자", progress: "안내완" });
+    expect(buildDeptKakaoText(row, null, NOW).split("\n").slice(-6)).toEqual([
+      `접수내용${T}내용`, `접수유형${T}카카오`, `예정일${T}2026. 10. 30(금)`, `외근요청${T}예`, `계약서구분${T}전자`, `진행메모${T}안내완`,
+    ]);
+  });
+  it("영업 — 본문 꼴(라벨:   값), 처리자 없는 사내 요청자", () => {
+    const row = rowOf({ dept: "영업팀", author: "홍길동", route: "사내", via: "이윤아", handler: " ", vendor: "가짜업체", field: "기타", content: "내용",
+      scheduleDate: "2026-10-30" });
+    const text = buildDeptKakaoText(row, null, NOW);
+    expect(text).toContain("🔹 접수내용:   내용\n접수유형:   사내\n예정일:   2026. 10. 30(금)");
   });
 });
 
@@ -235,5 +282,25 @@ describe("IT 일정·네이버 제목은 옛 형식 그대로(검수아 지적 2
     );
     expect(block).toContain("업체명: 주식회사 가짜테크");
     expect(block).not.toContain("노트북 주식회사");
+  });
+});
+
+describe("네 부서 공통: 둘째 줄이 작성자(AS방 CS 카드와 같은 자리, 2026-10-27 사용자)", () => {
+  const lease = { 업체명: "가짜업체", 순: "1", 등급: "S", 품목: "노트북" };
+  const second = (text: string) => text.split("\n").filter((l, i) => i === 0 || l !== "")[1];
+  it("경영·영업·운영·IT 모두 작성자, 꼬리 '접수자 …' 줄 없음", () => {
+    const texts: string[] = [];
+    for (const dept of ["경영지원", "영업팀", "운영지원"] as const) {
+      texts.push(buildDeptKakaoText(rowOf({ dept, author: "홍길동", route: "카카오", vendor: "가짜업체", leaseNo: "1", field: "기타", content: "내용", lease }), lease, NOW));
+    }
+    texts.push(buildItKakaoCard({ lease, manual: { 증상: "내용" }, route: "카카오", region: "수도권C", author: "홍길동" }, NOW));
+    // 영업은 지역 없을 때 처리자 기본값(박진영)이 붙는다
+    expect(texts.map(second)).toEqual([`작성자${T}홍길동`, "작성자:   홍길동   /   처리자:   박진영", `작성자${T}홍길동`, `작성자${T}홍길동`]);
+    texts.forEach((t) => expect(t).not.toMatch(/^접수자 /m));
+  });
+  it("처리자가 없으면 처리자 칸째 빠진다", () => {
+    const row = rowOf({ dept: "경영지원", author: "홍길동", route: "카카오", vendor: "가짜업체", region: "C", field: "기타", content: "내용" });
+    expect(row.remote_meta.handler).toBe("");
+    expect(buildDeptKakaoText(row, null, NOW).split("\n")[1]).toBe(`작성자${T}홍길동`);
   });
 });

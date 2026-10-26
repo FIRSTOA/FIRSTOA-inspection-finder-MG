@@ -8,6 +8,10 @@
  *
  * 순서: 잠금 → 5행 머리 검증 → (갱신 잡이면 갱신만) → 마지막 행·순번 → 지문 중복검사 → 행 위치
  *       → 대상 행 수식 읽기 → 앱 값 기입(수식 칸 건너뜀) → 임대리스트 값 고정(6행 원본 열 번호)
+ *
+ * 순번(A열)은 시트가 매긴다(spec.seqMode "sheet", 2026-10-27). 앱은 A열을 쓰지 않고 기입 뒤 A 표시값을 읽어 돌려준다.
+ * 머리 쪽 ARRAYFORMULA 가 채우는 칸은 대상 칸만 FORMULA 로 읽으면 빈칸이라 수식인 줄 몰랐다 — 그 칸에 값을 써서
+ * 배열이 #REF! 로 깨진 사고(영업 A7·C6, 경영 C6). 그래서 6~7행의 아래로 퍼지는 배열 수식 열도 '수식 칸'으로 친다.
  */
 import {
   acquireLock, batchGetValues, batchSetValues, batchUpdate, FIELD_SHEETS, gapi, getValues,
@@ -15,8 +19,8 @@ import {
 } from "./sheets-api.ts";
 import {
   buildAppendValues, buildLeaseValues, buildUpdateValues, colLetter, DEPT_SHEET_SPECS, type DeptSheetCategory,
-  type DeptSheetSpec, fingerprintCols, isDeptSheetCategory, lastFilledRow, nextSeq, normFingerprint, pickData,
-  verifyDeptHeaders,
+  type DeptSheetSpec, fingerprintCols, isDeptSheetCategory, isSpillFormula, lastFilledRow, nextSeq, normFingerprint,
+  parseSeq, pickData, seqBySheet, spillCols, verifyDeptHeaders,
 } from "./dept-sheet-spec.ts";
 
 export type DeptSheetRequest = {
@@ -174,10 +178,30 @@ export async function appendDeptRow(request: DeptSheetRequest, env: Env): Promis
       await batchUpdate(spreadsheetId, copyRequests);
     }
 
-    // 6) 대상 행의 수식 칸 — 앱 값·고정 문구·fallback 은 수식 칸에 쓰지 않는다(시트 담당자 수식 보존)
-    const rowFormula = (await getValues(spreadsheetId, `${T}!A${row}:${lastL}${row}`, "FORMULA"))[0] || [];
-    const formulaCols = new Set<number>();
+    // 6) 수식 칸 — 앱 값·고정 문구·fallback 은 수식 칸에 쓰지 않는다(시트 담당자 수식 보존).
+    //    대상 행 자체의 수식 + 머리 아래~데이터 첫 행(6·7행)의 아래로 퍼지는 배열 수식 열(대상 칸은 빈칸으로 보인다)
+    const [rowFormulaRows, headFormulas, aFormulaRows] = await Promise.all([
+      getValues(spreadsheetId, `${T}!A${row}:${lastL}${row}`, "FORMULA"),
+      getValues(spreadsheetId, `${T}!A${spec.headerRow + 1}:${lastL}${spec.dataStart}`, "FORMULA"),
+      getValues(spreadsheetId, `${T}!A1:A${Math.max(1, row - 1)}`, "FORMULA"),
+    ]);
+    const rowFormula = rowFormulaRows[0] || [];
+    const spill = spillCols(headFormulas);
+    const formulaCols = new Set<number>(spill);
     rowFormula.forEach((v, i) => { if (String(v).startsWith("=")) formulaCols.add(i + 1); });
+    const aFormulas = aFormulaRows.map((r) => r[0] ?? "");
+    const aboveA = row - 1 >= spec.dataStart ? aFormulas[row - 2] ?? "" : "";
+    const bySheet = seqBySheet(spec, { targetA: rowFormula[0], aboveA, aColumnFormulas: aFormulas });
+    // 행별 수식(위 행 A 가 수식, 배열 아님)인데 대상 A 가 비었으면 위 행 A 수식만 복사한다 — 숫자는 쓰지 않는다
+    if (bySheet && !String(rowFormula[0] ?? "").startsWith("=") && String(aboveA).startsWith("=") && !isSpillFormula(aboveA)) {
+      await batchUpdate(spreadsheetId, [{
+        copyPaste: {
+          source: { sheetId, startRowIndex: row - 2, endRowIndex: row - 1, startColumnIndex: 0, endColumnIndex: 1 },
+          destination: { sheetId, startRowIndex: row - 1, endRowIndex: row, startColumnIndex: 0, endColumnIndex: 1 },
+          pasteType: "PASTE_FORMULA",
+        },
+      }]);
+    }
 
     // 7) 임대리스트 값(순이 있을 때만). 못 찾거나 읽기 실패면 lease 열은 그대로 두고 fallback(업체명·지역·등급·주소)만 쓴다
     const leaseNo = pickData(data, "leaseNo");
@@ -196,9 +220,11 @@ export async function appendDeptRow(request: DeptSheetRequest, env: Env): Promis
         leaseValues = {};
       }
     }
+    // 배열 수식이 채우는 열에는 임대리스트 값도 쓰지 않는다(값을 쓰면 배열 전체가 #REF!). 행별 수식 덮어쓰기(값 고정)는 그대로
+    for (const col of spill) delete leaseValues[col];
     const leaseFilled = Object.keys(leaseValues).length > 0;
-    const appValues = buildAppendValues(spec, { data, author: request.author, submittedAt, seq }, { formulaCols, leaseFilled });
-    // A열이 수식이면 순번을 쓰지 않았다 — 기입 뒤 표시값을 읽어 돌려준다
+    const appValues = buildAppendValues(spec, { data, author: request.author, submittedAt, seq }, { formulaCols, leaseFilled, seqBySheet: bySheet });
+    // 시트가 순번을 매기거나 A열이 수식이면 순번을 쓰지 않았다 — 기입 뒤 표시값을 읽어 돌려준다
     const wroteSeq = appValues[1] !== undefined;
 
     // lease 값이 app 값보다 우선(같은 열에 겹치는 일은 없지만, 겹치면 임대리스트 고정이 이긴다)
@@ -206,9 +232,14 @@ export async function appendDeptRow(request: DeptSheetRequest, env: Env): Promis
 
     let seqOut: number | null = wroteSeq ? seq : null;
     if (!wroteSeq) {
-      const shown = (await getValues(spreadsheetId, `${T}!A${row}`))[0]?.[0] || "";
-      const n = Number(String(shown).replace(/[,\s]/g, ""));
-      seqOut = Number.isFinite(n) && n > 0 ? n : null;
+      // ARRAYFORMULA 는 값이 바로 생긴다. 비어 있으면 1.5초 뒤 한 번 더 읽고, 그래도 비면 null(실패로 치지 않음 —
+      // 갱신 잡은 행 번호 + 순·접수자로 확인하는 경로가 있다)
+      const readSeq = async () => parseSeq((await getValues(spreadsheetId, `${T}!A${row}`))[0]?.[0] ?? "");
+      seqOut = await readSeq();
+      if (seqOut === null) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        seqOut = await readSeq();
+      }
     }
     return { row, sheet: title, seq: seqOut };
   } finally {
