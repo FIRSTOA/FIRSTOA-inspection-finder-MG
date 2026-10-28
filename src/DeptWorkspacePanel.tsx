@@ -9,6 +9,9 @@
  * - 달력 = DeptCalendarPanel compact(그 부서 달력 추가·수정·삭제).
  * - 60초마다·창 복귀 때 다시 읽는다. 화면이 숨어 있으면(useScreenActive) 쉰다. 실패는 빨간 줄로 보이고 이전 값은 둔다.
  *   view 가 plan·cal 이 아니어도(접수리스트·미처리 현황 보기 중) 탭 숫자를 위해 계속 읽는다.
+ * 2026-10-28(docs/tasks/dept-plan-sheet-rows-2026-10-28.md): 영업·경영은 시트에만 적힌 접수도 보인다(운영지원은 시트 없음 → 안 읽음).
+ *   일정리스트 [금일] = 오늘 접수일 열린 시트 줄 + 오늘 완료(앱 접수·시트 줄, 맨 아래 회색). 달력 = 격자 범위 시트 줄(view "cal" 일 때만 읽음).
+ *   시트 읽기 실패는 회색 한 줄("앱 접수만 표시") — 빨간 오류 줄과 구분. 스위치 RECEPTION_SHEET_OPEN_ENABLED 꺼짐이면 부르지 않는다(fetchSheetListRows).
  * 배정 = remote_meta.handler 1명(runDeptAction "assign" → 시트 처리자 칸 갱신). 푸시 알림은 보내지 않는다(Q6). 부서 방에는 [배정] 후속 글이 간다(2026-10-27, deptReceptionFlow).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +21,9 @@ import { fetchOpenReceptions, type OpenReceptionRow } from "./deptReceptionApi";
 import { deptCalEditPatch, deptCalFormOf, deptCalQuery, deptMonthGrid, emptyDeptCalForm, shiftDeptMonth, toDeptCalEvent, type DeptCalEvent, type DeptCalForm } from "./deptCalendarView";
 import { resolveActor, runDeptAction, saveDeptCalEdit, warnTone, type DeptRowLike } from "./deptReceptionFlow";
 import { deptMemberNames, deptPlanBuckets, planTodoCount, type PlanBucket } from "./deptPlan";
-import { deptSheetUrl } from "./receptionSheetOpen";
+import { deptSheetUrl, fetchSheetListRows, type SheetListRow } from "./receptionSheetOpen";
+import { deptSheetSource, fetchDoneToday } from "./deptPlanSheet";
+import DeptSheetPlanCard from "./DeptSheetPlanCard";
 import type { ReceptionRightView } from "./receptionRightView";
 import type { DeptType } from "./deptReception";
 import { useMembers } from "./authors";
@@ -84,25 +89,43 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   const [calTick, setCalTick] = useState(0);
   const [saving, setSaving] = useState(false);
   const seq = useRef(0);
+  const sheetSource = deptSheetSource(dept);
+  const [sheetToday, setSheetToday] = useState<SheetListRow[]>([]);
+  const [doneRows, setDoneRows] = useState<OpenReceptionRow[]>([]);
+  const [sheetNote, setSheetNote] = useState("");
+  const [calSheet, setCalSheet] = useState<SheetListRow[]>([]);
+  const [calSheetNote, setCalSheetNote] = useState("");
+  const calSeq = useRef(0);
 
   const load = useCallback(async () => {
     const my = ++seq.current;
     const t = kstDate();
-    const [open, cal] = await Promise.allSettled([
+    const src = deptSheetSource(dept);
+    const [open, cal, done, sheet] = await Promise.allSettled([
       fetchOpenReceptions(90),
       selectRows<Parameters<typeof toDeptCalEvent>[0]>("team_calendar_events", deptCalQuery(dept, t, addDays(t, 90))),
+      fetchDoneToday<OpenReceptionRow & { completed_at?: string | null }>(dept, t),
+      src ? fetchSheetListRows(t, t, t, { sources: [src] }) : Promise.resolve(null),
     ]);
     if (my !== seq.current) return;
     const errs: string[] = [];
     setToday(t);
     if (open.status === "fulfilled") setRows(open.value.filter((r) => r.type === dept)); else errs.push(`열린 접수를 못 읽었습니다: ${msg(open.reason)}`);
     if (cal.status === "fulfilled") setEvents(cal.value.map(toDeptCalEvent).filter((ev): ev is DeptCalEvent => !!ev)); else errs.push(`부서 달력을 못 읽었습니다: ${msg(cal.reason)}`);
+    if (done.status === "fulfilled") setDoneRows(done.value); else errs.push(`오늘 완료한 접수를 못 읽었습니다: ${msg(done.reason)}`);
+    // 시트 줄: 읽혔으면 바꾸고, 못 읽었으면 이전 줄을 두고 회색 안내(스위치 꺼짐 = 줄 없음·안내 없음)
+    if (sheet.status === "rejected") setSheetNote(`시트 접수를 못 읽음 — 앱 접수만 표시 (${msg(sheet.reason).slice(0, 120)})`);
+    else if (!sheet.value) { setSheetToday([]); setSheetNote(""); }
+    else {
+      if (sheet.value.ok || !sheet.value.errors.length) setSheetToday(sheet.value.rows);
+      setSheetNote(sheet.value.errors.join(" · "));
+    }
     setErrors(errs);
     setLoading(false);
   }, [dept]);
 
   // 부서가 바뀌면 처음부터
-  useEffect(() => { setLoading(true); setRows([]); setEvents([]); setBucket(null); }, [dept]);
+  useEffect(() => { setLoading(true); setRows([]); setEvents([]); setBucket(null); setSheetToday([]); setDoneRows([]); setSheetNote(""); setCalSheet([]); setCalSheetNote(""); }, [dept]);
   useEffect(() => {
     if (!active) return;
     void load();
@@ -122,7 +145,7 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   };
   const patchRow = (next: DeptRowLike) => setRows((cur) => cur.map((r) => (r.id === next.id ? ({ ...r, ...next } as OpenReceptionRow) : r)));
 
-  const buckets = useMemo(() => deptPlanBuckets(dept, rows, events, today), [dept, rows, events, today]);
+  const buckets = useMemo(() => deptPlanBuckets(dept, rows, events, today, { sheet: sheetToday, done: doneRows }), [dept, rows, events, today, sheetToday, doneRows]);
   const shownBucket: PlanBucket = bucket ?? "today";
   const planCount = planTodoCount(buckets);
   useEffect(() => { if (!loading) onCounts?.({ plan: planCount }); }, [planCount, loading, onCounts]);
@@ -173,10 +196,39 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
   }, [view, load]);
   const calDays = useMemo(() => deptMonthGrid(calMonth), [calMonth]);
 
+  // 달력 시트 줄 — [달력]을 볼 때만, 격자 42칸 범위. 60초마다·창 복귀 때, 숨은 화면이면 쉼
+  const calFrom = calDays[0];
+  const calTo = calDays[calDays.length - 1];
+  const loadCalSheet = useCallback(async () => {
+    if (!sheetSource) return;
+    const my = ++calSeq.current;
+    try {
+      const res = await fetchSheetListRows(calFrom, calTo, kstDate(), { sources: [sheetSource] });
+      if (my !== calSeq.current) return;
+      if (res.ok || !res.errors.length) setCalSheet(res.rows);
+      setCalSheetNote(res.errors.join(" · "));
+    } catch (e) {
+      if (my === calSeq.current) setCalSheetNote(`시트 접수를 못 읽음 — 앱 일정만 표시 (${msg(e).slice(0, 120)})`);
+    }
+  }, [sheetSource, calFrom, calTo]);
+  useEffect(() => {
+    if (!active || view !== "cal" || !sheetSource) return;
+    void loadCalSheet();
+    const refresh = () => { if (document.visibilityState === "visible") void loadCalSheet(); };
+    const timer = window.setInterval(refresh, POLL_MS);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [active, view, sheetSource, loadCalSheet, reloadKey, calTick]);
+  // 달 이동 때 다른 달 줄이 잠깐 남지 않게
+  useEffect(() => { setCalSheet([]); }, [calFrom]);
+
   if (view !== "plan" && view !== "cal") return null;
   return (
     <div className="pb-2">
       {!!errors.length && <div className="mx-3 mt-2 space-y-0.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">{errors.map((e) => <div key={e}>{e}</div>)}</div>}
+
+      {view === "plan" && !!sheetNote && <div className="mx-3 mt-2 rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-500">{sheetNote}</div>}
+      {view === "cal" && !!calSheetNote && <div className="mx-3 mt-2 rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-bold text-slate-500">{calSheetNote}</div>}
 
       {view === "plan" ? (
         <>
@@ -186,11 +238,13 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
               className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full bg-blue-600 px-3 text-[11px] font-black text-white hover:bg-blue-700 sm:min-h-8"><Plus size={12} aria-hidden />일정 추가</button>
           </div>
           <DeptPlanList buckets={buckets} active={shownBucket} onActive={setBucket} loading={loading} assigningId={assigningId}
-            onAssign={openAssign} onOpenEvent={(ev) => setEdit({ ev, form: deptCalFormOf(ev) })} renderActions={actions} />
+            onAssign={openAssign} onOpenEvent={(ev) => setEdit({ ev, form: deptCalFormOf(ev) })} renderActions={actions}
+            sheetNote={!!sheetSource} renderSheet={(it) => <DeptSheetPlanCard sheet={it.sheet} done={it.done} author={author} onSent={settle} />} />
         </>
       ) : (
         <DeptCalendarPanel key={dept} team={dept} month={calMonth} days={calDays} today={today} mode="calendar" compact
-          reloadTick={calTick + reloadKey} onMonth={(d) => setCalMonth((m) => shiftDeptMonth(m, d))} />
+          reloadTick={calTick + reloadKey} onMonth={(d) => setCalMonth((m) => shiftDeptMonth(m, d))}
+          sheetRows={sheetSource ? calSheet : undefined} author={author} onSheetChanged={() => { window.setTimeout(() => void loadCalSheet(), 1500); }} />
       )}
 
       {assignRow && (names.length ? (

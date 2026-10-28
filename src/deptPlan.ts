@@ -7,6 +7,8 @@
 import { defaultHandler, type DeptType } from "./deptReception";
 import { nextWeekday } from "./deptReceptionFlow";
 import type { DeptCalEvent } from "./deptCalendarView";
+import type { SheetListRow } from "./receptionSheetOpen";
+import { hideLinkedLike, sheetPlanItems } from "./deptPlanSheet";
 
 export type PlanBucket = "today" | "next" | "later";
 export const PLAN_BUCKETS: PlanBucket[] = ["today", "next", "later"];
@@ -15,11 +17,24 @@ export const PLAN_BUCKET_LABEL: Record<PlanBucket, string> = { today: "금일", 
 /** 일정 묶음에 들어가는 접수 행의 최소 모양(OpenReceptionRow 가 맞는다) */
 export type PlanRow = {
   id: string; type: string; status?: string; receipt_date?: string; created_at?: string;
-  remote_meta?: Record<string, string> | null;
+  remote_meta?: Record<string, string> | null; vendor?: string; completed_at?: string | null;
 };
 export type PlanItem<R extends PlanRow = PlanRow> =
-  | { kind: "reception"; key: string; date: string; row: R }
-  | { kind: "event"; key: string; date: string; ev: DeptCalEvent };
+  | { kind: "reception"; key: string; date: string; row: R; done?: boolean }
+  | { kind: "event"; key: string; date: string; ev: DeptCalEvent }
+  /** 시트에만 적힌 접수(2026-10-28) — 접수일 = 오늘만, done = 오늘 접수돼 완료된 줄 */
+  | { kind: "sheet"; key: string; date: string; sheet: SheetListRow; done: boolean };
+
+/** 선택 인자(2026-10-28) — 없으면 예전과 1:1 */
+export type PlanExtra<R extends PlanRow = PlanRow> = {
+  /** 이 부서 출처 시트 줄(fetchSheetListRows). 오늘 접수일만 [금일]에 들어간다 */
+  sheet?: SheetListRow[];
+  /** 오늘 완료된 이 부서 앱 접수(fetchDoneToday) — [금일] 맨 아래 회색 */
+  done?: R[];
+};
+
+/** 끝난 항목(완료 앱 접수·완료 시트 줄·✅ 부서 일정) */
+export const isPlanDone = (it: PlanItem): boolean => (it.kind === "event" ? it.ev.done : !!it.done);
 
 const CLOSED = new Set(["완료", "취소"]);
 const isYmd = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -29,7 +44,7 @@ const isYmd = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
  * events: 그 부서 달력 일정 — 접수와 연결 안 된 것(receptionId 없음)만 날짜 묶음에 넣고, 오늘 전 날짜는 뺀다.
  * 익일 = 오늘 뒤 ~ 다음 영업일(금요일이면 토·일·월). 예정 = 그 뒤. 예정일 지남·없음은 어느 묶음에도 넣지 않는다(미처리현황 몫).
  */
-export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], events: DeptCalEvent[], today: string): Record<PlanBucket, PlanItem<R>[]> {
+export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], events: DeptCalEvent[], today: string, extra: PlanExtra<R> = {}): Record<PlanBucket, PlanItem<R>[]> {
   const out: Record<PlanBucket, PlanItem<R>[]> = { today: [], next: [], later: [] };
   const next = nextWeekday(today);
   const place = (date: string): PlanBucket | null => (date === today ? "today" : date > today && date <= next ? "next" : date > next ? "later" : null);
@@ -46,12 +61,34 @@ export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], ev
   }
   const byDate = (a: PlanItem<R>, b: PlanItem<R>) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   for (const k of PLAN_BUCKETS) out[k].sort(byDate);
+
+  // 2026-10-28: [금일] = (위 정렬 그대로) → 오늘 접수 열린 시트 줄(접수시간 순) → 오늘 완료(앱 → 시트) 맨 아래
+  const doneRows = (extra.done || []).filter((r) => r.type === dept && String(r.status || "") === "완료");
+  if (extra.sheet?.length) {
+    const appSeen = [...rows.filter((r) => r.type === dept), ...doneRows];
+    const sheet = hideLinkedLike(extra.sheet.filter((s) => s.kind === dept), appSeen);
+    const { open, done } = sheetPlanItems(sheet, today);
+    const sheetItem = (s: SheetListRow, isDone: boolean): PlanItem<R> =>
+      ({ kind: "sheet", key: `sh:${s.source}:${s.month || s.date.slice(0, 7)}:${s.seq || s.sheetRow}`, date: s.date, sheet: s, done: isDone });
+    out.today.push(...open.map((s) => sheetItem(s, false)));
+    out.today.push(...doneRows.map((row): PlanItem<R> => ({ kind: "reception", key: `d:${row.id}`, date: today, row, done: true })));
+    out.today.push(...done.map((s) => sheetItem(s, true)));
+  } else {
+    out.today.push(...doneRows.map((row): PlanItem<R> => ({ kind: "reception", key: `d:${row.id}`, date: today, row, done: true })));
+  }
   return out;
 }
 
-/** 전환 막대 "일정리스트 n" = 오늘 손댈 것(금일 접수·일정 중 안 끝난 것). 미처리는 [미처리현황] 숫자로 따로 센다. */
+/** 묶음 칩 숫자 — open = 안 끝난 것, done = 끝난 것(칩에 "✓m" 작게) */
+export function planChipCount(items: PlanItem[]): { open: number; done: number } {
+  let done = 0;
+  for (const it of items) if (isPlanDone(it)) done += 1;
+  return { open: items.length - done, done };
+}
+
+/** 전환 막대 "일정리스트 n" = 오늘 손댈 것(금일 접수·일정·오늘 접수 열린 시트 줄 중 안 끝난 것). 미처리는 [미처리현황] 숫자로 따로 센다. */
 export function planTodoCount(b: Record<PlanBucket, PlanItem[]>): number {
-  return b.today.filter((it) => it.kind === "reception" || !it.ev.done).length;
+  return planChipCount(b.today).open;
 }
 
 // ── 배정 후보(Q3) ─────────────────────────────────────

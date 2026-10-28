@@ -372,8 +372,11 @@ export type SheetListResult = { rows: SheetListRow[]; noDate: number; errors: st
  * - 엣지 실패 → ok:false + errors 첫 줄 "시트 접수를 못 읽음 — 앱 접수만 표시 (…)". 보관 표 줄은 읽혔으면 그대로 싣는다.
  * - 범위 중 이번 달 1일 이전 구간(2026-10-01 이후만)은 보관 표에서. 표 없음·실패는 errors 한 줄, 엣지 결과만.
  * from·to 는 kstDate() 기준 "YYYY-MM-DD". today 는 테스트용(기본 kstDate()).
+ * opts.sources(2026-10-28, 부서 일정리스트·달력): 이 출처 줄만. 엣지 본문 list.sources 로도 보내지만(옛 엣지는 무시),
+ * 결과·오류 글은 프런트에서 한 번 더 거르고 보관 표는 source=in.(…) 로 읽는다. 없으면 지금처럼 전부(접수리스트 무변경).
  */
-export async function fetchSheetListRows(from: string, to: string, today: string = kstDate()): Promise<SheetListResult> {
+export async function fetchSheetListRows(from: string, to: string, today: string = kstDate(), opts: { sources?: SheetListSource[] } = {}): Promise<SheetListResult> {
+  const sources = (opts.sources || []).filter((x) => LIST_SOURCES.has(x));
   let on = false;
   try { on = isSheetOpenOn(await getConfig()); } catch { on = false; }
   if (!on) return { rows: [], noDate: 0, errors: [], ok: false };
@@ -382,11 +385,11 @@ export async function fetchSheetListRows(from: string, to: string, today: string
   const tableFrom = from > SHEET_LIST_START ? from : SHEET_LIST_START;
   const tableTo = to < monthStart ? to : dayBefore(monthStart);
 
-  const edgeCall = invokeEdgeFunction<{ ok?: boolean; rows?: unknown[]; noDate?: number; errors?: unknown[] }>("reception-sheet-open", { list: { from, to } }, 25_000)
+  const edgeCall = invokeEdgeFunction<{ ok?: boolean; rows?: unknown[]; noDate?: number; errors?: unknown[] }>("reception-sheet-open", { list: { from, to, ...(sources.length ? { sources } : {}) } }, 25_000)
     .then((raw) => ({ raw, error: "" }), (e: unknown) => ({ raw: null, error: e instanceof Error ? e.message : String(e) }));
   const tableCall = tableFrom <= tableTo
     ? selectAllRows<SheetTableRow>(SHEET_TABLE,
-      `select=${SHEET_TABLE_COLUMNS}&receipt_date=gte.${tableFrom}&receipt_date=lte.${tableTo}&reception_id=is.null&gone_at=is.null&order=receipt_date.desc,id.desc`)
+      sheetTableQuery(tableFrom, tableTo, sources))
       .then((rows) => ({ rows, error: "" }), (e: unknown) => ({ rows: [] as SheetTableRow[], error: e instanceof Error ? e.message : String(e) }))
     : Promise.resolve({ rows: [] as SheetTableRow[], error: "" });
   const [edge, table] = await Promise.all([edgeCall, tableCall]);
@@ -409,7 +412,31 @@ export async function fetchSheetListRows(from: string, to: string, today: string
       : `지난달 시트 줄을 못 읽음 — 이번 달 시트 줄만 표시 (${table.error.slice(0, 120)})`);
   }
   const tableRows = table.rows.map(tableRowToSheetListRow).filter((r) => r.date >= tableFrom && r.date <= tableTo);
-  return { rows: dedupeSheetRows(edgeRows, tableRows), noDate, errors, ok };
+  const rows = dedupeSheetRows(edgeRows, tableRows);
+  if (!sources.length) return { rows, noDate, errors, ok };
+  return { rows: filterSheetListBySources(rows, sources), noDate, errors: filterSheetErrorsBySources(errors, sources), ok };
+}
+
+/** 보관 표 조회문 — sources 가 있으면 source=in.(…) */
+export function sheetTableQuery(from: string, to: string, sources: readonly SheetListSource[] = []): string {
+  return `select=${SHEET_TABLE_COLUMNS}&receipt_date=gte.${from}&receipt_date=lte.${to}&reception_id=is.null&gone_at=is.null`
+    + `${sources.length ? `&source=in.(${sources.join(",")})` : ""}&order=receipt_date.desc,id.desc`;
+}
+
+/** 출처 거르기(옛 엣지가 sources 를 무시하고 전부 돌려줘도 결과는 고른 출처만) */
+export function filterSheetListBySources<T extends { source: string }>(rows: T[], sources: readonly string[]): T[] {
+  if (!sources.length) return rows;
+  const want = new Set(sources);
+  return rows.filter((r) => want.has(r.source));
+}
+
+/** 엣지 오류 글의 시트 이름(state.ts SOURCE_LABEL 앞부분) — 다른 출처 이름만 적힌 오류 글은 부서 화면에 띄우지 않는다 */
+const SOURCE_ERROR_HINT: Record<SheetListSource, string> = { sales: "해지방어접수", mgmt: "경영지원접수", remote: "원격", copier: "AS접수용" };
+export function filterSheetErrorsBySources(errors: string[], sources: readonly SheetListSource[]): string[] {
+  if (!sources.length) return errors;
+  const mine = sources.map((x) => SOURCE_ERROR_HINT[x]);
+  const others = (Object.keys(SOURCE_ERROR_HINT) as SheetListSource[]).filter((x) => !sources.includes(x)).map((x) => SOURCE_ERROR_HINT[x]);
+  return errors.filter((e) => mine.some((h) => e.includes(h)) || !others.some((h) => e.includes(h)));
 }
 
 /** 접수리스트에 섞는 시트 줄 — ServiceReceptionRow 꼴 + sheet 표시 */

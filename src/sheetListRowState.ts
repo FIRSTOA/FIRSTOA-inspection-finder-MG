@@ -4,6 +4,8 @@
 //    record(CS 시트 줄 — 시트에 상태 칸 없음, Q4) = 완료 칸에 센다(열린 칸 숫자를 부풀리지 않게). 보이는 글자는 "기록".
 //  · 처리 단추: 영업·경영·원격·IT 의 열린 줄(open/hold)만, 순번이 빈 줄(영업 A열 수식 사고)은 숨김.
 
+import { ageDaysOf, type UnhandledKind, type UnhandledRow } from "./homeUnhandled";
+
 export type SheetListCls = "open" | "hold" | "done" | "record";
 export type SheetListBucket = "접수" | "진행중" | "완료";
 export type SheetListLabel = "접수" | "진행중" | "보류" | "완료" | "기록";
@@ -51,4 +53,22 @@ export function sheetListLine2(title: unknown, content: unknown, max = 40): stri
 /** 기간 줄 "(앱 n · 시트 m)" — 시트 줄이 없으면 "" */
 export function sheetListCountNote(appCount: number, sheetCount: number): string {
   return sheetCount > 0 ? `(앱 ${appCount} · 시트 ${sheetCount})` : "";
+}
+
+/** 처리 단추(UnhandledActionBar statusOnly)에 넘길 행 — 단추를 못 보이는 줄(sheetListCanAct 거짓)이면 null.
+ *  접수리스트 펼침(SheetListDetail)·부서 일정리스트 시트 카드가 같이 쓴다(2026-10-28, dept-plan-sheet-rows 3-3). */
+export function sheetListUnhandledRow(
+  row: { sheetSource: string; sheetRow: number; sheetSeq: string; sheetCls: string; sheetState?: string; type?: string; receipt_date?: string; vendor?: string; symptom?: string; title?: string; author?: string },
+  handler: string,
+  today: string,
+): UnhandledRow | null {
+  const { sheetSource: source, sheetRow, sheetSeq: seq, sheetCls: cls } = row;
+  if (!sheetListCanAct({ cls, source, seq })) return null;
+  const date = String(row.receipt_date || "").slice(0, 10);
+  return {
+    key: `s:${source}:${sheetRow}`, source: "reception", kind: row.type as UnhandledKind, team: "", date,
+    vendor: row.vendor || "", title: row.symptom || row.title || "", assignee: handler, status: row.sheetState || (cls === "hold" ? "보류" : ""),
+    ageDays: date ? ageDaysOf(date, today) : 0,
+    sheet: { source: source as "sales" | "mgmt" | "remote", row: sheetRow, seq, author: row.author || "", vendor: row.vendor || "" },
+  };
 }

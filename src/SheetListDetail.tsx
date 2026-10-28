@@ -6,8 +6,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { invokeEdgeFunction } from "./supabase";
 import { normalizeSheetRowDetail, sheetListRowUrl, type SheetListReceptionRow, type SheetRowDetail } from "./receptionSheetOpen";
-import { ageDaysOf, type UnhandledKind, type UnhandledRow } from "./homeUnhandled";
-import { sheetListCanAct } from "./sheetListRowState";
+import { sheetListUnhandledRow } from "./sheetListRowState";
 import { kstDate } from "./visits";
 import UnhandledActionBar from "./UnhandledActionBar.view";
 
@@ -24,9 +23,10 @@ async function loadSheetListDetail(source: string, sheetRow: number, seq: string
   return detail;
 }
 
-export default function SheetListDetail({ row, handler, author, onFinished }: { row: SheetListReceptionRow; handler: string; author?: string; onFinished?: () => void }) {
+/** actions=false: 단추 줄을 그리지 않는다(부서 일정리스트 시트 카드가 단추를 카드 밖에 따로 둘 때, 2026-10-28) */
+export default function SheetListDetail({ row, handler, author, onFinished, actions = true }: { row: SheetListReceptionRow; handler: string; author?: string; onFinished?: () => void; actions?: boolean }) {
   const [after, setAfter] = useState("");
-  const { sheetSource: source, sheetRow, sheetSeq: seq, sheetCls: cls } = row;
+  const { sheetSource: source, sheetRow, sheetSeq: seq } = row;
   const loadKey = `${source}:${sheetRow}:${seq}`;
   // 읽은 결과를 행 키와 같이 둔다 — 키가 다르면 읽는 중(효과 안에서 바로 setState 하지 않게)
   const [result, setResult] = useState<{ key: string; detail: SheetRowDetail | null; error: string } | null>(null);
@@ -42,14 +42,7 @@ export default function SheetListDetail({ row, handler, author, onFinished }: { 
   const detail = loading ? null : result?.detail ?? null;
   const error = loading ? "" : result?.error ?? "";
 
-  const canAct = sheetListCanAct({ cls, source, seq });
-  const date = String(row.receipt_date || "").slice(0, 10);
-  const urow: UnhandledRow | null = canAct ? {
-    key: `s:${source}:${sheetRow}`, source: "reception", kind: row.type as UnhandledKind, team: "", date,
-    vendor: row.vendor || "", title: row.symptom || row.title || "", assignee: handler, status: row.sheetState || (cls === "hold" ? "보류" : ""),
-    ageDays: date ? ageDaysOf(date, kstDate()) : 0,
-    sheet: { source: source as "sales" | "mgmt" | "remote", row: sheetRow, seq, author: row.author || "", vendor: row.vendor || "" },
-  } : null;
+  const urow = actions ? sheetListUnhandledRow(row, handler, kstDate()) : null;
   const url = sheetListRowUrl(source, sheetRow);
 
   return (

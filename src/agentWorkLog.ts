@@ -4,6 +4,66 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-28",
+    "hash": "fb8e725d68",
+    "agent": "kakao-pc-rules",
+    "summary": "카톡 대화 저장: 파일 이름 칸을 EM_SETSEL 로 전체 선택 후 붙여넣기 + Enter 전 칸 글이 기대 경로와 같은지 확인(다르면 저장 안 함)"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "2a2960ccff",
+    "agent": "developer",
+    "summary": "카톡 대화 저장: \"대화 내보내기\" 완료창을 기다려 완료되면 Enter 로 닫기 + 대기 시간 늘림(불러오기 30초·완료창 최대 5분·파일 15초 멈춤) + 상한 120분·04:30 시작"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "2a2960ccff",
+    "agent": "kakao-pc-rules",
+    "summary": "카톡 대화 저장: \"대화 내보내기\" 완료창을 기다려 완료되면 Enter 로 닫기 + 대기 시간 늘림(불러오기 30초·완료창 최대 5분·파일 15초 멈춤) + 상한 120분·04:30 시작"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "34d88994da",
+    "agent": "feature-planner",
+    "summary": "접수리스트에 시트에만 적힌 접수 보이기(\"시트\" 줄, 영업·경영·원격·IT·CS) + 보관 표 적재(엣지 snapshot) + 시트 줄 상세·처리 단추"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "34d88994da",
+    "agent": "ui-designer",
+    "summary": "접수리스트에 시트에만 적힌 접수 보이기(\"시트\" 줄, 영업·경영·원격·IT·CS) + 보관 표 적재(엣지 snapshot) + 시트 줄 상세·처리 단추"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "34d88994da",
+    "agent": "db-schema",
+    "summary": "접수리스트에 시트에만 적힌 접수 보이기(\"시트\" 줄, 영업·경영·원격·IT·CS) + 보관 표 적재(엣지 snapshot) + 시트 줄 상세·처리 단추"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "34d88994da",
+    "agent": "developer",
+    "summary": "접수리스트에 시트에만 적힌 접수 보이기(\"시트\" 줄, 영업·경영·원격·IT·CS) + 보관 표 적재(엣지 snapshot) + 시트 줄 상세·처리 단추"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "34d88994da",
+    "agent": "qa-checker",
+    "summary": "접수리스트에 시트에만 적힌 접수 보이기(\"시트\" 줄, 영업·경영·원격·IT·CS) + 보관 표 적재(엣지 snapshot) + 시트 줄 상세·처리 단추"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "34d88994da",
+    "agent": "field-deploy-check",
+    "summary": "접수리스트에 시트에만 적힌 접수 보이기(\"시트\" 줄, 영업·경영·원격·IT·CS) + 보관 표 적재(엣지 snapshot) + 시트 줄 상세·처리 단추"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "34d88994da",
+    "agent": "sql-review",
+    "summary": "접수리스트에 시트에만 적힌 접수 보이기(\"시트\" 줄, 영업·경영·원격·IT·CS) + 보관 표 적재(엣지 snapshot) + 시트 줄 상세·처리 단추"
+  },
+  {
+    "date": "2026-10-28",
     "hash": "5b6664ab17",
     "agent": "feature-planner",
     "summary": "접수리스트 시트 행 보관 표 SQL(reception_sheet_rows, 10/31 전 실행) + 시트에만 적힌 접수 보이기 설계안·결정"
