@@ -55,19 +55,30 @@ const timeKey = (r: Pick<SheetListRow, "time" | "sheetRow">) => `${r.time || "99
 const byTime = (a: SheetListRow, b: SheetListRow) => (timeKey(a) < timeKey(b) ? -1 : timeKey(a) > timeKey(b) ? 1 : 0);
 
 /**
- * 일정리스트 [금일]에 넣을 시트 줄 — 접수일 = 오늘(2026-10-01 이후)만.
- * open = 열린(open/hold) 줄, done = 오늘 접수돼 완료된 줄(맨 아래 회색). 지난 날짜(미처리 현황 몫, Q1)·미래 접수일(오타)·CS 기록 줄은 넣지 않는다.
- * 각각 접수시간 순(시각 없음은 그 뒤, 같은 시각은 시트 행 순).
+ * 일정리스트에 넣을 시트 줄 — 접수일로 묶음을 정한다(2026-10-28 사용자: 오늘 = 금일, 다음 영업일 = 익일, 그 뒤 = 예정).
+ * open = 오늘 접수 열린(open/hold) 줄, done = 오늘 접수돼 완료된 줄(맨 아래 회색), next·later = 오늘 뒤 접수일의 열린 줄.
+ * nextDay = 다음 영업일(주말·공휴일 건너뜀, planDate.nextBusinessDay) — 오늘 뒤 ~ nextDay 는 익일, 그 뒤는 예정.
+ * 지난 날짜(미처리 현황 몫, Q1)·CS 기록 줄·2026-10-01 이전은 넣지 않는다. 각각 접수시간 순(시각 없음은 그 뒤, 같은 시각은 시트 행 순).
+ * nextDay 를 안 주면 오늘 뒤 줄은 넣지 않는다(예전 동작).
  */
-export function sheetPlanItems(rows: SheetListRow[], today: string): { open: SheetListRow[]; done: SheetListRow[] } {
+export function sheetPlanItems(rows: SheetListRow[], today: string, nextDay = ""):
+  { open: SheetListRow[]; done: SheetListRow[]; next: SheetListRow[]; later: SheetListRow[] } {
   const open: SheetListRow[] = [];
   const done: SheetListRow[] = [];
+  const next: SheetListRow[] = [];
+  const later: SheetListRow[] = [];
   for (const r of rows) {
-    if (r.date !== today || r.date < SHEET_LIST_START) continue;
-    if (r.cls === "open" || r.cls === "hold") open.push(r);
-    else if (r.cls === "done") done.push(r);
+    if (r.date < SHEET_LIST_START || r.date < today) continue;
+    const isOpen = r.cls === "open" || r.cls === "hold";
+    if (r.date === today) {
+      if (isOpen) open.push(r);
+      else if (r.cls === "done") done.push(r);
+    } else if (nextDay && isOpen) {
+      (r.date <= nextDay ? next : later).push(r);
+    }
   }
-  return { open: open.sort(byTime), done: done.sort(byTime) };
+  const byDateTime = (a: SheetListRow, b: SheetListRow) => (a.date < b.date ? -1 : a.date > b.date ? 1 : byTime(a, b));
+  return { open: open.sort(byTime), done: done.sort(byTime), next: next.sort(byDateTime), later: later.sort(byDateTime) };
 }
 
 /** ISO 시각 → KST 날짜(YYYY-MM-DD), 못 읽으면 "" */
@@ -97,7 +108,9 @@ export function doneTodayQuery(dept: string, today: string): string {
   return `select=${DONE_COLS}&type=eq.${encodeURIComponent(dept)}&status=eq.${encodeURIComponent("완료")}&deleted=eq.false`
     + `&or=(completed_at.gte.${since},receipt_date.eq.${today})&order=completed_at.asc.nullslast,id.asc&limit=200`;
 }
-const DONE_COLS = "id,created_at,receipt_date,author,type,route,vendor,region,grade,lease_no,title,field,symptom,status,remote_meta,sheet_row,completed_at";
+// 상세(DeptReceptionDetail)를 펼칠 수 있게 담당자·주소·자산·사진·완료자도 읽는다(2026-10-28 사용자 "완료 건은 상세보기가 안 되나?")
+const DONE_COLS = "id,created_at,receipt_date,author,type,route,vendor,region,grade,lease_no,title,field,symptom,status,remote_meta,sheet_row,completed_at,completed_by,"
+  + "receiver_name,receiver_phone,notes,address,asset_no,model,serial,photos";
 
 /** 오늘 완료된 이 부서 앱 접수 읽기. 실패는 throw(부르는 쪽이 빨간 줄) */
 export async function fetchDoneToday<R extends { type?: string; status?: string; receipt_date?: string; completed_at?: string | null; remote_meta?: Record<string, string> | null }>(

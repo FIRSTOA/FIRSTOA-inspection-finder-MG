@@ -24,6 +24,7 @@ import { deptMemberNames, deptPlanBuckets, planTodoCount, type PlanBucket } from
 import { deptSheetUrl, fetchSheetListRows, type SheetListRow } from "./receptionSheetOpen";
 import { deptSheetSource, fetchDoneToday } from "./deptPlanSheet";
 import DeptSheetPlanCard from "./DeptSheetPlanCard";
+import DeptReceptionDetail from "./DeptReceptionDetail";
 import type { ReceptionRightView } from "./receptionRightView";
 import type { DeptType } from "./deptReception";
 import { useMembers } from "./authors";
@@ -105,7 +106,8 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
       fetchOpenReceptions(90),
       selectRows<Parameters<typeof toDeptCalEvent>[0]>("team_calendar_events", deptCalQuery(dept, t, addDays(t, 90))),
       fetchDoneToday<OpenReceptionRow & { completed_at?: string | null }>(dept, t),
-      src ? fetchSheetListRows(t, t, t, { sources: [src] }) : Promise.resolve(null),
+      // 오늘 ~ 90일(익일·예정 묶음용, 2026-10-28). 엣지 목록 최대 92일 안. 이번 달 안이면 보관 표는 안 읽는다
+      src ? fetchSheetListRows(t, addDays(t, 90), t, { sources: [src] }) : Promise.resolve(null),
     ]);
     if (my !== seq.current) return;
     const errs: string[] = [];
@@ -239,7 +241,8 @@ export default function DeptWorkspacePanel({ dept, view, author, reloadKey = 0, 
           </div>
           <DeptPlanList buckets={buckets} active={shownBucket} onActive={setBucket} loading={loading} assigningId={assigningId}
             onAssign={openAssign} onOpenEvent={(ev) => setEdit({ ev, form: deptCalFormOf(ev) })} renderActions={actions}
-            sheetNote={!!sheetSource} renderSheet={(it) => <DeptSheetPlanCard sheet={it.sheet} done={it.done} author={author} onSent={settle} />} />
+            renderDoneDetail={(row) => <DeptReceptionDetail row={row} author={author} actions={false} onChanged={(next) => { setDoneRows((cur) => cur.map((r) => (r.id === next.id ? ({ ...r, ...next } as OpenReceptionRow) : r))); settle(); }} />}
+            renderSheet={(it) => <DeptSheetPlanCard sheet={it.sheet} done={it.done} author={author} onSent={settle} />} />
         </>
       ) : (
         <DeptCalendarPanel key={dept} team={dept} month={calMonth} days={calDays} today={today} mode="calendar" compact

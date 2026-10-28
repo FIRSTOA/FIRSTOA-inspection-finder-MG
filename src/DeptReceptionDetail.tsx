@@ -22,11 +22,13 @@ type Props = {
   /** [삭제] 뒤 — 목록에서 빼고 현황판을 다시 읽는다. 없으면 onChanged 만 부른다 */
   onDeleted?: (id: string) => void;
   author?: string;
+  /** false 면 처리 단추 줄(DeptActionBar)을 숨긴다 — 일정리스트 [금일]의 오늘 완료 카드 상세(2026-10-28). 기본 true */
+  actions?: boolean;
 };
 
 const chip = (on: boolean) => `min-h-9 rounded-full border px-3 text-[11px] font-black transition ${on ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-500 hover:border-slate-400"}`;
 
-export default function DeptReceptionDetail({ row, onChanged, onDeleted, author }: Props) {
+export default function DeptReceptionDetail({ row, onChanged, onDeleted, author, actions = true }: Props) {
   const meta = row.remote_meta || {};
   const members = useMembers();
   const [status, setStatus] = useState(row.status || "접수");
@@ -209,7 +211,7 @@ export default function DeptReceptionDetail({ row, onChanged, onDeleted, author 
         </div>
       )}
 
-      <DeptActionBar row={row} author={author} onChanged={onChanged} />
+      {actions && <DeptActionBar row={row} author={author} onChanged={onChanged} />}
 
       <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
         <div>

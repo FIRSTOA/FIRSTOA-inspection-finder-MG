@@ -54,6 +54,41 @@ describe("sheetPlanItems — 금일은 오늘 접수일만(Q1)", () => {
   });
 });
 
+describe("sheetPlanItems — 접수일로 금일·익일·예정(2026-10-28 사용자 규칙)", () => {
+  it("오늘 = 금일, 다음 영업일까지 = 익일, 그 뒤 = 예정(열린 줄만), 지난 날·완료 미래 줄은 빠짐", () => {
+    const rows = [
+      s({ seq: "t", date: TODAY }), s({ seq: "n", date: "2026-10-29" }), s({ seq: "l", date: "2026-11-05", time: "09:00" }),
+      s({ seq: "l0", date: "2026-10-30" }), s({ seq: "nd", date: "2026-10-29", cls: "done" }), s({ seq: "p", date: "2026-10-27" }),
+    ];
+    const out = sheetPlanItems(rows, TODAY, "2026-10-29");
+    expect(out.open.map((x) => x.seq)).toEqual(["t"]);
+    expect(out.next.map((x) => x.seq)).toEqual(["n"]);
+    expect(out.later.map((x) => x.seq)).toEqual(["l0", "l"]); // 접수일 순
+    expect(out.done).toHaveLength(0);
+  });
+  it("nextDay 없으면 오늘 뒤 줄은 넣지 않음(예전 동작)", () => {
+    const out = sheetPlanItems([s({ date: "2026-10-29" })], TODAY);
+    expect(out.next).toHaveLength(0);
+    expect(out.later).toHaveLength(0);
+  });
+  it("deptPlanBuckets: 금요일의 익일 = 토·일·월, 화요일부터 예정", () => {
+    const FRI = "2026-10-30";
+    const sheet = [s({ seq: "sat", date: "2026-10-31" }), s({ seq: "mon", date: "2026-11-02" }), s({ seq: "tue", date: "2026-11-03" }), s({ seq: "fri", date: FRI })];
+    const b = deptPlanBuckets("영업팀", [], [], FRI, { sheet });
+    expect(b.today.map((x) => x.key)).toEqual(["sh:sales:2026-10:fri"]);
+    expect(b.next.map((x) => x.key)).toEqual(["sh:sales:2026-10:sat", "sh:sales:2026-10:mon"]);
+    expect(b.later.map((x) => x.key)).toEqual(["sh:sales:2026-10:tue"]);
+    expect(planTodoCount(b)).toBe(1); // 익일·예정은 탭 숫자에 안 셈
+  });
+  it("공휴일 건너뜀: 10-08(목) 다음 영업일 = 10-12(월, 10-09 한글날) → 앱·시트 모두 익일", () => {
+    const sheet = [s({ seq: "a", date: "2026-10-12" }), s({ seq: "b", date: "2026-10-13" })];
+    const rows = [r("x", { receipt_date: "2026-10-08", remote_meta: { schedule_date: "2026-10-12" } })];
+    const b = deptPlanBuckets("영업팀", rows, [], "2026-10-08", { sheet });
+    expect(b.next.map((x) => x.key)).toEqual(["r:x", "sh:sales:2026-10:a"]);
+    expect(b.later.map((x) => x.key)).toEqual(["sh:sales:2026-10:b"]);
+  });
+});
+
 describe("hideLinkedLike·hideLikeEvents — 중복 보조 막이", () => {
   it("같은 부서·같은 날·상호 앞 6자 같음 → 시트 숨김", () => {
     const sheet = [s({ vendor: "(주)가나다라마바사", seq: "1" }), s({ vendor: "가나다라마바", seq: "2", date: "2026-10-27" }), s({ vendor: "다른업체", seq: "3" })];
@@ -134,6 +169,10 @@ describe("오늘 완료 앱 접수", () => {
     expect(q).toContain("completed_at.gte.2026-10-27T15:00:00.000Z");
     expect(q).toContain("deleted=eq.false");
     expect(q).not.toContain("+");
+  });
+  it("조회문: 완료 카드 상세(DeptReceptionDetail)에 쓰는 칸도 읽는다", () => {
+    const q = doneTodayQuery("경영지원", TODAY);
+    for (const c of ["receiver_name", "receiver_phone", "notes", "address", "asset_no", "model", "photos", "completed_by"]) expect(q).toContain(c);
   });
 });
 

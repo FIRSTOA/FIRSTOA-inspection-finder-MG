@@ -4,6 +4,42 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-28",
+    "hash": "4d6db5cc30",
+    "agent": "developer",
+    "summary": "카톡 대화 저장: 완료창 판정을 실측대로(EVA_Window_Dblclk·제목 없음·방 창 소유·자식 0) + 파일 크기 멈춘 뒤에만 Enter, Enter 직전 파일 재확인, 오늘 .partial 방은 남은 창 정리 제외"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "4d6db5cc30",
+    "agent": "kakao-pc-rules",
+    "summary": "카톡 대화 저장: 완료창 판정을 실측대로(EVA_Window_Dblclk·제목 없음·방 창 소유·자식 0) + 파일 크기 멈춘 뒤에만 Enter, Enter 직전 파일 재확인, 오늘 .partial 방은 남은 창 정리 제외"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "1bd7790eab",
+    "agent": "feature-planner",
+    "summary": "부서(경영·영업) 일정리스트·달력에 시트 접수 줄 + [금일] 오늘 완료 표시(앱·시트, 회색 취소선) + 경영 처리자 빈칸 \"미배정\""
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "1bd7790eab",
+    "agent": "developer",
+    "summary": "부서(경영·영업) 일정리스트·달력에 시트 접수 줄 + [금일] 오늘 완료 표시(앱·시트, 회색 취소선) + 경영 처리자 빈칸 \"미배정\""
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "1bd7790eab",
+    "agent": "debugger",
+    "summary": "부서(경영·영업) 일정리스트·달력에 시트 접수 줄 + [금일] 오늘 완료 표시(앱·시트, 회색 취소선) + 경영 처리자 빈칸 \"미배정\""
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "1bd7790eab",
+    "agent": "qa-checker",
+    "summary": "부서(경영·영업) 일정리스트·달력에 시트 접수 줄 + [금일] 오늘 완료 표시(앱·시트, 회색 취소선) + 경영 처리자 빈칸 \"미배정\""
+  },
+  {
+    "date": "2026-10-28",
     "hash": "fb8e725d68",
     "agent": "kakao-pc-rules",
     "summary": "카톡 대화 저장: 파일 이름 칸을 EM_SETSEL 로 전체 선택 후 붙여넣기 + Enter 전 칸 글이 기대 경로와 같은지 확인(다르면 저장 안 함)"

@@ -5,7 +5,7 @@
  * 예정일이 지났거나 없는 접수는 일정리스트에 나오지 않고 [미처리현황] 탭에서 본다(같은 행을 두 곳에 두지 않는다).
  */
 import { defaultHandler, type DeptType } from "./deptReception";
-import { nextWeekday } from "./deptReceptionFlow";
+import { nextBusinessDay } from "./planDate";
 import type { DeptCalEvent } from "./deptCalendarView";
 import type { SheetListRow } from "./receptionSheetOpen";
 import { hideLinkedLike, sheetPlanItems } from "./deptPlanSheet";
@@ -22,12 +22,12 @@ export type PlanRow = {
 export type PlanItem<R extends PlanRow = PlanRow> =
   | { kind: "reception"; key: string; date: string; row: R; done?: boolean }
   | { kind: "event"; key: string; date: string; ev: DeptCalEvent }
-  /** 시트에만 적힌 접수(2026-10-28) — 접수일 = 오늘만, done = 오늘 접수돼 완료된 줄 */
+  /** 시트에만 적힌 접수(2026-10-28) — 접수일로 금일·익일·예정, done = 오늘 접수돼 완료된 줄 */
   | { kind: "sheet"; key: string; date: string; sheet: SheetListRow; done: boolean };
 
 /** 선택 인자(2026-10-28) — 없으면 예전과 1:1 */
 export type PlanExtra<R extends PlanRow = PlanRow> = {
-  /** 이 부서 출처 시트 줄(fetchSheetListRows). 오늘 접수일만 [금일]에 들어간다 */
+  /** 이 부서 출처 시트 줄(fetchSheetListRows). 접수일 오늘 = [금일], 다음 영업일까지 = [익일], 그 뒤 = [예정](열린 줄만), 지난 날짜는 안 넣음 */
   sheet?: SheetListRow[];
   /** 오늘 완료된 이 부서 앱 접수(fetchDoneToday) — [금일] 맨 아래 회색 */
   done?: R[];
@@ -42,11 +42,11 @@ const isYmd = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 /**
  * rows: 그 부서의 열린 접수(DB). 완료·취소·다른 종류는 걸러 낸다(낙관 갱신 뒤 다시 불러도 같은 결과).
  * events: 그 부서 달력 일정 — 접수와 연결 안 된 것(receptionId 없음)만 날짜 묶음에 넣고, 오늘 전 날짜는 뺀다.
- * 익일 = 오늘 뒤 ~ 다음 영업일(금요일이면 토·일·월). 예정 = 그 뒤. 예정일 지남·없음은 어느 묶음에도 넣지 않는다(미처리현황 몫).
+ * 익일 = 오늘 뒤 ~ 다음 영업일(금요일이면 토·일·월, 공휴일도 건너뜀 — planDate.nextBusinessDay, 2026-10-28). 예정 = 그 뒤. 예정일 지남·없음은 어느 묶음에도 넣지 않는다(미처리현황 몫).
  */
 export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], events: DeptCalEvent[], today: string, extra: PlanExtra<R> = {}): Record<PlanBucket, PlanItem<R>[]> {
   const out: Record<PlanBucket, PlanItem<R>[]> = { today: [], next: [], later: [] };
-  const next = nextWeekday(today);
+  const next = nextBusinessDay(today);
   const place = (date: string): PlanBucket | null => (date === today ? "today" : date > today && date <= next ? "next" : date > next ? "later" : null);
   for (const row of rows) {
     if (row.type !== dept || CLOSED.has(String(row.status || ""))) continue;
@@ -62,17 +62,20 @@ export function deptPlanBuckets<R extends PlanRow>(dept: DeptType, rows: R[], ev
   const byDate = (a: PlanItem<R>, b: PlanItem<R>) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   for (const k of PLAN_BUCKETS) out[k].sort(byDate);
 
-  // 2026-10-28: [금일] = (위 정렬 그대로) → 오늘 접수 열린 시트 줄(접수시간 순) → 오늘 완료(앱 → 시트) 맨 아래
+  // 2026-10-28: [금일] = (위 정렬 그대로) → 오늘 접수 열린 시트 줄(접수시간 순) → 오늘 완료(앱 → 시트) 맨 아래.
+  // 오늘 뒤 접수일의 열린 시트 줄은 같은 날짜 규칙으로 [익일]·[예정] 맨 아래(접수일·시각 순)
   const doneRows = (extra.done || []).filter((r) => r.type === dept && String(r.status || "") === "완료");
   if (extra.sheet?.length) {
     const appSeen = [...rows.filter((r) => r.type === dept), ...doneRows];
     const sheet = hideLinkedLike(extra.sheet.filter((s) => s.kind === dept), appSeen);
-    const { open, done } = sheetPlanItems(sheet, today);
+    const { open, done, next: sNext, later: sLater } = sheetPlanItems(sheet, today, next);
     const sheetItem = (s: SheetListRow, isDone: boolean): PlanItem<R> =>
       ({ kind: "sheet", key: `sh:${s.source}:${s.month || s.date.slice(0, 7)}:${s.seq || s.sheetRow}`, date: s.date, sheet: s, done: isDone });
     out.today.push(...open.map((s) => sheetItem(s, false)));
     out.today.push(...doneRows.map((row): PlanItem<R> => ({ kind: "reception", key: `d:${row.id}`, date: today, row, done: true })));
     out.today.push(...done.map((s) => sheetItem(s, true)));
+    out.next.push(...sNext.map((s) => sheetItem(s, false)));
+    out.later.push(...sLater.map((s) => sheetItem(s, false)));
   } else {
     out.today.push(...doneRows.map((row): PlanItem<R> => ({ kind: "reception", key: `d:${row.id}`, date: today, row, done: true })));
   }

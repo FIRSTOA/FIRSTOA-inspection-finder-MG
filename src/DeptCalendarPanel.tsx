@@ -4,7 +4,9 @@
  * 2026-10-19: 상세에서 제목·메모·날짜 수정(시간 칸 없음)·삭제, 빈 칸 더블클릭/[이 날에 추가]로 새 부서 일정(reception_id 없음).
  * 접수에서 온 일정은 날짜를 바꾸면 접수 예정일도, 지우면 접수 예정일이 비워진다(deptReceptionFlow.saveDeptCalEdit/deleteDeptCalEdit).
  * as_tickets·네이버 캘린더와는 섞지 않는다.
- * 2026-10-28: 선택 prop sheetRows(시트에만 적힌 접수, 접수일 칸) — 속 빈 점·"시트" 칩(완료는 회색 취소선, Q2), 누르면 SheetListDetail 창.
+ * 2026-10-28: 선택 prop sheetRows(시트에만 적힌 접수, 접수일 칸) — 누르면 SheetListDetail 창.
+ *   색은 앱 일정과 같은 규칙(열림 = 부서색 채움, 완료 = 회색 취소선, 점도 같은 채움) — 구분은 칩 안 작은 "시트" 글자만
+ *   (사용자 "역락은 빨간색이고 시트는 하얀색, 무슨 차이?" — 같은 접수로 본다).
  *   같은 날 같은 업체의 앱 일정이 있으면 시트 칩은 숨긴다(deptPlanSheet.hideLikeEvents). 달력 자체 조회는 그대로.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -111,7 +113,9 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
   const byDate = useMemo(() => groupDeptEventsByDate(events), [events]);
   const sheetByDate = useMemo(() => groupSheetByDate(hideLikeEvents(sheetRows || [], events)), [sheetRows, events]);
   const monthSheetCount = Array.from(sheetByDate.entries()).reduce((n, [d, l]) => n + (d.slice(0, 7) === month.slice(0, 7) ? l.length : 0), 0);
-  const sheetChip = (r: SheetListRow) => (r.cls === "done" ? "border-slate-200 bg-slate-50 text-slate-400 line-through" : "border-slate-300 bg-white text-slate-700");
+  // 앱 일정 칩(chip)과 같은 색 — 완료 = 회색 취소선, 열림 = 부서색
+  const sheetChip = (r: SheetListRow) => (r.cls === "done" ? "bg-slate-100 text-slate-400 line-through" : meta.badge);
+  const sheetTag = <span className="mr-1 inline-block rounded border border-current px-1 text-[9px] font-black leading-[14px] no-underline opacity-70">시트</span>;
   const sheetKey = (r: SheetListRow) => `${r.source}:${r.month}:${r.seq || r.sheetRow}`;
   const monthKey = month.slice(0, 7);
   const monthEvents = events.filter((ev) => ev.date.slice(0, 7) === monthKey);
@@ -128,9 +132,9 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
   const selectedList = byDate.get(selected) || [];
   const selectedSheet = sheetByDate.get(selected) || [];
   const sheetRowBtn = (r: SheetListRow) => (
-    <button key={sheetKey(r)} type="button" onClick={() => setSheetOpen(r)} className={`block w-full rounded-lg border px-3 py-2 text-left ${sheetChip(r)}`}>
+    <button key={sheetKey(r)} type="button" onClick={() => setSheetOpen(r)} className={`block w-full rounded-lg px-3 py-2.5 text-left ${sheetChip(r)}`}>
       <div className="flex items-center gap-1.5">
-        <span className="shrink-0 rounded border border-slate-300 px-1 text-[10px] font-black text-slate-500">시트</span>
+        <span className="shrink-0 rounded border border-current px-1 text-[10px] font-black opacity-70">시트</span>
         <span className="min-w-0 flex-1 truncate text-sm font-black">{r.time && `${r.time} `}{r.vendor || "업체 미정"}{r.field ? ` · ${r.field}` : ""}</span>
         {r.cls === "done" ? <span className="shrink-0 text-[10px] font-black">완료</span> : r.cls === "hold" ? <span className="shrink-0 text-[10px] font-black text-amber-700">보류</span> : null}
       </div>
@@ -189,9 +193,9 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                       {list.slice(0, 4).map((ev) => <span key={ev.id} className={`h-1.5 w-1.5 rounded-full ${ev.done ? "bg-slate-300" : meta.bar}`} />)}
                     </span>
                     {(sheetByDate.get(date) || []).length > 0 && (
-                      // 시트 줄 = 속 빈 점(테두리만). 4개 넘으면 숫자
+                      // 시트 줄 점 = 앱 일정 점과 같은 채움(열림 부서색·완료 회색). 4개 넘으면 숫자
                       <span className="mt-0.5 flex flex-wrap items-center gap-0.5" aria-label={`시트 ${(sheetByDate.get(date) || []).length}건`}>
-                        {(sheetByDate.get(date) || []).slice(0, 4).map((r) => <span key={sheetKey(r)} className={`h-1.5 w-1.5 rounded-full border ${r.cls === "done" ? "border-slate-300" : "border-slate-500"}`} />)}
+                        {(sheetByDate.get(date) || []).slice(0, 4).map((r) => <span key={sheetKey(r)} className={`h-1.5 w-1.5 rounded-full ${r.cls === "done" ? "bg-slate-300" : meta.bar}`} />)}
                         {(sheetByDate.get(date) || []).length > 4 && <span className="text-[9px] font-black leading-none text-slate-400">{(sheetByDate.get(date) || []).length}</span>}
                       </span>
                     )}
@@ -234,8 +238,8 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                         ))}
                         {(sheetByDate.get(date) || []).map((r) => (
                           <button key={sheetKey(r)} type="button" onClick={() => setSheetOpen(r)} title={`시트 · ${r.vendor}`}
-                            className={`block w-full truncate rounded-md border px-2 py-1 text-left text-[11px] font-bold transition hover:brightness-95 ${sheetChip(r)}`}>
-                            시트 · {r.vendor || "업체 미정"}
+                            className={`block w-full truncate rounded-md px-2 py-1 text-left text-[11px] font-bold transition hover:brightness-95 ${sheetChip(r)}`}>
+                            {sheetTag}{r.vendor || "업체 미정"}
                           </button>
                         ))}
                       </div>
