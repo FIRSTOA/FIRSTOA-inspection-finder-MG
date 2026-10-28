@@ -26,7 +26,7 @@ from datetime import timedelta
 
 from config import HOST, KAKAO_PC_DIR, LOG_DIR, RestError, kst_now, load_state, log, rest, save_state
 
-VERSION = "2026-10-27a"
+VERSION = "2026-10-29a"  # 카톡 저장 04:30·120분·방 자동 열기·완료창 닫기
 WORKER_NAME = os.environ.get("FIRSTOA_WORKER_NAME", f"worker@{HOST}")
 LOOP_SECONDS = 60
 BACKUP_AT = (2, 30)            # KST 02:30 이후 그날 첫 바퀴에
