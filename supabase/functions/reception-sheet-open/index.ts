@@ -369,8 +369,8 @@ async function snapshot(): Promise<{ ok: boolean; upserted: number; gone: number
     const built = buildSnapshotRecords(L, data.sheets.get(source) || [], data.rows, data.links, data.rules, data.fetchedAt, SHEET_LIST_START);
     noDate += built.noDate;
     if (built.duplicates.length) {
-      skipped += built.duplicates.length;
-      errors.push(`${SOURCE_LABEL[source]} 같은 순번 ${built.duplicates.length}행(처음 행만 보관): ${sample(built.duplicates)}`);
+      // 같은 순번 두 번 = 정보만(따로 보관함, 2026-10-29) — errors 에 넣으면 ok:false 가 돼 매시간 실패처럼 보인다
+      console.log("snapshot dup-seq", SOURCE_LABEL[source], sample(built.duplicates));
     }
     const months = Array.from(new Set(built.records.map((r) => r.month))).sort();
     if (!months.length) continue;

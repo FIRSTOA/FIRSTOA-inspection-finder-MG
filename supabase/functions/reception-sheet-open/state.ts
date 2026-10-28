@@ -764,7 +764,7 @@ export type SnapshotRecord = {
 /**
  * 한 탭의 파싱된 행 → 보관 표 행(순수). 날짜 없는 행은 noDate 로 세고 빼며, start 이전 행은 뺀다.
  * values = 그 탭에서 읽은 값(firstRow 부터, copier 는 mergeExtraColumns 뒤) — raw·content 원문용.
- * 같은 (month, seq) 가 두 번이면 처음 것만 두고 duplicates 에 적는다(한 요청 안 중복 키 = upsert 오류).
+ * 같은 (month, seq) 가 두 번이면 두 번째부터 seq~지문6 키로 따로 보관하고 duplicates 에 적는다(정보용, 2026-10-29). 내용까지 같으면 한 번만.
  */
 export function buildSnapshotRecords(
   layout: SheetLayout, values: string[][], rows: ParsedSheetRow[], links: Map<string, string>, rules: Map<string, LinkRule>,
@@ -774,16 +774,27 @@ export function buildSnapshotRecords(
   const records: SnapshotRecord[] = [];
   const duplicates: string[] = [];
   const keys = new Set<string>();
+  const firstFp = new Map<string, string>();
   let noDate = 0;
   for (const r of rows) {
     if (r.source !== layout.source) continue;
     if (!r.date) { noDate += 1; continue; }
     if (r.date < start) continue;
     const month = r.date.slice(0, 7);
-    const seq = snapshotSeq(r);
-    const k = `${month}|${seq}`;
-    if (keys.has(k)) { duplicates.push(`${month} 순번 ${seq}(${r.sheetRow}행)`); continue; }
+    let seq = snapshotSeq(r);
+    let k = `${month}|${seq}`;
+    if (keys.has(k) && firstFp.get(k) === snapshotFingerprint(r)) continue; // 날짜·접수자·상호까지 같음 = 같은 접수가 두 번 적힘 — 한 번만
+    if (keys.has(k)) {
+      // 2026-10-29 사용자 "원격팀 중복 알아서 정리": 시트에 같은 순번이 두 번 적힌 행(원격 1069·1154)도 버리지 않고
+      // 순번 뒤에 내용 지문 6자를 붙인 별도 키로 보관한다(같은 행이면 매번 같은 키 → 중복 적재 없음). 남의 시트는 고치지 않는다.
+      const alt = `${seq}~${snapshotFingerprint(r).slice(0, 6)}`;
+      duplicates.push(`${month} 순번 ${seq}(${r.sheetRow}행 → ${alt})`);
+      seq = alt;
+      k = `${month}|${seq}`;
+      if (keys.has(k)) continue;
+    }
     keys.add(k);
+    if (!firstFp.has(k)) firstFp.set(k, snapshotFingerprint(r));
     const rowVals = values[r.sheetRow - layout.firstRow] || [];
     const key = `${r.source}:${r.sheetRow}`;
     const content = maskPhones(keepText(rowVals[layout.summaryCol - 1], LIST_CONTENT_MAX));
