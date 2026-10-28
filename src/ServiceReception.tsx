@@ -43,7 +43,9 @@ import LeaseDeptPill from "./LeaseDeptPill";
 import { leaseDeptOf, MATCHED_BY_KEY } from "./leaseDept";
 
 type ListTypeFilter = "전체" | "복합기 AS" | "IT" | "원격이관" | "주소확인" | DeptType; // 접수리스트 종류 필터(2026-10-19 "지원" 묶음 → 부서 3종 각각)
-const LIST_TYPE_FILTERS: readonly ListTypeFilter[] = ["전체", "복합기 AS", "IT", "원격이관", "주소확인", "경영지원", "운영지원", "영업팀"];
+const LIST_TYPE_FILTERS: readonly ListTypeFilter[] = ["전체", "복합기 AS", "원격이관", "IT", "주소확인", "경영지원", "운영지원", "영업팀"]; // 원격 → IT(2026-10-28)
+
+const AUTHOR_PREVIEW = 5; // 접수자별 처리 카드 펼쳤을 때 먼저 보이는 인원
 
 type ReceiveRoute = "카카오" | "전화";
 type ReceiveType = "원격이관" | "복합기 AS" | "IT";
@@ -1431,6 +1433,8 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   const listMerge = useMemo(() => mergeListWithSheet(listRows, sheetList.rows), [listRows, sheetList.rows]);
   // 접수자별 처리 = 앱 + 시트 합산(11절 Q3)
   const byAuthor = useMemo(() => authorStats(listMerge.rows), [listMerge.rows]);
+  const [authorOpen, setAuthorOpen] = useState(false); // 접수자별 처리 카드 기본 접힘(2026-10-28)
+  const [authorAll, setAuthorAll] = useState(false);
   // 기간 밖이어도 미완료 원격·IT 건은 위로 이월해 보여준다 (어제 미완료가 사라지면 안 됨)
   const mergedRows = useMemo(() => {
     const seen = new Set(listRows.map((r) => r.id));
@@ -2147,16 +2151,27 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
             </div>
           )}
 
-          {byAuthor.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4">
-            <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]}){listMerge.sheetCount > 0 ? ` (시트 ${listMerge.sheetCount} 포함)` : ""}</div>
-            <div className="mt-2 space-y-1">
-              {byAuthor.map(([name, stat]) => (
-                <div key={name} className="flex items-center justify-between text-xs">
-                  <span className="font-black text-slate-700">{name}</span>
-                  <span className="font-bold text-slate-500">총 {stat.total}{authorStatParts(stat).map((p) => <span key={p.key}> · <span className={AUTHOR_STAT_TONE[p.key]}>{p.label} {p.n}</span></span>)}</span>
-                </div>
-              ))}
-            </div>
+          {byAuthor.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 px-4 py-3">
+            {/* 2026-10-28 사용자 "정신없다 접어두든가": 기본 접힘 — 머리 한 줄(기간·인원·시트 포함)만 보이고 누르면 펼침. 펼쳐도 5명까지, [n명 더] 로 전부 */}
+            <button type="button" onClick={() => setAuthorOpen((v) => !v)} aria-expanded={authorOpen} className="flex w-full items-center justify-between text-left">
+              <span className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]}) · {byAuthor.length}명{listMerge.sheetCount > 0 ? ` (시트 ${listMerge.sheetCount} 포함)` : ""}</span>
+              <span className="text-[11px] font-bold text-slate-400">{authorOpen ? "접기 ▴" : "펼치기 ▾"}</span>
+            </button>
+            {authorOpen && (
+              <div className="mt-2 space-y-1">
+                {(authorAll ? byAuthor : byAuthor.slice(0, AUTHOR_PREVIEW)).map(([name, stat]) => (
+                  <div key={name} className="flex items-center justify-between text-xs">
+                    <span className="font-black text-slate-700">{name}</span>
+                    <span className="font-bold text-slate-500">총 {stat.total}{authorStatParts(stat).map((p) => <span key={p.key}> · <span className={AUTHOR_STAT_TONE[p.key]}>{p.label} {p.n}</span></span>)}</span>
+                  </div>
+                ))}
+                {byAuthor.length > AUTHOR_PREVIEW && (
+                  <button type="button" onClick={() => setAuthorAll((v) => !v)} className="mt-1 text-[11px] font-bold text-slate-500 underline">
+                    {authorAll ? "앞 5명만" : `${byAuthor.length - AUTHOR_PREVIEW}명 더 보기`}
+                  </button>
+                )}
+              </div>
+            )}
           </div>}
           </div>
         </section>

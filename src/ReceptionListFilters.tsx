@@ -18,8 +18,8 @@ type Cell = { key: string; label: string; dept?: boolean; warn?: boolean };
 const TYPE_CELLS: Cell[] = [
   { key: "전체", label: "전체" },
   { key: "복합기 AS", label: "CS 접수" },
+  { key: "원격이관", label: "원격" },   // 2026-10-28 사용자: 원격 → IT 순서(선택기 RECEPTION_TYPES 와 같게)
   { key: "IT", label: "IT" },
-  { key: "원격이관", label: "원격" },
   { key: "경영지원", label: "경영", dept: true },
   { key: "운영지원", label: "운영", dept: true },
   { key: "영업팀", label: "영업", dept: true },
