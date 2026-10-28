@@ -372,6 +372,32 @@ def _visible_windows_of(pid: int) -> set:
     return s
 
 
+def _edit_text(h: int) -> str:
+    """표준 Edit 칸의 글을 읽기만 한다(WM_GETTEXT — 읽기 전용. WM_SETTEXT 는 쓰지 않는다)"""
+    import ctypes
+
+    try:
+        n = ctypes.windll.user32.SendMessageW(h, 0x000E, 0, 0)  # WM_GETTEXTLENGTH
+        buf = ctypes.create_unicode_buffer(int(n) + 2)
+        ctypes.windll.user32.SendMessageW(h, 0x000D, int(n) + 1, buf)  # WM_GETTEXT
+        return buf.value
+    except Exception:
+        return ""
+
+
+def _select_all_in_edit(h: int) -> None:
+    """윈도 표준 저장 창(comdlg32)의 파일 이름 Edit 칸 글 전체 선택 — EM_SETSEL(0, -1).
+    2026-10-28 노트북 실측: End → Shift+Home 키가 먹지 않아 붙여넣기가 카톡 기본 이름 앞에 끼어
+    '방이름_날짜.txtKakaoTalk_…_group.txt' 로 저장됐다. 키 대신 선택 메시지를 쓴다(글을 바꾸는 WM_SETTEXT 아님 — 선택만).
+    카톡이 그린 창이 아니라 윈도 표준 대화 상자의 Edit 이라 카톡 힙과 무관."""
+    import ctypes
+
+    try:
+        ctypes.windll.user32.SendMessageW(h, 0x00B1, 0, -1)  # EM_SETSEL
+    except Exception:
+        pass
+
+
 def _focused_control(hwnd: int):
     """그 창 스레드에서 키보드 포커스를 가진 컨트롤(핸들, 클래스) — GetGUIThreadInfo"""
     import ctypes
@@ -817,14 +843,22 @@ def export_one(room: str, folder: str, ymd: str) -> str:
         try:
             if _fg()[0] != dlg:
                 return "fail:붙여넣기 직전 맨 앞 창이 바뀜"
-            pyautogui.press("end")
-            pyautogui.hotkey("shift", "home")  # 칸 안 글 전체 선택(Ctrl+A 금지 규칙 — 표준 Edit 에서 같은 효과)
-            pyautogui.hotkey("ctrl", "v")
+            time.sleep(0.5)  # 저장 창이 막 뜬 직후엔 키가 씹힌다(실측 0.2초 만에 누름) — 조금 쉬고
+            if _fg()[0] != dlg:
+                return "fail:이름 칸 선택 직전 맨 앞 창이 바뀜"
+            _select_all_in_edit(focus_h)  # 기본 이름 전체 선택(Ctrl+A·End/Shift+Home 대신, 위 함수 주석)
+            time.sleep(0.2)
+            pyautogui.hotkey("ctrl", "v")  # 선택된 기본 이름을 우리 경로로 바꿈
             time.sleep(0.4)
         finally:
             _clear_clipboard()
         if _fg()[0] != dlg:
             return "fail:Enter 직전 맨 앞 창이 바뀜"
+        # Enter 전에 칸 글이 정확히 우리 경로인지 읽어서 확인 — 다르면 저장하지 않고 닫는다(이름 꼬인 파일을 만들지 않게)
+        typed = _edit_text(focus_h)
+        if typed.strip() != path:
+            _esc_if_front(dlg, "파일 이름이 기대와 다름")
+            return f"fail:파일 이름 칸 글이 기대와 다름('{typed[-60:]}') — 저장 안 함"
         before2 = _visible_windows_of(pid)
         pyautogui.press("enter")
         # 저장 창이 닫히거나, 확인창(덮어쓰기·오류)이 뜨거나, 카톡 완료창('대화 내보내기')이 뜨거나
