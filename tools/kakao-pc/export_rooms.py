@@ -15,7 +15,12 @@ r"""
   · 창이 안 열린 방은 스스로 연다(2026-10-29 사용자 "21개 방 열어 놓고 가야 해? 지가 열어야지") — open_room.py 의
     검색칸+Ctrl+V·더블클릭 방식. 이번에 연 창만 저장이 끝난 뒤(완료창 닫힘·파일 확정 뒤 최소 8초) WM_CLOSE 로 닫는다.
     사람이 원래 열어 둔 창은 닫지 않는다. 우리가 연 창은 동시에 최대 1개 — 못 닫으면 그 뒤로 새 방은 열지 않는다.
-    방 열기 실패가 로그인 화면·카톡 꺼짐이면 전체 중단, 그 밖은 그 방 실패(실패 3번이면 중단).
+    방 열기 실패가 로그인 화면·카톡 꺼짐이면 전체 중단, 그 밖은 그 방 실패(**연속** 실패 3번이면 중단 — 성공이 끼면 0부터, 2026-10-29b).
+  · 2026-10-29 04:30 첫 실전(저장 15·실패 3, 누적 3번으로 중단) 뒤 재시도 3가지:
+    ① Ctrl+S 뒤 저장 창이 안 뜨면 방 창이 살아 있고 카톡이 응답할 때만 → 맨 앞·제목 재확인 → 15초 더(그 사이 늦게 뜬 창이면 그것을 씀)
+      → 누르기 직전 맨 앞 재확인 → Ctrl+S 한 번 더(한 방당 1회). 재확인이 어긋나면 키 안 누름.
+    ② 창을 맨 앞으로 못 가져오면 2초 쉬고 한 번 더.  ③ 저장 창이 안 떴거나 창을 못 다룬 방은 목록 끝에서 한 바퀴 더(상한 안에서만,
+      파일이 생겼을 수 있는 실패 — .partial·확인창 — 는 다시 안 누름).
   · 키를 누르기 전마다 맨 앞 창을 확인한다. 아니면 그 자리에서 중단(키 안 누름).
   · Esc 는 "맨 앞 창이 카톡이 띄운 새 창(저장 창·확인창)"일 때만 누른다 — 방 창에 Esc 가 가면 방 창이 닫힐 수 있다.
   · 파일 이름 칸에는 클립보드 붙여넣기만(창 메시지로 글 넣기 금지 — 규칙 6). 붙여 넣은 뒤 클립보드를 비운다.
@@ -27,7 +32,7 @@ r"""
       (이때까지 완료창에는 아무 키도 안 누름 — 진행 중 Enter/Esc 는 내보내기를 취소할 수 있다)
     → 완료창(제목 없는 EVA_Window_Dblclk·방 창 소유·자식 0개·약 300×225, 2026-10-28 23:50 실측 — 제목·글자로는 못 찾는다)을
       찾아(최대 10초) 그 창이 맨 앞일 때만 Enter(기본 단추=확인)로 닫는다 → (이번에 연 창이면) 8초 뒤 WM_CLOSE·닫힘 확인
-    → 방 사이 20초 → 다음 방. 전체 상한 120분(새 방을 시작하지 않는 기준).
+    → 방 사이 20초 → 다음 방. 전체 상한 120분(새 방을 시작하지 않는 기준). 실측 2026-10-29: 18방 25분 43초(저장 창 0.2초·파일 16~29초 확정).
     기대 이름 파일이 없으면 Ctrl+S 뒤 생긴 .txt(카톡 기본 이름)의 크기를 재고, 멈추면 기대 이름으로 바꾼다.
     조정: FIRSTOA_KAKAO_EXPORT_LOAD_WAIT · _DIALOG_WAIT · _DONE_WAIT · _GAP · _LIMIT · _CLOSE_WAIT(최소 8) (초). 동시에 두 개 안 돈다(뮤텍스 Local\FIRSTOA-KakaoExport).
 
@@ -54,7 +59,12 @@ DIALOG_CLASS = "#32770"  # 윈도 표준 대화 상자(다른 이름으로 저�
 # 저장 창 제목 — 노트북 probe 로 확인 전엔 추정값. 다르면 환경 변수 FIRSTOA_KAKAO_SAVE_TITLE 에 실제 제목(일부)을 넣는다
 SAVE_TITLES = ("다른 이름으로 저장", "save as", "대화 내용 저장", "대화내용 저장")
 PROBE_WAIT = 1.5   # 초 — Ctrl+S 뒤 창을 기다리는 시간(probe)
-MAX_FAILS = 3      # 실패 3번이면 그날은 중단
+MAX_FAILS = 3      # **연속** 실패 3번이면 그날은 중단(성공이 끼면 다시 0부터 — 2026-10-29 실측: 누적 3번으로 18방째에 멈춤)
+FRONT_RETRY_GAP = 2.0  # 창을 맨 앞으로 못 가져왔을 때 쉬고 한 번 더(2026-10-29 실측 '경기D/초과사용 계약종료체크')
+SAVE_RETRY_WAIT = 15.0  # Ctrl+S 뒤 저장 창이 안 떴을 때 다시 누르기 전 더 기다리는 시간(그 사이 늦게 뜬 창이면 그것을 쓴다)
+# 끝에서 다시 시도해도 되는 실패 — 카톡이 아직 아무것도 내보내지 않았다고 볼 수 있는 것만(저장 창이 안 떴거나 창을 못 다룸).
+# 파일이 생겼거나(.partial·확인창·저장 창 안 닫힘) 이름 칸이 꼬인 실패는 내보내기가 진행 중일 수 있어 다시 누르지 않는다
+END_RETRY_MARKS = ("안에 창이 안 뜸", "맨 앞 창 확인 실패", "창을 맨 앞으로 못 가져옴", "방 열기 실패", "카톡 응답 없음")
 
 
 def env_seconds(name: str, default: float, lo: float = 0.0, hi: float = 3600.0) -> float:
@@ -245,6 +255,27 @@ def pick_default_name_file(entries: list, since: float, expected: str) -> str:
     return max(cand)[1] if cand else ""
 
 
+def next_fail_streak(streak: int, kind: str) -> int:
+    """연속 실패 수 — 'fail'·'stop' 이면 +1, 'ok' 면 0(성공이 끼면 리셋), 'skip' 은 그대로(저장도 실패도 아님)"""
+    if kind == "ok":
+        return 0
+    if kind in ("fail", "stop"):
+        return streak + 1
+    return streak
+
+
+def end_retry_rooms(failed: list) -> list:
+    """[(방, 실패 이유)] → 목록 끝에서 한 번 더 시도할 방(중복 제거·순서 유지). END_RETRY_MARKS 가 든 이유만 —
+    파일이 생겼을 수 있는 실패(.partial·확인창 등)는 다시 Ctrl+S 하지 않는다"""
+    seen, out = set(), []
+    for room, why in failed or []:
+        if room in seen or not any(m in str(why or "") for m in END_RETRY_MARKS):
+            continue
+        seen.add(room)
+        out.append(room)
+    return out
+
+
 def selftest() -> int:
     assert export_file_name("완료방(납품,철수,교체)", "20261023") == "완료방(납품,철수,교체)_20261023.txt"
     assert export_file_name("PC/IT/피씨/확장성고객등록및영업", "20261023") == "PC_IT_피씨_확장성고객등록및영업_20261023.txt"
@@ -329,6 +360,13 @@ def selftest() -> int:
     assert env_seconds("FIRSTOA_KAKAO_TEST_SEC", 7.0) == 25.0
     del os.environ["FIRSTOA_KAKAO_TEST_SEC"]
     assert env_seconds("FIRSTOA_KAKAO_TEST_SEC", 7.0) == 7.0
+    st = 0
+    for k in ("fail", "fail", "ok", "fail", "skip", "fail"):
+        st = next_fail_streak(st, k)
+    assert st == 2  # 성공이 끼어 리셋, 건너뜀은 그대로
+    assert next_fail_streak(2, "stop") == 3
+    assert end_retry_rooms([("A", "Ctrl+S 뒤 15초 안에 창이 안 뜸(…)"), ("B", "파일 쓰기가 300초 안에 안 끝남"),
+                            ("C", "방 열기 8초 → 맨 앞 창 확인 실패"), ("A", "Ctrl+S 뒤 15초 안에 창이 안 뜸")]) == ["A", "C"]
     print("selftest OK")
     return 0
 
@@ -751,8 +789,15 @@ def _front_room(room: str):
     if not hwnd:
         return 0
     if not bring_front(hwnd):
-        log(f"    [내보내기] ✗ [{room}] 창을 맨 앞으로 못 가져옴")
-        return -1
+        # 2026-10-29 04:30 실측 '경기D/초과사용 계약종료체크' — 한 번 못 가져오면 2초 쉬고 한 번만 더(키는 안 누름 — 창 찾기·앞으로만)
+        log(f"    [내보내기]   [{room}] 창을 맨 앞으로 못 가져옴 — {FRONT_RETRY_GAP:.0f}초 뒤 한 번 더")
+        time.sleep(FRONT_RETRY_GAP)
+        hwnd, title = find_room_window(room)
+        if not hwnd:
+            return 0
+        if not bring_front(hwnd):
+            log(f"    [내보내기] ✗ [{room}] 창을 맨 앞으로 못 가져옴(다시 시도 뒤에도)")
+            return -1
     fh, _, ft = _fg()
     if fh != hwnd or not (norm(room) in norm(ft) or norm(ft) in norm(room)) or not norm(ft):
         log(f"    [내보내기] ✗ 맨 앞 창이 '{ft}' — 목표 '{room}' 아님, 키 안 누름")
@@ -1007,6 +1052,41 @@ def export_one(room: str, folder: str, ymd: str, user_windows=frozenset()) -> st
     return f"{kind}:{why}"
 
 
+def _retry_ctrl_s(room: str, hwnd: int, pid: int, before: set):
+    """Ctrl+S 뒤 EXPORT_WAIT 안에 저장 창이 안 떴을 때 — 한 방당 한 번만.
+    방 창이 살아 있고 카톡이 응답하면 → 방 창을 맨 앞으로(_front_room: 제목 확인) → SAVE_RETRY_WAIT 초 더 기다리며
+    앞의 Ctrl+S 로 늦게 뜬 창이 있으면 그것을 쓴다(두 번 누르지 않음) → 그래도 없으면 맨 앞·제목을 다시 확인한 뒤에만 Ctrl+S 한 번 더.
+    재확인이 하나라도 어긋나면 키를 누르지 않는다. → (dlg, cls, title, hwnd, 로그 조각)"""
+    import pyautogui
+
+    from open_room import kakao_responding
+
+    if not _alive(hwnd):
+        return 0, "", "", hwnd, " → 방 창이 사라짐(재시도 안 함)"
+    if not kakao_responding(hwnd):
+        return 0, "", "", hwnd, " → 카톡 응답 없음(재시도 안 함)"
+    # 앞의 Ctrl+S 로 저장 창이 막 떴으면 bring_front(alt 키)를 부르지 않고 그 창을 바로 쓴다(방지훈 2026-10-29 권고 —
+    # 늦은 저장 창이 방 창 앞에 떠 있으면 bring_front 가 실패해 창이 남거나, 15초 뒤 before2 에 섞여 놓친다)
+    dlg, cls, title = _wait_new_window(pid, before, hwnd, 0.5)
+    if dlg:
+        return dlg, cls, title, hwnd, " → 저장 창이 늦게 뜸(재시도 없이 그대로 씀)"
+    h2 = _front_room(room)
+    if h2 <= 0:
+        return 0, "", "", hwnd, " → 재시도 전 맨 앞 창 확인 실패(키 안 누름)"
+    hwnd = h2
+    dlg, cls, title = _wait_new_window(pid, before, hwnd, SAVE_RETRY_WAIT)
+    if dlg:  # 앞의 Ctrl+S 가 늦게 먹었다 — 다시 누르지 않는다
+        return dlg, cls, title, hwnd, f" → {SAVE_RETRY_WAIT:.0f}초 더 기다리는 사이 창이 뜸"
+    # 기다리는 사이 다른 창이 앞으로 왔을 수 있다 — 누르기 직전 다시 맨 앞·제목 확인
+    h3 = hwnd if _fg()[0] == hwnd else _front_room(room)
+    if h3 <= 0 or h3 != hwnd or _fg()[0] != hwnd:
+        return 0, "", "", hwnd, " → Ctrl+S 재시도 직전 맨 앞 창 확인 실패(키 안 누름)"
+    before2 = before | _visible_windows_of(pid)  # 늦게 뜬 창도 아닌 것들(광고 등)은 새 창으로 보지 않는다
+    pyautogui.hotkey("ctrl", "s")
+    dlg, cls, title = _wait_new_window(pid, before2, hwnd, EXPORT_WAIT)
+    return dlg, cls, title, hwnd, " → Ctrl+S 재시도" + ("" if dlg else f" → 또 {EXPORT_WAIT:.0f}초 안에 창이 안 뜸")
+
+
 def _export_window(room: str, folder: str, path: str) -> str:
     """열려 있는 방 창 하나 저장(옛 export_one 본문) → 'ok:' / 'skip:' / 'fail:'"""
     import pyautogui
@@ -1030,7 +1110,11 @@ def _export_window(room: str, folder: str, path: str) -> str:
     dlg, cls, title = _wait_new_window(pid, before, hwnd, EXPORT_WAIT)
     steps += " → Ctrl+S"
     if not dlg:
-        return f"fail:Ctrl+S 뒤 {EXPORT_WAIT:.0f}초 안에 창이 안 뜸({steps})"
+        # 2026-10-29 04:30 실측 3방 중 2방 — 창이 아직 살아 있고 카톡이 응답하면 한 방당 한 번만 다시 누른다
+        dlg, cls, title, hwnd, more = _retry_ctrl_s(room, hwnd, pid, before)
+        steps += more
+        if not dlg:
+            return f"fail:Ctrl+S 뒤 {EXPORT_WAIT:.0f}초 안에 창이 안 뜸({steps})"
     if not is_save_dialog(cls, title, extra_save_titles()):
         _esc_if_front(dlg, "저장 창 아님")
         return f"fail:저장 창 아님('{title}' {cls})"
@@ -1143,7 +1227,8 @@ def export(rooms: list, folder: str) -> int:
     log("=" * 64)
     log(f"[내보내기] 시작 — 대상 {len(rooms)}방(창 없음 {n_open}방은 열어서 저장 뒤 닫음) · 폴더 {folder} · 한 번에 한 방(방 열기 약 {OPEN_TYPICAL:.0f}초·"
         f"불러오기 {LOAD_WAIT:.0f}초·저장 창 {EXPORT_WAIT:.0f}초·파일 {SETTLE_STABLE:.0f}초 멈춤 확인(최대 {DONE_WAIT:.0f}초) 뒤 완료창 Enter·"
-        f"연 창은 {CLOSE_WAIT:.0f}초 뒤 닫음·방 사이 {ROOM_GAP:.0f}초·상한 {RUN_LIMIT / 60:.0f}분) · 예상 약 {estimate_minutes(len(rooms), n_open=n_open)}분")
+        f"연 창은 {CLOSE_WAIT:.0f}초 뒤 닫음·방 사이 {ROOM_GAP:.0f}초·상한 {RUN_LIMIT / 60:.0f}분 · 저장 창 안 뜨면 {SAVE_RETRY_WAIT:.0f}초 뒤 Ctrl+S 재시도 1회·"
+        f"실패한 방은 끝에서 한 번 더·연속 실패 {MAX_FAILS}번이면 중단) · 예상 약 {estimate_minutes(len(rooms), n_open=n_open)}분(실패·재시도 없을 때)")
     if not _kakao_ready():
         return 2
     _KEEP_OPEN.clear()
@@ -1155,18 +1240,24 @@ def export(rooms: list, folder: str) -> int:
     if left:
         log(f"    [내보내기] 떠 있던 완료창 {left}개를 닫았습니다")
     ok = skip = fails = 0
-    pressed = False
+    streak = 0  # 연속 실패 — 성공이 끼면 0(2026-10-29: 누적 3번 → 연속 3번)
+    failed: list = []  # [(방, 이유)] — 끝에서 한 번 더 시도할 후보
+    state = {"pressed": False, "stopped": False, "hard": False}  # hard = 로그인 화면·카톡 꺼짐(stop)
     # 상한: 실행기(worker.py)가 이 스크립트를 별도 프로세스로 띄우고 심박은 계속 찍으므로 8분 → 60분(2026-10-27) → 120분(04:30 시작, 2026-10-28 실측 한 방 3분+).
     # 상한은 "새 방을 시작하지 않는" 기준 — 진행 중인 방은 끝까지(최대 약 5분 더)
     deadline = t_start + RUN_LIMIT
-    for room in rooms:  # 차례대로 한 방씩 — 동시에 여러 방을 다루지 않는다
-        if fails >= MAX_FAILS:
-            log(f"    [내보내기] 실패 {fails}번 — 남은 방은 오늘 건너뜀")
-            break
+
+    def before_room() -> bool:
+        """방 하나 시작 전 — 그만둘 때면 False(로그 남김)"""
+        if streak >= MAX_FAILS:
+            log(f"    [내보내기] 연속 실패 {streak}번 — 남은 방은 오늘 건너뜀")
+            state["stopped"] = True
+            return False
         if time.time() > deadline:
             log(f"    [내보내기] {RUN_LIMIT / 60:.0f}분 상한 — 남은 방은 오늘 건너뜀")
-            break
-        if pressed:
+            state["stopped"] = True
+            return False
+        if state["pressed"]:
             time.sleep(ROOM_GAP)  # 앞 방 저장이 끝나고 카톡이 숨 돌릴 텀
             # 앞 방 완료창이 남았으면 닫고 시작(파일이 안 멈춘 방 창은 건드리지 않음). 못 닫으면 로그만 — 소유 방이 달라 겹치지 않는다
             left = _close_leftover_done_popups(rooms, folder, ymd)
@@ -1175,31 +1266,61 @@ def export(rooms: list, folder: str) -> int:
             _retry_close_kept()  # 앞서 못 닫은 우리 창 — 닫혀야 다음 방을 연다
             if time.time() > deadline:
                 log(f"    [내보내기] {RUN_LIMIT / 60:.0f}분 상한 — 남은 방은 오늘 건너뜀")
-                break
+                state["stopped"] = True
+                return False
+        return True
+
+    def run_room(room: str, tag: str = "") -> str:
+        """한 방 저장·로그 → kind"""
+        nonlocal ok, skip, fails, streak
         res = export_one(room, folder, ymd, user_windows)
         kind, _, why = res.partition(":")
+        streak = next_fail_streak(streak, kind)
         if kind == "stop":
             fails += 1
-            log(f"    [내보내기] ✗ [{room}] {why} — 남은 방은 오늘 건너뜀")
-            break
-        if kind == "ok":
+            log(f"    [내보내기] ✗ [{room}]{tag} {why} — 남은 방은 오늘 건너뜀")
+            state["stopped"] = state["hard"] = True
+        elif kind == "ok":
             ok += 1
-            pressed = True
-            log(f"    [내보내기] ✓ [{room}] {why} → {export_file_name(room, ymd)}")
+            state["pressed"] = True
+            log(f"    [내보내기] ✓ [{room}]{tag} {why} → {export_file_name(room, ymd)}")
         elif kind == "skip":
             skip += 1
-            log(f"    [내보내기] - [{room}] 건너뜀: {why}")
+            log(f"    [내보내기] - [{room}]{tag} 건너뜀: {why}")
         else:
             fails += 1
-            pressed = True
-            log(f"    [내보내기] ✗ [{room}] {why}")
+            state["pressed"] = True
+            failed.append((room, why))
+            log(f"    [내보내기] ✗ [{room}]{tag} {why}{f' (연속 실패 {streak})' if streak > 1 else ''}")
+        return kind
+
+    for room in rooms:  # 차례대로 한 방씩 — 동시에 여러 방을 다루지 않는다
+        if not before_room():
+            break
+        run_room(room)
+        if state["stopped"]:
+            break
+    # 실패한 방은 목록 끝에서 한 바퀴만 더(상한·연속 실패 규칙 그대로) — 저장 창이 안 떴거나 창을 못 다룬 방만(END_RETRY_MARKS)
+    retry = end_retry_rooms(failed) if not state["stopped"] and streak < MAX_FAILS else []  # 마지막 방들이 연속 3번 실패면 다시 시도 안 함
+    recovered = 0
+    if retry:
+        log(f"    [내보내기] 끝에서 다시 시도 {len(retry)}방: {', '.join(retry)}")
+        for room in retry:
+            if not before_room():
+                break
+            if run_room(room, " (끝에서 다시 시도)") == "ok":
+                recovered += 1
+            if state["stopped"]:
+                break
+    final_fail = len({r for r, _ in failed}) - recovered
     if _KEEP_OPEN:
         _retry_close_kept()
     if _KEEP_OPEN:
         log(f"    [내보내기] ⚠ 이번에 열었지만 못 닫은 방 창: {', '.join(_KEEP_OPEN.values())} — 카톡 PC 에서 확인 후 손으로 닫아 주세요")
     took = time.time() - t_start
-    log(f"[내보내기] 끝 · 저장 {ok} · 건너뜀 {skip} · 실패 {fails} · 소요 {int(took // 60)}분 {int(took % 60)}초")
-    return 0 if fails == 0 else 2
+    again = f"(끝에서 다시 시도 {len(retry)}방 중 {recovered}방 저장)" if retry else ""
+    log(f"[내보내기] 끝 · 저장 {ok} · 건너뜀 {skip} · 실패 {final_fail}{again} · 시도 실패 {fails}번 · 소요 {int(took // 60)}분 {int(took % 60)}초")
+    return 0 if final_fail <= 0 and not state["hard"] else 2
 
 
 def list_rooms(rooms: list, folder: str) -> int:

@@ -137,6 +137,47 @@ class DonePopup(unittest.TestCase):
         self.assertEqual(er.rooms_with_partial(["PC/IT"], names, "20261027"), {"PC/IT"})
 
 
+class RetryRules(unittest.TestCase):
+    """2026-10-29b — 첫 실전(저장 15·실패 3, 누적 3번으로 중단) 뒤: 연속 실패만 세고, 실패한 방은 끝에서 한 번 더"""
+
+    def run_streak(self, kinds):
+        st = 0
+        for k in kinds:
+            st = er.next_fail_streak(st, k)
+        return st
+
+    def test_success_resets(self):
+        self.assertEqual(self.run_streak(["fail", "fail", "ok"]), 0)
+        self.assertEqual(self.run_streak(["fail", "ok", "fail", "ok", "fail"]), 1)  # 실측처럼 띄엄띄엄 3번 → 중단 아님
+
+    def test_three_in_a_row_stops(self):
+        self.assertGreaterEqual(self.run_streak(["ok", "fail", "fail", "fail"]), er.MAX_FAILS)
+        self.assertEqual(er.MAX_FAILS, 3)
+
+    def test_skip_keeps_streak(self):
+        self.assertEqual(self.run_streak(["fail", "skip", "fail"]), 2)
+        self.assertEqual(self.run_streak(["fail", "fail", "stop"]), 3)
+
+    def test_end_retry_measured(self):
+        # 2026-10-29 04:30~04:56 노트북 로그의 실패 3줄 — 셋 다 끝에서 다시 시도 대상
+        failed = [("강북A 점검방", "방 열기 9초 → Ctrl+S 뒤 15초 안에 창이 안 뜸(불러오기 대기 30초 → Ctrl+S) → 8초 쉬고 저장 뒤 닫음"),
+                  ("경기D/초과사용 계약종료체크", "방 열기 8초 → 맨 앞 창 확인 실패"),
+                  ("신)CD불만고객방", "Ctrl+S 뒤 15초 안에 창이 안 뜸(불러오기 대기 30초 → Ctrl+S)")]
+        self.assertEqual(er.end_retry_rooms(failed), ["강북A 점검방", "경기D/초과사용 계약종료체크", "신)CD불만고객방"])
+
+    def test_end_retry_excludes_maybe_written(self):
+        # 파일이 생겼을 수 있는 실패는 다시 Ctrl+S 하지 않는다
+        failed = [("A", "파일 쓰기가 300초 안에 안 끝남(1,000 KB … → .partial 로 치움)"),
+                  ("B", "확인창이 뜸('다른 이름으로 저장 확인') — 덮어쓰기/경로 문제"),
+                  ("C", "저장 창이 안 닫힘"),
+                  ("D", "파일 이름 칸 글이 기대와 다름('x') — 저장 안 함"),
+                  ("E", "방 열기 실패(hung, 6초)"),
+                  ("E", "방 열기 실패(hung, 6초)")]
+        self.assertEqual(er.end_retry_rooms(failed), ["E"])
+        self.assertEqual(er.end_retry_rooms([]), [])
+        self.assertEqual(er.end_retry_rooms(None), [])
+
+
 class ExportWindow(unittest.TestCase):
     def test_default_name_file(self):
         ents = [("KakaoTalk_20261028_2315_01.txt", 1000.0, 12345), ("KakaoTalk_old.txt", 10.0, 50), ("빈.txt", 1001.0, 0)]
