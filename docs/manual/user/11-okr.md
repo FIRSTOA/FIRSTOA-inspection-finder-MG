@@ -61,6 +61,16 @@
 - Pillar 개수 바꾸기·줄 순서 바꾸기는 없습니다. 8·9월(옛 화면)은 예전 방식 그대로입니다.
 - 다른 사람이 배포 전 화면을 열어 둔 채 목표를 고치면 보관한 줄이 다시 보이거나 **전용 줄이 공통 줄로 바뀌어 A~D 모두에 보일 수 있습니다**(기록은 안 지워짐). 배포 직후에는 OKR 화면을 새로고침하세요.
 
+## 엑셀 내려받기 (2026-10-28)
+- 짙은 띠 오른쪽 연도·분기·월 칩 옆 **[엑셀]** 을 누르면, **위에서 고른 연도·분기 전체**가 `.xlsx` 파일 하나로 받아집니다. 어느 탭(통합집계·A~D)·어느 달·주차를 보고 있어도 같은 파일입니다. 다른 분기는 분기를 바꾼 뒤 다시 누르세요.
+- 파일 이름: `OKR_2026Q4_2026-10-28.xlsx` (연도·분기·받은 날짜, 한국 시간).
+- 탭 5개: **요약**(파트·사람별 달 % — 홈 OKR % 와 같은 셈) · **분기 통합집계** · **월 통합집계**(세 달, `월` 열) · **파트 종합**(`파트` 열) · **주차 기록**(개인 주차 전부, `이름` 열). 파트·사람은 탭을 나누지 않았습니다 — 머리 줄의 필터(▼)로 "우리 파트만", "내 이름만" 고르세요.
+- 누르면 단추가 **"만드는 중…"** 으로 바뀌고(1~3초), 막 적은 글이 있으면 먼저 저장한 뒤 만듭니다. 끝나면 "엑셀을 내려받았습니다 (주차 기록 n행)" 알림.
+- 읽는 중 하나라도 실패하면 파일을 만들지 않고 "엑셀을 만들지 못했습니다: 이유" 알림이 뜹니다(일부만 든 파일은 숫자를 틀리게 보이게 해서). 잠시 뒤 다시 누르세요. 명단만 못 읽으면 파일은 만들고 요약 맨 위에 "명단을 못 읽어 보고자만 셈"이라고 적힙니다.
+- **8·9월(옛 구조) 분기를 보고 있으면 [엑셀] 단추가 없습니다.**
+- 폰(특히 아이폰·카톡 안 브라우저)은 파일이 안 받아지거나 미리보기로 열릴 수 있어 "PC 에서 받는 걸 권장" 안내가 뜹니다. 열람·필터는 PC 엑셀 기준입니다.
+- 엑셀은 보기용입니다. 엑셀에서 고친 내용을 OKR 로 다시 올리는 기능은 없습니다(팀장 문서는 기존 붙여넣기).
+
 ## 자주 하는 실수·주의
 - **(공통 줄) 층마다 따로 저장됩니다.** 통합집계·파트 종합·파트원 주차의 병목현상·목표·달성기준은 서로 덮어쓰지 않습니다(파트·개인 전용 줄은 예외 — 한 벌, 위 절). 처음 열 때만 위 층 글이 기본으로 보입니다.
 - **지운 칸은 빈 채로 남습니다**(위 층 글이 다시 나오지 않음). 예외: **파트 종합에서 달성기준을 비우면 통합집계 달성기준이 다시 보입니다.** 파트원 주차에서 지운 달성기준은 빈 채로 남습니다.
@@ -84,3 +94,4 @@
 - 2026-10-25: 병목 줄 추가·삭제·보관(위 "행 추가·삭제·보관" 절). 근거 파일 src/okr.ts(addGoalRow·removeGoalRow·restoreGoalRow), src/OkrCells.tsx(AddGoalRow·ArchivedGoals), src/OkrQuarterView.tsx, src/OkrMonthRollup.tsx, src/OkrHub.tsx · 설계 docs/tasks/okr-rows-add-remove-2026-10-25.md
 - 2026-10-25 저녁: 행의 주인(공통·파트 전용·개인 전용) — 위 "행 추가·삭제·보관" 절을 층 규칙으로 바꿈. 오후의 "파트 탭에서 공통 칸이 비면 공통에 저장" 규칙은 없앴습니다. 근거 파일 src/okr.ts(goalsForView·goalsForTeamTotal·replaceCommonGoals), src/okrGoalConfirm.ts, src/okrLayerView.ts, src/OkrHub.tsx, src/OkrMonthRollup.tsx, src/OkrCells.tsx(LayerChip·LayerRowsFold) · 설계 docs/tasks/okr-rows-per-layer-2026-10-25.md
 - 2026-10-25 밤(사용자 정정 → 재정정 "내 행은 내 탭에만, 다른 사람이 내 탭을 눌렀을 때 모두가 볼 수 있는 것"): 보임은 저녁 규칙(내 탭에만·통합집계/파트 종합 접힘), 바뀐 것은 수정 권한 — 전용 줄은 그 탭을 연 누구나 줄 자체를 고치고(한 벌)·판정하고·지우고(확인창에 주인)·되살림. 공통 줄 규칙·홈 %는 그대로. 근거 파일 src/okr.ts(goalsForView·goalAppliesTo·editsRowDirectly), src/okrLayerView.ts(canEditRow·layerFoldOf), src/okrGoalConfirm.ts(ownerLabelOf·goalEditTarget), src/OkrHub.tsx(selfRows·setCriteria), src/OkrMonthRollup.tsx
+- 2026-10-28: [엑셀] 내려받기(위 "엑셀 내려받기" 절). 근거 파일 src/okrExcelExport.ts(읽기·쓰기·다운로드), src/okrExcel.ts(탭 변환), src/OkrHeader.tsx(OkrTopBand 단추), src/OkrHub.tsx(호출부) · 설계 docs/tasks/okr-excel-export-2026-10-28.md

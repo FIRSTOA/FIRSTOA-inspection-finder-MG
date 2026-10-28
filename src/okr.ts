@@ -1190,3 +1190,14 @@ export async function getOkrReportsIn(cycleIds: string[]): Promise<OkrReport[]> 
   const rows = await selectAllRows<OkrReport>("okr_reports", `select=cycle_id,team,member,rows,updated_at,updated_by&cycle_id=in.(${list})&order=cycle_id.asc,team.asc,member.asc`);
   return rows.map(toReport);
 }
+
+// 주차의 저장 id(엑셀 내려받기 2026-10-28, docs/tasks/okr-excel-export-2026-10-28.md R1) — OkrHub weekIdFor 와 같은 규칙의 순수 함수.
+// 보통은 연-월-W번호. 같은 시작 월요일의 주차 행이 다른 id 로 남아 있으면(셈법이 바뀌던 2026-10-01 전후) 그 행을 쓴다.
+// 같은 기간 행이 여럿이면 정식 id → 결과가 적힌 쪽(resultIds = listOkrResultIndex) → 첫 행 순. OkrHub 는 이번에 바꾸지 않는다(추가만).
+export function resolveWeekCycleId(year: number, month: number, weekNo: number, cycles: ReadonlyArray<Pick<OkrCycle, "id" | "kind" | "start_date">>, resultIds: ReadonlySet<string> = new Set()): string {
+  const fresh = weekCycleId(year, month, weekNo);
+  const wk = okrWeeksInMonth(year, month).find((x) => x.weekNo === weekNo);
+  const same = wk ? cycles.filter((c) => c.kind === "week" && c.start_date === wk.start) : [];
+  if (!same.length) return fresh;
+  return (same.find((c) => c.id === fresh) || same.find((c) => resultIds.has(c.id)) || same[0]).id;
+}

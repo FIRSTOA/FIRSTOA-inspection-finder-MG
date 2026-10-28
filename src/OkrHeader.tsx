@@ -6,7 +6,8 @@ import { isAlert, normalizeJudgment, type OkrResultRow } from "./okr";
 
 // ── 짙은 띠: "CS팀 OKR" + [연도][분기] + 월 칩(통합집계면 [n분기] 포함). 기간 알약·동기화·큰 제목은 없다 ──
 export type BandChip = { id: string; label: string; on: boolean; now: boolean; title?: string; onClick: () => void };
-export function OkrTopBand({ years, year, quarter, chips, onYear, onQuarter }: { years: number[]; year: number; quarter: number; chips: BandChip[]; onYear: (y: number) => void; onQuarter: (q: number) => void }) {
+// [엑셀](2026-10-28): onExport 를 줄 때만 보인다(옛 구조 분기면 OkrHub 가 안 줌). exporting = 만드는 중(비활성)
+export function OkrTopBand({ years, year, quarter, chips, onYear, onQuarter, onExport, exporting }: { years: number[]; year: number; quarter: number; chips: BandChip[]; onYear: (y: number) => void; onQuarter: (q: number) => void; onExport?: () => void; exporting?: boolean }) {
   const chip = (on: boolean, now: boolean) => `relative shrink-0 rounded-md px-2.5 py-1 text-[12px] font-bold tabular-nums transition ${on ? "bg-white text-slate-950" : now ? "text-white ring-1 ring-inset ring-emerald-400" : "text-slate-300 hover:text-white"}`;
   return <div className="rounded-xl bg-[#1E252F] px-4 py-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -17,6 +18,8 @@ export function OkrTopBand({ years, year, quarter, chips, onYear, onQuarter }: {
         <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-white/15 bg-white/10 p-0.5">
           {chips.map((c) => <button key={c.id} type="button" title={c.title} onClick={c.onClick} className={chip(c.on, c.now)}>{c.label}</button>)}
         </div>
+        {onExport && <button type="button" onClick={onExport} disabled={exporting} title="보고 있는 분기 전체(요약·분기·월·파트 종합·주차 기록)를 엑셀 파일 하나로"
+          className="shrink-0 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-[12px] font-bold text-white transition hover:bg-white/20 disabled:cursor-wait disabled:opacity-60">{exporting ? "만드는 중…" : "엑셀"}</button>}
       </div>
     </div>
   </div>;

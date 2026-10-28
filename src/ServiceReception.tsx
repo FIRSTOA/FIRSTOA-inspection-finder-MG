@@ -33,6 +33,7 @@ import { RECEPTION_RIGHT_KEY, SHOW_BOARD_EVENT, effectiveRightView, parseRightVi
 import DeptWorkspacePanel, { type DeptCounts } from "./DeptWorkspacePanel";
 import DeptReception from "./DeptReceptionScreen";
 import DeptReceptionDetail from "./DeptReceptionDetail";
+import { authorStatParts, authorStats } from "./receptionAuthorStats";
 import { deptListState, deptShort, isDeptType, type DeptType } from "./deptReception";
 import ReceptionListFilters from "./ReceptionListFilters";
 import LeaseDeptPill from "./LeaseDeptPill";
@@ -125,6 +126,7 @@ function regionLabel(area: string) {
 }
 type ListPeriod = "day" | "week" | "month" | "quarter";
 const PERIOD_LABEL: Record<ListPeriod, string> = { day: "일일", week: "주간", month: "월간", quarter: "분기" };
+const AUTHOR_STAT_TONE: Record<string, string> = { cs: "text-blue-600", it: "text-cyan-600", remote: "text-violet-600", mgmt: "text-fuchsia-600", ops: "text-emerald-600", sales: "text-orange-600" };
 function periodRangeOf(period: ListPeriod, date: string): { start: string; end: string } {
   if (period === "day") return { start: date, end: date };
   if (period === "week") {
@@ -1402,20 +1404,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   };
 
   // ---- 통계 ----
-  const byAuthor = useMemo(() => {
-    const map = new Map<string, { total: number; copier: number; it: number; remote: number; dept: number }>();
-    for (const r of listRows) {
-      const key = r.author || "미지정";
-      const entry = map.get(key) || { total: 0, copier: 0, it: 0, remote: 0, dept: 0 };
-      entry.total += 1;
-      if (r.type === "복합기 AS") entry.copier += 1;
-      else if (r.type === "IT") entry.it += 1;
-      else if (isDeptType(r.type)) entry.dept += 1; // 지원 3종이 원격으로 잘못 세이던 것 분리
-      else entry.remote += 1;
-      map.set(key, entry);
-    }
-    return Array.from(map.entries()).sort((a, b) => b[1].total - a[1].total);
-  }, [listRows]);
+  const byAuthor = useMemo(() => authorStats(listRows), [listRows]);
   // 기간 밖이어도 미완료 원격·IT 건은 위로 이월해 보여준다 (어제 미완료가 사라지면 안 됨)
   const mergedRows = useMemo(() => {
     const seen = new Set(listRows.map((r) => r.id));
@@ -2105,7 +2094,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
               {byAuthor.map(([name, stat]) => (
                 <div key={name} className="flex items-center justify-between text-xs">
                   <span className="font-black text-slate-700">{name}</span>
-                  <span className="font-bold text-slate-500">총 {stat.total} <span className="text-blue-600">CS {stat.copier}</span> · <span className="text-cyan-600">IT {stat.it}</span> · <span className="text-violet-600">원격 {stat.remote}</span>{stat.dept > 0 && <> · <span className="text-fuchsia-600">지원 {stat.dept}</span></>}</span>
+                  <span className="font-bold text-slate-500">총 {stat.total}{authorStatParts(stat).map((p) => <span key={p.key}> · <span className={AUTHOR_STAT_TONE[p.key]}>{p.label} {p.n}</span></span>)}</span>
                 </div>
               ))}
             </div>

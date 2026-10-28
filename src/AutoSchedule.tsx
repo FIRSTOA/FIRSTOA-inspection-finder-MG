@@ -29,6 +29,7 @@ import PortalSelect from "./PortalSelect";
 import { hasAssignee } from "./assignees";
 import { countLabel } from "./loadState";
 import StateBox from "./ui/StateBox";
+import { candidateDistance, checkIssueText, groupLastVisitText, hasValidCoords, lastVisitText, pickAnchorHit, sortCandidates, visitFromDates } from "./autoScheduleCandidate";
 
 type Ticket = { id: string; date: string; time: string; team: string; vendor: string; address: string; scheduleType: string };
 type Place = {
@@ -40,6 +41,7 @@ type Place = {
   last_toner: string | null; last_spare: string | null; last_waste: string | null;
   last_serial: string | null; prev_serial: string | null; last_special: string | null;
   device_count: number; devices: string | null;
+  history_error?: boolean; // 기준 업체 고정 폴백에서 점검 기록 조회가 실패함 — "기록 없음"과 구분(2026-10-28)
 };
 
 const TEAMS = AUTO_SCHEDULE_TEAMS;
@@ -128,34 +130,35 @@ export default function AutoSchedule({ author }: { author: string }) {
     if (!raw) { setAnchorGeo(null); return; }
     // 법인 접두어·기호를 뺀 핵심 토큰으로 검색 — "주식회사 무암 (Mooam)" → "무암"
     const core = raw.replace(/주식회사|유한회사|재단법인|사단법인|농업회사법인|㈜|\(주\)/g, "").trim().match(/[가-힣a-zA-Z0-9]+/)?.[0] || raw;
-    const hits = await selectRows<{ id: number; name: string; latitude: number | null; longitude: number | null }>(
-      "workin_map_places", `select=id,name,latitude,longitude&name=ilike.*${encodeURIComponent(core.slice(0, 8))}*&limit=20`,
+    const hits = await selectRows<{ id: number; name: string; latitude: number | null; longitude: number | null; quarter: number | null; address: string | null; address_detail: string | null }>(
+      "workin_map_places", `select=id,name,latitude,longitude,quarter,address,address_detail&name=ilike.*${encodeURIComponent(core.slice(0, 8))}*&limit=20`,
     ).catch(() => []);
     const key = vendorMatchKey(raw);
-    const scored = hits
-      .filter((h) => h.latitude != null && h.longitude != null)
-      .map((h) => {
-        const hk = vendorMatchKey(h.name);
-        const score = hk === key ? 3 : hk.startsWith(key) || key.startsWith(hk) ? 2 : hk.includes(key.slice(0, 4)) ? 1 : 0;
-        return { h, score };
-      })
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score);
-    const hit = scored[0]?.h;
+    const scored = hits.map((h) => {
+      const hk = vendorMatchKey(h.name);
+      const score = hk === key ? 3 : hk.startsWith(key) || key.startsWith(hk) ? 2 : hk.includes(key.slice(0, 4)) ? 1 : 0;
+      return { h, score };
+    });
+    // 좌표 (0,0)인 워킨맵 행(3분기 3,586곳 중 3,376곳)을 기준점으로 쓰면 거리·지도가 대서양 기준이 된다(2026-10-28 연세플러스의원)
+    const hit = pickAnchorHit(scored, quarter);
     if (!fresh()) return;
-    if (hit) { setAnchorGeo({ name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number, placeId: hit.id }); return; }
-    // 워킨맵에 없는 업체(예: 분기점검 대상 아님) — 일정의 주소 → 입력값 순으로 지오코딩
-    for (const source of [address, raw]) {
+    if (hit && hasValidCoords(hit.latitude, hit.longitude)) { setAnchorGeo({ name: hit.name, lat: hit.latitude as number, lng: hit.longitude as number, placeId: hit.id }); return; }
+    // 워킨맵에 없거나 좌표가 없는 업체 — 워킨맵 주소 → 일정의 주소 → 입력값 순으로 지오코딩(워킨맵 행이면 고정용 id 는 유지)
+    const hitAddress = hit ? `${hit.address || ""} ${hit.address_detail || ""}`.trim() : "";
+    for (const source of [hitAddress, address, raw]) {
       const q = String(source || "").trim();
       if (!q) continue;
       const found = await geocodeKR(q);
       if (!fresh()) return;
-      if (found) { setAnchorGeo({ name: `${q.slice(0, 20)} (주소)`, lat: found.lat, lng: found.lng }); return; }
+      if (found && hasValidCoords(found.lat, found.lng)) {
+        setAnchorGeo(hit ? { name: hit.name, lat: found.lat, lng: found.lng, placeId: hit.id } : { name: `${q.slice(0, 20)} (주소)`, lat: found.lat, lng: found.lng });
+        return;
+      }
     }
     if (!fresh()) return;
     setAnchorGeo(null);
     setNotice(`"${raw}"의 좌표를 못 찾았습니다 — 업체명 또는 주소로 다시 시도해 보세요 (거리 정렬 없이 경과일 순).`);
-  }, []);
+  }, [quarter]);
 
   const anchorTicket = tickets.find((t) => t.id === anchorId);
   // 입력 디바운스 350ms — 한글 조합 중간 글자마다 조회하지 않는다 (순번 가드와 함께 경쟁 방지)
@@ -176,19 +179,38 @@ export default function AutoSchedule({ author }: { author: string }) {
       }
     } catch { /* 아래 폴백 */ }
     // 실패는 삼키지 않는다 — 부른 쪽(suggest)이 "기준 업체 고정 실패"를 안내한다(2026-10-24)
-    const rows = await selectRows<{ id: number; name: string; label: string; comment: string; address: string; address_detail: string; latitude: number | null; longitude: number | null; team: string }>(
-      "workin_map_places", `select=id,name,label,comment,address,address_detail,latitude,longitude,team&id=eq.${placeId}&limit=1`,
+    const rows = await selectRows<{ id: number; name: string; label: string; comment: string; address: string; address_detail: string; latitude: number | null; longitude: number | null; team: string; quarter: number | null }>(
+      "workin_map_places", `select=id,name,label,comment,address,address_detail,latitude,longitude,team,quarter&id=eq.${placeId}&limit=1`,
     );
     const w = rows[0];
     if (!w) return null;
     const grade = (w.name.match(/^\s*[\d/\-#]*\s*(V|SS|S|NN|N)(?=[^A-Za-z]|$)/)?.[1] || "").toUpperCase();
-    const reason = RENEWAL_DONE_LABELS.has(w.label) ? `이미 완료(${w.label})` : w.team && w.team !== team ? `${w.team}팀 소속` : "추천 조건 밖";
+    const baseReason = RENEWAL_DONE_LABELS.has(w.label) ? `이미 완료(${w.label})` : w.team && w.team !== team ? `${w.team}팀 소속` : "추천 조건 밖";
+    const reason = w.quarter != null && w.quarter !== quarter ? `${w.quarter}분기 워킨맵 · ${baseReason}` : baseReason;
+    const vendor = fieldTicketVendor(w.name).vendor || w.name;
+    // 이 행은 RPC 를 안 거쳐 점검 이력이 비어 있었다 → "마지막 null · 9999일 경과"(2026-10-28). 같은 업체 키의 점검 기록 날짜를 직접 읽는다.
+    // 조회 실패는 "기록 확인 실패"로 보인다(기록 없음과 구분).
+    let visit = visitFromDates([], kstDate());
+    let historyError = false;
+    const vkey = vendorMatchKey(vendor);
+    const probe = vendor.replace(/[*,()]/g, " ").trim().split(/\s+/)[0] || "";
+    if (vkey.length >= 3 && probe) {
+      try {
+        const hist = await selectRows<Record<string, string | null>>(
+          "jeomgeom", `select=${encodeURIComponent("_업체명,작성일")}&_hidden=not.is.true&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=id.desc&limit=200`,
+        );
+        visit = visitFromDates(hist.filter((h) => vendorMatchKey(String(h["_업체명"] || "")) === vkey).map((h) => h["작성일"]), kstDate());
+      } catch { historyError = true; }
+    }
+    const coordsOk = hasValidCoords(w.latitude, w.longitude);
     const row: Place = {
-      id: w.id, place_name: w.name, vendor: fieldTicketVendor(w.name).vendor || w.name, grade, label: w.label || "",
-      addr: `${w.address || ""} ${w.address_detail || ""}`.trim(), lat: w.latitude, lng: w.longitude, comment: w.comment || "",
-      last_date: null, days_since: 9999, distance_km: 0, quarter_ok: true, never_visited: false, code: "",
-      prev_date: null, last_pages: null, prev_pages: null, last_toner: null, last_spare: null, last_waste: null,
-      last_serial: null, prev_serial: null, last_special: null, device_count: 0, devices: null,
+      id: w.id, place_name: w.name, vendor, grade, label: w.label || "",
+      addr: `${w.address || ""} ${w.address_detail || ""}`.trim(),
+      // 워킨맵 좌표가 (0,0)이면 기준점(같은 업체 주소 지오코딩 값)을 쓴다
+      lat: coordsOk ? w.latitude : lat, lng: coordsOk ? w.longitude : lng, comment: w.comment || "",
+      last_date: visit.last_date, days_since: visit.days_since, distance_km: 0, quarter_ok: true, never_visited: visit.never_visited, code: "",
+      prev_date: visit.prev_date, last_pages: null, prev_pages: null, last_toner: null, last_spare: null, last_waste: null,
+      last_serial: null, prev_serial: null, last_special: null, device_count: 0, devices: null, history_error: historyError,
     };
     return { row, reason };
   };
@@ -218,14 +240,17 @@ export default function AutoSchedule({ author }: { author: string }) {
       }));
       let merged: Place[] = list || [];
       let pinNote = "";
+      let pinnedId: number | null = null;
       setAnchorPin(null);
       // 검색한 기준 업체가 조건에 걸려 목록에서 빠졌으면 맨 위에 고정하고 사유를 단다 — "내가 원하는 업체도 추가" 요구(2026-08-25)
       if (anchorGeo?.placeId != null && !merged.some((r) => r.id === anchorGeo.placeId)) {
         try {
           const pinned = await pinnedAnchorRow(anchorGeo.placeId, anchorGeo.lat, anchorGeo.lng);
-          if (pinned) { merged = [pinned.row, ...merged]; setAnchorPin({ id: pinned.row.id, reason: pinned.reason }); }
+          if (pinned) { merged = [pinned.row, ...merged]; pinnedId = pinned.row.id; setAnchorPin({ id: pinned.row.id, reason: pinned.reason }); }
         } catch (e) { pinNote = ` · 기준 업체를 맨 위에 고정하지 못했습니다(조회 실패: ${(e as Error).message})`; }
       }
+      // 기록 없는 곳(센티널 9999)을 "가장 오래됨"으로 맨 위에 두지 않는다 — 고정 기준 업체 → 거리 → 경과일 → 기록 없음(2026-10-28)
+      merged = sortCandidates(merged, pinnedId);
       setRows(merged); // 선택 스케줄은 검색을 다시 해도 남긴다(2026-09-26)
       setNotice(`${merged.length}곳 — ${anchorGeo ? `${anchorGeo.name.slice(0, 14)} 기준 가까운 순` : "거리 기준 없음(경과일 순)"}${pinNote}`);
       void getVendorFlagsBatch(merged.map((r) => r.vendor || r.place_name)).then(setFlags).catch(() => undefined);
@@ -331,14 +356,12 @@ export default function AutoSchedule({ author }: { author: string }) {
         const machineNote = multi
           ? `워킨맵 등록 ${group.members.length}곳 — ${group.members.map((m) => { const meq = parseEquipComment(m.comment); return `${memberTail(group, m)}${meq.model ? `: ${meq.model}` : ""}${meq.serial ? `/${meq.serial}` : ""}`; }).join(" · ")}`.slice(0, 400)
           : "";
-        const lastDate = group.members.map((m) => m.last_date || "").sort().at(-1) || "";
-        const minDaysSince = Math.min(...group.members.map((m) => m.days_since));
         const ticketId = `as-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         await upsertRow("as_tickets", {
           id: ticketId,
           team: group.team, date, time: "", vendor: vendorName, contact: "", address: first.addr, department: "", // 자동 배정 일정은 시간 미정 — 순서는 내 일정 동선이 정한다
           model: eq.model, serial: eq.serial, asset: "", grade: first.grade, keyman: "",
-          issue: `${kind === "renewal" ? "재계약 방문" : `정기점검 (마지막 ${lastDate || "기록 없음"}${minDaysSince < 9999 ? ` · ${minDaysSince}일 경과` : ""})`}${multi ? ` · 기기 ${group.members.length}대` : ""}`,
+          issue: `${kind === "renewal" ? "재계약 방문" : checkIssueText(group.members)}${multi ? ` · 기기 ${group.members.length}대` : ""}`,
           note: machineNote, assignee: author, status: "배정", scheduleType: kind === "renewal" ? "AS" : "매월점검",
           receptionId: "", calendarTitle: `${kind === "renewal" ? "재계약" : "점검"} ${vendorName}`, source: "autoplan",
         }, "id");
@@ -521,9 +544,10 @@ export default function AutoSchedule({ author }: { author: string }) {
             <CandidateMap
               anchor={anchorGeo ? { lat: anchorGeo.lat, lng: anchorGeo.lng, name: anchorGeo.name } : null}
               points={groups.slice(0, candLimit).flatMap((group, index): CandidatePoint[] => {
-                const m = group.members[0];
-                if (m.lat == null || m.lng == null) return [];
-                return [{ id: m.id, lat: m.lat, lng: m.lng, name: group.members.length > 1 ? group.rep : (m.vendor || m.place_name), rank: index + 1, picked: group.members.some((x) => picked.has(x.id)), distanceKm: m.distance_km }];
+                // 좌표 없는(0,0 포함) 후보는 빼고 나머지로 그린다 — 카드에 "좌표 없음" 표시(2026-10-28)
+                const m = group.members.find((x) => hasValidCoords(x.lat, x.lng));
+                if (!m || m.lat == null || m.lng == null) return [];
+                return [{ id: m.id, lat: m.lat, lng: m.lng, name: group.members.length > 1 ? group.rep : (m.vendor || m.place_name), rank: index + 1, picked: group.members.some((x) => picked.has(x.id)), distanceKm: candidateDistance(m) }];
               })}
               onToggle={(id) => { const group = groups.find((g) => g.members.some((m) => m.id === id)); (group ? group.members : []).forEach((m) => toggle(m.id)); }}
             />
@@ -539,6 +563,7 @@ export default function AutoSchedule({ author }: { author: string }) {
               if (single) {
                 const r = first;
                 const on = picked.has(r.id);
+                const dist = candidateDistance(r);
                 // 최근 2회 점검으로 사용량·여분 권장 계산 — MyPlan의 여분 분석과 같은 헬퍼
                 const latest = r.last_date ? { date: r.last_date, counts: r.last_pages || "", toner: r.last_toner || "", spare: r.last_spare || "", waste: r.last_waste || "", serial: r.last_serial || "" } : undefined;
                 const previous = r.prev_date ? { date: r.prev_date, counts: r.prev_pages || "", toner: "", spare: "", serial: r.prev_serial || "" } : undefined;
@@ -550,18 +575,19 @@ export default function AutoSchedule({ author }: { author: string }) {
                     <span className="min-w-0 flex-1 overflow-hidden">
                       <span className="flex flex-wrap items-center gap-1.5">
                         <span className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-slate-700">{groups.indexOf(group) + 1}</span>
-                        {r.distance_km != null && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{r.distance_km < 1 ? `${Math.round(r.distance_km * 1000)}m` : `${r.distance_km}km`}</span>}
+                        {dist != null && <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-white">{dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist}km`}</span>}
+                        {!hasValidCoords(r.lat, r.lng) && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">좌표 없음 · 지도 밖</span>}
                         <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{r.vendor || r.place_name}</span>
                         {anchorPin?.id === r.id && <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-black text-white">📍 기준 업체{anchorPin.reason ? ` · ${anchorPin.reason}` : ""}</span>}
                         {r.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(r.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{r.grade}</span>}
                         {r.label && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-600">{r.label}</span>}
-                        {r.never_visited && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
+                        {!r.last_date && !r.history_error && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                         {!r.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
                         {buildingBadge(r.addr)}
                         <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(r)} />
                       </span>
                       <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
-                        {r.never_visited ? "마지막 점검 기록 없음" : `마지막 ${r.last_date} · ${r.days_since}일 경과`}
+                        {lastVisitText(r)}
                         {r.device_count > 0 && <span className="ml-1.5 text-slate-400">🖨 {r.device_count}대{r.devices ? ` · ${r.devices}` : ""}</span>}
                       </span>
                       {r.last_pages && <span className="block truncate text-[10px] font-semibold text-slate-500">📊 {r.last_pages.trim()}{r.prev_pages ? ` ｜ 전전(${(r.prev_date || "").slice(5)}) ${r.prev_pages.trim()}` : ""}</span>}
@@ -575,10 +601,9 @@ export default function AutoSchedule({ author }: { author: string }) {
                 );
               }
               // 같은 회사 기기 여러 대 — 카드 1장, 방문 1건
-              const distances = group.members.map((m: Place) => m.distance_km).filter((d: number | null): d is number => d != null);
-              const lastDate = group.members.map((m: Place) => m.last_date || "").sort().at(-1) || "";
-              const minDaysSince = Math.min(...group.members.map((m: Place) => m.days_since));
-              const allNever = group.members.every((m: Place) => m.never_visited);
+              const distances = group.members.map((m: Place) => candidateDistance(m)).filter((d: number | null): d is number => d != null);
+              const allNever = group.members.every((m: Place) => !m.last_date && !m.history_error);
+              const noCoords = !group.members.some((m: Place) => hasValidCoords(m.lat, m.lng));
               // "기기 N대"는 임대리스트 기준 — 워킨맵에 지점(기기)이 일부만 등록된 업체(청연원 9대 중 3곳)가 있다
               const mfpCount = Number(String(first.devices || "").match(/복합기 (\d+)/)?.[1] || 0);
               // 임대리스트 기번→코드 매핑이 빠진 기기(청연원 B5650 등)는 코드 집계에서 새니, 워킨맵 등록 수와의 최댓값으로
@@ -592,13 +617,14 @@ export default function AutoSchedule({ author }: { author: string }) {
                       <span className="min-w-0 max-w-full truncate text-[13px] font-black text-slate-900">{group.rep}</span>
                       <span className="rounded bg-indigo-600 px-1.5 py-0.5 text-[10px] font-black text-white">기기 {deviceTotal}대</span>
                       {first.grade && <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${["SS", "V"].includes(first.grade) ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{first.grade}</span>}
+                      {noCoords && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">좌표 없음 · 지도 밖</span>}
                       {allNever && <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-600">점검 이력 없음</span>}
                       {!first.quarter_ok && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700">분기 초반 — 보류 권장</span>}
                       {buildingBadge(first.addr)}
                       <VendorAlertChip flags={fl} onOpen={() => openPlaceHistory(first)} />
                     </span>
                     <span className="mt-0.5 block truncate text-[11px] font-semibold text-slate-500">
-                      {allNever ? "마지막 점검 기록 없음" : `마지막 ${lastDate} · ${minDaysSince}일 경과`} · 워킨맵 {group.members.length}곳{deviceTotal > group.members.length ? ` (기기 ${deviceTotal - group.members.length}대는 워킨맵 미등록)` : ""} · 방문 1건으로 등록
+                      {groupLastVisitText(group.members)} · 워킨맵 {group.members.length}곳{deviceTotal > group.members.length ? ` (기기 ${deviceTotal - group.members.length}대는 워킨맵 미등록)` : ""} · 방문 1건으로 등록
                     </span>
                     <span className="mt-1 block space-y-0.5">
                       {group.members.map((m: Place) => {

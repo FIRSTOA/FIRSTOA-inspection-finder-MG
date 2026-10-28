@@ -177,6 +177,20 @@ export default function OkrHub({ author }: { author: string }) {
     for (const r of rs) await saveOkrReport(r, author).catch(() => undefined);
   };
   useEffect(() => () => { void flushPending(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 언마운트 시 1회
+  // [엑셀](2026-10-28) — 막 적은 글부터 저장(flush) → 보는 분기 전체를 파일 하나로. 모듈·exceljs 는 누를 때만 읽는다(번들 분리)
+  const [exporting, setExporting] = useState(false);
+  const exportExcel = async (y: number, q: number) => {
+    setExporting(true);
+    try {
+      await flushPending();
+      const mod = await import("./okrExcelExport");
+      const tip = mod.downloadAdvice(navigator.userAgent);
+      if (tip) notify(tip, "info");
+      const res = await mod.downloadOkrExcel(y, q, author);
+      notify(`엑셀을 내려받았습니다 (주차 기록 ${res.weekRows}행)${res.rosterFailed ? " — 명단을 못 읽어 보고자만 셈" : ""}`, res.rosterFailed ? "info" : "success");
+    } catch (e) { notify(`엑셀을 만들지 못했습니다: ${(e as Error).message}`, "error"); }
+    finally { setExporting(false); }
+  };
 
   const rosterOf = (team: OkrTeam): string[] => book[team] || [];
   // 파트 탭을 바꾸면: 내가 그 파트 팀원이면 내 박스, 아니면 파트 종합
@@ -979,6 +993,7 @@ export default function OkrHub({ author }: { author: string }) {
       {freshHead ? <>
         {/* 6차(2026-10-21): 짙은 띠 = 기간만, 흰 카드 = 탭 → 경로 줄 → (파트 탭) 사람 알약·주차 칩·표 */}
         <OkrTopBand years={years} year={year} quarter={selQuarter} onYear={(y) => goQuarter(y, selQuarter)} onQuarter={(q) => goQuarter(year, q)}
+          onExport={filterItems[0]?.legacy ? undefined : () => void exportExcel(year, selQuarter)} exporting={exporting}
           chips={filterItemsForTab(filterItems, tab).map((it) => ({
             id: it.id, label: it.label, title: it.legacy ? "옛 구조(월 종합 + 주차)" : undefined,
             on: it.kind === "quarter" ? view === "quarter" : view === "month" && month === it.month,

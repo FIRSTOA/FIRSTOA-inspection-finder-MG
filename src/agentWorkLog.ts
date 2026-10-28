@@ -3,6 +3,30 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-28",
+    "hash": "2106136803",
+    "agent": "feature-planner",
+    "summary": "부서 접수(경영·운영·영업) 사진 첨부(CS 와 같은 칸, 한조 캡처 안내, 필수 아님) + 할 일 문서(ERP 5항목)·부품 수명/CMYK 조사·OKR 엑셀 설계"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "2106136803",
+    "agent": "developer",
+    "summary": "부서 접수(경영·운영·영업) 사진 첨부(CS 와 같은 칸, 한조 캡처 안내, 필수 아님) + 할 일 문서(ERP 5항목)·부품 수명/CMYK 조사·OKR 엑셀 설계"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "2106136803",
+    "agent": "qa-checker",
+    "summary": "부서 접수(경영·운영·영업) 사진 첨부(CS 와 같은 칸, 한조 캡처 안내, 필수 아님) + 할 일 문서(ERP 5항목)·부품 수명/CMYK 조사·OKR 엑셀 설계"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "2106136803",
+    "agent": "field-deploy-check",
+    "summary": "부서 접수(경영·운영·영업) 사진 첨부(CS 와 같은 칸, 한조 캡처 안내, 필수 아님) + 할 일 문서(ERP 5항목)·부품 수명/CMYK 조사·OKR 엑셀 설계"
+  },
+  {
     "date": "2026-10-27",
     "hash": "5c1b015433",
     "agent": "developer",

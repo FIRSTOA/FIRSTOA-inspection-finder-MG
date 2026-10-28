@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
+import { hasValidCoords } from "./autoScheduleCandidate";
 
 export type CandidatePoint = { id: number; lat: number; lng: number; name: string; rank: number; picked: boolean; distanceKm?: number | null };
 
@@ -52,15 +53,17 @@ export default function CandidateMap({ anchor, points, onToggle, height = 230 }:
   }, []);
 
   useEffect(() => {
-    const shown = points.slice(0, 60); // 마커 60개 넘게 그리면 지도가 점으로 덮인다 — 목록 '더 보기'와 같은 감각
+    // (0,0)·한반도 밖 좌표는 그리지 않는다 — 하나라도 섞이면 fitBounds 가 대서양까지 넓어져 지도가 바다만 보였다(2026-10-28)
+    const shown = points.filter((p) => hasValidCoords(p.lat, p.lng)).slice(0, 60); // 마커 60개 넘게 그리면 지도가 점으로 덮인다 — 목록 '더 보기'와 같은 감각
+    const pin = anchor && hasValidCoords(anchor.lat, anchor.lng) ? anchor : null;
     if (engine === "leaflet" && leafletRef.current) {
       const { map, layer } = leafletRef.current;
       layer.clearLayers();
       const bounds: [number, number][] = [];
-      if (anchor) {
-        L.marker([anchor.lat, anchor.lng], { icon: L.divIcon({ className: "", html: anchorHtml, iconSize: [14, 14], iconAnchor: [7, 7] }), zIndexOffset: 1000 })
-          .addTo(layer).bindTooltip(`📍 ${anchor.name.slice(0, 20)}`);
-        bounds.push([anchor.lat, anchor.lng]);
+      if (pin) {
+        L.marker([pin.lat, pin.lng], { icon: L.divIcon({ className: "", html: anchorHtml, iconSize: [14, 14], iconAnchor: [7, 7] }), zIndexOffset: 1000 })
+          .addTo(layer).bindTooltip(`📍 ${pin.name.slice(0, 20)}`);
+        bounds.push([pin.lat, pin.lng]);
       }
       shown.forEach((p) => {
         const icon = L.divIcon({ className: "", html: markerHtml(p.rank, p.picked), iconSize: [24, 24], iconAnchor: [12, 12] });
@@ -77,9 +80,9 @@ export default function CandidateMap({ anchor, points, onToggle, height = 230 }:
     const bounds = new kakao.maps.LatLngBounds();
     let count = 0;
     let label: KakaoNS | null = null;
-    if (anchor) {
-      const pos = new kakao.maps.LatLng(anchor.lat, anchor.lng);
-      const el = document.createElement("div"); el.innerHTML = anchorHtml; el.title = anchor.name;
+    if (pin) {
+      const pos = new kakao.maps.LatLng(pin.lat, pin.lng);
+      const el = document.createElement("div"); el.innerHTML = anchorHtml; el.title = pin.name;
       const overlay = new kakao.maps.CustomOverlay({ position: pos, content: el, yAnchor: 0.5, zIndex: 50 });
       overlay.setMap(map); kakaoObjects.current.push(overlay);
       bounds.extend(pos); count += 1;
