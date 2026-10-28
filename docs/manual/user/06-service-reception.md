@@ -108,6 +108,18 @@
 - 배정 창 제목 아래에 "저장하면 시트 처리자 칸에 적힘"이 보이고, 저장 뒤 토스트가 "홍길동 에게 배정 — ○○ 처리자 칸에 적힘"으로 알려 줍니다.
 - 처리 중에는 단추가 잠기고, 실패하면 빨간 토스트와 함께 줄이 원래대로 돌아옵니다.
 
+## 접수리스트의 "시트" 줄 — 시트에 직접 적은 접수도 보임 (2026-10-28)
+접수리스트는 **앱에서 접수한 것 + 접수 시트에 직접 적은 것**을 한 목록으로 보여 줍니다(2026-10-01 이후 행). 앱을 안 쓰고 시트에만 적은 접수가 빠지지 않게 하려는 것입니다(사용자 "누락 방지").
+1. **어느 시트가 들어오나**: 영업팀(해지방어접수) · 경영지원(경영지원접수) · 원격이관·IT(원격 탭) · CS 접수(AS접수용 탭). 운영지원은 시트가 없어 앱 접수만 보입니다.
+2. **시트 줄 모양**: 앱 줄과 같은 줄에 왼쪽 종류 점 아래 작은 회색 **"시트"** 칩이 붙습니다. 시각은 시트의 접수시간(없으면 "--:--"), 둘째 줄은 내용 40자, 셋째 줄은 접수자 · 지역 · 처리자. 오른쪽 상태는 시트 상태 칸 그대로(접수 · 진행중 · 보류 · 완료). **CS 시트 줄은 상태 칸이 없어 흰 바탕 "기록"** 으로 표시되고 미처리에는 들어가지 않습니다.
+3. **앱 접수와 같은 건은 한 번만**: 시트 행이 앱 접수와 이어진 것(영업·경영은 시트 행 번호, 원격은 행 번호+상호, CS 는 날짜·퍼스트순·접수자가 같은 것)은 앱 줄만 보이고 시트 줄은 숨깁니다.
+4. **기간 줄**에 "· 8건 (앱 3 · 시트 5)" 처럼 둘을 나눠 적고, 종류 칩·상태 칩 숫자에 시트 줄이 들어갑니다. 아래 **접수자별 처리** 카드도 시트 줄을 합쳐 셉니다(머리에 "(시트 m 포함)").
+5. **시트 줄을 누르면** 시트 칸 전부(전화번호 열 제외, 번호는 가림)와 내용이 열리고 [시트에서 열기] 링크가 있습니다. 안내 "시트에서 적은 접수 — 사진·메모·카톡 후속 글·일정 연결은 없습니다". 완료된 줄도 열립니다.
+6. **처리 단추**: 열린 영업·경영 줄 = [완료] [보류] [배정], 원격·IT 줄 = [완료] [배정]. 시트의 상태·처리자 칸만 바뀌고(1~2분 뒤 반영) 사진·카톡 글은 나가지 않습니다. 완료 줄·CS 시트 줄·순번이 빈 줄에는 단추가 없습니다.
+7. **시트를 못 읽으면** 앱 줄만 보이고 맨 위에 회색 한 줄 "시트 접수를 못 읽음 — 앱 접수만 표시" 가 뜹니다. 숫자가 0 이 되지는 않습니다. 관리 탭 스위치 `RECEPTION_SHEET_OPEN_ENABLED` 가 꺼져 있으면 시트 줄 없이 예전 화면 그대로입니다.
+8. **지난달 것도 남습니다(영구 보관)**: 원격·AS접수용 탭은 달이 바뀌면 지난달 행이 비워지는데, 매시 17분과 23:50 에 시트 행을 보관 표(reception_sheet_rows)에 복사해 두므로 11월에도 10월 시트 줄이 접수리스트에 보입니다(기간을 지난달로 고르면 보관 표에서 읽음).
+9. **홈 미처리·현황판 숫자는 그대로**입니다. 바뀌는 건 접수리스트의 줄·칩 숫자·접수자별 처리 카드뿐입니다.
+
 ## 자주 하는 실수·주의
 - **업체를 바꾸면 팀 지역이 자동으로 초기화**됩니다. 업체를 바꿨으면 팀 지역을 다시 확인하세요. 지역이 비면 카톡을 보낼 수 없습니다.
 - 지역 → 카톡방·일정 시간: A 09:00 · B 12:00 · C 15:00 · D 18:00 · E 21:00(일정리스트·네이버의 시각은 실제 방문 시각이 아니라 팀 구분용입니다).
@@ -125,6 +137,7 @@
 | 종류 칩·현황판 **CS 접수** | 지난 날짜·미완료 AS 일정(매월점검·물류 제외, 최근 180일) | 홈 미처리 "CS 접수"와 같음(같은 로더) |
 | 현황판 아래 "일정 없이 열린 접수 n건" | 열린 복합기 AS 접수 중 연결 일정이 하나도 없는 것 | 홈에는 없음(접수리스트에서 처리) |
 | 종류 칩·현황판 원격·IT·경영·운영·영업 | 열린 접수(접수·진행중·보류, 최근 90일) · 시트 기준 모드면 시트 상태 | 홈 같은 종류와 같은 기준 |
+| 접수리스트 "N건 (앱 n · 시트 m)" | 기간 안 앱 접수 + 앱과 이어지지 않은 시트 행(2026-10-01 이후, CS 는 "기록") | 홈에는 없음(접수리스트만, 2026-10-28) |
 | 탭 줄 "미처리 현황 n" | 위 종류 칸 합(지원 3종은 켜져 있을 때만) + 물류 미처리 | — |
 | 탭 줄 "일정리스트 n"(부서만) | 그 부서 금일(안 끝난 것) | — |
 
@@ -135,4 +148,4 @@
 - 복합기 AS 접수는 일정이 완료되면 완료로 맞춰집니다(네이버에서 완료해도 반영).
 
 ---
-마지막 갱신: 2026-10-25 밤 2차(6종 같은 뼈대 — 부서는 [일정리스트][달력] 두 탭만 추가, 현황판 CS 접수 = 홈과 같은 일정 줄, 카드 누르면 상세 팝업 · 근거 src/ServiceReception.tsx·src/receptionRightView.ts·src/DeptWorkspacePanel.tsx·src/ReceptionBoardPanel.tsx·src/receptionBoardData.ts(replaceCopierWithTickets)·src/ReceptionBoard.tsx) · 이전 2026-10-25 밤(현황판 모든 카드 [완료]·[보류]·[배정] + 바로 빠짐, [완료]·[보류] 확인창, 부서 일정리스트 [미처리] 칩 제거, "복합기" 칩 → "CS 접수" · 근거 src/ReceptionBoardPanel.tsx·src/unhandledActions.ts(confirmTextFor·boardRowToUnhandled)·src/UnhandledActionBar.view.tsx·src/deptPlan.ts) · 이전 2026-10-25(미처리 [완료]·[보류]·[배정] — 부서 미니 업무공간·현황판 시트 카드, [시트 열기]를 [접수 저장] 옆으로, 복합기 AS → CS 접수 표시 이름 · 설계 docs/tasks/unhandled-actions-2026-10-25.md, 근거 src/UnhandledActionBar.view.tsx·src/unhandledActions.ts·src/unhandledPending.ts·src/remoteHandling.ts) · 이전 2026-10-25(일정·캘린더 탭 부서 칩 제거 → 서비스접수 탭 올인원, 부서 미니 업무공간 [달력]·[＋ 일정 추가], 시트 행 복구) · 이전 2026-10-22 · 근거 커밋 `ea68d6a`(지원 3종·현황판), `e009c9c`(오른쪽 기둥 전환·일정 미처리), `34eb627`(영업팀 이름·숫자 기준), `3a49c3a`(화면 재설계), `6794f0a`·`6efc6ee`(네이버 완료 동기화·부서 달력·수정/삭제), `6ae5cc4`(원격대기 7일), `a5b4d0b`(시트 상태 기준), `3aa39d1`(부서명 검색), `52b331f`(사진 400px) · 스위치 상태는 2026-10-22 실측 · 근거 파일 src/ServiceReception.tsx, src/ReceptionTypePicker.tsx, src/ReceptionBoard.tsx, src/SheetRowCard.tsx, src/DeptReceptionForm.view.tsx, src/DeptReceptionScreen.tsx, src/DeptActionBar.tsx, src/DeptReceptionDetail.tsx · 설계 docs/tasks/reception-dept-types.md, docs/tasks/reception-unhandled-sheet-and-dept-search.md · 그림 설명 `/guide/reception.html`(2026-08-25 기준)
+마지막 갱신: 2026-10-28(접수리스트 "시트" 줄·보관 표) · 이전: 2026-10-25 밤 2차(6종 같은 뼈대 — 부서는 [일정리스트][달력] 두 탭만 추가, 현황판 CS 접수 = 홈과 같은 일정 줄, 카드 누르면 상세 팝업 · 근거 src/ServiceReception.tsx·src/receptionRightView.ts·src/DeptWorkspacePanel.tsx·src/ReceptionBoardPanel.tsx·src/receptionBoardData.ts(replaceCopierWithTickets)·src/ReceptionBoard.tsx) · 이전 2026-10-25 밤(현황판 모든 카드 [완료]·[보류]·[배정] + 바로 빠짐, [완료]·[보류] 확인창, 부서 일정리스트 [미처리] 칩 제거, "복합기" 칩 → "CS 접수" · 근거 src/ReceptionBoardPanel.tsx·src/unhandledActions.ts(confirmTextFor·boardRowToUnhandled)·src/UnhandledActionBar.view.tsx·src/deptPlan.ts) · 이전 2026-10-25(미처리 [완료]·[보류]·[배정] — 부서 미니 업무공간·현황판 시트 카드, [시트 열기]를 [접수 저장] 옆으로, 복합기 AS → CS 접수 표시 이름 · 설계 docs/tasks/unhandled-actions-2026-10-25.md, 근거 src/UnhandledActionBar.view.tsx·src/unhandledActions.ts·src/unhandledPending.ts·src/remoteHandling.ts) · 이전 2026-10-25(일정·캘린더 탭 부서 칩 제거 → 서비스접수 탭 올인원, 부서 미니 업무공간 [달력]·[＋ 일정 추가], 시트 행 복구) · 이전 2026-10-22 · 근거 커밋 `ea68d6a`(지원 3종·현황판), `e009c9c`(오른쪽 기둥 전환·일정 미처리), `34eb627`(영업팀 이름·숫자 기준), `3a49c3a`(화면 재설계), `6794f0a`·`6efc6ee`(네이버 완료 동기화·부서 달력·수정/삭제), `6ae5cc4`(원격대기 7일), `a5b4d0b`(시트 상태 기준), `3aa39d1`(부서명 검색), `52b331f`(사진 400px) · 스위치 상태는 2026-10-22 실측 · 근거 파일 src/ServiceReception.tsx, src/ReceptionTypePicker.tsx, src/ReceptionBoard.tsx, src/SheetRowCard.tsx, src/DeptReceptionForm.view.tsx, src/DeptReceptionScreen.tsx, src/DeptActionBar.tsx, src/DeptReceptionDetail.tsx · 설계 docs/tasks/reception-dept-types.md, docs/tasks/reception-unhandled-sheet-and-dept-search.md · 그림 설명 `/guide/reception.html`(2026-08-25 기준)

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as front from "../src/receptionSheetState";
 import {
   healCandidates, linkRows, openRowsOf, parseSheetRows, receptionIdOfDupKey, SHEET_LAYOUTS, sheetDate, sheetStateClass,
-  syncedReceptionIds, isCancelState, maskPhones, sheetRowDetail,
+  syncedReceptionIds, isCancelState, maskPhones, sheetRowDetail, linkCopierRows, listRowsOf, sheetTime,
 } from "../supabase/functions/reception-sheet-open/state.ts";
 
 // 2026-10-22 실측 상태 값(설계안 4절)
@@ -188,5 +188,59 @@ describe("전화번호 가림(공개 엣지 응답)", () => {
     expect(d.cells.some((c) => c.label === "전화번호")).toBe(false);
     expect(d.content).toBe("연락 031-****-8888");
     expect(JSON.stringify(d)).not.toMatch(/9876-5432|555-1234|777-8888/);
+  });
+});
+
+// 2026-10-28 프런트 사본(src/receptionSheetState.ts)에 엣지 순수 함수를 옮겼다 — 영업·경영 표본은 엣지와 같은 결과·같은 숫자여야 한다.
+describe("프런트 사본 대조(영업·경영 표본 숫자 불변)", () => {
+  it("영업 탭 읽기·잇기·미처리 행이 엣지와 같다", () => {
+    const edge = parseSheetRows(SHEET_LAYOUTS.sales, SALES_VALUES, NOW);
+    const mine = front.parseSheetRows(front.SHEET_LAYOUTS.sales, SALES_VALUES, NOW);
+    expect(mine).toEqual(edge);
+    expect(mine.rows.map((r) => r.sheetRow)).toEqual([7, 8, 9]);
+    const jobs = [
+      { category: "reception_sales", sheet_row: 7, _dupKey: "dept:rec-1:append", author: "손영근" },
+      { category: "reception_sales", sheet_row: 8, _dupKey: "dept:rec-2:append", author: "다른사람" },
+    ];
+    const links = front.linkRows(mine.rows, jobs, [], "2026-10");
+    expect([...links.entries()]).toEqual([["sales:7", "rec-1"]]);
+    expect(front.healCandidates(mine.rows, links)).toEqual([{ id: "rec-1", to: "완료" }]);
+    expect(front.openRowsOf(mine.rows, links).map((r) => r.sheetRow)).toEqual([8, 9]);
+    expect(front.openRowsOf(mine.rows, links)).toEqual(openRowsOf(edge.rows, linkRows(edge.rows, jobs, [], "2026-10")));
+  });
+  it("경영 C열 빈 행 연도 추정이 엣지와 같다", () => {
+    const values = mgmtValues(["12/5", "12월 22일", "1월 5일", "7월 13일", "10월 20일", "10월 26일", "10월 30일"].map((b) => ({ 2: b })));
+    expect(front.parseSheetRows(front.SHEET_LAYOUTS.mgmt, values, NOW).rows.map((r) => r.date))
+      .toEqual(parseSheetRows(SHEET_LAYOUTS.mgmt, values, NOW).rows.map((r) => r.date));
+  });
+  it("copier 파싱·CS 잇기·목록 모드·미처리(copier 제외)가 엣지와 같다", () => {
+    const row = (cells: Record<number, string>) => { const r = Array(56).fill(""); for (const [c, v] of Object.entries(cells)) r[Number(c) - 1] = v; return r; };
+    const values = [
+      row({ 1: "순", 2: "날짜", 3: "년월", 4: "접수시간", 5: "접수자", 6: "퍼스트순", 8: "업체명", 19: "제목", 20: "내용", 56: "처리완료" }), row({}), row({}),
+      row({ 1: "1", 2: "10월 1일", 3: "2610", 4: "9:06", 5: "김광태", 6: "19655", 8: "가나상사", 19: "용지걸림", 20: "고객 010-1234-5678", 56: "완료" }),
+      row({ 1: "2", 2: "10월 1일", 3: "2610", 4: "오후 1:40", 5: "김광태", 6: "19655", 8: "가나상사" }),
+      row({ 1: "3", 2: "10월 3일", 3: "2610", 5: "지경민", 8: "㈜새거래처 본점" }),
+    ];
+    const edge = parseSheetRows(SHEET_LAYOUTS.copier, values, NOW);
+    const mine = front.parseSheetRows(front.SHEET_LAYOUTS.copier, values, NOW);
+    expect(mine).toEqual(edge);
+    expect(mine.rows.map((r) => [r.sheetRow, r.cls, r.time])).toEqual([[8, "record", "09:06"], [9, "record", "13:40"], [10, "record", undefined]]);
+    const db = [
+      { id: "a1", receipt_date: "2026-10-01", first_no: "19655", lease_no: null, author: "김광태", vendor: "가나" },
+      { id: "n1", receipt_date: "2026-10-03", first_no: null, lease_no: null, author: "지경민", vendor: "새거래처 본점" },
+    ];
+    const myLinks = front.linkCopierRows(mine.rows, db);
+    expect(myLinks).toEqual(linkCopierRows(edge.rows, db));
+    const all = front.combineLinks(new Map(), myLinks).links;
+    expect(front.listRowsOf(mine.rows, all, "2026-10-01", "2026-10-31")).toEqual(listRowsOf(edge.rows, all, "2026-10-01", "2026-10-31"));
+    expect(front.openRowsOf(mine.rows, all)).toEqual([]);
+    expect(openRowsOf(edge.rows, all)).toEqual([]);
+    const bad = values.map((r) => [...r]);
+    bad[0][5] = "퍼스트번호";
+    expect(front.parseSheetRows(front.SHEET_LAYOUTS.copier, bad, NOW)).toEqual(parseSheetRows(SHEET_LAYOUTS.copier, bad, NOW));
+    for (const t of ["9:06", "09:06:00", "오후 2:05", "오전 12:10", "13:00 PM", "25:00", ""]) expect(front.sheetTime(t)).toBe(sheetTime(t));
+  });
+  it("전화번호 가림이 엣지와 같다", () => {
+    for (const v of ["김담당대리 010-1234-5678", "대표 1588-1234", "0A6XBJKRC000B6B", "02-123-4567"]) expect(front.maskPhones(v)).toBe(maskPhones(v));
   });
 });

@@ -4,6 +4,42 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-28",
+    "hash": "5b6664ab17",
+    "agent": "feature-planner",
+    "summary": "접수리스트 시트 행 보관 표 SQL(reception_sheet_rows, 10/31 전 실행) + 시트에만 적힌 접수 보이기 설계안·결정"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "5b6664ab17",
+    "agent": "db-schema",
+    "summary": "접수리스트 시트 행 보관 표 SQL(reception_sheet_rows, 10/31 전 실행) + 시트에만 적힌 접수 보이기 설계안·결정"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "5b6664ab17",
+    "agent": "sql-review",
+    "summary": "접수리스트 시트 행 보관 표 SQL(reception_sheet_rows, 10/31 전 실행) + 시트에만 적힌 접수 보이기 설계안·결정"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "53668c89cd",
+    "agent": "debugger",
+    "summary": "미수 조회 [전체 현황] 팀 칩 숫자(E 8곳) + CS체크 목록 빈 상태 안내 + 구/시→팀 표(regionTeamMap, 미연결) + GAS 수집 확장 코드 push 기록"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "53668c89cd",
+    "agent": "qa-checker",
+    "summary": "미수 조회 [전체 현황] 팀 칩 숫자(E 8곳) + CS체크 목록 빈 상태 안내 + 구/시→팀 표(regionTeamMap, 미연결) + GAS 수집 확장 코드 push 기록"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "53668c89cd",
+    "agent": "field-deploy-check",
+    "summary": "미수 조회 [전체 현황] 팀 칩 숫자(E 8곳) + CS체크 목록 빈 상태 안내 + 구/시→팀 표(regionTeamMap, 미연결) + GAS 수집 확장 코드 push 기록"
+  },
+  {
+    "date": "2026-10-28",
     "hash": "0598a5d555",
     "agent": "feature-planner",
     "summary": "OKR 엑셀 내려받기(탭 5개: 요약·분기·월·파트 종합·주차 기록) + 접수자별 처리 카드 경영·운영·영업 분리 + 자동 일정 기록 없음·좌표 없음 표시 수정"

@@ -36,6 +36,9 @@ import DeptReceptionDetail from "./DeptReceptionDetail";
 import { authorStatParts, authorStats } from "./receptionAuthorStats";
 import { deptListState, deptShort, isDeptType, type DeptType } from "./deptReception";
 import ReceptionListFilters from "./ReceptionListFilters";
+import { fetchSheetListRows, isSheetListRow, mergeListWithSheet, type SheetListReceptionRow, type SheetListRow } from "./receptionSheetOpen";
+import SheetListDetail from "./SheetListDetail";
+import { sheetListBucket, sheetListCountNote, sheetListLabel, sheetListLine2, sheetListTime } from "./sheetListRowState";
 import LeaseDeptPill from "./LeaseDeptPill";
 import { leaseDeptOf, MATCHED_BY_KEY } from "./leaseDept";
 
@@ -669,10 +672,30 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     return () => window.clearInterval(timer);
   }, []);
 
+  // 시트에만 적힌 접수(2026-10-28, docs/tasks/reception-list-sheet-rows-2026-10-28.md 5절) — 앱 접수와 따로 읽어 늦거나 실패해도 앱 줄은 먼저 보인다.
+  // failed = 시트를 못 읽음(회색 한 줄 안내). 스위치 꺼짐(ok:false·errors 없음)은 안내 없이 앱 줄만(지금 화면 그대로).
+  const [sheetList, setSheetList] = useState<{ rows: SheetListRow[]; failed: string }>({ rows: [], failed: "" });
+  const sheetReqRef = useRef(0);
+  const sheetRangeRef = useRef("");
+  const loadSheetList = useCallback(async (start: string, end: string) => {
+    const req = ++sheetReqRef.current;
+    const range = `${start}~${end}`;
+    if (sheetRangeRef.current !== range) { sheetRangeRef.current = range; setSheetList({ rows: [], failed: "" }); } // 다른 기간의 시트 줄이 섞이지 않게
+    try {
+      const res = await fetchSheetListRows(start, end);
+      if (req !== sheetReqRef.current) return;
+      // ok:false 라도 지난달 보관 표 줄은 실려 올 수 있다(receptionSheetOpen.fetchSheetListRows) — 받은 줄은 그대로 보이고 안내 한 줄
+      const note = res.errors.join(" / ").slice(0, 200);
+      setSheetList({ rows: res.rows, failed: res.ok ? (note ? `시트 일부를 못 읽음 — ${note}` : "") : note });
+    } catch {
+      if (req === sheetReqRef.current) setSheetList({ rows: [], failed: "시트 접수를 못 읽음 — 앱 접수만 표시" });
+    }
+  }, []);
   const loadList = useCallback(async (date: string, period: ListPeriod = "day", silent = false) => {
     if (!silent) setListLoading(true);
     try {
       const { start, end } = periodRangeOf(period, date);
+      void loadSheetList(start, end);
       const rows = await getServiceReceptions(start, end);
       setListRows(rows.filter((row) => !deletedIdsRef.current.has(row.id)));
     } catch {
@@ -680,7 +703,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     } finally {
       if (!silent) setListLoading(false);
     }
-  }, []);
+  }, [loadSheetList]);
   useEffect(() => { void loadList(listDate, listPeriod); }, [listDate, listPeriod, loadList]);
   useEffect(() => { void loadRemoteQueue(); }, [page, loadRemoteQueue]);
   // 여러 명이 동시에 접수·처리하므로 다른 사람의 변경이 화면에 따라오게 60초마다·탭 복귀 때 조용히 갱신
@@ -1404,13 +1427,16 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   };
 
   // ---- 통계 ----
-  const byAuthor = useMemo(() => authorStats(listRows), [listRows]);
+  // 앱 접수 + 시트에만 적힌 접수(날짜·시각 내림차순, receptionSheetOpen.mergeListWithSheet)
+  const listMerge = useMemo(() => mergeListWithSheet(listRows, sheetList.rows), [listRows, sheetList.rows]);
+  // 접수자별 처리 = 앱 + 시트 합산(11절 Q3)
+  const byAuthor = useMemo(() => authorStats(listMerge.rows), [listMerge.rows]);
   // 기간 밖이어도 미완료 원격·IT 건은 위로 이월해 보여준다 (어제 미완료가 사라지면 안 됨)
   const mergedRows = useMemo(() => {
     const seen = new Set(listRows.map((r) => r.id));
     const carry = remoteQueue.filter((r) => !seen.has(r.id) && !(r.status === "원격완료" || r.status === "완료" || (r.remote_meta?.result || r.remote_meta?.end)));
-    return [...carry, ...listRows];
-  }, [listRows, remoteQueue]);
+    return [...carry, ...listMerge.rows];
+  }, [listRows, listMerge.rows, remoteQueue]);
   // 종류 칩 — 상태 칩(statusCounts)과 같은 집합(mergedRows: 날짜 + 이월 미완료 원격·IT)을 센다(2026-10-19 "전체 26 vs 51" 어긋남).
   // 머리 "오늘 접수 N건"·기간 "· N건" 은 날짜 기준(listRows.length) — 이월 건을 섞지 않는다.
   const counts = useMemo(() => ({
@@ -1427,6 +1453,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   }), [mergedRows]);
   // 리스트 표시용 상태 (필터·카운트 공용)
   const listStateOf = useCallback((r: ServiceReceptionRow): "접수" | "진행중" | "완료" => {
+    if (isSheetListRow(r)) return sheetListBucket(r.sheetCls, r.sheetState); // CS 시트 줄(기록)은 완료 칸
     if (isDeptType(r.type)) return deptListState(r); // 지원 3종: 보류→진행중, 취소→완료
     if (r.type === "IT" || r.type === "원격이관") {
       if (r.status === "원격완료" || r.status === "완료") return "완료";
@@ -1485,7 +1512,38 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     접수: "bg-rose-100 text-rose-700", 진행중: "bg-amber-100 text-amber-800", 완료: "bg-slate-200 text-slate-500",
   };
   
-  const renderQueueRow = (row: ServiceReceptionRow) => (
+  // 시트에만 적힌 접수 줄(2026-10-28) — 앱 줄과 같은 모양 + "시트" 칩. 펼치면 SheetListDetail(상세·열린 줄만 처리 단추)
+  const SHEET_LABEL_TONE: Record<string, string> = {
+    접수: "bg-rose-100 text-rose-700", 진행중: "bg-amber-100 text-amber-800", 보류: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+    완료: "bg-slate-200 text-slate-500", 기록: "bg-white text-slate-400 ring-1 ring-slate-200",
+  };
+  const renderSheetRow = (row: SheetListReceptionRow) => {
+    const label = sheetListLabel(row.sheetCls, row.sheetState);
+    const line2 = row.type === "복합기 AS" ? sheetListLine2(row.title, row.symptom) : sheetListLine2("", row.symptom || row.title);
+    const handler = row.sheetHandler || "";
+    return (
+      <div key={row.id}>
+        <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className={`grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 ${openRowId === row.id ? "bg-slate-50" : ""}`}>
+          <span className="w-12 shrink-0 text-center">
+            <span className="block text-[13px] font-black tabular-nums leading-tight text-slate-900">{sheetListTime(row.receipt_time)}</span>
+            {listPeriod !== "day" && <span className="block text-[10px] font-bold tabular-nums text-slate-400">{row.receipt_date.slice(5).replace("-", "/")}</span>}
+            <span className={`mt-1 inline-flex items-center justify-center gap-1 whitespace-nowrap text-[10px] font-bold ${TYPE_TONE[row.type] || "bg-slate-100 text-slate-600"} bg-transparent!`}><span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />{isDeptType(row.type) ? deptShort(row.type) : row.type === "복합기 AS" ? "CS" : row.type === "IT" ? "IT" : "원격"}</span>
+            <span className="mt-0.5 block"><span className="rounded border border-slate-300 px-1 text-[9px] font-bold leading-tight text-slate-500">시트</span></span>
+          </span>
+          <span className="min-w-0">
+            <b className="block truncate text-[15px] font-black leading-snug text-slate-950">{row.vendor || "업체 미기재"}</b>
+            {line2 && <span className="block truncate text-xs font-semibold text-slate-600">{line2}</span>}
+            <span className="block truncate text-[11px] font-bold text-slate-400">{row.author || "접수자 미지정"}{row.region ? ` · ${row.region}` : ""}{handler ? ` · 처리 ${handler}` : ""}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${SHEET_LABEL_TONE[label]}`}>{label}</span>
+          </span>
+        </button>
+        {openRowId === row.id && <div className="border-t border-slate-100 bg-slate-50 px-4 py-3"><SheetListDetail row={row} handler={handler} author={author} onFinished={() => { void loadList(listDate, listPeriod, true); }} /></div>}
+      </div>
+    );
+  };
+  const renderQueueRow = (row: ServiceReceptionRow) => isSheetListRow(row) ? renderSheetRow(row) : (
               <div key={row.id}>
                 <button type="button" onClick={() => setOpenRowId(openRowId === row.id ? "" : row.id)} className={`grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 ${openRowId === row.id ? "bg-slate-50" : ""}`}>
                   <span className="w-12 shrink-0 text-center">
@@ -1624,7 +1682,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
         </div>
         <div className="px-3 py-2.5">
           <ReceptionTypePicker value={PAGE_TYPE[page]} deptEnabled={deptEnabled} onChange={(t) => { const k = (Object.keys(PAGE_TYPE) as (keyof typeof PAGE_TYPE)[]).find((key) => PAGE_TYPE[key] === t); if (k) goPage(k); }}
-            counts={boardCounts || Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, mergedRows.filter((r) => r.type === m.type && listStateOf(r) !== "완료").length])) as Record<ReceptionType, number>} />
+            counts={boardCounts || Object.fromEntries(RECEPTION_TYPES.map((m) => [m.type, mergedRows.filter((r) => !isSheetListRow(r) && r.type === m.type && listStateOf(r) !== "완료").length])) as Record<ReceptionType, number>} />
         </div>
       </section>
 
@@ -2055,7 +2113,8 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                 <span tabIndex={0} role="img" aria-label="안내: 행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." title="행을 열면 상세·일정 등록·원격 처리(시작/끝)까지 할 수 있습니다. 미완료 원격·IT는 날짜와 무관하게 위로 이월됩니다." className="shrink-0 cursor-help px-0.5 text-[13px] font-black text-slate-400 hover:text-slate-700">ⓘ</span>
               </div>
             </div>
-            {listPeriod !== "day" && <div className="mt-2 text-[11px] font-bold text-slate-400">{periodRangeOf(listPeriod, listDate).start} ~ {periodRangeOf(listPeriod, listDate).end} · {listRows.length}건</div>}
+            {(listPeriod !== "day" || listMerge.sheetCount > 0) && <div className="mt-2 text-[11px] font-bold text-slate-400">{listPeriod === "day" ? listDate.slice(5) : `${periodRangeOf(listPeriod, listDate).start} ~ ${periodRangeOf(listPeriod, listDate).end}`} · {listMerge.appCount + listMerge.sheetCount}건{listMerge.sheetCount > 0 && <span className="ml-1 font-semibold">{sheetListCountNote(listMerge.appCount, listMerge.sheetCount)}</span>}</div>}
+            {sheetList.failed && <div role="status" className="mt-2 rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">{sheetList.failed}</div>}
             <div className="mt-2.5">
               <ReceptionListFilters typeFilter={listFilter} onTypeFilter={(f) => { const v = LIST_TYPE_FILTERS.find((x) => x === f); if (v) setListFilter(v); }}
                 typeCounts={{ 전체: counts.total, "복합기 AS": counts.copier, IT: counts.it, 원격이관: counts.remote, 경영지원: counts.mgmt, 운영지원: counts.ops, 영업팀: counts.sales, 주소확인: counts.addr }}
@@ -2089,7 +2148,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
           )}
 
           {byAuthor.length > 0 && <div className="border-t border-slate-200 bg-slate-50/60 p-4">
-            <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]})</div>
+            <div className="text-[11px] font-black text-slate-400">접수자별 처리 ({listPeriod === "day" ? listDate.slice(5) : PERIOD_LABEL[listPeriod]}){listMerge.sheetCount > 0 ? ` (시트 ${listMerge.sheetCount} 포함)` : ""}</div>
             <div className="mt-2 space-y-1">
               {byAuthor.map(([name, stat]) => (
                 <div key={name} className="flex items-center justify-between text-xs">

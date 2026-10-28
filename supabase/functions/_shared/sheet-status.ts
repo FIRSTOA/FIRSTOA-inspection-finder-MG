@@ -29,6 +29,7 @@ export const ALLOWED_STATUS: Record<SheetSource, readonly string[]> = {
   sales: ["진행중", "처리완료", "보류", "취소"],
   mgmt: ["진행중", "처리완료", "보류", "취소"],
   remote: ["처리완료", "접수취소", "재접수", "자체해결", "AS이관", "중복접수", "방문이관"],
+  copier: [], // AS접수용(CS) 탭은 상태 칸이 없다 — statusOnly 대상 아님(STATUS_CATEGORY_SOURCE 에도 없음, 2026-10-28)
 };
 
 export const HANDLER_HEADER = "처리자";

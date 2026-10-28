@@ -17,8 +17,11 @@
  * - 날짜 모름(2026-10-27): 엣지가 접수일을 끝내 못 읽은 시트 행은 칸 숫자에 넣지 않고 noDate 로 따로("날짜 모름 n" 칩).
  *   예전엔 칸 안에 넣었는데, 경영지원 시트 C열(년월) 빈 행 425건이 2025년 것까지 전부 미처리 숫자에 들어갔다.
  */
-import { getConfig, invokeEdgeFunction } from "./supabase";
+import { getConfig, invokeEdgeFunction, selectAllRows } from "./supabase";
 import { ageDays } from "./deptReception";
+import { kstDate } from "./visits";
+import type { ServiceReceptionRow } from "./api";
+import { maskPhones, normVendor, SHEET_LIST_START } from "./receptionSheetState";
 
 export type SheetSource = "sales" | "mgmt" | "remote";
 export type SheetKind = "영업팀" | "경영지원" | "원격이관" | "IT";
@@ -237,4 +240,262 @@ export async function fetchSheetRowDetail(source: SheetSource, sheetRow: number,
   const detail = normalizeSheetRowDetail(raw?.detail);
   if (!detail) throw new Error("시트 행 상세를 받지 못했습니다(엣지 함수가 아직 옛 버전일 수 있음)");
   return detail;
+}
+
+
+// ── 접수리스트 시트 줄(2026-10-28, docs/tasks/reception-list-sheet-rows-2026-10-28.md 4·5절) ──
+// 앱 접수 ∪ 시트에만 적힌 접수(2026-10-01부터). 이번 달(과 탭에 남은 영업·경영 지난 행)은 엣지 목록 모드 { list: { from, to } },
+// 이번 달 1일 이전 구간은 보관 표 reception_sheet_rows(anon select). 둘이 겹치면 엣지 쪽 우선.
+// 숫자 규칙: 홈 미처리·현황판은 그대로(이 목록 함수는 접수리스트만 쓴다).
+
+export type SheetListSource = SheetSource | "copier";
+export type SheetListKind = SheetKind | "복합기 AS";
+export type SheetListCls = "open" | "hold" | "done" | "record";
+
+/** 접수리스트 시트 줄 — SheetOpenRow 모양 + 완료·기록(copier) + 접수시간·퍼스트순·달. 전화번호 원문 없음, content 없음 */
+export type SheetListRow = {
+  source: SheetListSource;
+  kind: SheetListKind;
+  sheetRow: number;
+  /** 시트 A열 순번(보관 표에서 온 순번 빈 행은 "h:…" 해시) */
+  seq: string;
+  date: string;
+  author: string;
+  handler: string;
+  state: string;
+  cls: SheetListCls;
+  vendor: string;
+  field: string;
+  region: string;
+  summary: string;
+  /** 접수시간 "HH:MM"(원격·CS D열) */
+  time?: string;
+  /** 퍼스트순(CS F열) */
+  firstNo?: string;
+  /** "YYYY-MM"(접수일 기준) */
+  month?: string;
+};
+
+const LIST_SOURCES = new Set<string>(["sales", "mgmt", "remote", "copier"]);
+const LIST_CLS = new Set<string>(["open", "hold", "done", "record"]);
+const LIST_KINDS = new Set<string>(["영업팀", "경영지원", "원격이관", "IT", "복합기 AS"]);
+const SOURCE_KIND: Record<SheetListSource, SheetListKind> = { sales: "영업팀", mgmt: "경영지원", remote: "원격이관", copier: "복합기 AS" };
+const SHEET_LIST_GID: Record<SheetListSource, number> = { ...SHEET_GID, copier: 1181394897 };
+
+const listText = (v: unknown) => maskPhones(String(v ?? "").trim());
+const hhmm = (v: unknown) => {
+  const m = String(v ?? "").trim().match(/^(\d{1,2}):(\d{2})/);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : "";
+};
+
+/** 시트 줄로 바로 가는 링크(copier 포함) */
+export const sheetListRowUrl = (source: SheetListSource, sheetRow: number) =>
+  `https://docs.google.com/spreadsheets/d/${RECEPTION_SPREADSHEET_ID}/edit#gid=${SHEET_LIST_GID[source]}&range=A${sheetRow}`;
+
+/** 엣지 응답 한 줄 → SheetListRow(모양이 틀리면 null). 가림을 한 번 더 건다(옛 엣지 대비) */
+export function normalizeSheetListRow(raw: unknown): SheetListRow | null {
+  const r = (raw && typeof raw === "object" ? raw : null) as Record<string, unknown> | null;
+  if (!r || !LIST_SOURCES.has(String(r.source))) return null;
+  const source = r.source as SheetListSource;
+  const date = String(r.date ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const cls = LIST_CLS.has(String(r.cls)) ? (r.cls as SheetListCls) : source === "copier" ? "record" : "open";
+  const kind = LIST_KINDS.has(String(r.kind)) ? (r.kind as SheetListKind) : SOURCE_KIND[source];
+  const time = hhmm(r.time);
+  const firstNo = String(r.firstNo ?? "").trim();
+  return {
+    source, kind, sheetRow: Number(r.sheetRow) || 0, seq: String(r.seq ?? "").trim(), date,
+    author: listText(r.author), handler: listText(r.handler), state: listText(r.state), cls,
+    vendor: listText(r.vendor), field: listText(r.field), region: listText(r.region), summary: listText(r.summary),
+    ...(time ? { time } : {}), ...(firstNo ? { firstNo } : {}),
+    month: /^\d{4}-\d{2}$/.test(String(r.month ?? "")) ? String(r.month) : date.slice(0, 7),
+  };
+}
+
+/** 보관 표 reception_sheet_rows 한 행(읽는 열만) */
+export type SheetTableRow = {
+  source: string; month: string; seq: string; sheet_row: number | null; kind: string; receipt_date: string; receipt_time: string | null;
+  author: string | null; handler: string | null; state: string | null; cls: string; vendor: string | null; first_no: string | null;
+  field: string | null; region: string | null; summary: string | null; reception_id?: string | null;
+};
+export const SHEET_TABLE = "reception_sheet_rows";
+export const SHEET_TABLE_COLUMNS = "source,month,seq,sheet_row,kind,receipt_date,receipt_time,author,handler,state,cls,vendor,first_no,field,region,summary,reception_id";
+
+/** 보관 표 한 행 → SheetListRow (receipt_time "09:06:00" → "09:06") */
+export function tableRowToSheetListRow(r: SheetTableRow): SheetListRow {
+  const out = normalizeSheetListRow({
+    source: r.source, kind: r.kind, sheetRow: r.sheet_row ?? 0, seq: r.seq, date: r.receipt_date, author: r.author, handler: r.handler,
+    state: r.state, cls: r.cls, vendor: r.vendor, field: r.field, region: r.region, summary: r.summary,
+    time: r.receipt_time, firstNo: r.first_no, month: r.month,
+  });
+  if (out) return out;
+  // 표 제약(source·cls·날짜)상 오지 않지만, 와도 버리지 않고 모양만 맞춘다
+  const source: SheetListSource = LIST_SOURCES.has(r.source) ? (r.source as SheetListSource) : "sales";
+  return {
+    source, kind: SOURCE_KIND[source], sheetRow: r.sheet_row ?? 0, seq: String(r.seq ?? ""), date: String(r.receipt_date ?? "").slice(0, 10),
+    author: listText(r.author), handler: listText(r.handler), state: listText(r.state), cls: source === "copier" ? "record" : "open",
+    vendor: listText(r.vendor), field: listText(r.field), region: listText(r.region), summary: listText(r.summary), month: String(r.month ?? ""),
+  };
+}
+
+/** 겹침 판정 키: (source, month, seq). 순번이 비었거나 보관 표 해시("h:")면 (source, 날짜, 접수자, 상호 앞 6자) */
+export function sheetListKey(r: SheetListRow): string {
+  const seq = String(r.seq || "").trim();
+  if (seq && !seq.startsWith("h:")) return `${r.source}|${r.month || r.date.slice(0, 7)}|${seq}`;
+  return `${r.source}|${r.date}|${r.author.replace(/\s+/g, "")}|${normVendor(r.vendor).slice(0, 6)}`;
+}
+
+/** 엣지 줄 + 보관 표 줄 → 겹치는 것은 엣지 쪽만 남김(엣지가 최신 시트) */
+export function dedupeSheetRows(edgeRows: SheetListRow[], tableRows: SheetListRow[]): SheetListRow[] {
+  const seen = new Set<string>();
+  const out: SheetListRow[] = [];
+  for (const r of [...edgeRows, ...tableRows]) {
+    const k = sheetListKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+
+/** 표가 아직 없음(SQL 실행 대기) — selectRows 오류 글 "조회 실패 표(404): … PGRST205/42P01 …" */
+const tableMissing = (m: string) => /\(404\)|PGRST205|42P01|does not exist|Could not find the table/i.test(m);
+
+/** "YYYY-MM-DD" 하루 전 */
+const dayBefore = (ymd: string) => new Date(Date.parse(`${ymd}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+
+export type SheetListResult = { rows: SheetListRow[]; noDate: number; errors: string[]; ok: boolean };
+
+/**
+ * 접수리스트 시트 줄 읽기. throw 하지 않는다.
+ * - 스위치(RECEPTION_SHEET_OPEN_ENABLED) 꺼짐·설정 못 읽음 → { ok:false, rows:[], errors:[] } (지금 화면 그대로, 안내 없음)
+ * - 엣지 실패 → ok:false + errors 첫 줄 "시트 접수를 못 읽음 — 앱 접수만 표시 (…)". 보관 표 줄은 읽혔으면 그대로 싣는다.
+ * - 범위 중 이번 달 1일 이전 구간(2026-10-01 이후만)은 보관 표에서. 표 없음·실패는 errors 한 줄, 엣지 결과만.
+ * from·to 는 kstDate() 기준 "YYYY-MM-DD". today 는 테스트용(기본 kstDate()).
+ */
+export async function fetchSheetListRows(from: string, to: string, today: string = kstDate()): Promise<SheetListResult> {
+  let on = false;
+  try { on = isSheetOpenOn(await getConfig()); } catch { on = false; }
+  if (!on) return { rows: [], noDate: 0, errors: [], ok: false };
+  const errors: string[] = [];
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const tableFrom = from > SHEET_LIST_START ? from : SHEET_LIST_START;
+  const tableTo = to < monthStart ? to : dayBefore(monthStart);
+
+  const edgeCall = invokeEdgeFunction<{ ok?: boolean; rows?: unknown[]; noDate?: number; errors?: unknown[] }>("reception-sheet-open", { list: { from, to } }, 25_000)
+    .then((raw) => ({ raw, error: "" }), (e: unknown) => ({ raw: null, error: e instanceof Error ? e.message : String(e) }));
+  const tableCall = tableFrom <= tableTo
+    ? selectAllRows<SheetTableRow>(SHEET_TABLE,
+      `select=${SHEET_TABLE_COLUMNS}&receipt_date=gte.${tableFrom}&receipt_date=lte.${tableTo}&reception_id=is.null&gone_at=is.null&order=receipt_date.desc,id.desc`)
+      .then((rows) => ({ rows, error: "" }), (e: unknown) => ({ rows: [] as SheetTableRow[], error: e instanceof Error ? e.message : String(e) }))
+    : Promise.resolve({ rows: [] as SheetTableRow[], error: "" });
+  const [edge, table] = await Promise.all([edgeCall, tableCall]);
+
+  let edgeRows: SheetListRow[] = [];
+  let noDate = 0;
+  let ok = false;
+  if (edge.raw && Array.isArray(edge.raw.rows)) {
+    ok = edge.raw.ok !== false;
+    // 기간 밖 행은 버린다 — 엣지가 범위를 잘랐거나(92일), 옛 엣지(목록 모드 없음)가 미처리 행을 돌려줘도 화면 기간과 어긋나지 않게
+    edgeRows = edge.raw.rows.map(normalizeSheetListRow).filter((r): r is SheetListRow => r !== null && r.date >= from && r.date <= to);
+    noDate = Number(edge.raw.noDate) || 0;
+    if (Array.isArray(edge.raw.errors)) errors.push(...edge.raw.errors.map(String).filter(Boolean));
+  } else {
+    errors.unshift(`시트 접수를 못 읽음 — 앱 접수만 표시${edge.error ? ` (${edge.error.slice(0, 120)})` : " (엣지 함수가 아직 목록 모드를 모름)"}`);
+  }
+  if (table.error) {
+    errors.push(tableMissing(table.error)
+      ? "지난달 시트 줄 보관 표가 아직 없음(SQL 실행 대기) — 이번 달 시트 줄만 표시"
+      : `지난달 시트 줄을 못 읽음 — 이번 달 시트 줄만 표시 (${table.error.slice(0, 120)})`);
+  }
+  const tableRows = table.rows.map(tableRowToSheetListRow).filter((r) => r.date >= tableFrom && r.date <= tableTo);
+  return { rows: dedupeSheetRows(edgeRows, tableRows), noDate, errors, ok };
+}
+
+/** 접수리스트에 섞는 시트 줄 — ServiceReceptionRow 꼴 + sheet 표시 */
+export type SheetListReceptionRow = ServiceReceptionRow & {
+  sheet: true;
+  sheetSource: SheetListSource;
+  sheetRow: number;
+  sheetSeq: string;
+  sheetMonth: string;
+  sheetCls: SheetListCls;
+  /** 시트 상태 칸 원문(CS 는 BD 메모) */
+  sheetState: string;
+  /** 처리자(시트 칸) */
+  sheetHandler: string;
+  /** 접수시간 "HH:MM", 없으면 "" (화면 "--:--") */
+  receipt_time: string;
+};
+
+/** 시트 분류 → 앱 상태값: 미처리 = 접수(시트 칸이 진행중·처리중이면 진행중), 보류 = 보류, 완료 = 완료, 기록(CS) = "" */
+export function sheetListStatus(r: Pick<SheetListRow, "cls" | "state">): string {
+  if (r.cls === "record") return "";
+  if (r.cls === "done") return "완료";
+  return sheetRowStatus({ cls: r.cls, state: r.state });
+}
+
+/** 시트 줄 → 접수리스트 줄. id = sheet:source:month:seq(순번 없으면 행 번호). created_at = 접수일·시각(KST, 시각 없으면 00:00) */
+export function sheetListToListRow(r: SheetListRow): SheetListReceptionRow {
+  const month = r.month || r.date.slice(0, 7);
+  const seq = r.seq || String(r.sheetRow);
+  const time = r.time || "";
+  return {
+    id: `sheet:${r.source}:${month}:${seq}`,
+    created_at: `${r.date}T${time || "00:00"}:00+09:00`,
+    receipt_date: r.date,
+    receipt_time: time,
+    author: r.author,
+    route: "시트",
+    type: r.kind,
+    vendor: r.vendor,
+    asset_no: "", serial: "", model: "",
+    region: r.region,
+    title: "",
+    symptom: r.summary,
+    paid: "", notes: "", report_text: "",
+    status: sheetListStatus(r),
+    sent_room: "", grade: "", receiver_name: "", receiver_phone: "", keyman_info: "",
+    lease_no: "", address: "",
+    field: r.field,
+    first_no: r.firstNo || "",
+    sheet_row: r.sheetRow || null,
+    sheet: true,
+    sheetSource: r.source,
+    sheetRow: r.sheetRow,
+    sheetSeq: r.seq,
+    sheetMonth: month,
+    sheetCls: r.cls,
+    sheetState: r.state,
+    sheetHandler: r.handler,
+  };
+}
+
+/** 시트 줄인가(합친 목록에서 가르기) */
+export const isSheetListRow = (r: ServiceReceptionRow): r is SheetListReceptionRow => (r as Partial<SheetListReceptionRow>).sheet === true;
+
+/** 정렬 키 "YYYY-MM-DD HH:MM" — 앱 줄은 created_at 의 KST 시각, 시트 줄은 접수시간(없으면 날짜만 → 그날 맨 아래) */
+function sortKeyOf(r: ServiceReceptionRow): string {
+  const date = String(r.receipt_date || "").slice(0, 10);
+  if (isSheetListRow(r)) return r.receipt_time ? `${date} ${r.receipt_time}` : date;
+  const t = Date.parse(String(r.created_at || ""));
+  if (!Number.isFinite(t)) return date;
+  return `${date} ${new Date(t + 9 * 3600_000).toISOString().slice(11, 16)}`;
+}
+
+/** 앱 접수 + 시트 줄 → 날짜·시각 내림차순 한 목록(같은 id 한 번만, 같은 시각은 앱 줄 먼저) */
+export function mergeListWithSheet(db: ServiceReceptionRow[], sheet: SheetListRow[]): { rows: Array<ServiceReceptionRow | SheetListReceptionRow>; appCount: number; sheetCount: number } {
+  const seen = new Set<string>();
+  const app: ServiceReceptionRow[] = [];
+  for (const r of db) { if (!seen.has(r.id)) { seen.add(r.id); app.push(r); } }
+  const sheetRows: SheetListReceptionRow[] = [];
+  for (const s of sheet) {
+    const row = sheetListToListRow(s);
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    sheetRows.push(row);
+  }
+  const keyed = [...app, ...sheetRows].map((r, i) => ({ r, i, k: sortKeyOf(r) }));
+  keyed.sort((a, b) => (a.k < b.k ? 1 : a.k > b.k ? -1 : a.i - b.i));
+  return { rows: keyed.map((x) => x.r), appCount: app.length, sheetCount: sheetRows.length };
 }
