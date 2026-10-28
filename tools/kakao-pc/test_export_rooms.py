@@ -63,18 +63,44 @@ class Settings(unittest.TestCase):
         self.assertLessEqual(er.estimate_minutes(21, 30, 15, 20, 75), 60)
 
 
+class DonePopup(unittest.TestCase):
+    """2026-10-28 23:50 노트북 실측(probe_windows.py) 4줄 — 완료창만 True"""
+    ROOM, MAIN = 0x1006B6, 0x202EA
+
+    def test_measured_windows(self):
+        r, m = self.ROOM, self.MAIN
+        self.assertTrue(er.is_done_popup("EVA_Window_Dblclk", r, r, "", 0, 300, 225))  # 0xd06d8 완료창
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", 0, r, "강남C 점검방", 4, 380, 640))  # 방 창
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", m, r, "", 10, 390, 100))  # 광고 창(메인 창 소유)
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", 0, r, "카카오톡", 30, 490, 1020))  # 메인 창
+
+    def test_edges(self):
+        r, m = self.ROOM, self.MAIN
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", m, r, "", 0, 300, 225))  # 메인 창 소유면 모양이 같아도 아님
+        self.assertFalse(er.is_done_popup("#32770", r, r, "", 0, 300, 225))
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", 0, 0, "", 0, 300, 225))
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", r, r, "대화 내보내기", 0, 300, 225))
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", r, r, "", 2, 300, 225))
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", r, r, "", 0, 150, 225))
+        self.assertFalse(er.is_done_popup("EVA_Window_Dblclk", r, r, "", 0, 300, 100))
+        self.assertTrue(er.is_done_popup("EVA_Window_Dblclk", r, r, "", 0, 500, 400))  # 경계 포함
+
+    def test_file_unchanged_before_enter(self):
+        # 방지훈 ②A — Enter 직전 크기·mtime 이 확정 값과 같아야만 누른다
+        self.assertTrue(er.file_unchanged((15127552, 1730127000.0), (15127552, 1730127000.0)))
+        self.assertFalse(er.file_unchanged((15127552, 1730127000.0), (15200000, 1730127020.0)))
+        self.assertFalse(er.file_unchanged((15127552, 1730127000.0), (15127552, 1730127020.0)))
+        self.assertFalse(er.file_unchanged((15127552, 1730127000.0), (None, None)))
+
+    def test_rooms_with_partial(self):
+        # 방지훈 ②B — 오늘 날짜 .partial 이 있는 방은 시작 때 잔여 정리에서 건너뛴다
+        names = ["강남C 점검방_20261028.txt.partial", "AS C방_20261028.txt", "PC_IT_20261027.txt.partial"]
+        got = er.rooms_with_partial(["강남C 점검방", "AS C방", "PC/IT"], names, "20261028")
+        self.assertEqual(got, {"강남C 점검방"})
+        self.assertEqual(er.rooms_with_partial(["PC/IT"], names, "20261027"), {"PC/IT"})
+
+
 class ExportWindow(unittest.TestCase):
-    def test_title(self):
-        self.assertTrue(er.is_export_window_title("대화 내보내기"))
-        self.assertFalse(er.is_export_window_title("다른 이름으로 저장 확인"))
-
-    def test_done(self):
-        self.assertFalse(er.export_window_done("대화 내보내기", [("Static", "37%", True), ("Button", "취소", True)]))
-        self.assertFalse(er.export_window_done("대화 내보내기", []))
-        self.assertTrue(er.export_window_done("대화 내보내기", [("Static", "100% 완료되었습니다.", True), ("Button", "확인", True)]))
-        self.assertTrue(er.export_window_done("대화 내보내기", [("Button", "폴더열기", True), ("Button", "확인", True)]))
-        self.assertFalse(er.export_window_done("대화 내보내기", [("Button", "확인", False)]))
-
     def test_default_name_file(self):
         ents = [("KakaoTalk_20261028_2315_01.txt", 1000.0, 12345), ("KakaoTalk_old.txt", 10.0, 50), ("빈.txt", 1001.0, 0)]
         self.assertEqual(er.pick_default_name_file(ents, 999.0, "강남C 점검방_20261028.txt"), "KakaoTalk_20261028_2315_01.txt")
