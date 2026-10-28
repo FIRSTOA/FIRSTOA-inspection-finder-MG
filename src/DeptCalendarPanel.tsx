@@ -114,12 +114,17 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
   const sheetByDate = useMemo(() => groupSheetByDate(hideLikeEvents(sheetRows || [], events)), [sheetRows, events]);
   const monthSheetCount = Array.from(sheetByDate.entries()).reduce((n, [d, l]) => n + (d.slice(0, 7) === month.slice(0, 7) ? l.length : 0), 0);
   // 앱 일정 칩(chip)과 같은 색 — 완료 = 회색 취소선, 열림 = 부서색
-  const sheetChip = (r: SheetListRow) => (r.cls === "done" ? "bg-slate-100 text-slate-400 line-through" : meta.badge);
+  // 2026-10-29 사용자 "분홍이라 눈 아프다 — 흰색으로": 열림 = 흰 바탕·회색 테두리, 완료 = 연회색 취소선(앱 일정·시트 같은 규칙)
+  const sheetChip = (r: SheetListRow) => (r.cls === "done" ? "border border-slate-100 bg-slate-50 text-slate-400 line-through" : "border border-slate-200 bg-white text-slate-800");
   const sheetTag = <span className="mr-1 inline-block rounded border border-current px-1 text-[9px] font-black leading-[14px] no-underline opacity-70">시트</span>;
   const sheetKey = (r: SheetListRow) => `${r.source}:${r.month}:${r.seq || r.sheetRow}`;
   const monthKey = month.slice(0, 7);
   const monthEvents = events.filter((ev) => ev.date.slice(0, 7) === monthKey);
-  const chip = (ev: DeptCalEvent) => (ev.done ? "bg-slate-100 text-slate-400 line-through" : meta.badge);
+  const chip = (ev: DeptCalEvent) => (ev.done ? "border border-slate-100 bg-slate-50 text-slate-400 line-through" : "border border-slate-200 bg-white text-slate-800");
+  // 완료는 아래로 모은다(사용자 "완료랑 완료 아닌 게 뒤죽박죽") — 열린 앱 일정 → 열린 시트 → 완료 앱 일정 → 완료 시트
+  const openFirst = <T,>(list: T[], done: (x: T) => boolean) => [...list.filter((x) => !done(x)), ...list.filter(done)];
+  const evDone = (ev: DeptCalEvent) => !!ev.done;
+  const shDone = (r: SheetListRow) => r.cls === "done";
   const row = (ev: DeptCalEvent) => (
     <button key={ev.id} type="button" onClick={() => setDetail(ev)} className={`block w-full rounded-lg px-3 py-2.5 text-left ${chip(ev)}`}>
       <div className="flex items-center justify-between gap-2">
@@ -169,7 +174,7 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                 {date === today && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">오늘</span>}
                 <span className="text-[11px] font-bold text-slate-400">{list.length}건</span>
               </div>
-              <div className="mt-1 space-y-1.5">{list.map(row)}</div>
+              <div className="mt-1 space-y-1.5">{openFirst(list, evDone).map(row)}</div>
             </div>
           ))}
           {!loading && !monthEvents.length && <div className="p-12 text-center text-sm font-semibold text-slate-400">이 달의 {label} 일정이 없습니다.</div>}
@@ -190,12 +195,12 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                     className={`min-h-16 border-b border-r border-slate-200 p-1 text-left ${inMonth ? "bg-white" : "bg-slate-50"} ${date === selected ? "ring-2 ring-inset ring-blue-500" : ""}`}>
                     <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black ${date === today ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</span>
                     <span className="mt-1 flex flex-wrap gap-0.5">
-                      {list.slice(0, 4).map((ev) => <span key={ev.id} className={`h-1.5 w-1.5 rounded-full ${ev.done ? "bg-slate-300" : meta.bar}`} />)}
+                      {openFirst(list, evDone).slice(0, 4).map((ev) => <span key={ev.id} className={`h-1.5 w-1.5 rounded-full ${ev.done ? "bg-slate-300" : meta.bar}`} />)}
                     </span>
                     {(sheetByDate.get(date) || []).length > 0 && (
                       // 시트 줄 점 = 앱 일정 점과 같은 채움(열림 부서색·완료 회색). 4개 넘으면 숫자
                       <span className="mt-0.5 flex flex-wrap items-center gap-0.5" aria-label={`시트 ${(sheetByDate.get(date) || []).length}건`}>
-                        {(sheetByDate.get(date) || []).slice(0, 4).map((r) => <span key={sheetKey(r)} className={`h-1.5 w-1.5 rounded-full ${r.cls === "done" ? "bg-slate-300" : meta.bar}`} />)}
+                        {openFirst(sheetByDate.get(date) || [], shDone).slice(0, 4).map((r) => <span key={sheetKey(r)} className={`h-1.5 w-1.5 rounded-full ${r.cls === "done" ? "bg-slate-300" : meta.bar}`} />)}
                         {(sheetByDate.get(date) || []).length > 4 && <span className="text-[9px] font-black leading-none text-slate-400">{(sheetByDate.get(date) || []).length}</span>}
                       </span>
                     )}
@@ -209,8 +214,10 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                 <button type="button" onClick={() => openNew(selected)} className="inline-flex min-h-9 items-center gap-1 rounded-full border border-slate-300 bg-white px-3 text-[11px] font-black text-slate-600 hover:bg-slate-100"><Plus size={12} aria-hidden />이 날에 추가</button>
               </div>
               <div className="space-y-1.5">
-                {selectedList.map(row)}
-                {selectedSheet.map(sheetRowBtn)}
+                {selectedList.filter((ev) => !evDone(ev)).map(row)}
+                {selectedSheet.filter((r) => !shDone(r)).map(sheetRowBtn)}
+                {selectedList.filter(evDone).map(row)}
+                {selectedSheet.filter(shDone).map(sheetRowBtn)}
                 {!selectedList.length && !selectedSheet.length && <div className="py-4 text-center text-xs font-semibold text-slate-400">등록된 일정이 없습니다.</div>}
               </div>
             </div>
@@ -230,13 +237,25 @@ export default function DeptCalendarPanel({ team, month, days, today, mode, relo
                       className={`min-h-28 border-b border-r border-slate-200 p-1.5 sm:min-h-32 2xl:min-h-40 ${inMonth ? "bg-white" : "bg-slate-50/70"}`}>
                       <div className={`mb-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black tabular-nums ${date === today ? "bg-blue-600 text-white" : inMonth ? "text-slate-700" : "text-slate-300"}`}>{Number(date.slice(8, 10))}</div>
                       <div className="max-h-36 space-y-1 overflow-y-auto">
-                        {list.map((ev) => (
+                        {list.filter((ev) => !evDone(ev)).map((ev) => (
                           <button key={ev.id} type="button" onClick={() => setDetail(ev)} title={ev.title}
                             className={`block w-full truncate rounded-md px-2 py-1 text-left text-[11px] font-bold transition hover:brightness-95 ${chip(ev)}`}>
                             {ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}
                           </button>
                         ))}
-                        {(sheetByDate.get(date) || []).map((r) => (
+                        {(sheetByDate.get(date) || []).filter((r) => !shDone(r)).map((r) => (
+                          <button key={sheetKey(r)} type="button" onClick={() => setSheetOpen(r)} title={`시트 · ${r.vendor}`}
+                            className={`block w-full truncate rounded-md px-2 py-1 text-left text-[11px] font-bold transition hover:brightness-95 ${sheetChip(r)}`}>
+                            {sheetTag}{r.vendor || "업체 미정"}
+                          </button>
+                        ))}
+                        {list.filter(evDone).map((ev) => (
+                          <button key={ev.id} type="button" onClick={() => setDetail(ev)} title={ev.title}
+                            className={`block w-full truncate rounded-md px-2 py-1 text-left text-[11px] font-bold transition hover:brightness-95 ${chip(ev)}`}>
+                            {ev.time && `${ev.time} `}{ev.title || "(제목 없음)"}
+                          </button>
+                        ))}
+                        {(sheetByDate.get(date) || []).filter(shDone).map((r) => (
                           <button key={sheetKey(r)} type="button" onClick={() => setSheetOpen(r)} title={`시트 · ${r.vendor}`}
                             className={`block w-full truncate rounded-md px-2 py-1 text-left text-[11px] font-bold transition hover:brightness-95 ${sheetChip(r)}`}>
                             {sheetTag}{r.vendor || "업체 미정"}

@@ -60,9 +60,15 @@ describe("DeptCalendarPanel — 시트 칩·점 색 = 앱 일정 색", () => {
     expect(html).toContain("h-1.5 w-1.5 rounded-full bg-slate-300");
     expect(html).not.toContain("rounded-full border border-slate-500");
   });
-  it("고른 날(오늘) 목록: 열린 시트 칩 = 부서 badge, 완료 = 회색 취소선, '시트' 글자 있음", () => {
-    expect(html).toContain(meta.badge);
-    expect(html).toMatch(/bg-slate-100 text-slate-400 line-through[\s\S]*끝난업체/);
+  it("고른 날(오늘) 목록: 열린 칩 = 흰 바탕(2026-10-29 분홍 → 흰색), 완료 = 연회색 취소선이고 열린 것보다 아래, '시트' 글자 있음", () => {
+    expect(html).toContain("border border-slate-200 bg-white text-slate-800");
+    expect(html).toMatch(/bg-slate-50 text-slate-400 line-through[\s\S]*끝난업체/);
+    // 같은 날 칸·목록 모두: 열린 업체가 끝난 업체보다 먼저(완료는 아래로 모음)
+    const openAt = [...html.matchAll(/우리하나/g)].map((m) => m.index ?? 0);
+    const doneAt = [...html.matchAll(/끝난업체/g)].map((m) => m.index ?? 0);
+    expect(openAt.length).toBeGreaterThan(0);
+    expect(doneAt.length).toBe(openAt.length);
+    openAt.forEach((o, i) => expect(o).toBeLessThan(doneAt[i]));
     expect(html).toContain("시트");
   });
 });
