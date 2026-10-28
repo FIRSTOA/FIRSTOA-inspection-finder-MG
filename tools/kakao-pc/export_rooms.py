@@ -18,9 +18,13 @@ r"""
   · 같은 이름 파일이 있으면 덮어쓰지 않는다(미리 건너뛰고, 그래도 덮어쓰기 확인창이 뜨면 Esc).
   · Ctrl+A/F/E 를 쓰지 않는다. 파일 이름 칸 전체 선택은 End → Shift+Home 으로 한다(표준 Edit 칸에서만).
   · 천천히, 한 번에 한 방(2026-10-27 사용자 실측: 큰 방은 기다려야 대화가 다 불러와지고, 여러 방을 한꺼번에 열면 튕긴다).
-    방마다 창을 앞으로 → 불러오기 대기 10초 + 카톡 응답 확인(없으면 5초 간격 최대 60초) → Ctrl+S → 저장 창(최대 15초)
-    → 파일 크기가 10초 동안 안 변할 때까지(최대 180초) → 방 사이 20초 → 다음 방. 전체 상한 60분(새 방을 시작하지 않는 기준).
-    조정: FIRSTOA_KAKAO_EXPORT_LOAD_WAIT · _DIALOG_WAIT · _GAP · _LIMIT (초). 동시에 두 개 안 돈다(뮤텍스 Local\FIRSTOA-KakaoExport).
+    방마다 창을 앞으로 → 불러오기 대기 30초 + 카톡 응답 확인(없으면 5초 간격 최대 60초) → Ctrl+S → 저장 창(최대 15초)
+    → 카톡 "대화 내보내기" 완료창(진행 막대 → "100% 완료되었습니다" [폴더열기][확인])이 "완료"가 될 때까지 최대 300초
+      (진행 중엔 아무 키도 안 누름 — Esc 는 내보내기를 취소할 수 있다), 완료면 그 창이 맨 앞일 때만 Enter(기본 단추=확인)로 닫는다
+    → 그 뒤부터 파일 크기가 15초 동안 안 변할 때까지(최대 300초) → 방 사이 20초 → 다음 방. 전체 상한 60분(새 방을 시작하지 않는 기준).
+    완료창이 안 뜨는 옛 카톡은 파일 크기 멈춤만 본다. 기대 이름 파일이 없으면 수신함에서 Ctrl+S 뒤 생긴 .txt(카톡 기본 이름)를 기대 이름으로 바꾼다.
+    (2026-10-28 노트북 실측: 완료창이 남아 있었고, 파일은 3분 넘게 걸려 끝에 가서야 생겼다)
+    조정: FIRSTOA_KAKAO_EXPORT_LOAD_WAIT · _DIALOG_WAIT · _DONE_WAIT · _GAP · _LIMIT (초). 동시에 두 개 안 돈다(뮤텍스 Local\FIRSTOA-KakaoExport).
 
 사용법 (노트북 D6110 에서만 — 데스크톱에서 돌리지 않는다)
   python tools\kakao-pc\export_rooms.py --probe --room "방이름"     기본. Ctrl+S 뒤 뜨는 창만 기록하고 Esc (저장 안 함)
@@ -61,14 +65,19 @@ def env_seconds(name: str, default: float, lo: float = 0.0, hi: float = 3600.0) 
 
 # 2026-10-27 사용자 실측: "방마다 데이터가 커서 버벅이고, 조금 기다려야 전체 대화가 불러와진다. 한 번에 여러 방을 열면 분명히 튕긴다.
 # 한 방을 천천히 끝내고 다음 방." → 불러오기 대기·저장 완료(파일 크기 멈춤) 확인·방 사이 텀을 넉넉히, 한 번에 한 방만.
-LOAD_WAIT = env_seconds("FIRSTOA_KAKAO_EXPORT_LOAD_WAIT", 10.0, 0, 300)  # 창을 앞으로 가져온 뒤 Ctrl+S 전 대기(대화 불러오기)
+# 2026-10-28 사용자: "방 들어가면 읽는 시간이 더 필요하고 저장도 파일이 커서 오래 걸린다. 방 내용 기다리기 30초, 저장 1분 정도로."
+LOAD_WAIT = env_seconds("FIRSTOA_KAKAO_EXPORT_LOAD_WAIT", 30.0, 0, 300)  # 창을 앞으로 가져온 뒤 Ctrl+S 전 대기(대화 불러오기, 옛 10초)
 RESPOND_MAX = 60.0       # 카톡 응답 없음이면 최대 이만큼 더 기다린다
 RESPOND_EVERY = 5.0      # 그 사이 재확인 간격
 EXPORT_WAIT = env_seconds("FIRSTOA_KAKAO_EXPORT_DIALOG_WAIT", 15.0, 3, 120)  # Ctrl+S 뒤 저장 창이 뜨기를 기다리는 시간(옛 3초)
-SETTLE_STABLE = 10.0     # 저장 뒤 파일 크기가 이만큼 안 변해야 "쓰기 끝"
-SETTLE_MAX = 180.0       # 저장 뒤 파일 확정까지 최대 대기
+SETTLE_STABLE = 15.0     # 저장 뒤 파일 크기가 이만큼 안 변해야 "쓰기 끝"(옛 10초)
+SETTLE_MAX = 300.0       # 완료창이 닫힌 뒤(없으면 저장 창이 닫힌 뒤) 파일 확정까지 최대 대기(옛 180초)
+# 카톡 "대화 내보내기" 완료창(2026-10-28 노트북 실측) — 진행 막대 → "100% 완료되었습니다." + [폴더열기] [확인]. 클래스는 #32770 이 아닐 수 있다
+EXPORT_WIN_TITLE = "내보내기"
+DONE_WAIT = env_seconds("FIRSTOA_KAKAO_EXPORT_DONE_WAIT", 300.0, 10, 1800)  # 완료창이 "완료"가 되기까지 최대 대기(파일 유무와 무관)
+DONE_APPEAR = 15.0       # 저장 창이 닫힌 뒤 완료창이 뜨기를 기다리는 시간 — 안 뜨면 옛 카톡으로 보고 파일 크기만 본다
 ROOM_GAP = env_seconds("FIRSTOA_KAKAO_EXPORT_GAP", 20.0, 3, 600)  # 방 사이 텀(옛 3초)
-RUN_LIMIT = env_seconds("FIRSTOA_KAKAO_EXPORT_LIMIT", 3600.0, 60, 4 * 3600)  # 전체 상한 60분(옛 8분) — 실행기가 별도 프로세스로 띄워 심박은 계속 찍힌다(2026-10-27)
+RUN_LIMIT = env_seconds("FIRSTOA_KAKAO_EXPORT_LIMIT", 7200.0, 60, 4 * 3600)  # 전체 상한 120분(2026-10-28 실측 한 방 3분+ → 21방 약 75~100분, 옛 60분·8분) — 실행기가 별도 프로세스로 띄워 심박은 계속 찍힌다(2026-10-27)
 EXPORT_MUTEX = "Local\\FIRSTOA-KakaoExport"  # 한 번에 하나만 — worker.py 도 이 이름으로 "내보내기 중"을 안다
 # 수집 표가 없을 때(404)·비었을 때 room_map 폴백으로 거르는 업무 종류 — 마감·부품·자가(토너)·칭찬 등은 수집 대상이 아니다(2026-10-24 설계)
 DEFAULT_CATEGORIES = ("점검", "AS", "물류", "미수", "불만", "재계약")
@@ -152,9 +161,13 @@ def fmt_kb(size: int) -> str:
     return f"{max(0, size) / 1024:,.0f} KB" if size >= 1024 else f"{max(0, size)} B"
 
 
+EXPORT_TYPICAL = 60.0  # 추정용 — 카톡이 방 하나를 내보내는 데 걸리는 보통 시간(2026-10-28 사용자 "저장 1분 정도")
+
+
 def estimate_minutes(n_rooms: int, load: float = LOAD_WAIT, dialog: float = EXPORT_WAIT, gap: float = ROOM_GAP,
-                     write: float = SETTLE_STABLE + 5.0) -> float:
-    """대략 걸리는 분 — 방마다 불러오기 + 저장 창(최대치) + 쓰기·확정 + 다음 방까지 텀(마지막 방 제외)"""
+                     write: float = EXPORT_TYPICAL + SETTLE_STABLE) -> float:
+    """대략 걸리는 분 — 방마다 불러오기 + 저장 창(최대치) + 내보내기(완료창)·파일 확정 + 다음 방까지 텀(마지막 방 제외).
+    기본값 21방 = 21×(30+15+75)+20×20 = 2,920초 ≈ 48.7분"""
     if n_rooms <= 0:
         return 0.0
     return round((n_rooms * (load + dialog + write) + (n_rooms - 1) * gap) / 60.0, 1)
@@ -166,6 +179,35 @@ def is_save_dialog(cls: str, title: str, extra_titles: tuple = ()) -> bool:
         return False
     t = str(title or "").strip().lower()
     return any(s.lower() in t for s in tuple(SAVE_TITLES) + tuple(extra_titles) if s)
+
+
+def is_export_window_title(title: str) -> bool:
+    """카톡 '대화 내보내기' 진행·완료창인가 — 제목에 '내보내기'(클래스 무관). 저장 창·덮어쓰기 확인창 제목과 겹치지 않는다"""
+    return EXPORT_WIN_TITLE in str(title or "")
+
+
+def _btn_text(s: str) -> str:
+    return re.sub(r"[\s&]", "", str(s or ""))
+
+
+def export_window_done(title: str, children: list) -> bool:
+    """완료창 상태 — children = [(클래스, 글자, 활성)]. 글자(또는 제목)에 '완료'(미완료 제외)가 보이거나,
+    [확인] 단추가 활성이고 [취소] 단추가 없으면 완료. 진행 중(완료 글자 없음)이면 False → 아무 키도 누르지 않는다"""
+    texts = [str(title or "")] + [str(t or "") for _, t, _ in (children or [])]
+    if any("완료" in t and "미완료" not in t for t in texts):
+        return True
+    btns = {_btn_text(t): bool(en) for c, t, en in (children or []) if "button" in str(c or "").lower()}
+    if "취소" in btns or "cancel" in {k.lower() for k in btns}:
+        return False
+    return btns.get("확인", False) or btns.get("OK", False)
+
+
+def pick_default_name_file(entries: list, since: float, expected: str) -> str:
+    """카톡 기본 이름으로 저장된 파일 찾기 — entries = [(이름, 수정 시각, 크기)].
+    since(Ctrl+S 시각, 2초 여유) 이후 바뀐 .txt, 0바이트 아님, 기대 이름 아님 중 가장 최근 1개 → 이름(없으면 '')"""
+    cand = [(m, n) for n, m, s in (entries or [])
+            if str(n).lower().endswith(".txt") and n != expected and s and s > 0 and m >= since - 2.0]
+    return max(cand)[1] if cand else ""
 
 
 def selftest() -> int:
@@ -213,6 +255,20 @@ def selftest() -> int:
     assert fmt_kb(2048) == "2 KB" and fmt_kb(10) == "10 B"
     assert estimate_minutes(0) == 0.0
     assert estimate_minutes(2, 10, 15, 20, 15) == round((2 * 40 + 20) / 60, 1)
+    assert estimate_minutes(21, 30, 15, 20, 75) == 48.7
+    assert is_export_window_title("대화 내보내기") and not is_export_window_title("다른 이름으로 저장")
+    assert not is_export_window_title("저장 확인") and not is_export_window_title("")
+    assert not export_window_done("대화 내보내기", [("Static", "45%", True), ("Button", "취소", True)])  # 진행 중
+    assert not export_window_done("대화 내보내기", [])  # 글자를 못 읽으면 완료로 보지 않는다
+    assert export_window_done("대화 내보내기", [("Static", "100% 완료되었습니다.", True), ("Button", "폴더열기", True), ("Button", "확인", True)])
+    assert export_window_done("대화 내보내기", [("Button", "폴더열기", True), ("Button", "확인", True)])  # 완료 글자 없이 확인 활성
+    assert not export_window_done("대화 내보내기", [("Button", "확인", False)])  # 확인 비활성
+    assert not export_window_done("대화 내보내기", [("Static", "미완료", True)])
+    ents = [("강남C 점검방_20261028.txt", 50.0, 0), ("KakaoTalk_20261028_2315.txt", 200.0, 5000),
+            ("옛파일.txt", 10.0, 900), ("KakaoTalk_빈.txt", 210.0, 0), ("사진.png", 220.0, 10), ("다른.txt", 150.0, 30)]
+    assert pick_default_name_file(ents, 100.0, "강남C 점검방_20261028.txt") == "KakaoTalk_20261028_2315.txt"
+    assert pick_default_name_file(ents, 300.0, "x.txt") == ""
+    assert pick_default_name_file([("기대.txt", 200.0, 10)], 100.0, "기대.txt") == ""
     os.environ["FIRSTOA_KAKAO_TEST_SEC"] = "abc"
     assert env_seconds("FIRSTOA_KAKAO_TEST_SEC", 7.0) == 7.0
     os.environ["FIRSTOA_KAKAO_TEST_SEC"] = "9999"
@@ -417,6 +473,170 @@ def _esc_if_front(hwnd: int, why: str) -> bool:
     return True
 
 
+# ── 완료창("대화 내보내기") ────────────────────────────────────────
+def _alive(h: int) -> bool:
+    import win32gui
+
+    try:
+        return bool(h) and bool(win32gui.IsWindow(h)) and bool(win32gui.IsWindowVisible(h))
+    except Exception:
+        return False
+
+
+def _child_states(hwnd: int, limit: int = 40) -> list:
+    """자식 컨트롤 [(클래스, 글자, 활성)] — 읽기만(GetWindowText). 창 메시지로 글을 넣지 않는다"""
+    import win32gui
+
+    out = []
+
+    def cb(h, _):
+        if len(out) < limit:
+            try:
+                if win32gui.IsWindowVisible(h):
+                    out.append((win32gui.GetClassName(h), win32gui.GetWindowText(h), bool(win32gui.IsWindowEnabled(h))))
+            except Exception:
+                pass
+
+    try:
+        win32gui.EnumChildWindows(hwnd, cb, None)
+    except Exception:
+        pass
+    return out
+
+
+def _looks_like_room_window(h: int) -> bool:
+    """방 창(채팅 입력칸이 있는 창)인가 — 방 이름에 '내보내기'가 든 방 창에 Enter 가 들어가지 않게(방지훈 2026-10-28).
+    자식에 Edit/RichEdit 계열 입력칸이 있으면 방 창으로 본다. 완료창(진행 막대·글자·단추)에는 입력칸이 없다."""
+    return any("edit" in (cls or "").lower() for cls, _, _ in _child_states(h))
+
+
+def _export_windows(pid: int, exclude: set = frozenset()) -> list:
+    """카톡 프로세스(pid)의 보이는 창 중 제목에 '내보내기'가 든 완료창 — 클래스 무관, 방 창(입력칸 있음)은 제외"""
+    import win32gui
+
+    out = []
+    for h in _visible_windows_of(pid):
+        if h in exclude:
+            continue
+        try:
+            if is_export_window_title(win32gui.GetWindowText(h)) and not _looks_like_room_window(h):
+                out.append(h)
+        except Exception:
+            pass
+    return out
+
+
+def _enter_close_export(h: int) -> str:
+    """완료 상태인 완료창을 Enter(기본 단추=확인)로 닫는다 — 클릭·좌표 없음.
+    그 창이 맨 앞(제목 '내보내기' 재확인)일 때만 누른다. 아니면 SetForegroundWindow 한 번 → 재확인 → 그래도 아니면 안 누름.
+    → 'closed' / 'left'(못 눌렀거나 눌러도 안 닫힘)"""
+    import pyautogui
+    import win32gui
+
+    from poster_send import log
+
+    fh, _, ft = _fg()
+    if fh != h:
+        try:
+            win32gui.SetForegroundWindow(h)
+        except Exception:
+            pass
+        time.sleep(0.4)
+        fh, _, ft = _fg()
+    if fh != h or not is_export_window_title(ft) or _looks_like_room_window(h):
+        log(f"    [내보내기]   완료창이 맨 앞이 아니거나 방 창으로 보임(맨 앞 '{ft}') — Enter 안 누름, 창은 남겨 둠")
+        return "left"
+    pyautogui.press("enter")
+    end = time.time() + 3.0
+    while time.time() < end:
+        time.sleep(0.25)
+        if not _alive(h):
+            return "closed"
+    log("    [내보내기]   완료창에 Enter 를 눌렀지만 3초 안에 안 닫힘 — 창은 남겨 둠")
+    return "left"
+
+
+def _wait_export_done(pid: int, room_hwnd: int, found: int = 0, appear_wait: float = DONE_APPEAR):
+    """저장 창이 닫힌 뒤 — 완료창을 기다려 '완료'가 되면 Enter 로 닫는다. 파일 유무와 무관하게 창 상태만 본다.
+    진행 중엔 아무 키도 누르지 않는다(Esc 는 내보내기 취소가 될 수 있다).
+    → (상태, 걸린 초) 상태: 'none'(안 뜸=옛 카톡) / 'closed' / 'gone'(스스로 닫힘) / 'left'(완료지만 못 닫음) / 'timeout'(아직 진행 중)"""
+    import win32gui
+
+    from poster_send import log
+
+    t0 = time.time()
+    h = found
+    while not h:
+        wins = _export_windows(pid, {room_hwnd})
+        if wins:
+            h = wins[0]
+            break
+        if time.time() - t0 >= appear_wait:
+            return "none", time.time() - t0
+        time.sleep(0.5)
+    try:
+        log(f"    [내보내기]   완료창: 클래스='{win32gui.GetClassName(h)}' 제목='{win32gui.GetWindowText(h)}' · 자식={', '.join(_child_summary(h)) or '없음'}")
+    except Exception:
+        pass
+    end = time.time() + DONE_WAIT
+    while time.time() < end:
+        if not _alive(h):
+            return "gone", time.time() - t0
+        try:
+            title = win32gui.GetWindowText(h)
+        except Exception:
+            title = ""
+        if export_window_done(title, _child_states(h)):
+            return _enter_close_export(h), time.time() - t0
+        time.sleep(1.0)
+    states = _child_states(h)
+    log(f"    [내보내기]   완료창이 {DONE_WAIT:.0f}초 안에 '완료'가 안 됨 — 키 안 누름 · 글자={[t for _, t, _ in states if t][:8] or '못 읽음'}")
+    return "timeout", time.time() - t0
+
+
+def _close_leftover_export_windows() -> int:
+    """시작 때·방 사이 — 남아 있는 완료창을 닫는다. 완료 상태면 Enter, 진행 중이면 '완료'까지 기다린다(최대 DONE_WAIT, 키 안 누름).
+    → 닫은 수. 끝까지 진행 중(timeout)이거나 완료인데 못 닫은(left) 창이 남으면 -1 — 내보내기 두 개가 겹치지 않게 호출자가 멈춘다(방지훈 2026-10-28)"""
+    from open_room import main_window
+
+    main = main_window()
+    if not main:
+        return 0
+    n = 0
+    for h in _export_windows(_pid(main), {main}):
+        status, _ = _wait_export_done(_pid(main), main, h)
+        if status in ("closed", "gone"):
+            n += 1
+        elif status in ("timeout", "left"):
+            return -1
+    return n
+
+
+def _rename_default_name_file(folder: str, path: str, since: float) -> str:
+    """기대 이름 파일이 없을 때 — 수신함에서 Ctrl+S 뒤 생긴 .txt(카톡 기본 이름)를 기대 이름으로. 같은 이름이 있으면 덮지 않고 .alt
+    → 로그용 설명('' 이면 못 찾음)"""
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return ""
+    ents = []
+    for n in names:
+        try:
+            st = os.stat(os.path.join(folder, n))
+            ents.append((n, st.st_mtime, st.st_size))
+        except OSError:
+            pass
+    src = pick_default_name_file(ents, since, os.path.basename(path))
+    if not src:
+        return ""
+    dst = path if not os.path.exists(path) else path + ".alt"
+    try:
+        os.replace(os.path.join(folder, src), dst)
+    except OSError as e:
+        return f"카톡 기본 이름 '{src}' 를 바꾸지 못함({e}) — 수신함 수동 확인"
+    return f"카톡 기본 이름 '{src}' → 기대 이름 '{os.path.basename(dst)}'"
+
+
 def _front_room(room: str):
     """방 창을 찾아 맨 앞으로 + 제목 확인 → hwnd 또는 0"""
     from open_room import bring_front
@@ -585,6 +805,7 @@ def export_one(room: str, folder: str, ymd: str) -> str:
         _esc_if_front(dlg, "저장 창 아님")
         return f"fail:저장 창 아님('{title}' {cls})"
     steps += f" → 저장 창 {time.time() - t_s:.1f}초"
+    export_win = 0  # 저장 창 Enter 뒤 뜬 카톡 완료창('대화 내보내기')
     try:
         # 파일 이름 칸에 포커스가 있어야만 쓴다
         fh = _fg()[0]
@@ -606,16 +827,22 @@ def export_one(room: str, folder: str, ymd: str) -> str:
             return "fail:Enter 직전 맨 앞 창이 바뀜"
         before2 = _visible_windows_of(pid)
         pyautogui.press("enter")
-        # 저장 창이 닫히거나, 확인창(덮어쓰기·오류)이 뜨거나
+        # 저장 창이 닫히거나, 확인창(덮어쓰기·오류)이 뜨거나, 카톡 완료창('대화 내보내기')이 뜨거나
         end = time.time() + 5.0
         while time.time() < end:
             time.sleep(0.25)
-            if not (win32gui.IsWindow(dlg) and win32gui.IsWindowVisible(dlg)):
+            if not _alive(dlg):
+                break
+            # 완료창은 확인창이 아니다 — Esc 하면 내보내기가 취소될 수 있다(2026-10-28 실측). 뜨면 루프를 끝내고 완료창 단계로
+            news_exp = _export_windows(pid, {hwnd, dlg})
+            if news_exp:
+                export_win = news_exp[0]
                 break
             fh, fc, ft = _fg()
-            pop = fh if (fh != dlg and fc == DIALOG_CLASS and _pid(fh) == pid) else 0
+            pop = fh if (fh != dlg and fc == DIALOG_CLASS and _pid(fh) == pid and not is_export_window_title(ft)) else 0
             if not pop:
-                news = [h for h in _visible_windows_of(pid) - before2 if win32gui.GetClassName(h) == DIALOG_CLASS]
+                news = [h for h in _visible_windows_of(pid) - before2
+                        if win32gui.GetClassName(h) == DIALOG_CLASS and not is_export_window_title(win32gui.GetWindowText(h))]
                 pop = news[0] if news else 0
             if pop:
                 ptitle = win32gui.GetWindowText(pop)
@@ -624,26 +851,50 @@ def export_one(room: str, folder: str, ymd: str) -> str:
                 time.sleep(0.3)
                 _esc_if_front(dlg, "저장 창 닫기")
                 return f"fail:확인창이 뜸('{ptitle}') — 덮어쓰기/경로 문제"
-        if win32gui.IsWindow(dlg) and win32gui.IsWindowVisible(dlg):
+        if _alive(dlg) and not export_win:
             _esc_if_front(dlg, "5초 지나도 저장 창이 안 닫힘")
             return "fail:저장 창이 안 닫힘"
     except Exception as e:
-        if win32gui.IsWindow(dlg) and win32gui.IsWindowVisible(dlg):
+        if _alive(dlg) and not export_win:
             _esc_if_front(dlg, "오류")
         return f"fail:{e}"
-    # 저장 완료 확인 — 큰 방은 쓰는 데 시간이 걸린다. 크기가 SETTLE_STABLE 초 멈출 때까지 다음 방으로 가지 않는다
+    # 완료창 — 카톡이 내보내기를 끝낼 때까지(최대 DONE_WAIT) 창 상태만 본다. "완료" 전에는 실패 처리하지 않고 키도 안 누른다
+    status, done_secs = _wait_export_done(pid, hwnd, export_win)
+    steps += " → 완료창 없음" if status == "none" else f" → 완료창 {done_secs:.0f}초"
+    waits = f"완료창 대기 {done_secs:.0f}초"
+    if status == "timeout":
+        return f"fail:카톡이 {DONE_WAIT:.0f}초 안에 내보내기를 못 끝냄({waits} / 파일 대기 0초 · 키 안 누름, 다음 방 전에 다시 기다림 · {steps})"
+    if status == "left":
+        steps += "(완료, 창은 남음)"
+    # 기대 이름 파일이 없으면 — 붙여 넣은 이름이 안 먹고 카톡 기본 이름으로 저장됐을 수 있다(2026-10-28 실측 의심)
+    renamed = ""
+    if not os.path.exists(path):
+        renamed = _rename_default_name_file(folder, path, t_s)
+        if renamed:
+            log(f"    [내보내기]   {renamed}")
+            steps += " → 기본 이름 바꿈"
+    # 저장 완료 확인 — 완료창이 닫힌 뒤부터 잰다. 크기가 SETTLE_STABLE 초 멈출 때까지 다음 방으로 가지 않는다
     done, size, took = _wait_file_settled(path)
+    if not done and size <= 0 and not renamed:  # 옛 카톡(완료창 없음)은 파일이 늦게 생길 수 있다 — 한 번 더 찾아본다
+        renamed = _rename_default_name_file(folder, path, t_s)
+        if renamed:
+            log(f"    [내보내기]   {renamed}")
+            steps += " → 기본 이름 바꿈"
+            done, size, took2 = _wait_file_settled(path)
+            took += took2
+    waits += f" / 파일 대기 {took:.0f}초"
     if done:
         return f"ok:{steps} → 파일 {fmt_kb(size)} 확정({took:.0f}초)"
     if size <= 0:
-        return f"fail:파일이 안 생김(또는 0바이트) {took:.0f}초({steps})"
-    # 반쪽 파일이 수신함에 남으면 GAS 가 그대로 적재한다 — 이름을 .partial 로 바꿔 적재에서 뺀다(다음 날 같은 날짜 파일명으로 다시 시도됨)
+        return f"fail:파일이 안 생김(또는 0바이트) — {waits}({steps})"
+    # 완료창이 "완료"였는데(또는 옛 카톡) 파일이 SETTLE_MAX 안에 안 멈춤 — 반쪽 파일이 수신함에 남으면 GAS 가 그대로 적재한다.
+    # 이름을 .partial 로 바꿔 적재에서 뺀다(다음 날 같은 날짜 파일명으로 다시 시도됨). 완료 전(timeout)에는 위에서 이미 돌아가 치우지 않는다
     moved = "→ .partial 로 치움"
     try:
         os.replace(path, path + ".partial")
     except OSError:
         moved = "→ 치우지 못함(카톡이 아직 쓰는 중?) 수신함에서 수동 확인"  # 거짓 로그를 남기지 않는다(방지훈 2026-10-27)
-    return f"fail:파일 쓰기가 {SETTLE_MAX:.0f}초 안에 안 끝남({fmt_kb(size)}, 일부만 저장됐을 수 있음 {moved} · {steps})"
+    return f"fail:파일 쓰기가 {SETTLE_MAX:.0f}초 안에 안 끝남({fmt_kb(size)}, 일부만 저장됐을 수 있음 {moved} · {waits} · {steps})"
 
 
 def _acquire_mutex():
@@ -672,14 +923,20 @@ def export(rooms: list, folder: str) -> int:
     t_start = time.time()
     log("=" * 64)
     log(f"[내보내기] 시작 — 대상 {len(rooms)}방 · 폴더 {folder} · 한 번에 한 방(불러오기 {LOAD_WAIT:.0f}초·저장 창 {EXPORT_WAIT:.0f}초·"
-        f"파일 {SETTLE_STABLE:.0f}초 멈춤 확인(최대 {SETTLE_MAX:.0f}초)·방 사이 {ROOM_GAP:.0f}초·상한 {RUN_LIMIT / 60:.0f}분) · 예상 약 {estimate_minutes(len(rooms))}분")
+        f"완료창 최대 {DONE_WAIT:.0f}초·파일 {SETTLE_STABLE:.0f}초 멈춤 확인(최대 {SETTLE_MAX:.0f}초)·방 사이 {ROOM_GAP:.0f}초·상한 {RUN_LIMIT / 60:.0f}분) · 예상 약 {estimate_minutes(len(rooms))}분")
     if not _kakao_ready():
         return 2
     if close_popup_windows():
         log("    [내보내기] 떠 있던 팝업을 닫았습니다")
+    left = _close_leftover_export_windows()  # 전에 남은 완료창 — 완료면 Enter, 진행 중이면 기다림(키 안 누름)
+    if left < 0:
+        log("    [내보내기] ✗ 앞서 시작된 내보내기가 아직 진행 중(또는 완료창을 못 닫음) — 겹치지 않게 오늘은 시작 안 함")
+        return 2
+    if left:
+        log("    [내보내기] 떠 있던 완료창('대화 내보내기')을 닫았습니다")
     ok = skip = fails = 0
     pressed = False
-    # 상한: 실행기(worker.py)가 이 스크립트를 별도 프로세스로 띄우고 심박은 계속 찍으므로 8분 → 60분(05:30 시작 창 안에서 끝나게, 2026-10-27).
+    # 상한: 실행기(worker.py)가 이 스크립트를 별도 프로세스로 띄우고 심박은 계속 찍으므로 8분 → 60분(2026-10-27) → 120분(04:30 시작, 2026-10-28 실측 한 방 3분+).
     # 상한은 "새 방을 시작하지 않는" 기준 — 진행 중인 방은 끝까지(최대 약 5분 더)
     deadline = t_start + RUN_LIMIT
     for room in rooms:  # 차례대로 한 방씩 — 동시에 여러 방을 다루지 않는다
@@ -691,6 +948,16 @@ def export(rooms: list, folder: str) -> int:
             break
         if pressed:
             time.sleep(ROOM_GAP)  # 앞 방 저장이 끝나고 카톡이 숨 돌릴 텀
+            # 앞 방 완료창이 남았으면 닫고(진행 중이면 끝날 때까지 기다림) 시작 — 내보내기 두 개가 겹치지 않게
+            left = _close_leftover_export_windows()
+            if left < 0:
+                log("    [내보내기] ✗ 앞 방 내보내기가 아직 진행 중(또는 완료창을 못 닫음) — 겹치지 않게 남은 방은 오늘 건너뜀")
+                break
+            if left:
+                log("    [내보내기] 떠 있던 완료창('대화 내보내기')을 닫았습니다")
+            if time.time() > deadline:
+                log(f"    [내보내기] {RUN_LIMIT / 60:.0f}분 상한 — 남은 방은 오늘 건너뜀")
+                break
         res = export_one(room, folder, ymd)
         kind, _, why = res.partition(":")
         if kind == "ok":

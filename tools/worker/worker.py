@@ -9,8 +9,8 @@ FIRSTOA 작업 실행기 — 노트북(사무실 상시 PC)에서 24시간 도�
   ① 심박: worker_heartbeat 에 "살아 있음"을 적는다. 15분 끊기면 DB 파수꾼(worker-watchdog 크론)이 담당자에게 웹푸시.
   ② 일감: worker_jobs 에서 queued 를 하나씩 잡아(claim) 처리한다 — ping · backup · relay · poster. (음성·OCR 은 자리만 있다)
   ③ 시계: 매일 02:30 KST 전체 표 백업, 5분마다 카톡 PC 발송 중계(봇이 못 보낸 outbox), 월요일 10시 키맨 포스터,
-          (스위치 FIRSTOA_KAKAO_EXPORT=1 일 때만) 매일 05:30~06:50 카톡 PC 대화 내용 저장 → 드라이브 수신함.
-          카톡 저장은 별도 프로세스(비차단, 최대 약 60분)라 그동안도 심박은 1분마다 찍히고, 중계·포스터·카톡 사진 일감은 끝날 때까지 쉰다.
+          (스위치 FIRSTOA_KAKAO_EXPORT=1 일 때만) 매일 04:30~06:50 카톡 PC 대화 내용 저장 → 드라이브 수신함.
+          카톡 저장은 별도 프로세스(비차단, 최대 약 120분)라 그동안도 심박은 1분마다 찍히고, 중계·포스터·카톡 사진 일감은 끝날 때까지 쉰다.
 
 설치·운영은 README.md. 수동 확인: python worker.py --once (한 바퀴) · python worker.py --job ping · python worker.py --backup
 """
@@ -34,7 +34,7 @@ RELAY_EVERY = 60               # 초 — 봇이 2분 넘게 못 가져간 outbox
 POSTER_HOUR = 10               # 월요일 10시대 (2026-10-21 사용자: 8시 → 10시, 출근 전 카톡 금지 규칙)
 RELAY_ENABLED = os.environ.get("FIRSTOA_RELAY", "1") != "0"
 POSTER_ENABLED = os.environ.get("FIRSTOA_POSTER", "1") != "0"
-KAKAO_EXPORT_AT = (5, 30)      # KST 05:30~06:50 사이 하루 1회 — GAS 수집 트리거(07시 이후·1시간마다)보다 먼저 파일이 도착해야 하루 늦게 적재되지 않는다(2026-10-24, 옛 06:30~08:00)
+KAKAO_EXPORT_AT = (4, 30)      # KST 04:30~06:50 사이 하루 1회(2026-10-28 실측 한 방 3분+ → 21방 최대 120분이라 04:30 시작, 옛 05:30) — GAS 수집 트리거(07시 이후·1시간마다)보다 먼저 파일이 도착해야 하루 늦게 적재되지 않는다(2026-10-24, 옛 06:30~08:00)
 KAKAO_EXPORT_UNTIL = (6, 50)   # 06:50 이 넘으면 그날은 건너뜀(실행기가 늦게 켜져도 근무 중엔 누르지 않는다). 방 목록은 export_rooms.py 가 kakao_collect_rooms(export=true)에서 읽음
 KAKAO_EXPORT_ENABLED = os.environ.get("FIRSTOA_KAKAO_EXPORT", "0") == "1"  # 기본 꺼짐 — export_rooms.py --probe 로 Ctrl+S 확인 뒤에만 켠다(2026-10-23)
 
@@ -85,7 +85,7 @@ def job_poster(payload: dict) -> str:
 
 # 카톡 저장은 방마다 불러오기·저장 확인을 천천히 하느라 수십 분 걸린다(2026-10-27 사용자 실측 반영) — 실행기 루프를 막으면 심박 파수꾼(15분)이
 # "실행기 멈춤"을 보내므로 별도 프로세스로 띄우고(비차단) 바퀴마다 끝났는지만 본다. export_rooms.py 자체 상한 60분 + 진행 중 방 마무리.
-KAKAO_EXPORT_KILL_AFTER = 75 * 60  # 초 — 이만큼 넘게 안 끝나면 멈춘 것으로 보고 종료
+KAKAO_EXPORT_KILL_AFTER = 135 * 60  # 초 — 이만큼 넘게 안 끝나면 멈춘 것으로 보고 종료(export_rooms RUN_LIMIT 120분 + 진행 중 방 마무리)
 KAKAO_EXPORT_MUTEX = "Local\\FIRSTOA-KakaoExport"  # export_rooms.py EXPORT_MUTEX 와 같은 이름(실행기 재시작·손으로 돌린 것도 감지)
 _kakao_export = {"proc": None, "started": 0.0, "log": ""}
 
