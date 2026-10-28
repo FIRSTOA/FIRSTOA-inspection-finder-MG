@@ -54,13 +54,50 @@ class Settings(unittest.TestCase):
             os.environ.pop(k, None)
 
     def test_estimate(self):
-        # 21방 × (불러오기 10 + 저장 창 15 + 쓰기 15) + 20 텀 × 20 = 1240초 ≈ 20.7분
-        self.assertEqual(er.estimate_minutes(21, 10, 15, 20, 15), 20.7)
+        # 창이 다 열려 있을 때: 21방 × (불러오기 10 + 저장 창 15 + 쓰기 15) + 20 텀 × 20 = 1240초 ≈ 20.7분
+        self.assertEqual(er.estimate_minutes(21, 10, 15, 20, 15, n_open=0), 20.7)
 
     def test_estimate_default_21(self):
-        # 21방 × (불러오기 30 + 저장 창 15 + 내보내기 60·멈춤 15) + 20 텀 × 20 = 2920초 ≈ 48.7분 → 05:30 시작이면 06:19 무렵, 상한 60분 안
-        self.assertEqual(er.estimate_minutes(21, 30, 15, 20, 75), 48.7)
-        self.assertLessEqual(er.estimate_minutes(21, 30, 15, 20, 75), 60)
+        # 창이 다 열려 있을 때: 21방 × (불러오기 30 + 저장 창 15 + 내보내기 60·멈춤 15) + 20 텀 × 20 = 2920초 ≈ 48.7분
+        self.assertEqual(er.estimate_minutes(21, 30, 15, 20, 75, n_open=0), 48.7)
+
+    def test_estimate_open_all_21(self):
+        # 2026-10-29 스스로 열기: 21방 모두 열기 5초 + 닫기 전 8초 → 2920 + 21×13 = 3193초 ≈ 53.2분 → 04:30 시작이면 05:24 무렵, 상한 120분 안
+        if os.environ.get("FIRSTOA_KAKAO_EXPORT_CLOSE_WAIT"):
+            self.skipTest("FIRSTOA_KAKAO_EXPORT_CLOSE_WAIT 가 설정돼 있음")
+        self.assertEqual(er.CLOSE_WAIT, 8.0)
+        self.assertEqual(er.estimate_minutes(21, 30, 15, 20, 75), 53.2)  # n_open 기본 = 전부
+        self.assertEqual(er.estimate_minutes(21, 30, 15, 20, 75, n_open=21, open_close=er.OPEN_TYPICAL + er.CLOSE_WAIT), 53.2)
+        self.assertLessEqual(er.estimate_minutes(21, 30, 15, 20, 75), er.RUN_LIMIT / 60)
+        # 실측 한 방 3분+(내보내기 약 135초) 기준이어도 21×(30+15+135+15+13)+20×20 = 4768초 ≈ 79.5분 — 상한 안
+        self.assertLessEqual(er.estimate_minutes(21, 30, 15, 20, 150), 120)
+
+    def test_close_env_floor(self):
+        # 닫기 전 대기는 8초 밑으로 못 내린다(2026-10-19 닫은 직후 크래시 규칙)
+        k = "FIRSTOA_KAKAO_TEST_CLOSE"
+        try:
+            os.environ[k] = "2"
+            self.assertEqual(er.env_seconds(k, 8.0, 8, 120), 8.0)
+        finally:
+            os.environ.pop(k, None)
+
+
+class CloseDecision(unittest.TestCase):
+    """2026-10-29 방 스스로 열기 — 이번에 연 창만, 팝업·진행 중이 없을 때만 닫는다"""
+
+    def test_close_only_ours_when_clean(self):
+        self.assertEqual(er.close_decision(True, True, False, 0), "close")
+
+    def test_never_close_user_window(self):
+        self.assertTrue(er.close_decision(False, True, False, 0).startswith("keep:"))
+        self.assertTrue(er.close_decision(False, False, False, 0).startswith("keep:"))
+
+    def test_keep_when_busy(self):
+        self.assertTrue(er.close_decision(True, True, True, 0).startswith("keep:"))  # 파일이 안 멈춤
+        self.assertTrue(er.close_decision(True, True, False, 1).startswith("keep:"))  # 완료창·저장 창 남음
+
+    def test_gone(self):
+        self.assertEqual(er.close_decision(True, False, False, 0), "gone")
 
 
 class DonePopup(unittest.TestCase):

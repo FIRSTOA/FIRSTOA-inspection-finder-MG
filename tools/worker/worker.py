@@ -106,7 +106,7 @@ def kakao_export_running() -> bool:
 
 
 def job_kakao_export(payload: dict) -> str:
-    """카톡 PC 대화 내용 저장 → 구글 드라이브 '카톡 자동적재 수신함' (tools/kakao-pc/export_rooms.py --export). 창이 열린 방만.
+    """카톡 PC 대화 내용 저장 → 구글 드라이브 '카톡 자동적재 수신함' (tools/kakao-pc/export_rooms.py --export). 창이 없는 방은 스스로 열고 저장 뒤 닫음(2026-10-29).
     시작만 하고 바로 돌아온다 — 결과는 poll_kakao_export 가 state['kakao_export_last'] 에 적는다"""
     if kakao_export_running():
         return "건너뜀: 이미 실행 중"

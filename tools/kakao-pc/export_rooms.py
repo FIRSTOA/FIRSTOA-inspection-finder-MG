@@ -7,31 +7,36 @@ r"""
 빠진 것은 매일 저장 버튼을 누르는 손 — 이 스크립트가 그 손이다.
 
 안전 원칙 (.claude/agents/kakao-pc-rules.md, docs/tasks/tab-search-kakao-history.md 5-1)
-  · 메뉴 클릭·좌표 클릭은 한 번도 하지 않는다. 채팅방 메뉴에는 "채팅방 나가기"가 있어 한 칸만 어긋나도
+  · 방 창 안에서는 메뉴 클릭·좌표 클릭을 한 번도 하지 않는다. 채팅방 메뉴에는 "채팅방 나가기"가 있어 한 칸만 어긋나도
     봇이 업무방에서 나간다. 그래서 **단축키 하나(Ctrl+S)** 와 윈도 표준 저장 창만 쓴다.
+    (클릭은 방을 열 때 open_room.py 가 메인 창에서 하는 실측 확정 순서뿐 — 사이드바·돋보기·검색칸·목록 더블클릭)
   · Ctrl+S 가 정말 "대화 내용 저장"인지는 추정이다 → 먼저 --probe 로 노트북에서 확인하고, 그 뒤에만
     실행기 스위치(FIRSTOA_KAKAO_EXPORT=1)를 켠다.
-  · 창은 이미 열려 있는 방만. 검색으로 열지 않는다(1단계).
+  · 창이 안 열린 방은 스스로 연다(2026-10-29 사용자 "21개 방 열어 놓고 가야 해? 지가 열어야지") — open_room.py 의
+    검색칸+Ctrl+V·더블클릭 방식. 이번에 연 창만 저장이 끝난 뒤(완료창 닫힘·파일 확정 뒤 최소 8초) WM_CLOSE 로 닫는다.
+    사람이 원래 열어 둔 창은 닫지 않는다. 우리가 연 창은 동시에 최대 1개 — 못 닫으면 그 뒤로 새 방은 열지 않는다.
+    방 열기 실패가 로그인 화면·카톡 꺼짐이면 전체 중단, 그 밖은 그 방 실패(실패 3번이면 중단).
   · 키를 누르기 전마다 맨 앞 창을 확인한다. 아니면 그 자리에서 중단(키 안 누름).
   · Esc 는 "맨 앞 창이 카톡이 띄운 새 창(저장 창·확인창)"일 때만 누른다 — 방 창에 Esc 가 가면 방 창이 닫힐 수 있다.
   · 파일 이름 칸에는 클립보드 붙여넣기만(창 메시지로 글 넣기 금지 — 규칙 6). 붙여 넣은 뒤 클립보드를 비운다.
   · 같은 이름 파일이 있으면 덮어쓰지 않는다(미리 건너뛰고, 그래도 덮어쓰기 확인창이 뜨면 Esc).
   · Ctrl+A/F/E 를 쓰지 않는다. 파일 이름 칸 전체 선택은 EM_SETSEL(선택만, 표준 Edit 칸에서만) 뒤 WM_GETTEXT 로 읽어 확인한다.
   · 천천히, 한 번에 한 방(2026-10-27 사용자 실측: 큰 방은 기다려야 대화가 다 불러와지고, 여러 방을 한꺼번에 열면 튕긴다).
-    방마다 창을 앞으로 → 불러오기 대기 30초 + 카톡 응답 확인(없으면 5초 간격 최대 60초) → Ctrl+S → 저장 창(최대 15초)
+    방마다 (창 없으면 열기 약 5초) → 창을 앞으로 → 불러오기 대기 30초 + 카톡 응답 확인(없으면 5초 간격 최대 60초) → Ctrl+S → 저장 창(최대 15초)
     → 파일 크기가 15초 동안 안 변할 때까지(최대 300초, 파일이 늦게 생겨도) = "내보내기 완료" 신호
       (이때까지 완료창에는 아무 키도 안 누름 — 진행 중 Enter/Esc 는 내보내기를 취소할 수 있다)
     → 완료창(제목 없는 EVA_Window_Dblclk·방 창 소유·자식 0개·약 300×225, 2026-10-28 23:50 실측 — 제목·글자로는 못 찾는다)을
-      찾아(최대 10초) 그 창이 맨 앞일 때만 Enter(기본 단추=확인)로 닫는다 → 방 사이 20초 → 다음 방. 전체 상한 120분(새 방을 시작하지 않는 기준).
+      찾아(최대 10초) 그 창이 맨 앞일 때만 Enter(기본 단추=확인)로 닫는다 → (이번에 연 창이면) 8초 뒤 WM_CLOSE·닫힘 확인
+    → 방 사이 20초 → 다음 방. 전체 상한 120분(새 방을 시작하지 않는 기준).
     기대 이름 파일이 없으면 Ctrl+S 뒤 생긴 .txt(카톡 기본 이름)의 크기를 재고, 멈추면 기대 이름으로 바꾼다.
-    조정: FIRSTOA_KAKAO_EXPORT_LOAD_WAIT · _DIALOG_WAIT · _DONE_WAIT · _GAP · _LIMIT (초). 동시에 두 개 안 돈다(뮤텍스 Local\FIRSTOA-KakaoExport).
+    조정: FIRSTOA_KAKAO_EXPORT_LOAD_WAIT · _DIALOG_WAIT · _DONE_WAIT · _GAP · _LIMIT · _CLOSE_WAIT(최소 8) (초). 동시에 두 개 안 돈다(뮤텍스 Local\FIRSTOA-KakaoExport).
 
 사용법 (노트북 D6110 에서만 — 데스크톱에서 돌리지 않는다)
   python tools\kakao-pc\export_rooms.py --probe --room "방이름"     기본. Ctrl+S 뒤 뜨는 창만 기록하고 Esc (저장 안 함)
   python tools\kakao-pc\export_rooms.py --export --rooms "방이름"   그 방 하나만 실제 저장(첫 시험)
-  python tools\kakao-pc\export_rooms.py --export                    Supabase kakao_collect_rooms(enabled·export=true) 방 중 창이 열린 방 전부
+  python tools\kakao-pc\export_rooms.py --export                    Supabase kakao_collect_rooms(enabled·export=true) 방 전부(창 없으면 열어서)
                                                                      (표가 없거나 비면 room_map 의 점검·AS·물류·미수·불만·재계약 방 — 마감·부품·자가 제외)
-  python tools\kakao-pc\export_rooms.py --list                      대상 방과 창 열림 여부만(키 안 누름)
+  python tools\kakao-pc\export_rooms.py --list                      대상 방과 창 열림/안 열림(→ 열어서 저장 예정)만(키 안 누름)
   python tools\kakao-pc\export_rooms.py --selftest                  순수 함수 점검(카톡 안 건드림)
   옵션: --dir "<수신함 폴더>" (기본: 환경 변수 FIRSTOA_KAKAO_EXPORT_DIR > 구글 드라이브\카톡 자동적재 수신함)
 로그: tools\kakao-pc\poster_log.txt ("[내보내기]" 줄), probe 스크린샷 tools\kakao-pc\logs\export_probe.png
@@ -85,6 +90,11 @@ DONE_FIND_WAIT = 10.0    # 파일 확정 뒤 완료창을 다시 찾는 최대 �
 DONE_FIND_EVERY = 0.5
 ROOM_GAP = env_seconds("FIRSTOA_KAKAO_EXPORT_GAP", 20.0, 3, 600)  # 방 사이 텀(옛 3초)
 RUN_LIMIT = env_seconds("FIRSTOA_KAKAO_EXPORT_LIMIT", 7200.0, 60, 4 * 3600)  # 전체 상한 120분(2026-10-28 실측 한 방 3분+ → 21방 약 75~100분, 옛 60분·8분) — 실행기가 별도 프로세스로 띄워 심박은 계속 찍힌다(2026-10-27)
+# 2026-10-29 방 스스로 열기 — 연 창은 저장이 끝나고 이만큼 쉰 뒤 닫는다(규칙: 보낸 직후 닫으면 카톡이 죽는다,
+# outbox_relay 8초 — 2026-10-19 08:05 닫은 8초 뒤 크래시). 8초 밑으로는 못 내린다
+CLOSE_WAIT = env_seconds("FIRSTOA_KAKAO_EXPORT_CLOSE_WAIT", 8.0, 8, 120)
+CLOSE_CONFIRM = 5.0      # WM_CLOSE 뒤 창이 사라지기를 기다리는 최대 시간
+OPEN_TYPICAL = 5.0       # 추정용 — open_room 한 번(검색·더블클릭·검색 닫기 2.5초 포함) 보통 시간
 EXPORT_MUTEX = "Local\\FIRSTOA-KakaoExport"  # 한 번에 하나만 — worker.py 도 이 이름으로 "내보내기 중"을 안다
 # 수집 표가 없을 때(404)·비었을 때 room_map 폴백으로 거르는 업무 종류 — 마감·부품·자가(토너)·칭찬 등은 수집 대상이 아니다(2026-10-24 설계)
 DEFAULT_CATEGORIES = ("점검", "AS", "물류", "미수", "불만", "재계약")
@@ -172,12 +182,30 @@ EXPORT_TYPICAL = 60.0  # 추정용 — 카톡이 방 하나를 내보내는 데 
 
 
 def estimate_minutes(n_rooms: int, load: float = LOAD_WAIT, dialog: float = EXPORT_WAIT, gap: float = ROOM_GAP,
-                     write: float = EXPORT_TYPICAL + SETTLE_STABLE) -> float:
-    """대략 걸리는 분 — 방마다 불러오기 + 저장 창(최대치) + 내보내기(완료창)·파일 확정 + 다음 방까지 텀(마지막 방 제외).
-    기본값 21방 = 21×(30+15+75)+20×20 = 2,920초 ≈ 48.7분"""
+                     write: float = EXPORT_TYPICAL + SETTLE_STABLE, n_open: int | None = None,
+                     open_close: float = OPEN_TYPICAL + CLOSE_WAIT) -> float:
+    """대략 걸리는 분 — 방마다 불러오기 + 저장 창(최대치) + 내보내기(완료창)·파일 확정 + 다음 방까지 텀(마지막 방 제외)
+    + 스스로 연 방(n_open, 기본 = 전부)마다 열기·닫기 전 대기(open_close).
+    기본값 21방 모두 열기 = 21×(30+15+75)+21×(5+8)+20×20 = 3,193초 ≈ 53.2분"""
     if n_rooms <= 0:
         return 0.0
-    return round((n_rooms * (load + dialog + write) + (n_rooms - 1) * gap) / 60.0, 1)
+    n_open = n_rooms if n_open is None else max(0, min(n_rooms, n_open))
+    return round((n_rooms * (load + dialog + write) + n_open * open_close + (n_rooms - 1) * gap) / 60.0, 1)
+
+
+def close_decision(opened_here: bool, exists: bool, unsettled: bool, n_owned: int) -> str:
+    """저장 뒤 방 창을 닫을지 — 'close' / 'gone'(이미 없음) / 'keep:이유'.
+    사람이 열어 둔 창은 절대 안 닫고, 아직 내보내는 중일 수 있는 창·소유 창(완료창·저장 창)이 남은 창도 안 닫는다
+    (소유 창이 떠 있는데 방 창을 닫으면 내보내기 취소·카톡 비정상 종료 위험)"""
+    if not opened_here:
+        return "keep:원래 열려 있던 창"
+    if not exists:
+        return "gone"
+    if unsettled:
+        return "keep:파일이 안 멈춰 아직 내보내는 중일 수 있음"
+    if n_owned > 0:
+        return f"keep:완료창·저장 창 등 이 방 창의 팝업 {n_owned}개가 남음"
+    return "close"
 
 
 def is_save_dialog(cls: str, title: str, extra_titles: tuple = ()) -> bool:
@@ -261,8 +289,15 @@ def selftest() -> int:
     assert size_settled([(0, -1), (3, 50), (13, 50)], 10)
     assert fmt_kb(2048) == "2 KB" and fmt_kb(10) == "10 B"
     assert estimate_minutes(0) == 0.0
-    assert estimate_minutes(2, 10, 15, 20, 15) == round((2 * 40 + 20) / 60, 1)
-    assert estimate_minutes(21, 30, 15, 20, 75) == 48.7
+    assert estimate_minutes(2, 10, 15, 20, 15, n_open=0) == round((2 * 40 + 20) / 60, 1)
+    assert estimate_minutes(21, 30, 15, 20, 75, n_open=0) == 48.7  # 21방 창이 다 열려 있을 때
+    assert estimate_minutes(21, 30, 15, 20, 75, n_open=21, open_close=13) == 53.2  # 21방 모두 스스로 열기(5초)·닫기 전 8초
+    assert estimate_minutes(2, 10, 15, 20, 15, n_open=9, open_close=10) == round((2 * 40 + 2 * 10 + 20) / 60, 1)  # 방 수보다 많이 못 엶
+    assert close_decision(True, True, False, 0) == "close"
+    assert close_decision(False, True, False, 0).startswith("keep:")  # 사람이 열어 둔 창
+    assert close_decision(True, False, False, 0) == "gone"
+    assert close_decision(True, True, True, 0).startswith("keep:")  # 아직 내보내는 중
+    assert close_decision(True, True, False, 1).startswith("keep:")  # 완료창 남음
     # 2026-10-28 23:50 노트북 실측 4줄(probe_windows.py) — 방 창 0x1006b6, 메인 창 0x202ea
     room, main = 0x1006B6, 0x202EA
     assert is_done_popup("EVA_Window_Dblclk", room, room, "", 0, 300, 225)  # 0xd06d8 완료창
@@ -816,7 +851,7 @@ def _wait_loaded(room: str, hwnd: int):
         if time.time() >= end:
             return -1, time.time() - t0, "카톡 응답 없음"
         time.sleep(RESPOND_EVERY)
-    # 기다리는 사이 다른 창이 앞으로 왔을 수 있다 — 누르기 직전 다시 맨 앞·제목 확인(이미 열린 창을 앞으로만, 새로 열지 않는다)
+    # 기다리는 사이 다른 창이 앞으로 왔을 수 있다 — 누르기 직전 다시 맨 앞·제목 확인(이미 열린 창을 앞으로만, 여기서는 새로 열지 않는다)
     if _fg()[0] != hwnd:
         h2 = _front_room(room)
         if h2 <= 0:
@@ -849,17 +884,136 @@ def _wait_file_settled(path: str, folder: str, since: float, max_secs: float = D
         time.sleep(1.0)
 
 
-def export_one(room: str, folder: str, ymd: str) -> str:
-    """한 방 저장 → 'ok:진행 요약' / 'skip:이유' / 'fail:이유'.
-    한 번에 한 방만 — 창은 절대 새로 열지 않는다(이미 열린 방 창만 앞으로). 여러 방을 한꺼번에 열면 카톡이 튕긴다(2026-10-27 사용자 실측)"""
+# 이번 실행에서 우리가 연 방 창 중 아직 못 닫은 것 {hwnd: 방} — 남아 있으면 새 방을 열지 않는다(우리 창 동시에 최대 1개)
+_KEEP_OPEN: dict = {}
+
+
+def _owned_visible(hwnd: int, pid: int) -> list:
+    """그 방 창이 소유한 보이는 최상위 창(완료창·저장 창·확인창 등) — 읽기만"""
+    import win32gui
+
+    out = []
+
+    def cb(h, _):
+        try:
+            if win32gui.IsWindowVisible(h) and _pid(h) == pid and win32gui.GetWindow(h, 4) == hwnd:  # 4 = GW_OWNER
+                out.append(h)
+        except Exception:
+            pass
+        return True
+
+    try:
+        win32gui.EnumWindows(cb, None)
+    except Exception:
+        pass
+    return out
+
+
+def _close_opened(room: str, hwnd: int) -> str:
+    """이번에 연 방 창을 닫는다 — 소유 팝업이 없고 파일이 확정된 창만, CLOSE_WAIT 초 쉰 뒤 WM_CLOSE(outbox_relay·poster_send 와 같은 방식)
+    → 닫힘 확인(최대 CLOSE_CONFIRM 초). 못 닫으면 _KEEP_OPEN 에 남겨 새 방 열기를 멈춘다 → 로그 조각"""
+    import win32con
+    import win32gui
+
+    def exists() -> bool:
+        try:
+            return bool(win32gui.IsWindow(hwnd))
+        except Exception:
+            return False
+
+    pid = _pid(hwnd)
+    dec = close_decision(True, exists(), hwnd in _UNSETTLED_ROOMS, len(_owned_visible(hwnd, pid)) if exists() else 0)
+    if dec == "gone":
+        _KEEP_OPEN.pop(hwnd, None)
+        return "연 창 이미 닫혀 있음"
+    if dec != "close":
+        _KEEP_OPEN[hwnd] = room
+        return f"연 창 안 닫음({dec[5:]}) — 새 방 열기 멈춤"
+    time.sleep(CLOSE_WAIT)  # 저장 직후 닫으면 카톡이 죽는다(2026-10-19 실측) — 완료창 닫힘·파일 확정 뒤 최소 8초
+    # 쉬는 사이 팝업이 새로 떴을 수 있다 — 다시 확인
+    dec = close_decision(True, exists(), hwnd in _UNSETTLED_ROOMS, len(_owned_visible(hwnd, pid)) if exists() else 0)
+    if dec == "gone":
+        _KEEP_OPEN.pop(hwnd, None)
+        return "연 창 이미 닫혀 있음"
+    if dec != "close":
+        _KEEP_OPEN[hwnd] = room
+        return f"연 창 안 닫음({dec[5:]}) — 새 방 열기 멈춤"
+    try:
+        win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+    except Exception:
+        pass
+    end = time.time() + CLOSE_CONFIRM
+    while time.time() < end:
+        time.sleep(0.25)
+        if not _alive(hwnd):
+            _KEEP_OPEN.pop(hwnd, None)
+            return f"{CLOSE_WAIT:.0f}초 쉬고 저장 뒤 닫음"
+    _KEEP_OPEN[hwnd] = room
+    return f"닫기 요청 뒤 {CLOSE_CONFIRM:.0f}초 안에 안 닫힘 — 창 남김, 새 방 열기 멈춤"
+
+
+def _retry_close_kept() -> None:
+    """방 사이 — 앞서 못 닫은 우리 창을 다시 닫아 본다(완료창이 정리됐으면 닫힌다)"""
+    from poster_send import log
+
+    for h, room in list(_KEEP_OPEN.items()):
+        log(f"    [내보내기]   [{room}] 앞서 연 창 다시 닫기: {_close_opened(room, h)}")
+
+
+def _open_for_export(room: str, user_windows) -> tuple:
+    """창이 없으면 open_room 으로 연다 → (hwnd 또는 0, 이번에 연 창이면 그 hwnd 아니면 0, 걸린 초, 실패 종류)
+    실패 종류: '' 성공 / 'login'·'nokakao'(전체 중단) / 'hung'·'noopen'·'error' 등(그 방 실패)"""
+    from open_room import open_room
+    from poster_send import find_room_window, log
+
+    t0 = time.time()
+    h, _ = find_room_window(room)
+    if h:
+        return h, 0, 0.0, ""
+    log(f"    [내보내기]   [{room}] 창이 안 열려 있음 — 방 이름으로 검색해 엽니다")
+    open_room.last_fail = ""  # 성공하면 갱신되지 않는 값이라 앞 실패가 남지 않게 비운다
+    try:
+        ok = open_room(room)
+    except Exception as e:
+        log(f"    [내보내기]   방 열기 오류: {e}")
+        return 0, 0, time.time() - t0, "error"
+    h = find_room_window(room)[0] if ok else None
+    if not h:
+        return 0, 0, time.time() - t0, getattr(open_room, "last_fail", "") or "noopen"
+    return h, (0 if h in user_windows else h), time.time() - t0, ""
+
+
+def export_one(room: str, folder: str, ymd: str, user_windows=frozenset()) -> str:
+    """한 방 저장 → 'ok:진행 요약' / 'skip:이유' / 'fail:이유' / 'stop:이유'(로그인 화면·카톡 꺼짐 — 전체 중단).
+    한 번에 한 방만. 창이 없으면 스스로 열고(2026-10-29), 이번에 연 창은 저장이 끝나면 닫는다 — 우리가 연 창은 동시에 최대 1개.
+    user_windows = 실행 시작 때 이미 열려 있던 방 창(사람이 연 창, 절대 안 닫음). 여러 방을 한꺼번에 열면 카톡이 튕긴다(2026-10-27 사용자 실측)"""
+    path = os.path.join(folder, export_file_name(room, ymd))
+    if os.path.exists(path):
+        return "skip:오늘 파일 이미 있음"
+    from poster_send import find_room_window
+
+    if not find_room_window(room)[0] and _KEEP_OPEN:
+        return f"skip:앞서 연 방 창({', '.join(_KEEP_OPEN.values())})을 못 닫아 새 방을 열지 않음(우리가 연 창은 동시에 최대 1개)"
+    hwnd, opened, secs, fail = _open_for_export(room, user_windows)
+    if not hwnd:
+        why = f"방 열기 실패({fail}, {secs:.0f}초)"
+        if fail in ("login", "nokakao"):
+            return f"stop:{why} — {'카톡이 로그인 화면' if fail == 'login' else '카톡 메인 창 없음(꺼짐)'}, 남은 방도 못 연다"
+        return f"fail:{why}"
+    res = _export_window(room, folder, path)
+    kind, _, why = res.partition(":")
+    if opened:
+        why = f"방 열기 {secs:.0f}초 → {why} → {_close_opened(room, opened)}"
+    return f"{kind}:{why}"
+
+
+def _export_window(room: str, folder: str, path: str) -> str:
+    """열려 있는 방 창 하나 저장(옛 export_one 본문) → 'ok:' / 'skip:' / 'fail:'"""
     import pyautogui
     import win32gui
 
     from poster_send import log, set_clipboard_text
 
-    path = os.path.join(folder, export_file_name(room, ymd))
-    if os.path.exists(path):
-        return "skip:오늘 파일 이미 있음"
     hwnd = _front_room(room)
     if hwnd == 0:
         return "skip:창 안 열림"
@@ -976,8 +1130,8 @@ def _acquire_mutex():
 def export(rooms: list, folder: str) -> int:
     import pyautogui
 
-    from open_room import close_popup_windows
-    from poster_send import log
+    from open_room import close_popup_windows, room_windows_snapshot
+    from poster_send import find_room_window, log
 
     pyautogui.FAILSAFE = False
     ymd = kst_today()
@@ -985,11 +1139,15 @@ def export(rooms: list, folder: str) -> int:
         log("[내보내기] 이미 다른 내보내기가 실행 중 — 이번엔 건너뜀")
         return 0
     t_start = time.time()
+    n_open = sum(1 for r in rooms if not find_room_window(r)[0])
     log("=" * 64)
-    log(f"[내보내기] 시작 — 대상 {len(rooms)}방 · 폴더 {folder} · 한 번에 한 방(불러오기 {LOAD_WAIT:.0f}초·저장 창 {EXPORT_WAIT:.0f}초·"
-        f"파일 {SETTLE_STABLE:.0f}초 멈춤 확인(최대 {DONE_WAIT:.0f}초) 뒤 완료창 Enter·방 사이 {ROOM_GAP:.0f}초·상한 {RUN_LIMIT / 60:.0f}분) · 예상 약 {estimate_minutes(len(rooms))}분")
+    log(f"[내보내기] 시작 — 대상 {len(rooms)}방(창 없음 {n_open}방은 열어서 저장 뒤 닫음) · 폴더 {folder} · 한 번에 한 방(방 열기 약 {OPEN_TYPICAL:.0f}초·"
+        f"불러오기 {LOAD_WAIT:.0f}초·저장 창 {EXPORT_WAIT:.0f}초·파일 {SETTLE_STABLE:.0f}초 멈춤 확인(최대 {DONE_WAIT:.0f}초) 뒤 완료창 Enter·"
+        f"연 창은 {CLOSE_WAIT:.0f}초 뒤 닫음·방 사이 {ROOM_GAP:.0f}초·상한 {RUN_LIMIT / 60:.0f}분) · 예상 약 {estimate_minutes(len(rooms), n_open=n_open)}분")
     if not _kakao_ready():
         return 2
+    _KEEP_OPEN.clear()
+    user_windows = frozenset(room_windows_snapshot())  # 시작 때 열려 있던 창 = 사람이 연 창 — 절대 닫지 않는다
     if close_popup_windows():
         log("    [내보내기] 떠 있던 팝업을 닫았습니다")
     _UNSETTLED_ROOMS.clear()
@@ -1014,11 +1172,16 @@ def export(rooms: list, folder: str) -> int:
             left = _close_leftover_done_popups(rooms, folder, ymd)
             if left:
                 log(f"    [내보내기] 떠 있던 완료창 {left}개를 닫았습니다")
+            _retry_close_kept()  # 앞서 못 닫은 우리 창 — 닫혀야 다음 방을 연다
             if time.time() > deadline:
                 log(f"    [내보내기] {RUN_LIMIT / 60:.0f}분 상한 — 남은 방은 오늘 건너뜀")
                 break
-        res = export_one(room, folder, ymd)
+        res = export_one(room, folder, ymd, user_windows)
         kind, _, why = res.partition(":")
+        if kind == "stop":
+            fails += 1
+            log(f"    [내보내기] ✗ [{room}] {why} — 남은 방은 오늘 건너뜀")
+            break
         if kind == "ok":
             ok += 1
             pressed = True
@@ -1030,6 +1193,10 @@ def export(rooms: list, folder: str) -> int:
             fails += 1
             pressed = True
             log(f"    [내보내기] ✗ [{room}] {why}")
+    if _KEEP_OPEN:
+        _retry_close_kept()
+    if _KEEP_OPEN:
+        log(f"    [내보내기] ⚠ 이번에 열었지만 못 닫은 방 창: {', '.join(_KEEP_OPEN.values())} — 카톡 PC 에서 확인 후 손으로 닫아 주세요")
     took = time.time() - t_start
     log(f"[내보내기] 끝 · 저장 {ok} · 건너뜀 {skip} · 실패 {fails} · 소요 {int(took // 60)}분 {int(took % 60)}초")
     return 0 if fails == 0 else 2
@@ -1039,17 +1206,22 @@ def list_rooms(rooms: list, folder: str) -> int:
     from poster_send import find_room_window, log
 
     log(f"[내보내기] 수신함 폴더: {folder or '(못 찾음)'}")
+    n_open = 0
     for r in rooms:
         h, t = find_room_window(r)
-        log(f"  {'창 있음 ✓ ' + t if h else '창 없음 —'} · {r}")
+        if not h:
+            n_open += 1
+        log(f"  {'창 열림 ✓ ' + t + ' → 바로 저장' if h else '창 안 열림 → 열어서 저장 예정(저장 뒤 닫음)'} · {r}")
+    log(f"[내보내기] {len(rooms)}방 중 창 열림 {len(rooms) - n_open} · 안 열림 {n_open} · 예상 약 {estimate_minutes(len(rooms), n_open=n_open)}분"
+        f"(상한 {RUN_LIMIT / 60:.0f}분)")
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="카톡 PC 대화 내용 저장(수신함으로) — 기본은 --probe")
     ap.add_argument("--probe", action="store_true", help="(기본) Ctrl+S 뒤 뜨는 창만 기록하고 Esc — 저장 안 함")
-    ap.add_argument("--export", action="store_true", help="열린 방 창마다 실제 저장")
-    ap.add_argument("--list", action="store_true", help="대상 방·창 열림 여부만")
+    ap.add_argument("--export", action="store_true", help="대상 방마다 실제 저장(창이 없으면 열어서, 저장 뒤 그 창은 닫음)")
+    ap.add_argument("--list", action="store_true", help="대상 방·창 열림/안 열림(열어서 저장 예정)만")
     ap.add_argument("--selftest", action="store_true", help="순수 함수 점검(카톡 안 건드림)")
     ap.add_argument("--room", help="probe 할 방 이름")
     ap.add_argument("--rooms", help="저장할 방 이름들(쉼표·줄바꿈 구분) — 없으면 kakao_collect_rooms(export=true) 전체")
