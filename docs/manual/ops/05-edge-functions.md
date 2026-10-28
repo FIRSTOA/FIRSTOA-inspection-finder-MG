@@ -105,3 +105,11 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 5. 앱 배포 → 관리 탭 [카톡 수집] → [끝난 작업 정리] 같은 가벼운 단추로 확인.
 
 **문제가 생기면**: "GAS 가 거부했습니다(관리 토큰)" = 두 곳 값이 다르거나 GAS 를 새 버전으로 배포하지 않음. 503 = Supabase 시크릿 없음. photo-drive-archive cron 결과에 `forbidden` = 같은 원인.
+
+## data-ask "무엇이든 묻기" (2026-10-29)
+- 도구: 기본(query_rows·tally·vendor_team·team_members·app_guide) + `_shared/ask/tools-index.ts` 의 ASK_TOOLS 14개(okr_member_report·okr_team_report·person_activity·inspection_gap·recontract_progress·misu_followup·unhandled_now·schedule_view·vendor_lookup·photo_summary·it_sheet·kakao_search·ops_status·kpi_explain).
+- 읽을 수 있는 표 57개(`_shared/ask/catalog.ts`), 금지 표(FORBIDDEN_TABLES)·금지 칸(전화·raw·토큰) 제외. 응답 전부 askMask(주민·카드·계좌·휴대폰 가운데).
+- 환경변수(선택): ASK_MAX_USD(기본 1.5, 질문당), ASK_DAILY_USD(기본 20, 분석 모드 하루 — ai_usage 오늘 합), OPENAI_ASK_ANALYSIS_EFFORT(기본 medium). 분석 왕복 16·데이터 9, 140초에 마무리.
+- 글자 날짜 표(misu.입력일·bulman.날짜·overage_adjust.방문일)는 형식이 섞여 있어 서버 order/gte 를 쓰지 않고 읽은 뒤 ymdOf 로 거른다(catalog dateText).
+- **kpiDefs.ts 를 고치면** `node tools/build-ask-kpi-defs.mjs` 로 `_shared/ask/kpi-defs.json` 을 다시 만들고 data-ask 재배포(어긋나면 테스트가 잡음).
+- OKR 순수 규칙은 `_shared/ask/okr-rules.ts` 가 원본, src/okr.ts·kpiCompute.ts 는 재수출(앱·엣지 같은 계산).

@@ -16,24 +16,25 @@ import UnifiedHistory from "./UnifiedHistory";
 import AnswerImage from "./AnswerImage";
 import { extractSvg, mobilePhonesIn } from "./answerSvg";
 import { maskCode, maskDeep, maskRrn } from "./privacy";
+import { askRoute, followUpContext, toAskAnswerView, vendorOfRow, type AskMember, type AskRoute, type DataAskResponse } from "./askRoute";
+import AskAnswerCard, { type AskAnswerView, type AskEvidenceGroup } from "./AskAnswer.view";
+import { currentBook, fetchMembers } from "./authors";
 import {
   buildEntity, countRows, daysSince, deriveState, entityTokensFromQuestion, gather, gatherModelRefs, identKey, isOtherVendor, isStrongCandidate, rawTextOf, resolveCandidates, SOURCES, toEvents,
   type Candidate, type Entity, type EventItem, type Group, type ModelRef, type SourceResult, type State,
 } from "./entity360";
 
 type Phase = "idle" | "resolving" | "choose" | "gathering" | "done";
-type Mode = "auto" | "search" | "entity" | "data";
+type Mode = "auto" | "search" | "entity" | "data" | "analysis";
 const GROUPS: Group[] = ["기기·계약", "현장 기록", "영업·관리", "고객 소통", "기타"];
 const EXACT_HOW = new Set(["기번·자산번호 일치", "임대리스트 기기 번호 일치", "업체명 일치"]);
 const RECENT_KEY = "cs_search360_recent_v1";
 const TOTALS_KEY = "cs_search360_totals_v1";
 const fmtDays = (ymd: string) => { const d = daysSince(ymd); return d === null ? "" : d === 0 ? "오늘" : `${d}일 전`; };
 const loadRecent = (): string[] => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); return Array.isArray(v) ? v.map(String).slice(0, 8) : []; } catch { return []; } };
-// 문장인가(질문·요청) — 이게 아니면 업체명·기번 검색으로 본다
-const QUESTION_RE = /[?？]|몇|언제|어디|어떻|무슨|뭐|얼마|줘|주세요|알려|정리|요약|목록|리스트|있어|있나|됐어|했어|중에|추려|비교|평균|합계|건수|누가|왜|해야|필요|만들/;
-// 표 전체를 조건으로 추리는 질문의 단서 — 팀·기간·등급·"각각/씩/전체"
-// 지식 질문(복합기 증상·원인·처리, 앱 사용법)도 전체 질문으로 — 업체 찾기를 건너뛴다(2026-10-12)
-const DATA_RE = /[A-E]\s*팀|이번\s*주|지난\s*주|이번\s*달|지난\s*달|\d{1,2}\s*월|등급|전체|모든|각각|몇\s*개씩|씩|리스트|목록|순위|합계|평균|건수|누가|제일|가장|원인|증상|고치|수리\s*방법|처리\s*방법|사용법|어떻게\s*(해|하|써|보|쓰)|매뉴얼|설명서|기능|앱에서|어느\s*탭|어디서/;
+// 문장·전체 질문·분석 판정은 askRoute.ts(QUESTION_RE·DATA_RE 도 거기로 옮김, 2026-10-29 "무엇이든 묻기")
+/** data-ask 대기 — 분석 모드는 왕복 16·엣지 140초 마무리라 넉넉히 */
+const DATA_ASK_TIMEOUT_MS = 240_000;
 
 /** 에이전트에게 넘길 압축 기록 — 정확 일치만, 최신순 350건, 글자 수 제한(토큰 절약) */
 function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
@@ -53,7 +54,10 @@ function compactForAsk(entity: Entity, state: State, events: EventItem[]) {
   };
 }
 const ASK_SUGGESTIONS = ["AS가 몇 번 있었고 주로 무슨 문제였어?", "언제부터 임대했고 기기는 어떻게 바뀌었어?", "이 기기 이전 사용처가 있어?", "초과료·미수 흐름을 정리해 줘", "이 업체를 처음 가는 사람에게 한 문단으로 요약해 줘"];
-const TRY_THESE: Array<{ text: string; kind: "검색" | "업체 질문" | "전체 질문" }> = [
+const TRY_THESE: Array<{ text: string; kind: "검색" | "업체 질문" | "전체 질문" | "분석" }> = [
+  { text: "이민구 10월 OKR 분석해줘", kind: "분석" },
+  { text: "C팀 이번 달 점검 누락 업체", kind: "분석" },
+  { text: "미수 3개월 이상 중 방문 안 한 곳", kind: "전체 질문" },
   { text: "잡플러스", kind: "검색" },
   { text: "B6945", kind: "검색" },
   { text: "잡플러스 AS 몇 번 터졌어?", kind: "업체 질문" },
@@ -107,8 +111,29 @@ export default function Search360({ author }: { author: string }) {
   const [foundBy, setFoundBy] = useState("");
   // 전체 질문(data-ask) — 표를 직접 조회
   const [dataAsking, setDataAsking] = useState(false);
-  const [dataAnswers, setDataAnswers] = useState<Array<{ q: string; a: string; rows: Record<string, unknown>[]; table: string; calls: string[]; usage?: Usage; cost?: Cost }>>([]);
+  const [dataAnswers, setDataAnswers] = useState<Array<{ q: string; a: string; view: AskAnswerView; calls: string[] }>>([]);
   const [routeNote, setRouteNote] = useState(""); // "문장으로 보여 전체 데이터에 물었습니다"
+  // 무엇이든 묻기(2026-10-29) — 명단(사람 이름 라우트), 진행 단계, 이어서 묻기, 실패 카드
+  const [members, setMembers] = useState<AskMember[]>([]);
+  const [stage, setStage] = useState<{ steps: string[]; active: number; at: number; note: string } | null>(null);
+  const [, setTick] = useState(0);
+  const [followCtx, setFollowCtx] = useState<{ q: string; a: string } | null>(null);
+  const [askFail, setAskFail] = useState<{ q: string; message: string; daily: boolean } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchMembers().then(
+      (rows) => { if (alive) setMembers(rows.map((m) => ({ name: m.name, team: m.team, active: m.active }))); },
+      // 명단을 못 읽으면 기기에 남은 명단(currentBook — 작성자 고르기와 같은 거울)으로 사람 이름만 판정한다
+      () => { if (alive) setMembers(Object.entries(currentBook()).flatMap(([team, names]) => names.map((name) => ({ name, team })))); },
+    );
+    return () => { alive = false; };
+  }, []);
+  // 진행 중 경과 초 표시용 1초 틱
+  useEffect(() => {
+    if (!stage) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [stage]);
 
   useEffect(() => { const t = window.setInterval(() => setPhIndex((i) => (i + 1) % PLACEHOLDERS.length), 3200); return () => window.clearInterval(t); }, []);
   useEffect(() => {
@@ -173,17 +198,47 @@ export default function Search360({ author }: { author: string }) {
     }
     setPhase("choose");
   };
-  const askData = async (text: string) => {
+  /** 전체 데이터·분석 질문(data-ask). route 의 mode·사람·팀·꾸러미, 이어서 묻기 요약을 같이 보낸다 */
+  const askData = async (text: string, route: AskRoute) => {
     const q = text.trim();
     if (q.length < 4 || dataAsking) return;
-    setDataAsking(true); remember(q);
+    const askMode = route.kind === "analysis" ? "analysis" : "data";
+    const wantPacks = route.packs.includes("kpi");
+    const steps = ["질문 분류", ...(wantPacks ? ["KPI 계산값 붙이기"] : []), askMode === "analysis" ? "기록 조회·세기 → 답 쓰기" : "표 조회 → 답 쓰기"];
+    const ctx = followCtx;
+    setDataAsking(true); setAskFail(null); remember(q);
+    setStage({ steps, active: 1, at: Date.now(), note: route.note });
     try {
-      const res = await invokeEdgeFunction<{ answer?: string; rows?: Record<string, unknown>[]; table?: string; calls?: string[]; error?: string; usage?: Usage; cost?: Cost }>("data-ask", { question: q, author }, 180_000);
+      let packs: unknown[] | undefined;
+      if (wantPacks) {
+        try {
+          const { loadAskPacks } = await import("./askPacks");
+          const got = await loadAskPacks({ period: route.period, teams: route.teams, people: route.people });
+          packs = got.packs;
+          setStage((s) => (s ? { ...s, note: `${route.note} (${got.note})` } : s));
+        } catch (err) {
+          // 꾸러미 없이도 물을 수는 있다 — 숫자가 화면과 다를 수 있음을 알린다
+          notify(`KPI 계산값을 못 붙였습니다(${(err as Error).message}) — 서버 조회만으로 답합니다`, "info");
+        }
+        setStage((s) => (s ? { ...s, active: s.steps.length - 1 } : s));
+      }
+      const body: Record<string, unknown> = { question: q, author, mode: askMode };
+      if (route.people.length) body.people = route.people.slice(0, 10);
+      if (route.teams.length) body.teams = route.teams;
+      if (packs?.length) body.packs = packs;
+      if (ctx) body.context = followUpContext(ctx.q, ctx.a);
+      const res = await invokeEdgeFunction<DataAskResponse & { error?: string }>("data-ask", body, DATA_ASK_TIMEOUT_MS);
       if (res.error) throw new Error(res.error);
-      setDataAnswers((cur) => [{ q, a: maskRrn(String(res.answer || "").trim()), rows: maskDeep(res.rows || []), table: res.table || "", calls: res.calls || [], usage: res.usage, cost: res.cost }, ...cur].slice(0, 5));
+      const a = maskRrn(String(res.answer || "").trim());
+      const img = extractSvg(a);
+      const view = toAskAnswerView(q, res, img ? img.rest : a, maskDeep);
+      setDataAnswers((cur) => [{ q, a, view, calls: res.calls || [] }, ...cur].slice(0, 5));
+      if (ctx) setFollowCtx(null);
     } catch (err) {
-      notify(`답을 받지 못했습니다: ${(err as Error).message}`, "error");
-    } finally { setDataAsking(false); }
+      const message = (err as Error).message;
+      // 429 daily_limit — 분석 질문만 막힌다(일반 질문은 계속). invokeEdgeFunction 은 서버 error 글만 넘겨 주므로 글로 가린다
+      setAskFail({ q, message, daily: askMode === "analysis" && /한도/.test(message) });
+    } finally { setDataAsking(false); setStage(null); }
   };
   /** 질문 속 업체·기번으로 먼저 찾는다. 찾으면 true(모은 뒤 답까지 진행), 못 찾으면 false */
   const askEntity = async (q: string): Promise<boolean> => {
@@ -202,20 +257,28 @@ export default function Search360({ author }: { author: string }) {
   const submit = async (raw: string, forced: Mode = mode) => {
     const text = raw.trim();
     if (!text) return;
-    setInput(text); setRouteNote("");
-    const isQuestion = QUESTION_RE.test(text) || text.split(/\s+/).length >= 4;
-    const m: Mode = forced !== "auto" ? forced : !isQuestion ? "search" : "auto";
-    if (m === "search") { await run(text); return; }
-    if (m === "data") { await askData(text); return; }
-    if (m === "entity") { setPhase("resolving"); if (!(await askEntity(text))) { setPhase("idle"); notify("질문에서 업체·기번을 못 찾았습니다 — 업체명을 함께 넣어 주세요", "info"); } return; }
-    // 자동: 업체가 들리면 그 업체, 아니면 전체 데이터
+    setInput(text); setRouteNote(""); setAskFail(null);
+    let route = askRoute(text, members, forced);
+    // 이어서 묻기 중이면 짧은 말("그 중 C팀만")도 앞 답에 이어 묻는다 — 검색·업체 질문으로 새지 않게
+    if (followCtx && (route.kind === "search" || route.kind === "entity")) route = { ...route, kind: "data", note: "앞 답에 이어서 전체 데이터에 물었습니다" };
+    if (route.kind === "search") { await run(text); return; }
+    if (route.kind === "data" || route.kind === "analysis") { setRouteNote(route.note); await askData(text, route); return; }
+    if (forced === "entity") { setPhase("resolving"); if (!(await askEntity(text))) { setPhase("idle"); notify("질문에서 업체·기번을 못 찾았습니다 — 업체명을 함께 넣어 주세요", "info"); } return; }
+    // 자동: 질문 속 업체가 확실하면 그 업체(entity-ask), 아니면 전체 데이터
     setPhase("resolving");
-    const dataLike = DATA_RE.test(text);
-    if (!dataLike && await askEntity(text)) return;
+    if (await askEntity(text)) return;
     setPhase("idle");
-    if (!dataLike && entityTokensFromQuestion(text).length) setRouteNote("질문에 확실한 업체·기번이 없어 전체 데이터에 물었습니다 — 특정 업체 질문이면 업체명을 함께 적어 주세요");
-    else setRouteNote("팀·기간·등급으로 추리는 질문으로 보여 전체 데이터에 물었습니다");
-    await askData(text);
+    const note = entityTokensFromQuestion(text).length ? "질문에 확실한 업체·기번이 없어 전체 데이터에 물었습니다 — 특정 업체 질문이면 업체명을 함께 적어 주세요" : "전체 데이터에 물었습니다";
+    setRouteNote(note);
+    await askData(text, { ...route, kind: "data", note });
+  };
+  /** 근거 행 누르기 — 업체 칸이 있으면 그 업체 360 을 연다(OKR 탭으로 가는 길은 이 화면에 연결된 게 없어 생략) */
+  const openEvidenceRow = (_g: AskEvidenceGroup, row: Record<string, unknown>) => {
+    const vendor = vendorOfRow(row);
+    if (!vendor) { notify("이 행에는 업체 칸이 없어 열 화면이 없습니다", "info"); return; }
+    setInput(vendor);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    void run(vendor);
   };
   const ask = async (q: string) => { const text = q.trim(); if (!text || !entity || asking) return; setQuestion(""); await askWith(text, entity, results); };
 
@@ -250,7 +313,7 @@ export default function Search360({ author }: { author: string }) {
   const modePill = (m: Mode, label: string) => (
     <button key={m} type="button" onClick={() => setMode(m)} className={`rounded-full px-3 py-1 text-[11px] font-black transition ${mode === m ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>
   );
-  const KIND_DOT: Record<string, string> = { 검색: "bg-blue-500", "업체 질문": "bg-indigo-500", "전체 질문": "bg-emerald-500" };
+  const KIND_DOT: Record<string, string> = { 검색: "bg-blue-500", "업체 질문": "bg-indigo-500", "전체 질문": "bg-emerald-500", 분석: "bg-amber-500" };
 
   return (
     <div className="space-y-3">
@@ -284,7 +347,7 @@ export default function Search360({ author }: { author: string }) {
           </form>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <div className="flex rounded-full bg-slate-100 p-0.5" title="자동: 문장이면 질문, 아니면 검색으로 봅니다">
-              {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터·지식에 질문")}
+              {modePill("auto", "자동")}{modePill("search", "업체·기번 검색")}{modePill("entity", "업체에 질문")}{modePill("data", "전체 데이터·지식에 질문")}{modePill("analysis", "분석")}
             </div>
             {!landing && aiMonth && <span title="통합검색 질문에 쓴 OpenAI 사용량(ai_usage 표)" className="ml-auto text-[10.5px] font-bold text-slate-400">이번 달 AI {aiMonth.count}건{aiMonth.priced ? ` · $${aiMonth.usd.toFixed(2)}` : ""}</span>}
           </div>
@@ -298,7 +361,7 @@ export default function Search360({ author }: { author: string }) {
                     <span className={`h-1.5 w-1.5 rounded-full ${KIND_DOT[t.kind]}`} />{t.text}
                   </button>
                 ))}
-                <span className="ml-1 hidden items-center gap-2 text-[10px] font-bold text-slate-400 sm:inline-flex"><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />검색</span><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />업체 질문</span><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />전체 질문</span></span>
+                <span className="ml-1 hidden items-center gap-2 text-[10px] font-bold text-slate-400 sm:inline-flex"><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />검색</span><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />업체 질문</span><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />전체 질문</span><span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />분석</span></span>
               </div>
               {recent.length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
@@ -309,7 +372,13 @@ export default function Search360({ author }: { author: string }) {
               )}
             </>
           )}
-          {dataAsking && <div className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-[12px] font-bold text-emerald-800">표를 조회하고 답을 쓰는 중입니다… 30초에서 1분 정도 걸립니다 (조회 최대 8번)</div>}
+          {followCtx && (
+            <div className="mt-2 flex min-w-0 items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-[11.5px] font-bold text-emerald-800">
+              <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black">이어서 묻기</span>
+              <span className="min-w-0 flex-1 truncate">앞 질문 "{followCtx.q}" 의 답을 붙여 묻습니다</span>
+              <button type="button" onClick={() => setFollowCtx(null)} className="min-h-8 shrink-0 px-1 text-[11px] font-black text-slate-500 hover:text-slate-800">풀기</button>
+            </div>
+          )}
           {routeNote && !dataAsking && <div className="mt-2 text-[11px] font-bold text-slate-500">{routeNote}</div>}
         </div>
         {landing && (
@@ -330,36 +399,35 @@ export default function Search360({ author }: { author: string }) {
         )}
       </section>
 
-      {/* 전체 데이터 질문의 답 */}
-      {dataAnswers.map((item, i) => (
-        <section key={`${item.q}-${i}`} className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[11px] font-black text-emerald-700"><span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px]">전체 데이터</span>Q. {item.q}</div>
-            <div className="flex gap-1.5">
-              <button type="button" onClick={() => { void navigator.clipboard.writeText(item.a).then(() => notify("답을 복사했습니다", "success")); }} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-600 hover:bg-slate-50">복사</button>
-              <button type="button" onClick={() => setDataAnswers((cur) => cur.filter((_, j) => j !== i))} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10.5px] font-black text-slate-500 hover:bg-slate-50">지우기</button>
-            </div>
-          </div>
-          {(() => { const img = extractSvg(item.a); return (<>
-            <div className="mt-2 whitespace-pre-wrap text-[13.5px] font-semibold leading-7 text-slate-800">{img ? img.rest : item.a}</div>
+      {/* 전체 데이터·분석 질문 — 진행 중 / 실패 / 답(AskAnswer.view) */}
+      {dataAsking && stage && (
+        <AskAnswerCard state="loading" steps={stage.steps} activeStep={stage.active}
+          routeNote={`${stage.note || "질문을 확인하고 있습니다."} · ${Math.round((Date.now() - stage.at) / 1000)}초 경과(최대 4분)`} />
+      )}
+      {askFail && !dataAsking && (
+        <div className="space-y-2">
+          <AskAnswerCard state="error" errorMessage={askFail.daily ? `${askFail.message}` : `답을 받지 못했습니다: ${askFail.message}`}
+            onRetry={() => { const q = askFail.q; void submit(q, askFail.daily ? "data" : mode); }} />
+          {askFail.daily && <div className="px-1 text-[11px] font-bold text-slate-500">[다시 묻기]를 누르면 분석이 아닌 일반 질문(전체 데이터)으로 다시 묻습니다 — 하루 한도는 분석 질문에만 걸립니다.</div>}
+        </div>
+      )}
+      {dataAnswers.map((item, i) => {
+        const img = extractSvg(item.a);
+        return (
+          <div key={`${item.q}-${i}`} className="space-y-1.5">
+            <AskAnswerCard answer={item.view} onRowClick={openEvidenceRow}
+              onCopy={(t) => { void navigator.clipboard.writeText(t).then(() => notify("답을 복사했습니다", "success"), (e: Error) => notify(`복사하지 못했습니다: ${e.message}`, "error")); }}
+              onDismiss={() => setDataAnswers((cur) => cur.filter((_, j) => j !== i))} />
             {img && <AnswerImage item={img} vendor="" phones={[]} author={author} />}
-          </>); })()}
-          {item.usage && <div className="mt-1.5 text-[10px] font-bold text-slate-500">{usageLine(item.usage, item.cost)}</div>}
-          {item.rows.length > 0 && (
-            <details className="mt-2">
-              <summary className="cursor-pointer text-[11px] font-black text-slate-500">근거로 쓴 마지막 조회 결과 {item.rows.length}행 ({item.table})</summary>
-              <div className="mt-1.5 overflow-x-auto rounded-lg border border-slate-200">
-                <table className="min-w-full text-[11px]">
-                  <thead className="bg-slate-50 text-left font-black text-slate-500"><tr>{Object.keys(item.rows[0]).slice(0, 8).map((c) => <th key={c} className="px-2 py-1">{c}</th>)}</tr></thead>
-                  <tbody>{item.rows.slice(0, 60).map((r, j) => <tr key={j} className="border-t border-slate-100">{Object.keys(item.rows[0]).slice(0, 8).map((c) => <td key={c} className="max-w-[220px] truncate px-2 py-1 font-semibold text-slate-700">{String(r[c] ?? "")}</td>)}</tr>)}</tbody>
-                </table>
-              </div>
-            </details>
-          )}
-          {item.calls.length > 0 && <details className="mt-1"><summary className="cursor-pointer text-[10px] font-bold text-slate-500">어떻게 조회했나 ({item.calls.length}번)</summary><ul className="mt-1 space-y-0.5 font-mono text-[10px] text-slate-500">{item.calls.map((c, j) => <li key={j} className="break-all">{c}</li>)}</ul></details>}
-          <div className="mt-1.5 text-[10px] font-bold text-slate-500">표를 직접 조회해 만든 답입니다. 미수·초과료는 팀 칸이 없어 일정·접수·점검 기록으로 팀을 붙였습니다. 중요한 판단은 원본 표를 확인하세요.</div>
-        </section>
-      ))}
+            <div className="flex flex-wrap items-center gap-2 px-1">
+              <button type="button" disabled={dataAsking} onClick={() => { setFollowCtx({ q: item.q, a: item.a }); setInput(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className="min-h-9 rounded-full border border-emerald-300 bg-white px-3 text-[11.5px] font-black text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">이어서 묻기</button>
+              {item.calls.length > 0 && <details className="min-w-0 flex-1"><summary className="cursor-pointer text-[10.5px] font-bold text-slate-500">어떻게 조회했나 ({item.calls.length}번)</summary><ul className="mt-1 space-y-0.5 font-mono text-[10px] text-slate-500">{item.calls.map((c, j) => <li key={j} className="break-all">{c}</li>)}</ul></details>}
+            </div>
+            <div className="px-1 text-[10px] font-bold text-slate-500">표를 직접 조회해 만든 답입니다(휴대폰·주민번호는 가림). 근거 행에 업체가 있으면 누르면 그 업체 기록을 엽니다. 중요한 판단은 원본 화면을 확인하세요.</div>
+          </div>
+        );
+      })}
 
       {/* 후보 고르기 */}
       {phase === "choose" && (

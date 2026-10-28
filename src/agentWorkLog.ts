@@ -3,6 +3,30 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-29",
+    "hash": "be08625cf9",
+    "agent": "developer",
+    "summary": "카톡 대화 저장: 창이 없는 방은 스스로 열고(open_room, 중계와 같은 순서) 저장 뒤 8초 쉬고 닫기 — 사람이 열어 둔 창은 보존, 동시에 1개"
+  },
+  {
+    "date": "2026-10-29",
+    "hash": "be08625cf9",
+    "agent": "kakao-pc-rules",
+    "summary": "카톡 대화 저장: 창이 없는 방은 스스로 열고(open_room, 중계와 같은 순서) 저장 뒤 8초 쉬고 닫기 — 사람이 열어 둔 창은 보존, 동시에 1개"
+  },
+  {
+    "date": "2026-10-29",
+    "hash": "06a436c859",
+    "agent": "debugger",
+    "summary": "부서 일정리스트 완료 건 기본 접힘·완료 카드 상세 + 달력 시트 칩 같은 부서색 + 시트 줄 금일/익일/예정 영업일 규칙(주말·공휴일 건너뜀)"
+  },
+  {
+    "date": "2026-10-29",
+    "hash": "06a436c859",
+    "agent": "qa-checker",
+    "summary": "부서 일정리스트 완료 건 기본 접힘·완료 카드 상세 + 달력 시트 칩 같은 부서색 + 시트 줄 금일/익일/예정 영업일 규칙(주말·공휴일 건너뜀)"
+  },
+  {
     "date": "2026-10-28",
     "hash": "4d6db5cc30",
     "agent": "developer",
