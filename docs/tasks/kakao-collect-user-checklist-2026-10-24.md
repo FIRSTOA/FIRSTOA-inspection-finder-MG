@@ -9,7 +9,7 @@
 - [x] 3. **Supabase** 대시보드 › Edge Functions › Secrets › 같은 이름·같은 값 두 개 추가
 
 ## B. GAS 새 버전 (클로드와 같이)
-- [ ] 4. 클로드에게 **"GAS 올려"** → 클로드가 clasp pull/push
+- [x] 4. 클로드에게 **"GAS 올려"** → 클로드가 clasp pull/push (2026-10-28 22:30 완료 — 원격은 8/27 상태였고 손수정 없음, 21파일 push·pull 재검증 일치, 로그인 계정 admin@firstoa-ai.com)
 - [ ] 5. GAS 편집기 › 배포 › 배포 관리 › ✏ 편집 › 버전 "새 버전" › 배포 (URL 그대로)
 - [ ] 6. GAS 편집기에서 함수 `setDriveIngestHourly` 골라 ▶ 실행 1회
 - [ ] 7. FIELD 관리 탭 › 전송·연동 › [카톡 수집] 카드 › [지금 수집 실행] — 403 안 나면 OK

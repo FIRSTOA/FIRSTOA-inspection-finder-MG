@@ -4,6 +4,36 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-28",
+    "hash": "0598a5d555",
+    "agent": "feature-planner",
+    "summary": "OKR 엑셀 내려받기(탭 5개: 요약·분기·월·파트 종합·주차 기록) + 접수자별 처리 카드 경영·운영·영업 분리 + 자동 일정 기록 없음·좌표 없음 표시 수정"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "0598a5d555",
+    "agent": "developer",
+    "summary": "OKR 엑셀 내려받기(탭 5개: 요약·분기·월·파트 종합·주차 기록) + 접수자별 처리 카드 경영·운영·영업 분리 + 자동 일정 기록 없음·좌표 없음 표시 수정"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "0598a5d555",
+    "agent": "debugger",
+    "summary": "OKR 엑셀 내려받기(탭 5개: 요약·분기·월·파트 종합·주차 기록) + 접수자별 처리 카드 경영·운영·영업 분리 + 자동 일정 기록 없음·좌표 없음 표시 수정"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "0598a5d555",
+    "agent": "qa-checker",
+    "summary": "OKR 엑셀 내려받기(탭 5개: 요약·분기·월·파트 종합·주차 기록) + 접수자별 처리 카드 경영·운영·영업 분리 + 자동 일정 기록 없음·좌표 없음 표시 수정"
+  },
+  {
+    "date": "2026-10-28",
+    "hash": "0598a5d555",
+    "agent": "field-deploy-check",
+    "summary": "OKR 엑셀 내려받기(탭 5개: 요약·분기·월·파트 종합·주차 기록) + 접수자별 처리 카드 경영·운영·영업 분리 + 자동 일정 기록 없음·좌표 없음 표시 수정"
+  },
+  {
+    "date": "2026-10-28",
     "hash": "2106136803",
     "agent": "feature-planner",
     "summary": "부서 접수(경영·운영·영업) 사진 첨부(CS 와 같은 칸, 한조 캡처 안내, 필수 아님) + 할 일 문서(ERP 5항목)·부품 수명/CMYK 조사·OKR 엑셀 설계"

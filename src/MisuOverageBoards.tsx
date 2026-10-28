@@ -254,6 +254,13 @@ export function MisuBoard({ onMisuSupplement }: { onMisuSupplement?: (visit: Mis
   }, [rows, team, monthsFilter, sort, sortDir, query, targets, target, gradeSel]);
 
   const totalBalance = filtered.reduce((sum, r) => sum + (Number(r["_balance"]) || 0), 0);
+  // 팀별 미수 업체 수(시트 이름 = 팀) — 전체 현황 팀 칩에 숫자를 보여 준다. 숫자가 CS체크 목록에만 있어
+  // 'E팀 0'(관리부가 E 업체를 아직 CS체크 안 함)을 'E 미수 0'으로 읽던 혼동(2026-10-28)
+  const sheetTeamCount = useMemo(() => {
+    const map: Record<string, number> = {};
+    rows.forEach((r) => { const t = str(r, "_team"); if (t) map[t] = (map[t] || 0) + 1; });
+    return map;
+  }, [rows]);
 
   const csList = (csChecks || []).filter((c) => (team === "전체" || c.team === team) && (!query.trim() || c.vendor.toLowerCase().includes(query.trim().toLowerCase())));
   const misuByVendor = useMemo(() => {
@@ -316,7 +323,9 @@ export function MisuBoard({ onMisuSupplement }: { onMisuSupplement?: (visit: Mis
                   </button>
                 );
               })}
-              {!csList.length && <StateBox kind="empty" inside message="CS체크된 업체가 없습니다." hint="팀이나 검색어를 바꿔 보세요." />}
+              {!csList.length && (team !== "전체" && !query.trim() && sheetTeamCount[team]
+                ? <StateBox kind="empty" inside message={`${team}팀은 관리부가 CS체크한 업체가 아직 없습니다.`} hint={`${team}팀 미수 업체 ${sheetTeamCount[team]}곳은 [전체 현황]에 있습니다.`} />
+                : <StateBox kind="empty" inside message="CS체크된 업체가 없습니다." hint="팀이나 검색어를 바꿔 보세요." />)}
             </div>
           </section>}
           {detail && <SheetDetailModal title={`${str(detail, "_업체명")} — 미수 상세`} row={detail} fields={MISU_DETAIL_FIELDS} layout={MISU_DETAIL_LAYOUT} onClose={() => setDetail(null)} />}
@@ -340,7 +349,12 @@ export function MisuBoard({ onMisuSupplement }: { onMisuSupplement?: (visit: Mis
       <div className="space-y-2 border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <span className={UI.rowLabelInline}>팀</span>
-          {["전체", ...TEAM_NAMES].map((name) => <button key={name} type="button" onClick={() => setTeam(name)} className={UI.chip(team === name)}>{name === "전체" ? "전체" : `${name}팀`}</button>)}
+          {["전체", ...TEAM_NAMES].map((name) => (
+            <button key={name} type="button" onClick={() => setTeam(name)} className={UI.chip(team === name)}>
+              {name === "전체" ? "전체" : `${name}팀`}
+              {!loading && <span className={`ml-1 tabular-nums ${team === name ? "text-slate-300" : "text-blue-600"}`}>{name === "전체" ? rows.length : sheetTeamCount[name] || 0}</span>}
+            </button>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className={UI.rowLabelInline}>조건</span>

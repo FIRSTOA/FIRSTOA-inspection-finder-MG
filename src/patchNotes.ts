@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "0598a5d555",
+    "date": "2026-10-28",
+    "note": "OKR 엑셀 내려받기(탭 5개: 요약·분기·월·파트 종합·주차 기록) + 접수자별 처리 카드 경영·운영·영업 분리 + 자동 일정 기록 없음·좌표 없음 표시 수정"
+  },
+  {
     "hash": "2106136803",
     "date": "2026-10-28",
     "note": "부서 접수(경영·운영·영업) 사진 첨부(CS 와 같은 칸, 한조 캡처 안내, 필수 아님) + 할 일 문서(ERP 5항목)·부품 수명/CMYK 조사·OKR 엑셀 설계"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "a4c4ead136",
     "date": "2026-10-02",
     "note": "1~3분기 성과 리포트(다크 B안)를 /report/2026-q1-q3.html 로 공개 게시 — 사용설명서처럼 로그인 없이 열람"
-  },
-  {
-    "hash": "74009d8283",
-    "date": "2026-10-02",
-    "note": "서비스접수 증상 사진: 6MB 아래 원본은 재압축 없이 그대로(긴 변 제한 없이), 그 이상·HEIC는 3000px·품질 0.92 — 카톡 링크로 원본 수준으로 보이게"
   }
 ];
