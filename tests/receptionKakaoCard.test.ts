@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDeptReceptionRow, type DeptReceptionInput } from "../src/deptReception";
 import {
-  buildDeptFollowupText, buildDeptKakaoText, buildItKakaoCard, cardDate, cardDateYY, cardWon, korDayWithWeekday, monthsLeft, monthsUsed, serializeCard,
+  buildDeptFollowupText, buildDeptKakaoText, buildItKakaoCard, deptPhotoLine, cardDate, cardDateYY, cardWon, korDayWithWeekday, monthsLeft, monthsUsed, serializeCard,
   KAKAO_CARD_MAX,
 } from "../src/receptionKakaoCard";
 import { isTableReceptionHead } from "../src/inspectionBlocks";
@@ -193,6 +193,34 @@ describe("운영지원 카드(경영 틀 기반, 2026-10-27 자유 글 틀 폐�
       `기종${T}${T}기번`,
       `접수내용${T}택배 2건`,
     ].join("\n"));
+  });
+});
+
+describe("부서 카드 사진 줄(2026-10-28 경영·운영·영업 사진 첨부)", () => {
+  const ALBUM = "https://firstoa-inspection-finder-mg.vercel.app/?album=abc-123";
+  const input: DeptReceptionInput = {
+    dept: "경영지원", author: "홍길동", route: "전화", vendor: "새경영업체", field: "사용량", content: "카운터 확인 부탁",
+    photos: ["https://x/photos/reception/a.jpg", "https://x/photos/reception/b.png"], photoLink: ALBUM,
+  };
+  it("사진 있음 — 접수내용 바로 다음 줄 '📷 사진 n장 {링크}', 그 뒤 칸 없는 폼 값", () => {
+    const row = rowOf(input);
+    const lines = buildDeptKakaoText(row, null, NOW, deptPhotoLine(2, ALBUM)).split("\n");
+    const at = lines.indexOf(`접수내용${T}카운터 확인 부탁`);
+    expect(at).toBeGreaterThan(0);
+    expect(lines[at + 1]).toBe(`📷 사진 2장 ${ALBUM}`);
+    expect(lines[at + 2]).toBe(`접수유형${T}전화`);
+    expect(row.report_text).toContain(`📷 사진 2장 ${ALBUM}`); // 저장 행의 카톡 글에도
+    // 운영 카드도 같은 자리(접수내용이 마지막 줄)
+    const ops = rowOf({ ...input, dept: "운영지원", field: "소모품" });
+    expect(ops.report_text.split("\n").slice(-2)).toEqual([`접수내용${T}카운터 확인 부탁`, `📷 사진 2장 ${ALBUM}`]);
+  });
+  it("사진 없음 — 사진 줄 없음(링크만 있거나 사진만 있어도 줄 없음)", () => {
+    const row = rowOf({ ...input, photos: [], photoLink: "" });
+    expect(row.report_text).not.toContain("📷");
+    expect(buildDeptKakaoText(row, null, NOW)).toBe(buildDeptKakaoText(row, null, NOW, ""));
+    expect(deptPhotoLine(0, ALBUM)).toBe("");
+    expect(deptPhotoLine(2, "")).toBe("");
+    expect(rowOf({ ...input, photoLink: "" }).report_text).not.toContain("📷");
   });
 });
 

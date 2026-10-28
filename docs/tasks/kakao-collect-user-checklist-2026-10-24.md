@@ -1,11 +1,12 @@
 # 카톡 수집 켜기 — 사용자가 할 것만 (2026-10-24)
 
 앱·엣지·SQL 은 끝났다. 아래만 하면 켜진다. 순서대로, 같은 날에.
+> 2026-10-28: A 끝남. 다른 할 일과 함께 [user-todo-2026-10-28.md](user-todo-2026-10-28.md) 에 모았다.
 
 ## A. 토큰 2개 (10분)
-- [ ] 1. 긴 임의 문자열 2개 만들기(비밀번호 생성기 40자). 메모장에 잠깐 두기 — 이름: `FIELD_ADMIN_TOKEN`, `FIELD_INGEST_TOKEN`
-- [ ] 2. **GAS First-DATA** 편집기 › ⚙ 프로젝트 설정 › 스크립트 속성 › 두 개 추가(이름·값)
-- [ ] 3. **Supabase** 대시보드 › Edge Functions › Secrets › 같은 이름·같은 값 두 개 추가
+- [x] 1. 긴 임의 문자열 2개 만들기(비밀번호 생성기 40자). 메모장에 잠깐 두기 — 이름: `FIELD_ADMIN_TOKEN`, `FIELD_INGEST_TOKEN`
+- [x] 2. **GAS First-DATA** 편집기 › ⚙ 프로젝트 설정 › 스크립트 속성 › 두 개 추가(이름·값)
+- [x] 3. **Supabase** 대시보드 › Edge Functions › Secrets › 같은 이름·같은 값 두 개 추가
 
 ## B. GAS 새 버전 (클로드와 같이)
 - [ ] 4. 클로드에게 **"GAS 올려"** → 클로드가 clasp pull/push

@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-27",
+    "hash": "5c1b015433",
+    "agent": "developer",
+    "summary": "부서 접수 처리 후속 카톡 글([처리완료]/[보류]/[배정]/[일정 변경]/[취소]) + 보류·예정일 변경 사유 필수 + 조회 탭 접수 CSS(E) 0건 수정"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "5c1b015433",
+    "agent": "debugger",
+    "summary": "부서 접수 처리 후속 카톡 글([처리완료]/[보류]/[배정]/[일정 변경]/[취소]) + 보류·예정일 변경 사유 필수 + 조회 탭 접수 CSS(E) 0건 수정"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "5c1b015433",
+    "agent": "qa-checker",
+    "summary": "부서 접수 처리 후속 카톡 글([처리완료]/[보류]/[배정]/[일정 변경]/[취소]) + 보류·예정일 변경 사유 필수 + 조회 탭 접수 CSS(E) 0건 수정"
+  },
+  {
+    "date": "2026-10-27",
+    "hash": "5c1b015433",
+    "agent": "field-deploy-check",
+    "summary": "부서 접수 처리 후속 카톡 글([처리완료]/[보류]/[배정]/[일정 변경]/[취소]) + 보류·예정일 변경 사유 필수 + 조회 탭 접수 CSS(E) 0건 수정"
+  },
+  {
+    "date": "2026-10-27",
     "hash": "b2d1a92c49",
     "agent": "developer",
     "summary": "부서 카드 2차(둘째 줄 작성자·운영 카드·접수유형 보존) + 시트 배열 수식 보호(A열 순번은 시트가, 머리 ARRAYFORMULA 열엔 값 안 씀) + 처리 패널 세로 정렬"

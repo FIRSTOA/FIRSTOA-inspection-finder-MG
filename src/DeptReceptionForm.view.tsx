@@ -62,6 +62,7 @@ export type DeptReceptionFormViewProps = {
   onContractKind?: (v: string) => void;
   scheduledDate: string;
   onScheduledDate: (v: string) => void;
+  photoSlot?: ReactNode; // 사진 첨부 칸(DeptPhotoField). 특이사항 아래에 놓인다(2026-10-28)
   receiverLabel?: string; // 머리 오른쪽 위 작은 글씨(예: "접수자 이민구 · CS"). 없으면 안 보임
   // 필수 점검·저장
   required: Array<[string, boolean]>;
@@ -238,6 +239,7 @@ export default function DeptReceptionFormView(p: DeptReceptionFormViewProps) {
           <label className="block sm:col-span-2"><span className={label}>특이사항 (선택, 앱에만 저장됩니다)</span>
             <textarea value={p.notes} onChange={(e) => p.onNotes(e.target.value)} rows={2} className={area} />
           </label>
+          {p.photoSlot && <div className="min-w-0 sm:col-span-2">{p.photoSlot}</div>}
 
           <div><div className={label}>처리자</div><div className="mt-1">{p.handlerSlot}</div></div>
           <label className="block"><span className={label}>예정일 (비우면 오늘(접수일)로 부서 달력에 올라갑니다)</span><input type="date" value={p.scheduledDate} onChange={(e) => p.onScheduledDate(e.target.value)} onClick={openNativePicker} className={`${input} mt-1`} /></label>

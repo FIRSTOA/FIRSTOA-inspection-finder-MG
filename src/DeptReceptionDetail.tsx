@@ -14,9 +14,10 @@ import { askConfirm } from "./confirmModal";
 import { useMembers } from "./authors";
 import { notify } from "./toast";
 import { openNativePicker } from "./datePicker";
+import PhotoViewer from "./PhotoViewer";
 
 type Props = {
-  row: DeptRowLike & { model?: string; asset_no?: string; serial?: string; report_text?: string };
+  row: DeptRowLike & { model?: string; asset_no?: string; serial?: string; report_text?: string; photos?: string[] | null };
   onChanged: (row: DeptRowLike) => void;
   /** [삭제] 뒤 — 목록에서 빼고 현황판을 다시 읽는다. 없으면 onChanged 만 부른다 */
   onDeleted?: (id: string) => void;
@@ -38,6 +39,8 @@ export default function DeptReceptionDetail({ row, onChanged, onDeleted, author 
   const [edit, setEdit] = useState<DeptEditForm | null>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [photoIdx, setPhotoIdx] = useState<number | null>(null); // 첨부 사진 크게 보기(2026-10-28)
+  const photos = (row.photos || []).filter(Boolean);
   // 다른 곳(단추·새로고침)에서 행이 바뀌면 입력칸도 따라간다
   const sig = `${row.status || ""}|${meta.handler || ""}|${meta.progress || ""}|${meta.handled || ""}`;
   const [prevSig, setPrevSig] = useState(sig);
@@ -197,6 +200,8 @@ export default function DeptReceptionDetail({ row, onChanged, onDeleted, author 
       </dl>
       {row.symptom && <div className="whitespace-pre-wrap"><b className="text-slate-500">접수내용</b> {row.symptom}</div>}
       {row.notes && <div className="whitespace-pre-wrap"><b className="text-slate-500">특이사항</b> {row.notes}</div>}
+      {photos.length > 0 && <div className="flex flex-wrap gap-1.5">{photos.map((url, pi) => <button key={url} type="button" title="누르면 크게 — 확대·회전·선명하게" onClick={() => setPhotoIdx(pi)}><img loading="lazy" src={url} alt="첨부 사진" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" /></button>)}</div>}
+      {photoIdx !== null && <PhotoViewer urls={photos} index={photoIdx} onClose={() => setPhotoIdx(null)} />}
       {meta.memo_log && (
         <div className="rounded-lg border border-slate-200 bg-white p-2">
           <div className={label}>메모 기록</div>

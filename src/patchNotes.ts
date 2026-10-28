@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "5c1b015433",
+    "date": "2026-10-27",
+    "note": "부서 접수 처리 후속 카톡 글([처리완료]/[보류]/[배정]/[일정 변경]/[취소]) + 보류·예정일 변경 사유 필수 + 조회 탭 접수 CSS(E) 0건 수정"
+  },
+  {
     "hash": "e2e961338b",
     "date": "2026-10-27",
     "note": "부서 접수 처리자 '미정' 고르면 지역 기본값(이정현 등)으로 덮지 않음"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "784f31a977",
     "date": "2026-10-01",
     "note": "OKR 임시 [주차 기록 정리] 단추·SQL 파일 제거(이미 실행됨) — 주차 기준은 월요일이 든 달 그대로, 같은 기간 행은 정식 id 우선"
-  },
-  {
-    "hash": "35e43eca41",
-    "date": "2026-10-01",
-    "note": "OKR 주차 기록 정리 단추(SQL 없이 브라우저에서 옛 번호 행을 새 번호로 옮기고 같은 사람 행은 번호별 병합) + 주차 저장 id를 기간(월요일)으로 찾기"
   }
 ];

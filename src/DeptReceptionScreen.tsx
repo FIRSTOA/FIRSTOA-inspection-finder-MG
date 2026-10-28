@@ -18,6 +18,8 @@ import { useMembers } from "./authors";
 import { getSsoSession, ssoRequiredCached } from "./sso";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
+import DeptPhotoField, { type DeptPhoto } from "./DeptPhotoField";
+import { createAlbum } from "./supabase";
 
 type Props = {
   dept: DeptType;
@@ -57,6 +59,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
   const [outside, setOutside] = useState(false);
   const [contractKind, setContractKind] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
+  const [photos, setPhotos] = useState<DeptPhoto[]>([]); // 첨부 사진(필수 아님, 2026-10-28)
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
   const savingRef = useRef(false);
@@ -89,6 +92,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
     field: fieldFinal, content: symptom, notes, receiverName, receiverPhone,
     handler: effectiveHandler, handlerExplicit: handlerTouched, outside, contractKind: dept === "경영지원" ? contractKind : "", scheduleDate,
     lease: isNew ? null : lease, // 카톡 카드의 임대리스트 칸(2026-10-27)
+    photos: photos.map((p) => p.url),
   };
   const missing = deptMissing(input);
   const required: Array<[string, boolean]> = [
@@ -179,7 +183,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
   const resetForm = () => {
     setQuery(""); setLeaseHits([]); setSearched(false); setLease(null); setIsNew(false); setNewVendor(""); setNewRegion("");
     setRoute(defaultRoute(dept)); setVia(""); setField(""); setFieldCustom(""); setReceiverName(""); setReceiverPhone(""); setSymptom(""); setNotes("");
-    setHandler(""); setHandlerTouched(false); setOutside(false); setContractKind(""); setScheduleDate("");
+    setHandler(""); setHandlerTouched(false); setOutside(false); setContractKind(""); setScheduleDate(""); setPhotos([]);
   };
 
   const save = async () => {
@@ -194,7 +198,18 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
     setSaving(true); setResult(null);
     try {
       const extra: Record<string, string> = { unit: "device", author_team: receiver.team };
-      const res = await runDeptSave(input, extra);
+      // 사진 → 모아보기 앨범 하나(CS 접수 withAlbumLink 와 같은 ?album= 링크). 앨범을 못 만들면 첫 장 링크로 보내고 알린다(접수는 막지 않는다)
+      let photoLink = "";
+      if (input.photos?.length) {
+        try {
+          const albumId = await createAlbum(input.photos, vendorName || "서비스접수", { category: "접수", sourceType: "reception" });
+          photoLink = `${window.location.origin}/?album=${albumId}`;
+        } catch (e) {
+          photoLink = `${window.location.origin}/?photo=${encodeURIComponent(input.photos[0])}`;
+          notify(`사진 모아보기 링크를 만들지 못해 카톡에는 첫 장 링크만 갑니다: ${(e as Error).message}`, "error");
+        }
+      }
+      const res = await runDeptSave({ ...input, photoLink }, extra);
       lastSavedRef.current = { sig, id: res.id };
       const bad = res.warnings.filter((w) => warnTone(w) === "error");
       res.warnings.forEach((w) => notify(w, warnTone(w)));
@@ -246,6 +261,7 @@ export default function DeptReception({ dept, fallbackAuthor, onSaved }: Props) 
         contractKind={dept === "경영지원" && /계약/.test(fieldFinal) ? contractKind : undefined}
         onContractKind={dept === "경영지원" ? setContractKind : undefined}
         scheduledDate={scheduleDate} onScheduledDate={setScheduleDate}
+        photoSlot={<DeptPhotoField photos={photos} onChange={setPhotos} />}
         required={required} onSave={() => void save()} saving={saving} result={result}
       />
     </div>

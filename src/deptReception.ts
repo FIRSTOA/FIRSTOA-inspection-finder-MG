@@ -8,7 +8,7 @@
 import { md5 } from "./md5";
 import { regionLetter } from "./region";
 import { kstDate } from "./visits";
-import { buildDeptKakaoText } from "./receptionKakaoCard";
+import { buildDeptKakaoText, deptPhotoLine } from "./receptionKakaoCard";
 
 export const DEPT_TYPES = ["경영지원", "운영지원", "영업팀"] as const;
 export type DeptType = (typeof DEPT_TYPES)[number];
@@ -147,6 +147,8 @@ export type DeptReceptionInput = {
   scheduleDate?: string;    // yyyy-MM-dd
   reportText?: string;      // 카톡·기록 양식(없으면 buildDeptKakaoText 로 만든다)
   lease?: Record<string, string> | null; // 고른 임대리스트 행(LeaseHit) — 카톡 카드의 임대리스트 칸. 신규면 null
+  photos?: string[];        // 첨부 사진 공개 주소(2026-10-28, CS 접수와 같은 service_receptions.photos 칸). 필수 아님
+  photoLink?: string;       // 사진 모아보기 링크(?album=…) — 카톡 카드의 "📷 사진 n장 {링크}" 줄
 };
 
 /** 필수 점검 — 빈 항목 이름 목록(화면의 필수 칩 줄과 저장 차단에 같이 쓴다) */
@@ -171,6 +173,7 @@ export type DeptReceptionRow = {
   lease_no: string; first_no: string; asset_no: string; serial: string; model: string; address: string;
   field: string; title: string; symptom: string; notes: string; receiver_name: string; receiver_phone: string;
   report_text: string; status: "접수"; remote_meta: DeptMeta;
+  photos?: string[]; // 사진이 있을 때만 싣는다(CS 접수 persist 와 같은 규칙)
 };
 
 /** service_receptions insert 객체. 필수값이 비면 throw(메시지에 빈 항목). */
@@ -218,7 +221,9 @@ export function buildDeptReceptionRow(input: DeptReceptionInput): DeptReceptionR
     status: "접수",
     remote_meta: meta,
   };
-  row.report_text = t(input.reportText) || buildDeptKakaoText(row, input.lease ?? null); // 각 방 실물 양식(2026-10-27)
+  const photos = (input.photos || []).map((u) => t(u)).filter(Boolean);
+  if (photos.length) row.photos = photos;
+  row.report_text = t(input.reportText) || buildDeptKakaoText(row, input.lease ?? null, undefined, deptPhotoLine(photos.length, t(input.photoLink))); // 각 방 실물 양식(2026-10-27)
   return row;
 }
 

@@ -64,6 +64,15 @@ describe("defaultHandler", () => {
 });
 
 describe("buildDeptReceptionRow", () => {
+  it("사진 첨부(2026-10-28) — CS 접수와 같은 photos 칸에 주소 목록, 없으면 칸 자체를 싣지 않는다", () => {
+    const urls = ["https://x/photos/reception/a.jpg", " https://x/photos/reception/b.png ", ""];
+    const row = buildDeptReceptionRow({ ...base, photos: urls, photoLink: "https://app/?album=1" });
+    expect(row.photos).toEqual(["https://x/photos/reception/a.jpg", "https://x/photos/reception/b.png"]);
+    expect(row.report_text).toContain("📷 사진 2장 https://app/?album=1");
+    expect(row.remote_meta).not.toHaveProperty("photos"); // 평평한 문자열 메타에는 넣지 않는다
+    expect("photos" in buildDeptReceptionRow(base)).toBe(false);
+    expect("photos" in buildDeptReceptionRow({ ...base, photos: [] })).toBe(false);
+  });
   it("필수값·컬럼·remote_meta 구조", () => {
     const row = buildDeptReceptionRow({ ...base, outside: true, scheduleDate: "2026-10-25" });
     expect(row.type).toBe("영업팀");

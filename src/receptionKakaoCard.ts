@@ -349,8 +349,18 @@ function korWeekday(ymd: string): string {
   return m ? m[0] : "";
 }
 
-/** 부서 접수 카톡 글 — 경영지원·전략영업·운영지원 모두 카드 */
-export function buildDeptKakaoText(row: DeptCardRow, lease: Lease, now: Date = new Date()): string {
+/**
+ * 부서 접수 사진 줄(2026-10-28 사용자 "운영·경영·영업에도 사진 첨부") — "📷 사진 n장 {링크}". 사진이 없거나 링크가 비면 빈 글자(줄 없음).
+ * 카톡은 글만 가므로 사진은 모아보기 링크 하나로(CS·IT 접수와 같은 ?album= 링크).
+ */
+export function deptPhotoLine(count: number, link: string): string {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  const url = str(link);
+  return n > 0 && url ? `📷 사진 ${n}장 ${url}` : "";
+}
+
+/** 부서 접수 카톡 글 — 경영지원·전략영업·운영지원 모두 카드. photoLine(deptPhotoLine)은 접수내용 바로 다음 줄(값 있을 때만) */
+export function buildDeptKakaoText(row: DeptCardRow, lease: Lease, now: Date = new Date(), photoLine = ""): string {
   const spec = row.type === "경영지원" ? MGMT_CARD : row.type === "운영지원" ? OPS_CARD : SALES_CARD;
   const m = row.remote_meta || {};
   const values = {
@@ -363,7 +373,7 @@ export function buildDeptKakaoText(row: DeptCardRow, lease: Lease, now: Date = n
   const sep = spec === SALES_CARD ? SEP_LV : SEP_CELL; // 영업 본문은 "라벨:   값" 꼴
   return withCap((content) => {
     const card = serializeCard(resolveCard(spec, { ...values, content }));
-    return [card, ...extras.map(([l, val]) => `${l}${sep}${val}`)].join("\n");
+    return [card, str(photoLine), ...extras.map(([l, val]) => `${l}${sep}${val}`)].filter(Boolean).join("\n");
   }, String(row.symptom ?? "").trim());
 }
 
