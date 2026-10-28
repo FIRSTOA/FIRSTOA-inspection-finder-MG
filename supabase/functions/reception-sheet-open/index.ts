@@ -20,7 +20,7 @@
  * 목록(2026-10-28, 본문 { list: { from, to } }): { ok, rows: SheetListRow[], noDate, from, to, clipped, fetchedAt, errors, okSources, cached }
  *  2026-10-01 이후·from~to(최대 92일, to 기준으로 자름)·앱 접수와 이어지지 않은 시트 행(완료·기록 포함), content 없음. 날짜 모름은 noDate 개수만.
  *
- * 보관(2026-10-28, 본문 { snapshot: true }): pg_cron(ops.call_edge, vault field_cron_jwt = anon 키) 이 부른다. Bearer 가 service role 키 또는 anon 키여야 하고(무인증·다른 값 403),
+ * 보관(2026-10-28, 본문 { snapshot: true }): pg_cron(ops.call_edge, vault field_cron_jwt = anon 키) 이 부른다. Bearer 가 이 프로젝트의 anon/service_role JWT 여야 하고(게이트웨이가 서명 검증, 여기서는 ref·role·만료만 — 무인증·다른 값 403),
  *  5분 안 재호출은 시트를 읽지 않고 { ok: true, throttled: true, nextAfter } 를 돌려준다.
  *  팀장 결정(2026-10-28): 크론 12개와 같은 anon JWT 호출을 그대로 받는다 — 새 시크릿·vault 등록·SQL 수정 없음. 이유: ① 저장 값은 호출자가 아니라
  *  시트에서 오고 ② 목록 모드로 누구나 읽는 가린 값과 같으며 ③ fingerprint 가 다른 행은 덮지 않는다 → 공개 호출의 위험은 부하뿐이라 빈도만 막는다.
@@ -277,18 +277,36 @@ function sameToken(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/** 이 함수가 속한 프로젝트 ref — SUPABASE_URL(https://<ref>.supabase.co)에서 읽는다 */
+function projectRef(): string {
+  const m = /^https?:\/\/([a-z0-9]+)\./i.exec(Deno.env.get("SUPABASE_URL") || "");
+  return m ? m[1] : "";
+}
+
 /**
- * 보관 모드 인증: Authorization: Bearer 가 엣지 환경변수 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_ANON_KEY 와 글자까지 같으면 통과(상수 시간 비교).
- * pg_cron 의 ops.call_edge 는 vault field_cron_jwt(= anon 키)를 보낸다. 무인증·다른 값은 403. 부하는 SNAPSHOT_MIN_GAP_MS 로 막는다.
+ * 보관 모드 인증(2026-10-28 밤 실측 수정): 게이트웨이(verify_jwt)가 서명을 검증한 뒤에야 여기 오므로("Invalid JWT" 는 401 로 먼저 막힘),
+ * 여기서는 Bearer JWT 의 **내용**만 본다 — 이 프로젝트 ref 이고 role 이 anon 또는 service_role 이며 만료 전이면 통과.
+ * 환경변수 SUPABASE_ANON_KEY 와 글자 비교는 버렸다: 프로젝트에 새 publishable 키(sb_publishable_…)가 생긴 뒤 env 값이 앱·크론이 쓰는
+ * legacy anon JWT 와 달라 크론·앱 호출이 전부 403 이 났다. 무인증·다른 프로젝트·다른 role 은 403. 부하는 SNAPSHOT_MIN_GAP_MS 로 막는다.
  */
 function snapshotAuthorized(req: Request): boolean {
   const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!bearer) return false;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-  const okService = Boolean(serviceKey) && sameToken(bearer, serviceKey);
-  const okAnon = Boolean(anonKey) && sameToken(bearer, anonKey);
-  return okService || okAnon;
+  if (serviceKey && sameToken(bearer, serviceKey)) return true;
+  const parts = bearer.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4))) as { ref?: unknown; role?: unknown; exp?: unknown };
+    const ref = projectRef();
+    const roleOk = payload.role === "anon" || payload.role === "service_role";
+    const refOk = Boolean(ref) && payload.ref === ref;
+    const expOk = typeof payload.exp !== "number" || payload.exp * 1000 > Date.now();
+    return roleOk && refOk && expOk;
+  } catch {
+    return false;
+  }
 }
 
 /** 보관 모드 최소 간격(크론은 매시 17분·23:50 이라 영향 없음). 콜드 스타트면 비어 있어 그냥 진행 */
