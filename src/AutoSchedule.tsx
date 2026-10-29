@@ -15,6 +15,7 @@ import { RENEWAL_DONE_LABELS } from "./workinPlaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarPlus, MapPin, RefreshCw, Wand2 } from "lucide-react";
 import { rpc, selectRows, upsertRow } from "./supabase";
+import { LATEST_ORDER } from "./api";
 import { historyCoreName, vendorMatchKey } from "./ids";
 import { vendorNameByCode } from "./vendorCodes";
 import { geocodeKR } from "./geocode";
@@ -197,7 +198,7 @@ export default function AutoSchedule({ author }: { author: string }) {
     if (vkey.length >= 3 && probe) {
       try {
         const hist = await selectRows<Record<string, string | null>>(
-          "jeomgeom", `select=${encodeURIComponent("_업체명,작성일")}&_hidden=not.is.true&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=id.desc&limit=200`,
+          "jeomgeom", `select=${encodeURIComponent("_업체명,작성일")}&_hidden=not.is.true&${encodeURIComponent("_업체명")}=ilike.*${encodeURIComponent(probe)}*&order=${LATEST_ORDER}&limit=200`,
         );
         visit = visitFromDates(hist.filter((h) => vendorMatchKey(String(h["_업체명"] || "")) === vkey).map((h) => h["작성일"]), kstDate());
       } catch { historyError = true; }

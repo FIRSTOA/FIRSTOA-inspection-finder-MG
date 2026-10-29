@@ -45,13 +45,14 @@ type Gas = {
   buildLogisticsRows_: (m: Msg[], o?: { team?: string; isBot?: (a: string) => boolean }) => { rows: Row[]; forms: number; freeText: number; bot: number; noVendor: number };
   filterLogisticsAgainstExisting_: (rows: Row[], existing: Row[]) => { rows: Row[]; dupKey: number; near: number };
   parseKakaoMessages_: (t: string) => Msg[];
+  logisticsDupKeyQueries_: (keys: string[], prefixLen: number) => string[];
 };
 
 const gas: Gas = new Function("Utilities", [
   read("DateNorm.gs"), read("Logistics.gs"),
   "function pad2_(n) { return (n < 10 ? '0' : '') + Number(n); }",
   sliceFunction(read("Kakao.gs"), "parseKakaoMessages_"),
-  "return { normalizeDateText, normYmd_, normalizeKakaoDates_, isLogisticsForm_, parseLogisticsForm_, logisticsMd5_, logisticsVendorKey_, buildLogisticsRows_, filterLogisticsAgainstExisting_, parseKakaoMessages_ };",
+  "return { normalizeDateText, normYmd_, normalizeKakaoDates_, isLogisticsForm_, parseLogisticsForm_, logisticsMd5_, logisticsVendorKey_, buildLogisticsRows_, filterLogisticsAgainstExisting_, parseKakaoMessages_, logisticsDupKeyQueries_ };",
 ].join("\n"))(Utilities);
 
 // FIELD 물류 양식 실제 샘플 3개 — 앱과 같은 함수(buildLogisticsText)로 만든다
@@ -183,5 +184,21 @@ describe("날짜 정규화 normalizeDateText / normYmd_", () => {
     const ins = { "작성일": "26-11-01" };
     gas.normalizeKakaoDates_("점검", ins);
     expect(ins["작성일"]).toBe("26-11-01");
+  });
+});
+
+describe("적재 확인 조회 URL 길이 — GAS UrlFetch 2KB 한도", () => {
+  // 2026-10-29·30 완료방: 키 100개씩 묶어 URL 약 3.4KB → "길이 초과: URLFetch URL 길이" throw → 파일이 확인필요로 감
+  const prefix = "https://kkdiihazgzesbqxjytqv.supabase.co/rest/v1/logistics_records?";
+  const keys = Array.from({ length: 250 }, (_, i) => createHash("md5").update(String(i)).digest("hex"));
+  it("모든 조회 URL 이 2,000자 이하이고, 키를 빠짐없이 한 번씩 담는다", () => {
+    const qs = gas.logisticsDupKeyQueries_(keys, prefix.length);
+    expect(qs.length).toBeGreaterThan(2);
+    for (const q of qs) expect((prefix + q).length).toBeLessThanOrEqual(2000);
+    const back = qs.flatMap((q) => q.slice(q.indexOf("in.(") + 4, -1).split(","));
+    expect(back).toEqual(keys);
+  });
+  it("키가 없으면 조회도 없다", () => {
+    expect(gas.logisticsDupKeyQueries_([], prefix.length)).toEqual([]);
   });
 });

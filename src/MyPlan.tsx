@@ -12,7 +12,7 @@ import { kstDate } from "./visits";
 import { defaultPlanDate, nextBusinessDay } from "./planDate";
 import { kakaoMapRouteLink, kakaoMapSearchLink, naverMapLink, naverMapRouteLink, tmapRouteLink, isMobileDevice } from "./navApp";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
-import { getInspForms, getRecentInspections, leaseAddressOf, type InspectionSnapshot, type InspForm } from "./api";
+import { getInspForms, getRecentInspections, leaseAddressOf, LATEST_ORDER, type InspectionSnapshot, type InspForm } from "./api";
 import { selectRows, upsertRow } from "./supabase";
 import VendorSearch from "./VendorSearch";
 import { notify } from "./toast";
@@ -700,8 +700,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
         const rawForms: Array<Record<string, unknown> & { __gubun: string }> = [];
         const fetchRaw = async (filter: string) => {
           const [insp, as] = await Promise.all([
-            selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=id.desc&limit=6`).catch(() => []),
-            selectRows<Record<string, unknown>>("as_records", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=id.desc&limit=6`).catch(() => []),
+            selectRows<Record<string, unknown>>("jeomgeom", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=${LATEST_ORDER}&limit=6`).catch(() => []),
+            selectRows<Record<string, unknown>>("as_records", `select=${encodeURIComponent("작성일,_업체명,모델명,시리얼넘버,자산기번,내용,처리내용,_원문")}&_hidden=not.is.true&${filter}&order=${LATEST_ORDER}&limit=6`).catch(() => []),
           ]);
           rawForms.push(...insp.map((r) => ({ ...r, __gubun: "점검" })), ...as.map((r) => ({ ...r, __gubun: "AS" })));
         };

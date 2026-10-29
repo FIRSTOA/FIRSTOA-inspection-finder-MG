@@ -18,6 +18,15 @@
 
 var KAKAO_RAW_CHUNK_BYTES = 450 * 1024;
 var KAKAO_RAW_TIME_MS = 4 * 60 * 1000;
+// 조각 하나가 DB 문장 시간 초과(57014, PostgREST 8초)·게이트웨이 시간 초과로 실패하면 잠깐 쉬고 같은 조각을 다시 보낸다.
+// 2026-10-29·30 "강남C as" 첫 적재(50조각)가 매번 1~2조각째 500행 넣기에서 57014 로 끊겼다 — 같은 행이 다음 날엔 들어가는
+// 일시 실패인데, 여기서 바로 멈추면 파일이 처리됨으로 옮겨져 다음 날 새 파일까지 원문이 하루 1~2조각씩만 늘었다.
+// 다시 보내도 안전하다: 엣지가 on_conflict=hash 로 이미 들어간 글은 건너뛴다.
+var KAKAO_RAW_RETRY = 2;
+var KAKAO_RAW_RETRY_WAIT_MS = 5000;
+function kakaoRawRetryable_(err) {
+  return /57014|statement timeout|\((?:502|503|504|546)\)|timed out|시간 초과/i.test(String(err || ''));
+}
 
 // 날짜 띠·글 머리 (supabase/functions/_shared/kakao-parse.ts 와 같은 형식)
 var KR_DATE_BAR_ = /^[-=\s]*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일(?:\s*[월화수목금토일]요일)?(?:\s*(?:오전|오후)?\s*\d{1,2}:\d{2})?[-=\s]*$/;
@@ -62,9 +71,14 @@ function pushRawMessages_(roomName, fileText, sourceFile) {
         out.error = '시간 부족 — ' + i + '/' + chunks.length + '조각까지 보냄, 다음 실행에서 이어감';
         return out;
       }
-      var r = kakaoRawCall_({
-        room: room, text: chunks[i], file_name: fileName, chunk_index: i, chunk_count: chunks.length, source: 'gas-drive'
-      }, token);
+      var r = null;
+      for (var attempt = 0; attempt <= KAKAO_RAW_RETRY; attempt++) {
+        if (attempt) Utilities.sleep(KAKAO_RAW_RETRY_WAIT_MS * attempt);
+        r = kakaoRawCall_({
+          room: room, text: chunks[i], file_name: fileName, chunk_index: i, chunk_count: chunks.length, source: 'gas-drive'
+        }, token);
+        if (r.ok || !kakaoRawRetryable_(r.error) || Date.now() - started > KAKAO_RAW_TIME_MS) break;
+      }
       if (!r.ok) { out.error = (i + 1) + '/' + chunks.length + '조각 실패: ' + r.error; return out; }
       out.chunks++;
       out.sent += Number(r.inserted || 0);

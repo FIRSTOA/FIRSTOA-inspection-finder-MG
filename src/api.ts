@@ -720,10 +720,14 @@ export async function searchAircleaner(q: string): Promise<AirHit[]> {
 
 const AIR_RX = /블루스카이|샤오미|xiaomi|mi[\s-]?air|blue\s?sky/i;
 export type AirForm = { date: string; model: string; region: string; author: string; text: string };
+/** 점검·AS "최근" = 작성일 순(같은 날은 나중 id 먼저). id 순은 안 된다 — 2026-10-29 카톡 수집이 옛 양식 3년 치를 새 id 로
+ *  적재해서, id 순으로는 비에스종합병원 맨 위가 10-29·10-15 대신 08-21 처럼 옛 기록이 떴다(사용자 보고 2026-10-30). */
+export const LATEST_ORDER = `${encodeURIComponent("작성일")}.desc.nullslast,id.desc`;
+
 export async function getAirForms(vendor: string): Promise<AirForm[]> {
   const v = String(vendor || "").trim();
   if (!v) return [];
-  const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=id.desc&limit=30`);
+  const rows = await selectRows<Record<string, unknown>>("jeomgeom", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=${LATEST_ORDER}&limit=30`);
   return rows
     .filter((r) => AIR_RX.test(String(r["모델명"] ?? "")) || AIR_RX.test(String(r["_원문"] ?? "")))
     .slice(0, 6)
@@ -738,8 +742,8 @@ export async function getInspForms(vendor: string): Promise<InspFormsResp> {
   if (!v) return { vendor: "", forms: [] };
   try {
     const [insp, as] = await Promise.all([
-      selectRows<Record<string, unknown>>("jeomgeom", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=id.desc&limit=6`),
-      selectRows<Record<string, unknown>>("as_records", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=id.desc&limit=4`),
+      selectRows<Record<string, unknown>>("jeomgeom", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=${LATEST_ORDER}&limit=6`),
+      selectRows<Record<string, unknown>>("as_records", `select=*&_hidden=not.is.true&${vendorEq(v)}&order=${LATEST_ORDER}&limit=4`),
     ]);
     const forms: InspForm[] = [
       ...insp.map((r) => toForm(r, "점검")),

@@ -96,3 +96,6 @@
 
 ---
 마지막 갱신: 2026-10-24(카톡 수집 카드 — src/KakaoCollectAdmin.tsx·src/kakaoCollectApi.ts) · 2026-10-24(인원 호칭·K21/K34 키) · 이전 2026-10-23(홈 KPI 목표 칸) · 스위치 상태는 2026-10-22 실측 · 근거 커밋 `a5b4d0b`(시트 상태 기준 스위치), `34eb627`·`e009c9c`(지원 3종 스위치), `e3ba5d1`(사진 분석 스위치), `792c399`(카톡 발송 현황) · 근거 파일 src/kpi/kpiCompute.ts(OVERHAUL_EXCLUDED_TITLES), src/AdminHub.tsx, src/SystemAdmin.tsx, src/kpi/KpiTargetsEditor.tsx, src/kpi/kpiDefs.ts, src/RoomDeliveryBoard.tsx · 그림 설명 `/guide/admin.html`(2026-08-25 기준) · 운영 쪽 설명은 docs/manual/ops/
+
+## 카톡 원문 검색 스위치 (2026-10-30)
+- 관리 탭 › 시스템 스위치 **"카톡 원문 검색"**(KAKAO_SEARCH_ENABLED, 빨간 주의). 켜면 검색·필드 🔍·통합검색에 수집한 카톡방 대화 원문이 나온다. 직원 대화가 검색되므로 **전 직원 고지 뒤** 켠다. 전화·주민·계좌 번호는 가린 채 보인다. 끄면 "카톡 원문 검색은 꺼져 있습니다" 한 줄.

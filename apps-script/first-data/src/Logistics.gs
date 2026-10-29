@@ -173,6 +173,26 @@ function filterLogisticsAgainstExisting_(rows, existing) {
   return { rows: keep, dupKey: dupKey, near: near };
 }
 
+/**
+ * 적재 확인용 `_dupKey=in.(…)` 조회 글 목록. GAS UrlFetch 는 URL 2KB 를 넘으면 "길이 초과: URLFetch URL 길이" 로 throw 한다
+ * (2026-10-29·30 완료방: 키 100개씩 = URL 약 3.4KB → 넣기는 됐는데 확인에서 throw → 파일이 확인필요로 감).
+ * prefixLen = 'https://…/rest/v1/표?' 길이. 각 조회 글은 prefixLen 과 합쳐 LOGI_URL_MAX_ 이하. (순수 함수 — 테스트 대상)
+ */
+var LOGI_URL_MAX_ = 1900;
+function logisticsDupKeyQueries_(keys, prefixLen) {
+  var head = 'select=' + encodeURIComponent('"_dupKey"') + '&' + encodeURIComponent('"_dupKey"') + '=in.(';
+  var room = LOGI_URL_MAX_ - Number(prefixLen || 0) - head.length - 1;   // 1 = 닫는 ')'
+  var out = [], cur = [], len = 0;
+  for (var i = 0; i < keys.length; i++) {
+    var k = String(keys[i]);
+    var add = (cur.length ? 1 : 0) + k.length;
+    if (cur.length && len + add > room) { out.push(head + cur.join(',') + ')'); cur = []; len = 0; add = k.length; }
+    cur.push(k); len += add;
+  }
+  if (cur.length) out.push(head + cur.join(',') + ')');
+  return out;
+}
+
 /** logistics_records 읽기(anon). 실패면 throw — 부르는 쪽이 적재를 멈춘다(방어 없이 넣지 않음). */
 function logisticsSelect_(query) {
   var res = UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/' + (SUPABASE_TABLE['물류'] || 'logistics_records') + '?' + query, {
@@ -235,11 +255,9 @@ function ingestLogisticsForms_(routeOrMessages, textOrTeam) {
     // 들어갔는지 다시 확인한다 — supabaseInsertIgnore_ 는 실패를 돌려주지 않는다(_dupKey unique 가 없으면 400 으로 전부 빠짐)
     var keys = f.rows.map(function (r) { return r._dupKey; });
     var present = 0;
-    for (var c = 0; c < keys.length; c += 100) {
-      var got = logisticsSelect_('select=' + encodeURIComponent('"_dupKey"') + '&' +
-        encodeURIComponent('"_dupKey"') + '=in.(' + keys.slice(c, c + 100).join(',') + ')');
-      present += got.length;
-    }
+    var prefixLen = (SUPABASE_URL + '/rest/v1/' + (SUPABASE_TABLE['물류'] || 'logistics_records') + '?').length;
+    var qs = logisticsDupKeyQueries_(keys, prefixLen);
+    for (var c = 0; c < qs.length; c++) present += logisticsSelect_(qs[c]).length;
     res.added = present;
     if (present < keys.length) {
       res.error = '물류 적재 확인 실패: ' + keys.length + '건 중 ' + present + '건만 표에 있음(Apps Script 로그 [Supabase] 줄 확인)';
