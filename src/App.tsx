@@ -13,6 +13,7 @@ import { COMPANY_MEMBERS } from "./companyDirectory";
 import { ToastHost } from "./toast";
 import { authorLocked, getSsoSession, ssoRequiredCached } from "./sso";
 import { extractVendorFromText, pickLabelValue } from "./vendorLine";
+import { isWorkinRowDone, matchToken, matchVendor, pickRowsForDevices } from "./workinAutoComplete";
 import { ConfirmHost } from "./confirmModal";
 import { syncPush } from "./push";
 import { useInboxBadge } from "./useInboxBadge";
@@ -2085,7 +2086,7 @@ function workinSyncSummary(result: WorkinSyncResult): string {
     `다음 분기 이관 ${result.carriedDevices}대`,
   ];
   if (result.reviewDevices) parts.push(`확인 필요 ${result.reviewDevices}대`);
-  return `기기 ${result.totalDevices}대 · ${parts.join(" · ")} · 워킨맵 ${result.changedRows}건 변경`;
+  return `기기 ${result.totalDevices}대 → 워킨맵 ${result.changedRows}행 반영 · ${parts.join(" · ")}`;
 }
 
 const WORKIN_SYNC_STATUS_META: Record<WorkinDeviceSyncStatus, {
@@ -2106,15 +2107,6 @@ function workinStatusDate(place: FieldWorkinMapRow): string {
   return history?.match(/\d{4}-\d{2}-\d{2}/)?.[0] || place.updated_at?.slice(0, 10) || "확인되지 않음";
 }
 
-function matchToken(value: string) {
-  return value.replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
-}
-
-function matchVendor(value: string) {
-  return matchToken(value
-    .replace(/^(?:\d{4}\/)?\d+(?:SS|NN|S|N|V)?[A-Z]?(?=[가-힣㈜(])/i, "")
-    .replace(/(?:분기|매월|계약종료|재계약|점검|마감).*$/i, ""));
-}
 // 시트 자동 기입 4종의 대상 시트 링크 — 전송 후 직원이 바로 열어 확인하는 용도
 const FIELD_SHEET_LINKS: Record<string, string> = {
   praise: "https://docs.google.com/spreadsheets/d/1H15RFS7h-euPJM1pfPIQl_FQNzxk6OrjkSmZZGsqWKQ/edit#gid=0",
@@ -4114,53 +4106,53 @@ export default function App() {
       "workin_map_places",
       `select=id,team,quarter,kind,label,name,comment,memos,updated_at&quarter=in.(${quarter},${nextQuarter})&order=id.asc`,
     );
-    const searchableRows = rows
-      .filter((row) => row.kind === "quarter" || row.kind === "monthly")
-      .map((row) => ({
-        row,
-        rowText: matchToken([row.name, row.comment, ...(row.memos || [])].join(" ")),
-        rowVendor: matchVendor(row.name),
-      }));
+    // 기기 하나당 워킨맵 행 하나(2026-10-31 사용자 결정) — 규칙은 src/workinAutoComplete.ts.
+    // 분기점검: 이번 분기에서 칠할 행이 없는 기기만 다음 분기 행에 선반영(분기 말 선점검). 매월점검은 이번 분기만.
+    const pickDevices = devices.map((device) => ({ index: device.index, serial: device.serial, asset: device.asset, model: device.rawModel }));
+    const selections = new Map<number, Array<{ row: FieldWorkinMapRow; basis: string; shared: boolean; note?: string }>>();
+    const addSelection = (deviceIndex: number, item: { row: FieldWorkinMapRow; basis: string; shared: boolean; note?: string }) => {
+      selections.set(deviceIndex, [...(selections.get(deviceIndex) || []), item]);
+    };
+    (["quarter", "monthly"] as const).forEach((kind) => {
+      const kindLabel = kind === "quarter" ? "분기점검" : "매월점검";
+      const targetLabel = kind === "monthly" ? monthlyLabel : "G5";
+      const current = pickRowsForDevices(pickDevices, rows, { kind, quarter, vendorKey, targetLabel });
+      const waiting = kind === "quarter" ? pickDevices.filter((_, i) => current.picks[i].state !== "pick") : [];
+      const next = waiting.length ? pickRowsForDevices(waiting, rows, { kind, quarter: nextQuarter, vendorKey, targetLabel }) : null;
+      current.picks.forEach((pick) => {
+        const nextPick = next?.picks.find((item) => item.deviceIndex === pick.deviceIndex);
+        if (pick.state !== "pick" && nextPick?.state === "pick" && nextPick.row) {
+          addSelection(pick.deviceIndex, {
+            row: nextPick.row,
+            basis: nextPick.basis || "",
+            shared: nextPick.shared,
+            note: pick.row ? `${kindLabel} ${quarter}분기: ${pick.row.label === "G12" ? "다음 분기 이관(G12)" : "이미 반영(G5)"} → ${nextQuarter}분기 행에 반영` : undefined,
+          });
+          return;
+        }
+        if (pick.row) addSelection(pick.deviceIndex, { row: pick.row, basis: pick.basis || "", shared: pick.shared });
+      });
+    });
+    const plannedRows = new Set([...selections.values()].flat()
+      .filter(({ row }) => !isWorkinRowDone(row, row.kind === "monthly" ? monthlyLabel : "G5"))
+      .map(({ row }) => row.id)).size;
 
     const deviceResults: WorkinDeviceSyncResult[] = [];
     const processedRowIds = new Set<number>();
     const changedRows: Array<{ id: number; label: string; memos: string[] }> = [];
     const monthlyRank: Record<string, number> = { G1: 0, G2: 1, G3: 2, G5: 3 };
 
-    for (const device of devices) {
-      const serialMatches = device.serial.length >= 5
-        ? searchableRows.filter(({ rowText }) => rowText.includes(device.serial))
-        : [];
-      const assetMatches = device.asset.length >= 4
-        ? searchableRows.filter(({ rowText }) => rowText.includes(device.asset))
-        : [];
-      const vendorModelMatches = vendorKey.length >= 4 && device.model.length >= 3
-        ? searchableRows.filter(({ rowText, rowVendor }) =>
-            rowVendor.length >= 4
-            && (rowVendor.includes(vendorKey) || vendorKey.includes(rowVendor))
-            && rowText.includes(device.model))
-        : [];
-      const matchBasis = serialMatches.length
-        ? "시리얼"
-        : assetMatches.length
-          ? "자산기번"
-          : vendorModelMatches.length
-            ? "업체명+기종"
-            : "";
-      const candidates = serialMatches.length
-        ? serialMatches
-        : assetMatches.length
-          ? assetMatches
-          : vendorModelMatches;
-      const weakInputAmbiguous = !serialMatches.length
-        && !assetMatches.length
-        && vendorModelMatches.length > 0
-        && devices.filter((item) => item.model && item.model === device.model).length > 1;
-      const details: string[] = [];
-      const selectedRows: FieldWorkinMapRow[] = [];
-      let ambiguous = false;
+    for (const [deviceOrder, device] of devices.entries()) {
+      const selected = selections.get(device.index) || [];
+      const selectedRows = selected.map(({ row }) => row);
+      const details: string[] = selected.flatMap(({ note }) => (note ? [note] : []));
+      const bases = [...new Set(selected.map(({ basis }) => basis).filter(Boolean))];
+      const matchBasis = bases.map((basis) => (basis === "업체 순번" ? "같은 업체 미완료 행 순번" : basis === "모델명" ? "같은 업체 미완료 행 중 모델명" : basis)).join("·");
+      const ident = device.rawSerial || device.rawAsset || "";
+      // 메모에 "양식 기기 2/4 · 시리얼" — 같은 업체 여러 행 중 어느 기기로 칠했는지 남긴다
+      const deviceTag = ` · 양식 기기 ${deviceOrder + 1}/${devices.length}${ident ? ` ${ident}` : ""}`;
 
-      if (!candidates.length) {
+      if (!selectedRows.length) {
         deviceResults.push({
           index: device.index,
           location: device.location,
@@ -4168,46 +4160,12 @@ export default function App() {
           serial: device.rawSerial,
           asset: device.rawAsset,
           status: "missing",
-          details: ["워킨맵에서 일치 항목을 찾지 못했습니다."],
+          details: ["워킨맵에서 일치 항목을 찾지 못했습니다(시리얼·자산기번 불일치, 같은 업체 행 없음)."],
           matchedRows: 0,
           changedRows: 0,
         });
         continue;
       }
-
-      if (weakInputAmbiguous) {
-        ambiguous = true;
-        details.push("같은 기종이 여러 대라 업체명+기종만으로는 기기를 구분할 수 없습니다.");
-      } else {
-        (["quarter", "monthly"] as const).forEach((kind) => {
-          const kindLabel = kind === "quarter" ? "분기점검" : "매월점검";
-          // 매월점검은 이번 분기 행만 본다 — 다음 분기 행까지 칠하면 월 횟수(G2→G3→G5)가 어긋난다
-          const inCurrent = candidates.filter(({ row }) => row.kind === kind && row.quarter === quarter);
-          const inNext = kind === "quarter" ? candidates.filter(({ row }) => row.kind === kind && row.quarter === nextQuarter) : [];
-          if (inCurrent.length > 1) {
-            ambiguous = true;
-            details.push(`${kindLabel} ${quarter}분기 후보 ${inCurrent.length}곳 · 자동 반영 제외`);
-            return;
-          }
-          const current = inCurrent[0]?.row;
-          // 규칙 ① 이번 분기 행이 아직 안 끝났으면(G5·G12 아님) 이번 분기에만 반영 — 3·4분기 양쪽에 있어도 한 곳만 칠한다
-          if (current && current.label !== "G5" && current.label !== "G12") { selectedRows.push(current); return; }
-          if (inNext.length > 1) {
-            ambiguous = true;
-            details.push(`${kindLabel} ${nextQuarter}분기 후보 ${inNext.length}곳 · 자동 반영 제외`);
-            return;
-          }
-          const next = inNext[0]?.row;
-          if (next) {
-            // 규칙 ② 이번 분기가 이미 완료(G5)·이관(G12)이거나 등재가 없으면 다음 분기 행에 선반영(분기 말 선점검)
-            if (current) details.push(`${kindLabel} ${quarter}분기: ${current.label === "G12" ? "다음 분기 이관(G12)" : "이미 반영(G5)"} → ${nextQuarter}분기 행에 반영`);
-            selectedRows.push(next);
-            return;
-          }
-          if (current) selectedRows.push(current); // 다음 분기 등재 없음 — 이번 분기 행 상태(이미 반영/이관)로 보고
-        });
-      }
-
       let changedForDevice = 0;
       let hasUpdated = false;
       let hasCarried = false;
@@ -4233,8 +4191,8 @@ export default function App() {
           continue;
         }
         const history = nextLabel === "G5"
-          ? `[G5 완료] ${workDate}${row.quarter !== quarter ? ` (${row.quarter}분기 선반영)` : ""}`
-          : `[매월점검 ${monthIndex + 1}회 완료] ${workDate}`;
+          ? `[G5 완료] ${workDate}${row.quarter !== quarter ? ` (${row.quarter}분기 선반영)` : ""}${deviceTag}`
+          : `[매월점검 ${monthIndex + 1}회 완료] ${workDate}${deviceTag}`;
         const memos = (row.memos || []).includes(history) ? row.memos : [...(row.memos || []), history];
         await updateRows("workin_map_places", `id=eq.${row.id}`, {
           label: nextLabel,
@@ -4249,9 +4207,7 @@ export default function App() {
         details.push(`${kindLabel}: ${row.label || "미지정"} → ${nextLabel} 반영 완료`);
       }
 
-      const status: WorkinDeviceSyncStatus = ambiguous
-        ? "ambiguous"
-        : hasUpdated
+      const status: WorkinDeviceSyncStatus = hasUpdated
           ? "updated"
           : hasCarried
             ? "carried"
@@ -4259,6 +4215,7 @@ export default function App() {
               ? "already"
               : "missing";
       if (matchBasis) details.unshift(`${matchBasis} 기준 매칭`);
+      if (deviceOrder === 0) details.push(`양식 기기 ${devices.length}대 → 워킨맵 ${plannedRows}행 반영 대상`);
       deviceResults.push({
         index: device.index,
         location: device.location,
@@ -5522,7 +5479,7 @@ export default function App() {
               <div className="min-w-0">
                 <div className="text-sm font-black text-slate-950">최근 워킨맵 반영 결과</div>
                 <div className="mt-1 text-xs font-semibold leading-5 text-slate-600">
-                  기기 {workinSyncResult.totalDevices}대 · 워킨맵 {workinSyncResult.changedRows}건 변경
+                  기기 {workinSyncResult.totalDevices}대 → 워킨맵 {workinSyncResult.changedRows}행 반영
                 </div>
               </div>
               <button
