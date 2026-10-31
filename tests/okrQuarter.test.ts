@@ -6,10 +6,10 @@ import {
   goalsAreFromQuarter, isLeaderGoals, mergeCycle, mergeMonthActuals, monthDraftFromQuarter, monthlyRollup, monthsOfQuarter, okrCyclePayload,
   parseOkrPaste, parseQuarterId, quarterCycleId, quarterDraft, quarterOf, quarterProgress, splitTsv, topFilterItems, weeksOfMonth,
   directionSteps, lastJudgmentInMonth, lastOfJudgments, mergeFeedback, monthCsJudgment, overlayCriteria, overlayGoals, partMonthJudgment,
-  prevGoalsToCarry, putGoalField, quarterCsJudgment, quarterRollup, filterItemsForTab, quarterNowMonth, alertMonths, quarterTeamCard, monthScreenGoals,
+  prevGoalsToCarry, putGoalField, quarterCsJudgment, quarterRollup, filterItemsForTab, quarterNowMonth, alertMonths, quarterTeamCard, monthScreenGoals, partQuarterRows, partQuarterMonthStrip,
   type OkrCycle, type OkrGoal, type OkrJudgedCell, type OkrReport, type OkrTeam,
 } from "../src/okr";
-import { showsWeekChips } from "../src/okrUi";
+import { okrCrumbs, showsWeekChips } from "../src/okrUi";
 
 type Doc = { id: string; direction: string; goals: OkrGoal[] };
 const load = (name: string): Doc => JSON.parse(readFileSync(resolve(__dirname, "../docs/okr", name), "utf8"));
@@ -410,7 +410,10 @@ describe("3차(2026-10-21): 병목현상 덮어쓰기·파트 탭 필터·주차
   it("T11 파트 탭 필터엔 [n분기]가 없고 통합집계엔 있다, 분기 지금 달", () => {
     const items = topFilterItems([], "2026-10-21", { year: 2026, quarter: 4 });
     expect(filterItemsForTab(items, "all").map((x) => x.label)).toEqual(["4분기", "10월", "11월", "12월"]);
-    expect(filterItemsForTab(items, "A").map((x) => x.label)).toEqual(["10월", "11월", "12월"]);
+    expect(filterItemsForTab(items, "A").map((x) => x.label)).toEqual(["4분기", "10월", "11월", "12월"]); // 2026-11-01 파트 분기
+    const q3 = topFilterItems([], "2026-08-05", { year: 2026, quarter: 3 }); // legacy 분기는 종전대로
+    expect(filterItemsForTab(q3, "A").map((x) => x.label)).toEqual(["7월", "8월", "9월"]);
+    expect(filterItemsForTab(q3, "all").map((x) => x.label)).toEqual(["3분기", "7월", "8월", "9월"]);
     expect(quarterNowMonth(2026, 4, "2026-11-03").id).toBe("2026-11");
     expect(quarterNowMonth(2026, 4, "2027-01-05").id).toBe("2026-10"); // 오늘이 분기 밖이면 첫 달
     expect(quarterNowMonth(2027, 1, "2026-10-21").id).toBe("2027-01");
@@ -462,5 +465,49 @@ describe("4차·5차: 분기 파트 카드·월 빈 틀(2026-10-21)", () => {
     const leader: OkrCycle = { ...copy, goals_origin: "import" };
     expect(monthScreenGoals(leader, q)).toEqual({ goals: leader.goals, pending: false });
     expect(monthScreenGoals(null, q)).toEqual({ goals: [], pending: false });
+  });
+});
+
+describe("2026-11-01 파트 분기", () => {
+  const goals: OkrGoal[] = [1, 2, 3].map((no) => ({ no, pillar: "P", bottleneck: "", objective: `목표 ${no}`, criteria: "" }));
+  const q: OkrCycle = { ...quarterDraft(2026, 4), goals };
+  const oct: OkrCycle = { ...monthDraftFromQuarter(2026, 10, q), goals, goals_origin: "manual" };
+  const nov: OkrCycle = { ...monthDraftFromQuarter(2026, 11, q), goals, goals_origin: "manual" };
+  const dec: OkrCycle = { ...monthDraftFromQuarter(2026, 12, q), goals, goals_origin: "manual" };
+  const rep = (cid: string, rows: Array<[number, string]>): OkrReport => ({ ...emptyReport(cid, "A", ""), rows: rows.map(([no, judgment]) => ({ no, actual: "", judgment, reason: "", plan: "", evidence: "" })) });
+  const weeks = { "2026-11": [{ ...emptyReport("2026-11-W1", "A", "민구"), rows: [{ no: 2, actual: "", judgment: "미흡", reason: "", plan: "", evidence: "" }] }] };
+  const rollup = quarterRollup(q, [oct, nov, dec], { "2026-10": [rep("2026-10", [[1, "미흡"], [2, "완료"]])], "2026-11": [rep("2026-11", [[1, "완료"]])] }, weeks);
+
+  it("partQuarterRows — 세 달 확정/제안, 자동값(마지막 기록 달), report 없으면 row null", () => {
+    const rows = partQuarterRows(rollup, "A", null);
+    expect(rows.map((r) => r.no)).toEqual([1, 2, 3]);
+    expect(rows[0].byMonth.map((m) => [m.label, m.judgment, m.confirmed])).toEqual([["10월", "미흡", true], ["11월", "완료", true], ["12월", "", false]]);
+    expect(rows[1].byMonth[1]).toMatchObject({ judgment: "미흡", confirmed: false });
+    expect(rows[0]).toMatchObject({ auto: "완료", judgment: "완료", manual: false, row: null });
+    expect(rows[1]).toMatchObject({ auto: "미흡", judgment: "미흡" });
+    expect(rows[2]).toMatchObject({ auto: "", judgment: "", manual: false });
+    expect(rows[0].goal.objective).toBe("목표 1");
+  });
+  it("partQuarterRows — 분기 기록의 판정이 있으면 사람 값 우선, 판정 빈 행은 자동값", () => {
+    const rows = partQuarterRows(rollup, "A", rep("2026-Q4", [[1, "부분달성"], [2, ""]]));
+    expect(rows[0]).toMatchObject({ auto: "완료", judgment: "부분달성", manual: true });
+    expect(rows[0].row?.no).toBe(1);
+    expect(rows[1]).toMatchObject({ judgment: "미흡", manual: false });
+    expect(rows[1].row?.no).toBe(2);
+    expect(rows[2].row).toBeNull();
+    expect(partQuarterRows(rollup, "B", null)[0]).toMatchObject({ judgment: "", manual: false });
+  });
+  it("partQuarterMonthStrip — 달별 판정 수·경고 수", () => {
+    expect(partQuarterMonthStrip(rollup, "A")).toEqual([
+      { monthId: "2026-10", label: "10월", judged: 2, total: 3, warn: 1, hasReport: true },
+      { monthId: "2026-11", label: "11월", judged: 2, total: 3, warn: 1, hasReport: true },
+      { monthId: "2026-12", label: "12월", judged: 0, total: 3, warn: 0, hasReport: false },
+    ]);
+    expect(partQuarterMonthStrip(rollup, "B")[0]).toMatchObject({ judged: 0, warn: 0, hasReport: false });
+  });
+  it("okrCrumbs — 분기 + 파트 탭은 [파트, 4분기]", () => {
+    const base = { quarterView: true, quarter: 4, member: "", month: 10 };
+    expect(okrCrumbs({ ...base, tab: "C" })).toEqual(["C파트", "4분기"]);
+    expect(okrCrumbs({ ...base, tab: "all" })).toEqual(["통합집계", "4분기"]);
   });
 });

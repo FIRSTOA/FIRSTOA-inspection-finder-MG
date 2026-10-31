@@ -1,12 +1,13 @@
 // OKR 분기 → 월 → 주 화면(2026-10-20) — 분기 탭·[10월] 통합집계·파트 탭(파트 종합)이 서버 렌더로 깨지지 않고 나오는지,
 // 그리고 옛 화면(fresh 없음)의 열 머리가 그대로인지 확인하는 최소 회귀 테스트. 데이터는 props 로 넣고 fetch 는 막아 둔다.
-// 3차(2026-10-21): 범례 없음 · QuarterTeamView 없음(파트 탭엔 분기 화면 없음) · 주차 열 머리 "이번 주 목표" 없음 · 청록 쪼개기색 없음 · 주차 합치기/불러오기 단추 없음.
+// 3차(2026-10-21): 범례 없음 · QuarterTeamView 없음(2026-11-01 파트 분기로 OkrPartQuarterView 가 대신함) · 주차 열 머리 "이번 주 목표" 없음 · 청록 쪼개기색 없음 · 주차 합치기/불러오기 단추 없음.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { blankGoalsLike, emptyReport, monthDraftFromQuarter, quarterRollup, weeksOfMonth, type OkrCycle, type OkrGoal, type OkrReport } from "../src/okr";
+import { blankGoalsLike, emptyReport, filterItemsForTab, monthDraftFromQuarter, quarterRollup, topFilterItems, weeksOfMonth, type OkrCycle, type OkrGoal, type OkrReport } from "../src/okr";
+import OkrPartQuarterView from "../src/OkrPartQuarterView";
 import * as QuarterViewModule from "../src/OkrQuarterView";
 import OkrMonthRollup, { MonthTeamSummary } from "../src/OkrMonthRollup";
 import { TeamView } from "../src/OkrHub";
@@ -86,8 +87,40 @@ describe("OKR 분기 → 월 → 주 화면 렌더", () => {
     expect(html).toMatch(/text-rose-600">10월</);
   });
 
-  it("3차: 파트 탭용 분기 화면(QuarterTeamView)은 없다", () => {
-    expect("QuarterTeamView" in QuarterViewModule).toBe(false);
+  // 2026-11-01 파트 분기(docs/tasks/okr-part-quarter-2026-11-01.md 후보 ②): 3차에서 지운 파트 탭 분기 화면을 새 파일(OkrPartQuarterView)로 되살렸다.
+  // 같은 날 사용자 피드백: 달 판정 점·분기 판정 열·달별 진행 띠 없음 — 병목현상 | 목표 | 달성기준 | 분기 실제결과 | 사유 | 다음 분기 개선계획 | 근거자료
+  it("파트 탭 분기 화면이 렌더된다(칩·경로·열 구성·노란 칸)", () => {
+    const items = topFilterItems([quarter, october], "2026-10-31", { year: 2026, quarter: 4 });
+    expect(filterItemsForTab(items, "A").map((it) => it.label)).toEqual(["4분기", "10월", "11월", "12월"]);
+    expect(okrCrumbs({ quarterView: true, quarter: 4, tab: "A", member: "", month: 10 })).toEqual(["A파트", "4분기"]);
+    const html = render(createElement(OkrPartQuarterView, { team: "A" as const, quarter, report: null, onResult: noop, onCriteria: noop }));
+    const heads = [...html.matchAll(/<th[^>]*>([^<]+)<span/g)].map((m) => m[1]);
+    expect(heads).toEqual(["병목현상", "목표", "달성기준", "4분기 실제결과", "사유", "다음 분기 개선계획", "근거자료"]);
+    expect((html.match(/bg-indigo-100/g) || []).length).toBe(3); // 앞 셋 남보라
+    expect((html.match(/bg-\[#FDECB3\]/g) || []).length).toBe(4); // 뒤 넷 노랑
+    expect(html).toContain("focus-within:ring-indigo-400"); // 달성기준 = 고칠 수 있는 남보라 칸
+    // 없어진 것: 달 점·분기 판정·달별 띠·필수 표시·달성기준 접기
+    expect(html).not.toContain("4분기 종합");
+    expect(html).not.toContain("파트 종합 열기");
+    expect(html).not.toContain("아직 기록 없음");
+    expect(html).not.toContain(">필수<");
+    expect(html).not.toContain("달성기준 ▾");
+    expect(html).not.toMatch(/title="A파트 10월 종합/);
+    const cols = html.match(/<col(?!group)[^>]*>/g) || [];
+    expect(cols.length).toBe(7);
+    expect(cols[0]).toContain("width:160px");
+    expect(cols[cols.length - 1]).not.toContain("width");
+    expect(html).not.toContain("나눠 적어도"); // 실제결과 칸도 다른 노란 칸처럼 안내 없는 빈 칸(사용자 피드백)
+    expect(html).toContain("병목현상·목표는 팀장 글(통합집계)을 그대로 보여줍니다.");
+  });
+
+  it("파트 분기: 분기 기록 못 읽음 안내·목표 없음", () => {
+    const err = render(createElement(OkrPartQuarterView, { team: "C" as const, quarter, report: null, error: "timeout", onRetry: noop, onResult: noop, onCriteria: noop }));
+    expect(err).toContain("분기 기록을 불러오지 못했습니다");
+    expect(err).toContain("다시 불러오기");
+    expect(err).not.toContain("<table");
+    const none = render(createElement(OkrPartQuarterView, { team: "C" as const, quarter: { ...quarter, goals: [] }, report: null, onResult: noop, onCriteria: noop }));
+    expect(none).toContain("분기 OKR이 없습니다");
   });
 
   it("[10월] 통합집계: 핵심방향 + A~D 판정 + 조치 필요 파트·사람 + 'n월 결과 및 n+1월 개선계획'", () => {

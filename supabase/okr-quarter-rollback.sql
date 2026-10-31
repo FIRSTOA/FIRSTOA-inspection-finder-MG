@@ -12,6 +12,7 @@
 --     분기 화면은 비게 된다.
 --   - 분기 행에 okr_reports 가 붙어 있으면(okr_reports.cycle_id 는 on delete cascade) 삭제 때 그 기록까지 지워진다.
 --     그래서 아래 DO 블록이 그런 기록이 있으면 멈춘다 — 그 경우 기록을 먼저 확인할 것.
+--   - [경고 2026-11-01] 파트 탭 [4분기] 기능부터 파트가 분기 결과를 okr_reports(cycle_id '2026-Q4', team A~D)에 적는다 — 분기 행을 지우면 cascade 로 이 파트 분기 기록까지 모두 지워진다.
 --   - goals_prev 가 비어 있으면(이 SQL 전 앱이 따로 덮은 경우 등) 백업 표 okr_cycles_bak_20261020 의 goals 로 복원.
 --   - okr_reports 는 okr-quarter.sql 이 바꾸지 않았다. 필요하면 okr_reports_bak_20261020 에서 행 단위로 복원.
 --

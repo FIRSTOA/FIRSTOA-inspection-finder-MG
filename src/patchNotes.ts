@@ -2,6 +2,21 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "4efc45b1f7",
+    "date": "2026-10-31",
+    "note": "워킨맵 분기점검 카드: 전분기 재계약 워킨맵 배지·거르기 제거(이번 분기 재계약만) — 사용자 지시 2026-11-01, 매뉴얼 12"
+  },
+  {
+    "hash": "2b55ebed95",
+    "date": "2026-10-31",
+    "note": "OKR 파트별 분기 설계안(한설계 조사, 코드 변경 없음) docs/tasks/okr-part-quarter-2026-11-01.md"
+  },
+  {
+    "hash": "0cbd0ca2df",
+    "date": "2026-10-31",
+    "note": "워킨맵 연도 칸 가동(SQL 실행 확인·엣지 workinmap-sync·data-ask 배포) + 워킨맵 937 vs 웹 948: 머리 수는 켜진 곳만 + \"· 숨김 n\", 동기화 짝짓기 N:M 이면 숨긴 앱 행 빼고 N:N(미래에이비엠 본사 실사례), 매뉴얼 12·AGENTS·worklog"
+  },
+  {
     "hash": "360c706ccf",
     "date": "2026-10-31",
     "note": "worklog: 워킨맵 연도 칸 1단계 평가 항목"
@@ -1235,20 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "686a72dabc",
     "date": "2026-10-10",
     "note": "AI 질문 토큰·추정 비용 표시 + 홈 상단 \"이번 달 비용\" 위젯"
-  },
-  {
-    "hash": "e7b36ad744",
-    "date": "2026-10-10",
-    "note": "통합검색 에이전트 답의 SVG 를 진짜 그림으로 — 저장·복사·문자(MMS) 전송"
-  },
-  {
-    "hash": "1a1eabf6e2",
-    "date": "2026-10-10",
-    "note": "마감 카운터 글: 관리부 목록 원문에서 기종·시리얼넘버·자산기번·주소를 채워 사용자 형식으로"
-  },
-  {
-    "hash": "7445ff7bef",
-    "date": "2026-10-10",
-    "note": "통합검색 자동 라우팅 오탐 수정 + 고객 문자 발송 건수 제한·기록"
   }
 ];

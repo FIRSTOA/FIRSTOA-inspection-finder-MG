@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "2b55ebed95",
+    "agent": "feature-planner",
+    "summary": "OKR 파트별 분기 설계안(한설계 조사, 코드 변경 없음) docs/tasks/okr-part-quarter-2026-11-01.md"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "3097eaccb8",
     "agent": "feature-planner",
     "summary": "워킨맵 연도 칸 1단계: SQL workin-year-20261101(year 열·트리거·백필·인덱스·stale_done·suggest_workin_candidates p_year·RPC year, 권한나 통과) + 공용 헬퍼(currentYQ·shiftYQ·nearestYearFor·scopeFilter…) + 엣지 범위 (팀·연도·분기·업무)·stale_done·other_scope/year_mismatch 경보 + AI 도구 recontract_progress 연도 (배포는 SQL 실행 뒤)"

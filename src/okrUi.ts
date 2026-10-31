@@ -84,7 +84,7 @@ const mdOf = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
 // "2026-10-19","2026-10-23" → "10/19~23", 달이 바뀌면 "9/28~10/2"
 export const weekRangeShort = (start: string, end: string) => `${mdOf(start)}~${end.slice(5, 7) === start.slice(5, 7) ? Number(end.slice(8, 10)) : mdOf(end)}`;
 export function okrCrumbs(p: { quarterView: boolean; quarter: number; tab: string; member: string; month: number; week?: { weekNo: number; start: string; end: string } | null }): string[] {
-  if (p.quarterView) return ["통합집계", `${p.quarter}분기`];
+  if (p.quarterView) return [p.tab === "all" ? "통합집계" : teamName(p.tab), `${p.quarter}분기`]; // 2026-11-01 파트 분기: 파트 탭이면 ["C파트", "4분기"]
   if (p.tab === "all") return ["통합집계", `${p.month}월`];
   const part = teamName(p.tab);
   if (!p.member) return [part, "파트 종합", `${p.month}월`];

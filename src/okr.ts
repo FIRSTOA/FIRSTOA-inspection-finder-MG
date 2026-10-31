@@ -585,7 +585,8 @@ export function applyPastedGoals(current: OkrGoal[], pasted: OkrGoal[]): OkrGoal
 export type OkrFilterItem = { id: string; label: string; kind: "quarter" | "month"; year: number; month: number; exists: boolean; legacy: boolean };
 // today('YYYY-MM-DD', visits.ts kstDate())가 든 분기, 또는 pick으로 고른 분기의 [분기, 달×3]. 주차는 넣지 않는다.
 // 3차(2026-10-21): 파트 탭(A~D)엔 [n분기]가 없다 — 통합집계 탭('all')일 때만 분기 칩을 남긴다
-export const filterItemsForTab = (items: OkrFilterItem[], tab: string): OkrFilterItem[] => (tab === "all" ? items : items.filter((it) => it.kind !== "quarter"));
+// 2026-11-01 파트 분기: 파트 탭에도 [n분기] 칩을 남긴다. 단 legacy 분기(2026-Q3 이하, 분기 행 없음)는 종전처럼 파트 탭에서 뺀다.
+export const filterItemsForTab = (items: OkrFilterItem[], tab: string): OkrFilterItem[] => (tab === "all" ? items : items.filter((it) => it.kind !== "quarter" || !it.legacy));
 // 3차: 그 분기의 "지금 달" — 오늘(KST yyyy-mm-dd)이 든 달, 아니면 첫 달. 분기 화면에서 파트 탭을 누르면 이 달의 [파트 종합]으로 간다
 export function quarterNowMonth(year: number, q: number, today: string): { year: number; month: number; id: string } {
   const ms = monthsOfQuarter(year, q);
@@ -742,6 +743,46 @@ export function quarterRollup(quarter: OkrCycle | null, monthCycles: OkrCycle[],
       };
     }),
   };
+}
+
+// ── 2026-11-01 파트 분기: 파트 탭 [4분기] 화면용 순수 함수 ──
+export type PartQuarterRow = {
+  no: number;
+  goal: OkrQuarterRollup["rows"][number]; // 분기 goal(병목·목표·달성기준) 그대로 — rollup 행
+  byMonth: Array<{ monthId: string; label: string; judgment: OkrJudgment | ""; confirmed: boolean }>; // confirmed: ● 사람 확정(set) / ○ 제안·없음
+  auto: OkrJudgment | ""; // 마지막 기록 달의 파트 판정(byTeam[team].quarter)
+  judgment: OkrJudgment | ""; // 화면에 보일 분기 판정 = 사람 값 우선, 없으면 auto
+  manual: boolean; // judgment 가 사람이 고른 값인가
+  row: OkrResultRow | null; // 파트 분기 기록(cycle_id 분기 id) 행, 없으면 null
+};
+/**
+ * 2026-11-01 파트 분기 — 분기 goals 번호마다 한 줄: 세 달 파트 판정(●/○)·자동 분기 판정·사람 값 우선 판정·분기 기록 행.
+ * quarterReport = 그 파트의 분기 okr_reports 행(cycle_id 분기 id, team, member ''), 없으면 null.
+ */
+export function partQuarterRows(rollup: OkrQuarterRollup, team: OkrTeam, quarterReport: OkrReport | null): PartQuarterRow[] {
+  return rollup.rows.map((r) => {
+    const t = r.byTeam[team];
+    const byMonth = rollup.months.map((m) => {
+      const c = t?.byMonth[m.id];
+      return { monthId: m.id, label: `${m.month}월`, judgment: (c?.judgment || "") as OkrJudgment | "", confirmed: c?.source === "set" };
+    });
+    const auto = t?.quarter || "";
+    const row = quarterReport?.rows.find((x) => x.no === r.no) || null;
+    const set = normalizeJudgment(row?.judgment || "");
+    return { no: r.no, goal: r, byMonth, auto, judgment: set || auto, manual: !!set, row };
+  });
+}
+export type PartQuarterMonthStat = { monthId: string; label: string; judged: number; total: number; warn: number; hasReport: boolean };
+/**
+ * 2026-11-01 파트 분기 — 달별 진행 띠: 그 달 파트 월 종합 판정이 있는 목표 수(judged, ●○ 모두)/목표 수(total),
+ * 미흡·미착수(isAlert) 수(warn), 판정이 하나라도 있으면 hasReport.
+ */
+export function partQuarterMonthStrip(rollup: OkrQuarterRollup, team: OkrTeam): PartQuarterMonthStat[] {
+  return rollup.months.map((m) => {
+    const js = rollup.rows.map((r) => normalizeJudgment(r.byTeam[team]?.byMonth[m.id]?.judgment || ""));
+    const judged = js.filter(Boolean).length;
+    return { monthId: m.id, label: `${m.month}월`, judged, total: rollup.rows.length, warn: js.filter((j) => isAlert(j)).length, hasReport: judged > 0 };
+  });
 }
 
 // ── 목표·달성기준 덮어쓰기 사슬(새 구조): 월 공통(effectiveGoals) → 파트 종합(월 report header.goals) → 파트원 주차(header.goals) ──
