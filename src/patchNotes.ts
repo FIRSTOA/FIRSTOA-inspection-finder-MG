@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "c4b6302aac",
+    "date": "2026-10-31",
+    "note": "전체 디버깅 2차: 오버홀 시트 파일 교체(ID 설정화), 영업 시트 A열 머리 완화, 담당자변경 날짜 수식 중복 차단(dedupe.ts)+정리 SQL, 방문 판단 추가일정 같은 건물만(주소 미확인 표시), REST 읽기45/쓰기30초 타임아웃, 문자 상한 조회 실패 차단, GAS·OpenAI·CalDAV 타임아웃 11함수, 일정 카드 폰 높이 축소, 매뉴얼 ops05·08·user06·14"
+  },
+  {
     "hash": "0b3039abf6",
     "date": "2026-10-31",
     "note": "전체 디버깅 1차 + 확장성 탭 BO 본 화면: 린트 92→66(동작 불변 규칙), 조용한 저장·발송 실패 6곳 알림(리포트 문자 기록 실패 ≠ 발송 실패), UTC '오늘' 3곳 KST, 엣지 3개(담당자변경 공유 claim·되돌림·22시 보류 share.ts, kakao-ingest 250행+57014 반분 재시도 rest-batch.ts, keyman-poster outbox 실패 502), 확장성 IT·복합기 탭은 FIELD_EXPANSION_LEGACY_TABS 뒤로, 매뉴얼 ops05·user00·04, 운영 전수 점검 기록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "cb27b286a7",
     "date": "2026-10-08",
     "note": "복합기 학습·처리이력에 [구동원리] 탭 — 다른 직원이 만든 Apeos 구동원리·급지·ADF 교육가이드(애니메이션 8개)를 FIELD 컨셉으로 다시 입힘 + 내 계정 카드 디자인"
-  },
-  {
-    "hash": "66f9c26abc",
-    "date": "2026-10-08",
-    "note": "로그아웃은 FIELD 세션만 지우고 첫 화면으로 — 그룹웨어 화면에 떨궈 두지 않음(자동 재로그인은 그대로)"
   }
 ];

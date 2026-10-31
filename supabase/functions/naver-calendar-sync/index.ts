@@ -14,6 +14,7 @@
 
 import { importedTicketVendor } from "../_shared/ticket-title.ts";
 import { linkedTicketPatch } from "../_shared/naver-linked-patch.ts";
+import { decideGoneTicket, probeResultOf, type ProbeResult } from "./guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +24,7 @@ const corsHeaders = {
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const CALDAV_BASE = "https://caldav.calendar.naver.com";
 // CalDAV 조회·내려받기 타임아웃(2026-10-31). 시간 초과는 throw → 조회(REPORT)는 errors 에 담겨 삭제 판단을 건너뛰고, 내려받기는 이번 실행 실패(500)로 끝난다.
-// 삭제 가드용 조회(listAccountCalendarIds·다른 캘린더 probe)에는 일부러 붙이지 않는다 — 실패를 "없음"으로 읽어 티켓 삭제로 이어질 수 있다.
+// 삭제 가드용 조회(listAccountCalendarIds·다른 캘린더 probe)도 30초 — 2026-10-31부터 실패는 "모름"으로 읽어 그 회차 삭제를 미룬다(guard.ts).
 const CALDAV_TIMEOUT_MS = 30_000;
 
 function caldavAuth() {
@@ -109,22 +110,24 @@ function parseEvents(xml: string): NaverEvent[] {
   return out;
 }
 
-/** 계정에 보이는 캘린더 id 전부(PROPFIND Depth 1) — 감시 밖 캘린더로 옮긴 일정을 삭제로 오판하지 않기 위한 가드용. 실패하면 빈 배열 */
-async function listAccountCalendarIds(auth: { id: string; header: string }): Promise<string[]> {
+/** 계정에 보이는 캘린더 id 전부(PROPFIND Depth 1) — 감시 밖 캘린더로 옮긴 일정을 삭제로 오판하지 않기 위한 가드용.
+ *  실패하면 null("모름") — 예전엔 빈 배열이라 "다른 캘린더 없음 = 삭제"로 이어졌다(2026-10-31 고침). */
+async function listAccountCalendarIds(auth: { id: string; header: string }): Promise<string[] | null> {
   try {
     const res = await fetch(`${CALDAV_BASE}/caldav/${encodeURIComponent(auth.id)}/calendar/`, {
       method: "PROPFIND",
       headers: { Authorization: auth.header, "Content-Type": "application/xml; charset=utf-8", Depth: "1" },
       body: `<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>`,
+      signal: AbortSignal.timeout(CALDAV_TIMEOUT_MS),
     });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     const text = await res.text();
     const blocks = text.match(/<(?:\w+:)?response>[\s\S]*?<\/(?:\w+:)?response>/g) || [];
     return blocks
       .filter((b) => /<(?:\w+:)?calendar\s*\/>/.test(b))
       .map((b) => decodeURIComponent((((b.match(/<(?:\w+:)?href>([^<]+)<\/(?:\w+:)?href>/) || [])[1] || "").trim().replace(/\/$/, "").split("/").pop() || "")))
       .filter(Boolean);
-  } catch { return []; }
+  } catch { return null; }
 }
 
 Deno.serve(async (req) => {
@@ -394,7 +397,7 @@ Deno.serve(async (req) => {
     // 삭제 완전 양방향(2026-08-15 확정): 네이버에서 사라진 일정은 웹앱 일정·표시도 삭제.
     // 가드: 조회 실패 회차·백로그 잔여 회차에는 판단하지 않는다 (캘린더 간 "이동"을 삭제로 오인 방지 —
     //        이동은 새 href가 다운로드돼야 같은 uid가 살아있음을 알 수 있다)
-    let removed = 0, ticketDeleted = 0, movedElsewhere = 0;
+    let removed = 0, ticketDeleted = 0, movedElsewhere = 0, deferred = 0;
     const backlogNow = listing.filter((l) => stateByHref.get(l.href)?.etag !== l.etag).length - changed.length;
     if (!errors.length && backlogNow <= 0) {
       // 살아있는 uid = 여전히 목록에 있는 href의 uid + 이번에 내려받은 uid
@@ -402,7 +405,7 @@ Deno.serve(async (req) => {
       for (const r of state) if (listedHrefs.has(r.href)) aliveUids.add(r.uid);
       for (const item of changed) { const st = stateByHref.get(item.href); if (st) aliveUids.add(st.uid); }
       const goneRows = state.filter((r) => !listedHrefs.has(r.href));
-      let accountCals: string[] | null = null; // 필요할 때 한 번만 PROPFIND
+      let accountCals: string[] | null | undefined = undefined; // 필요할 때 한 번만 PROPFIND(null = 조회 실패 → 이번 회차 삭제 보류)
       for (const row of goneRows.slice(0, 100)) {
         const uidAlive = row.uid && aliveUids.has(row.uid);
         if (row.uid && !uidAlive) {
@@ -411,15 +414,23 @@ Deno.serve(async (req) => {
           // 팀이 완료 일정을 미감시 캘린더(당시 미설정 팀 캘린더·점검마감 등)로 옮긴 것을 "네이버 삭제"로 오판해
           // 티켓을 지워온 실사고(2026-08-15~25, A·B·D·E 매일). 다른 캘린더에 살아 있으면 티켓·표시를 그대로 둔다.
           if (t) {
-            if (accountCals === null) accountCals = await listAccountCalendarIds(auth);
-            let foundElsewhere = false;
-            for (const cal of accountCals.filter((c) => !calendars.includes(c))) {
-              const probe = await fetch(`${CALDAV_BASE}/caldav/${encodeURIComponent(auth.id)}/calendar/${encodeURIComponent(cal)}/${encodeURIComponent(row.uid)}.ics`, { headers: { Authorization: auth.header } }).catch(() => null);
-              if (probe && probe.ok) { foundElsewhere = true; break; }
+            if (accountCals === undefined) accountCals = await listAccountCalendarIds(auth);
+            const probes: ProbeResult[] = [];
+            for (const cal of (accountCals || []).filter((c) => !calendars.includes(c))) {
+              const probe = await fetch(`${CALDAV_BASE}/caldav/${encodeURIComponent(auth.id)}/calendar/${encodeURIComponent(cal)}/${encodeURIComponent(row.uid)}.ics`, { headers: { Authorization: auth.header }, signal: AbortSignal.timeout(CALDAV_TIMEOUT_MS) }).catch(() => null);
+              const r = probeResultOf(probe);
+              probes.push(r);
+              if (r === "found") break;
             }
-            if (foundElsewhere) {
+            const decision = decideGoneTicket({ accountCals, probes });
+            if (decision === "moved") {
               movedElsewhere += 1;
               await fetch(`${rest}/naver_caldav_state?href=eq.${encodeURIComponent(row.href)}`, { method: "DELETE", headers: { ...restHeaders, Prefer: "return=minimal" } }).catch(() => undefined);
+              continue;
+            }
+            if (decision === "defer") {
+              // 조회 실패 = 모름 → 이번 회차엔 지우지 않는다. state 행도 남겨 다음 실행이 다시 본다(2026-10-31, 8월 사고 재발 방지)
+              deferred += 1;
               continue;
             }
           }
@@ -436,7 +447,7 @@ Deno.serve(async (req) => {
 
     return Response.json({
       ok: true, calendars: calendars.length, listed: listing.length, changed: changed.length, downloaded,
-      manualUpserted, imported, ticketUpdated, ticketDeleted, movedElsewhere, promotedRemoved, removed, errors,
+      manualUpserted, imported, ticketUpdated, ticketDeleted, movedElsewhere, deferred, promotedRemoved, removed, errors,
       backlog: Math.max(0, listing.filter((l) => force || stateByHref.get(l.href)?.etag !== l.etag).length - changed.length),
     }, { headers: jsonHeaders });
   } catch (error) {

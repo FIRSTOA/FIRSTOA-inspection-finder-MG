@@ -167,3 +167,4 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 foreach ($f in "customer-message-send","photo-drive-archive","counter-ocr","entity-ask","guide-tag","playbook-draft","golden-card-transform","growth-note-transform","okr-assist","quarter-result-quantify","naver-calendar-sync","contact-sheet-pull","field-sheet-sync") { npx supabase functions deploy $f --project-ref kkdiihazgzesbqxjytqv }
 ```
 - SQL(사용자 실행, 권한나 통과): `supabase/cleanup-20261031.sql` — 청현세무 쓰레기 12행 삭제(최근 1행은 dedupe 기준으로 남김) + `log_outbox_delivery()` EXECUTE 를 public·anon·authenticated 에서 회수(트리거는 소유자 권한이라 계속 동작).
+- **naver-calendar-sync 삭제 가드 보강(2026-10-31 저녁, 사용자 "진행해")**: 네이버에서 사라진 일정이 웹앱 티켓에 걸려 있으면 계정 다른 캘린더에 살아 있는지 확인하는데, 예전엔 그 확인(PROPFIND·GET)이 실패하면 "없음"으로 읽어 티켓을 지울 수 있었다(8월 사고 계통). 이제 `guard.ts decideGoneTicket`: 목록 조회 실패(null) 또는 확인 중 하나라도 오류/타임아웃 → **보류**(deferred, state 행 유지 → 다음 1분 실행이 다시 봄), 다른 캘린더에 있음 → 옮김, 전부 404 → 삭제. 두 조회에 30초 타임아웃. 응답에 `deferred` 추가. 재배포 필요.
