@@ -328,6 +328,19 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
     expect(p4.detail!.unmatchedLocal.every((x) => x.duplicateOfMatched === false)).toBe(true);
   });
 
+  it("2026-11-01 실사례: N:M 이지만 숨긴(visible=false) 앱 행을 빼면 N:N → 켜진 행만 순서로 짝(미래에이비엠 본사 앱 3 = 켜진 2 + 철수 숨김 1, 워킨맵 2)", () => {
+    const nm = "29V(주)미래에이비엠본사매월마감", addr = "서울 송파구 백제고분로7길 8-8";
+    const remote = [rp({ extId: "e430", name: nm, seq: 10, address: addr }), rp({ extId: "e440", name: nm, seq: 20, address: addr })];
+    const local = [lp({ id: 908, name: nm, address: addr }), lp({ id: 909, name: nm, address: addr }), lp({ id: 910, name: nm, address: addr, visible: false })];
+    const m = matchPlaces(remote, local);
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["e430", 908, "exact_name_order"], ["e440", 909, "exact_name_order"]]);
+    expect(m.ambiguous).toEqual([]);
+    // 숨긴 행을 빼도 개수가 안 맞으면(켜진 3 vs 워킨맵 2) 전처럼 ambiguous
+    const m2 = matchPlaces(remote, local.map((l) => ({ ...l, visible: true })));
+    expect(m2.pairs.filter((p) => p.by === "exact_name_order")).toEqual([]);
+    expect(m2.ambiguous.length).toBe(2);
+  });
+
   it("꼬리 반복 떼기(단순마감마감) + 그래도 안 맞으면 fresh 에 similarLocal(같은 주소 짝 안 된 앱 행) 표시", () => {
     expect(tailNameKey("19SS㈜기산리더스5층단순마감마감")).toBe("19SS㈜기산리더스5층");
     expect(tailNameKey("19SS㈜기산리더스5층단순마감마감")).toBe(tailNameKey("19SS㈜기산리더스5층매월마감"));

@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "3097eaccb8",
+    "agent": "feature-planner",
+    "summary": "워킨맵 연도 칸 1단계: SQL workin-year-20261101(year 열·트리거·백필·인덱스·stale_done·suggest_workin_candidates p_year·RPC year, 권한나 통과) + 공용 헬퍼(currentYQ·shiftYQ·nearestYearFor·scopeFilter…) + 엣지 범위 (팀·연도·분기·업무)·stale_done·other_scope/year_mismatch 경보 + AI 도구 recontract_progress 연도 (배포는 SQL 실행 뒤)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "3097eaccb8",
+    "agent": "db-schema",
+    "summary": "워킨맵 연도 칸 1단계: SQL workin-year-20261101(year 열·트리거·백필·인덱스·stale_done·suggest_workin_candidates p_year·RPC year, 권한나 통과) + 공용 헬퍼(currentYQ·shiftYQ·nearestYearFor·scopeFilter…) + 엣지 범위 (팀·연도·분기·업무)·stale_done·other_scope/year_mismatch 경보 + AI 도구 recontract_progress 연도 (배포는 SQL 실행 뒤)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "3097eaccb8",
+    "agent": "developer",
+    "summary": "워킨맵 연도 칸 1단계: SQL workin-year-20261101(year 열·트리거·백필·인덱스·stale_done·suggest_workin_candidates p_year·RPC year, 권한나 통과) + 공용 헬퍼(currentYQ·shiftYQ·nearestYearFor·scopeFilter…) + 엣지 범위 (팀·연도·분기·업무)·stale_done·other_scope/year_mismatch 경보 + AI 도구 recontract_progress 연도 (배포는 SQL 실행 뒤)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "3097eaccb8",
+    "agent": "sql-review",
+    "summary": "워킨맵 연도 칸 1단계: SQL workin-year-20261101(year 열·트리거·백필·인덱스·stale_done·suggest_workin_candidates p_year·RPC year, 권한나 통과) + 공용 헬퍼(currentYQ·shiftYQ·nearestYearFor·scopeFilter…) + 엣지 범위 (팀·연도·분기·업무)·stale_done·other_scope/year_mismatch 경보 + AI 도구 recontract_progress 연도 (배포는 SQL 실행 뒤)"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "7702c1594e",
     "agent": "developer",
     "summary": "FIELD 점검 전송 → 워킨맵 자동 완료를 양식 기기 수만큼(기기 1대 = 행 1개: 시리얼·자산기번 → 모델명 → 같은 업체 미완료 행 번호 순, 업체는 접두 일치) — src/workinAutoComplete.ts 분리, 후보 여럿 '자동 반영 제외' 제거, 메모 꼬리에 기기 n/m, 매뉴얼 03"

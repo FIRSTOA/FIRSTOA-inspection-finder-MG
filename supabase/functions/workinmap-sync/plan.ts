@@ -378,6 +378,7 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
 
   const remoteExact = exactCount(rest);
   const localExact = exactCount(unlinked.filter((l) => !used.has(l.id)));
+  const localExactVisible = exactCount(unlinked.filter((l) => !used.has(l.id) && l.visible !== false));
   const afterExact: RemotePlace[] = [];
   const orderedDone = new Set<string>();
   for (const r of rest) {
@@ -389,10 +390,13 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
     // ①-3(4차 실측) 같은 이름 N:N(N≥2, 기기 여러 대를 같은 이름으로 등록) + 주소도 모두 같음 → 순서로 1:1
     //   워킨맵 seq 오름차순 ↔ 앱 number 오름차순(number 없으면 id). 개수가 다르면(N:M) 다음 단계로(결국 ambiguous)
     const n = k ? remoteExact.get(k) || 0 : 0;
-    if (n >= 2 && localExact.get(k) === n) {
+    //   N:M 인데 숨긴(visible=false) 앱 행을 빼면 N:N 이 되는 묶음은 **켜진 행만**으로 짝짓는다(2026-11-01 실사례: 미래에이비엠 본사 앱 3 = 켜진 2 + 철수 기기 숨김 1, 워킨맵 2).
+    //   숨긴 행은 철수·대상 아님이라 워킨맵 장소의 짝이 될 수 없다. 개수가 맞는 묶음은 전처럼 전부로(동작 불변).
+    const visibleOnly = n >= 2 && localExact.get(k) !== n && localExactVisible.get(k) === n;
+    if (n >= 2 && (localExact.get(k) === n || visibleOnly)) {
       if (orderedDone.has(k)) continue; // 같은 묶음에서 이미 짝지어진 워킨맵 장소
       const rg = rest.filter((x) => exactNameKey(x.name) === k).sort((a, b) => a.seq - b.seq);
-      const lg = unlinked.filter((x) => !used.has(x.id) && exactNameKey(x.name) === k)
+      const lg = unlinked.filter((x) => !used.has(x.id) && exactNameKey(x.name) === k && (!visibleOnly || x.visible !== false))
         .sort((a, b) => (Number(a.number) || Number.MAX_SAFE_INTEGER) - (Number(b.number) || Number.MAX_SAFE_INTEGER) || a.id - b.id);
       const base = addrKeys(rg[0].address);
       const sameAddr = (address: string | null | undefined) => {

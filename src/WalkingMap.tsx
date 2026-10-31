@@ -2597,11 +2597,17 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
   };
 
   // 모바일 목록 뷰의 상단바 — 예전엔 ≡ 버튼만 한 줄을 차지했다(요청: 거래처 N곳을 그 옆에). 지도 뷰의 headerControls와 같은 자리
+  // 머리 수는 **켜진(보이는) 곳만** — 워킨맵 동기화가 철수 기기를 자동으로 숨기면서(2026-10-31) 숨긴 행까지 세면 워킨맵 수(937)와 달라 보였다(사용자 "워킨맵은 937인데 웹은 왜 948").
+  // 숨긴 행은 목록에 흐리게 그대로 두고 수만 따로 적는다.
+  const visibleCount = useMemo(() => filtered.reduce((n, place) => n + (place.visible ? 1 : 0), 0), [filtered]);
+  const hiddenCount = filtered.length - visibleCount;
+  const hiddenSuffix = hiddenCount > 0 ? <span className="text-[11px] font-bold text-slate-400"> · 숨김 {hiddenCount}</span> : null;
+
   const listHeaderControls = headerSlot && createPortal(
     <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
       <div className="min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="text-[14px] font-black text-white">거래처 <span className="tabular-nums">{filtered.length}</span>곳</span>
+          <span className="text-[14px] font-black text-white">거래처 <span className="tabular-nums">{visibleCount}</span>곳{hiddenSuffix}</span>
           <span className={`text-[11px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>{syncState === "loading" ? "저장 중" : syncState === "error" ? "DB 연결 필요" : "저장됨"}</span>
         </div>
         <div className="truncate text-[11px] font-bold text-slate-400">{conditionTitle}</div>
@@ -2617,7 +2623,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
         <div className="min-w-0">
           <div className="truncate text-[11px] font-bold text-slate-400">{conditionTitle}</div>
           <div className="flex items-baseline gap-2">
-            <span className="text-sm font-black text-white">거래처 <span className="tabular-nums">{filtered.length}</span>곳</span>
+            <span className="text-sm font-black text-white">거래처 <span className="tabular-nums">{visibleCount}</span>곳{hiddenSuffix}</span>
             <span className={`text-[11px] font-bold ${syncState === "error" ? "text-rose-400" : "text-slate-400"}`}>
               {syncState === "loading" ? "공용 저장 중" : syncState === "error" ? "공용 DB 연결 필요" : "공용 저장됨"}
             </span>

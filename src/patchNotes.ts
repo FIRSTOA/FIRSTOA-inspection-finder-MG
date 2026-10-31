@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "360c706ccf",
+    "date": "2026-10-31",
+    "note": "worklog: 워킨맵 연도 칸 1단계 평가 항목"
+  },
+  {
+    "hash": "3097eaccb8",
+    "date": "2026-10-31",
+    "note": "워킨맵 연도 칸 1단계: SQL workin-year-20261101(year 열·트리거·백필·인덱스·stale_done·suggest_workin_candidates p_year·RPC year, 권한나 통과) + 공용 헬퍼(currentYQ·shiftYQ·nearestYearFor·scopeFilter…) + 엣지 범위 (팀·연도·분기·업무)·stale_done·other_scope/year_mismatch 경보 + AI 도구 recontract_progress 연도 (배포는 SQL 실행 뒤)"
+  },
+  {
     "hash": "a56e1e91ee",
     "date": "2026-10-31",
     "note": "AGENTS·worklog: 워킨맵 후속·자동 완료 기기 수 규칙 기록"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "7445ff7bef",
     "date": "2026-10-10",
     "note": "통합검색 자동 라우팅 오탐 수정 + 고객 문자 발송 건수 제한·기록"
-  },
-  {
-    "hash": "dbc8fd9bd9",
-    "date": "2026-10-10",
-    "note": "카운터 카드: 목록에 오른 날·문자 보낸 날·사진 전송/완료 날을 한 줄에, 다시 올라온 횟수와 '문자 후·완료 후 또 올라옴' 배지"
-  },
-  {
-    "hash": "5954c771be",
-    "date": "2026-10-10",
-    "note": "카운터 전송: 폰에서 카메라가 바로 열리던 것 → 사진첩·파일 선택(고객에게 받은 사진을 고른다)"
   }
 ];
