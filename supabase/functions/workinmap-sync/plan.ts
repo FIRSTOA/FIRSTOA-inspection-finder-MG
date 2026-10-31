@@ -274,8 +274,16 @@ export const exactNameKey = (name: string) => normText(name).replace(/\s+/g, " "
  * 꼬리 뗀 이름 키(3차 실측) — exactNameKey 에서 '>' 뒤 메모와 끝의 마감 꼬리(매월마감·분기마감·단순마감·매주마감·월말마감·마감)를 뗀 값.
  * 주소가 같고 1:1 일 때만 짝짓기에 쓴다(matchPlaces ②-2)
  */
-export const tailNameKey = (name: string) => exactNameKey(name).split(">")[0]
-  .replace(/\s*(?:매월마감|분기마감|단순마감|매주마감|월말마감|마감)\s*$/, "").trim();
+export const tailNameKey = (name: string) => {
+  // 꼬리가 겹친 이름("…5층단순마감마감")도 있어 더 떨어지지 않을 때까지 반복(4차 실측)
+  let k = exactNameKey(name).split(">")[0].trim();
+  for (let i = 0; i < 10; i += 1) {
+    const next = k.replace(/\s*(?:매월마감|분기마감|단순마감|매주마감|월말마감|마감)\s*$/, "").trim();
+    if (next === k) break;
+    k = next;
+  }
+  return k;
+};
 /** src/workinPlaces.ts addressGroupKey 와 같은 규칙(엣지에서 src 를 import 하지 않으려고 복사) */
 export const addressKey = (address: string | null | undefined) => String(address || "").replace(/\s+/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
 
@@ -308,7 +316,7 @@ export function addressHeadKey(address: string | null | undefined): string {
 
 // ── 짝짓기(v2-B2) ────────────────────────────────────────────────
 
-export type MatchBy = "ext_id" | "exact_name" | "number_name" | "tail_name" | "name_address";
+export type MatchBy = "ext_id" | "exact_name" | "exact_name_order" | "number_name" | "tail_name" | "name_address";
 /** multiple_candidates = 이 워킨맵 장소에 앱 후보가 2개+ · shared_candidate = 후보 1개지만 그 앱 행을 다른 워킨맵 장소도 후보로 잡음 */
 export type AmbiguousReason = "multiple_candidates" | "shared_candidate";
 export type MatchResult = {
@@ -324,7 +332,7 @@ export type MatchResult = {
 };
 
 /**
- * ① ext_id 같음 → ①-2(2차 실측 뒤) 정규화한 전체 이름 완전 일치, 워킨맵·앱 양쪽 다 1개 → ② (ext_id 빈 행 중) 번호 = 응답 순서 + 이름 키 같음,
+ * ① ext_id 같음 → ①-2(2차 실측 뒤) 정규화한 전체 이름 완전 일치, 워킨맵·앱 양쪽 다 1개(①-3 N:N 같은 개수·같은 주소면 순서로) → ② (ext_id 빈 행 중) 번호 = 응답 순서 + 이름 키 같음,
  *   후보 1개 → ②-2(3차 실측 뒤) 꼬리(마감·'>' 뒤 메모) 뗀 이름 완전 일치 + 같은 주소, 1:1 → ③ 이름 + 주소, 후보 1개.
  * ③(2026-10-31 첫 dry 실측 뒤 강화): 이름은 비교키(vendorMatchKey) 또는 느슨한 키(looseNameKey) 중 하나라도 같고,
  *   주소는 전체 키(addressKey) 또는 앞부분 키(addressHeadKey: 시·도 표기 무시, 번지까지) 중 하나라도 같으면 후보.
@@ -352,14 +360,40 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
     for (const x of list) { const k = exactNameKey(x.name); if (k) c.set(k, (c.get(k) || 0) + 1); }
     return c;
   };
+  const addrKeys = (address: string | null | undefined): string[] => {
+    const full = addressKey(address), head = addressHeadKey(address);
+    return [full ? `f:${full}` : "", head ? `h:${head}` : ""].filter(Boolean);
+  };
+  const overlap = (a: string[], b: string[]) => a.some((x) => b.includes(x));
+
   const remoteExact = exactCount(rest);
   const localExact = exactCount(unlinked.filter((l) => !used.has(l.id)));
   const afterExact: RemotePlace[] = [];
+  const orderedDone = new Set<string>();
   for (const r of rest) {
     const k = exactNameKey(r.name);
     if (k && remoteExact.get(k) === 1 && localExact.get(k) === 1) {
       const l = unlinked.find((x) => !used.has(x.id) && exactNameKey(x.name) === k);
       if (l) { pairs.push({ remote: r, local: l, by: "exact_name" }); used.add(l.id); continue; }
+    }
+    // ①-3(4차 실측) 같은 이름 N:N(N≥2, 기기 여러 대를 같은 이름으로 등록) + 주소도 모두 같음 → 순서로 1:1
+    //   워킨맵 seq 오름차순 ↔ 앱 number 오름차순(number 없으면 id). 개수가 다르면(N:M) 다음 단계로(결국 ambiguous)
+    const n = k ? remoteExact.get(k) || 0 : 0;
+    if (n >= 2 && localExact.get(k) === n) {
+      if (orderedDone.has(k)) continue; // 같은 묶음에서 이미 짝지어진 워킨맵 장소
+      const rg = rest.filter((x) => exactNameKey(x.name) === k).sort((a, b) => a.seq - b.seq);
+      const lg = unlinked.filter((x) => !used.has(x.id) && exactNameKey(x.name) === k)
+        .sort((a, b) => (Number(a.number) || Number.MAX_SAFE_INTEGER) - (Number(b.number) || Number.MAX_SAFE_INTEGER) || a.id - b.id);
+      const base = addrKeys(rg[0].address);
+      const sameAddr = (address: string | null | undefined) => {
+        const ks = addrKeys(address);
+        return base.length ? overlap(base, ks) : ks.length === 0;
+      };
+      if (lg.length === n && rg.every((x) => sameAddr(x.address)) && lg.every((x) => sameAddr(x.address))) {
+        orderedDone.add(k);
+        rg.forEach((x, i) => { pairs.push({ remote: x, local: lg[i], by: "exact_name_order" }); used.add(lg[i].id); });
+        continue;
+      }
     }
     afterExact.push(r);
   }
@@ -374,12 +408,6 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
     else afterStep2.push(r);
   }
   rest = afterStep2;
-
-  const addrKeys = (address: string | null | undefined): string[] => {
-    const full = addressKey(address), head = addressHeadKey(address);
-    return [full ? `f:${full}` : "", head ? `h:${head}` : ""].filter(Boolean);
-  };
-  const overlap = (a: string[], b: string[]) => a.some((x) => b.includes(x));
 
   // ②-2(3차 실측 뒤) 꼬리 뗀 이름 완전 일치 + 같은 주소, 1:1 일 때만 — "…3603호 안쪽매월마감" vs "…3603호 안쪽"
   {
@@ -633,7 +661,7 @@ export type PullPlan = {
   inserts: PlannedInsert[];
   reviews: PlannedReview[];
   stats: {
-    remote: number; matched: number; byExtId: number; byExactName: number; byNumberName: number; byTailName: number; byNameAddress: number;
+    remote: number; matched: number; byExtId: number; byExactName: number; byExactNameOrder: number; byNumberName: number; byTailName: number; byNameAddress: number;
     changed: number; labelChanges: number; memoAdds: number; fresh: number; inserted: number;
     ambiguous: number; missing: number; downgrades: number; keptLocalNewer: number; linkedOnly: number;
     /** 첫 짝짓기에서 앱 완료(G5·G12)를 지킨 곳(keepAppDone) — keptLocalNewer 에도 포함 */
@@ -653,8 +681,10 @@ const oneLine = (s: unknown) => normText(s).replace(/\s+/g, " ").trim();
 /** dry detail:true 전체 목록(2026-10-31 사용자 "어떤 워크에 어디가 다른지 구체적으로") */
 export type PullDetail = {
   ambiguous: Array<{ extId: string; name: string; address: string | null; labelColor: number | null; candidates: Array<{ id: number; name: string; address: string; label: string }>; reason: AmbiguousReason }>;
-  fresh: Array<{ extId: string; seq: number; name: string; address: string | null; labelColor: number | null }>;
-  unmatchedLocal: Array<{ id: number; number: number; name: string; address: string; label: string }>;
+  /** similarLocal = 같은 주소(전체 키 또는 앞부분 키)의 짝 안 된 앱 행(번호 순 첫 행) — 사람이 확인 큐에서 "이게 그거다"로 잇게. 자동 짝은 안 함 */
+  fresh: Array<{ extId: string; seq: number; name: string; address: string | null; labelColor: number | null; similarLocal: { id: number; name: string } | null }>;
+  /** duplicateOfMatched = 같은 이름·주소의 다른 앱 행이 이미 짝됨(앱 쪽 중복 의심) */
+  unmatchedLocal: Array<{ id: number; number: number; name: string; address: string; label: string; duplicateOfMatched: boolean }>;
   /** completion_down = 완료(G5·G12)→낮음(반영+알림) · progress_down = 매월 단계 하강(반영+알림) · keep_app = 첫 가져오기 완료 보존(앱 유지) */
   downgrades: Array<{ id: number; name: string; appLabel: string; workinmapLabel: string | null; reason: "completion_down" | "progress_down" | "keep_app" }>;
   labelChanges: Array<{ id: number; name: string; from: string; to: string }>;
@@ -721,7 +751,7 @@ export function nextScheduledRun(nowMs: number): string {
 export function planPull(input: PullInput): PullPlan {
   const { workId, accountNo, parse, remote, nowIso } = input;
   const stats: PullPlan["stats"] = {
-    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
+    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byExactNameOrder: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
     fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0, keptAppDone: 0, firstImport: false,
   };
   const histogram: Record<string, number> = {};
@@ -751,8 +781,17 @@ export function planPull(input: PullInput): PullPlan {
       extId: a.remote.extId, name: oneLine(a.remote.name), address: a.remote.address, labelColor: a.remote.labelColor, reason: a.reason,
       candidates: a.candidates.map((id) => localById.get(id)).filter((l): l is LocalPlace => Boolean(l)).map((l) => ({ id: l.id, name: oneLine(l.name), address: l.address, label: l.label })),
     }));
-    full.fresh = m.fresh.map((r) => ({ extId: r.extId, seq: r.seq, name: oneLine(r.name), address: r.address, labelColor: r.labelColor }));
-    full.unmatchedLocal = m.unmatchedLocal.map((l) => ({ id: l.id, number: l.number, name: oneLine(l.name), address: l.address, label: l.label }));
+    const addrSig = (a: string | null | undefined) => [addressKey(a) ? `f:${addressKey(a)}` : "", addressHeadKey(a) ? `h:${addressHeadKey(a)}` : ""].filter(Boolean);
+    const spare = [...m.unmatchedLocal].sort((a, b) => (Number(a.number) || Number.MAX_SAFE_INTEGER) - (Number(b.number) || Number.MAX_SAFE_INTEGER) || a.id - b.id)
+      .map((l) => ({ l, sig: addrSig(l.address) }));
+    full.fresh = m.fresh.map((r) => {
+      const sig = addrSig(r.address);
+      const hit = sig.length ? spare.find((x) => x.sig.some((k) => sig.includes(k))) : undefined;
+      return { extId: r.extId, seq: r.seq, name: oneLine(r.name), address: r.address, labelColor: r.labelColor, similarLocal: hit ? { id: hit.l.id, name: oneLine(hit.l.name) } : null };
+    });
+    const dupKey = (l: LocalPlace) => `${exactNameKey(l.name)}|${addressKey(l.address)}`;
+    const matchedKeys = new Set(m.pairs.map((p) => dupKey(p.local)));
+    full.unmatchedLocal = m.unmatchedLocal.map((l) => ({ id: l.id, number: l.number, name: oneLine(l.name), address: l.address, label: l.label, duplicateOfMatched: matchedKeys.has(dupKey(l)) }));
   }
   stats.firstImport = input.scopeEmpty === true && remote.length > 0;
   const freshGuard = stats.firstImport ? "ok" : newPlaceGuard(m.fresh.length, input.firstPull);
@@ -777,7 +816,7 @@ export function planPull(input: PullInput): PullPlan {
 
   for (const { remote: r, local: l, by } of m.pairs) {
     stats.matched += 1;
-    if (by === "ext_id") stats.byExtId += 1; else if (by === "exact_name") stats.byExactName += 1; else if (by === "number_name") stats.byNumberName += 1; else if (by === "tail_name") stats.byTailName += 1; else stats.byNameAddress += 1;
+    if (by === "ext_id") stats.byExtId += 1; else if (by === "exact_name") stats.byExactName += 1; else if (by === "exact_name_order") stats.byExactNameOrder += 1; else if (by === "number_name") stats.byNumberName += 1; else if (by === "tail_name") stats.byTailName += 1; else stats.byNameAddress += 1;
     if (by !== "ext_id" && r.label) {
       if (r.label === l.label) colorCheck.firstMatchSame += 1;
       else {

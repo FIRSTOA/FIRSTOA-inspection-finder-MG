@@ -181,11 +181,12 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
     expect(exactNameKey("19V엔티에스케이투_x000d_\nK2  8층")).toBe(exactNameKey("19V엔티에스케이투\r\nK2 8층"));
   });
 
-  it("완전 일치가 양쪽 중 한쪽이라도 2개+ 면 그 단계에선 짝짓지 않고 다음 단계로", () => {
-    const remote = [rp({ extId: "a", name: "휴스틸", seq: 1, address: "서울 중구 세종대로 1" }), rp({ extId: "b", name: "휴스틸", seq: 2, address: "서울 중구 세종대로 1" })];
+  it("완전 일치가 양쪽 개수가 다르면(N:M) 그 단계에선 짝짓지 않고 다음 단계(번호+이름)로", () => {
+    const remote = [rp({ extId: "a", name: "휴스틸", seq: 1, address: "서울 중구 세종대로 1" }), rp({ extId: "b", name: "휴스틸", seq: 2, address: "서울 중구 세종대로 1" }), rp({ extId: "c", name: "휴스틸", seq: 3, address: "서울 중구 세종대로 1" })];
     const local = [lp({ id: 1, name: "휴스틸", number: 1, address: "서울 중구 세종대로 1" }), lp({ id: 2, name: "휴스틸", number: 2, address: "서울 중구 세종대로 1" })];
     const m = matchPlaces(remote, local);
     expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["a", 1, "number_name"], ["b", 2, "number_name"]]);
+    expect(m.fresh.map((r) => r.extId)).toEqual(["c"]);
   });
 
   it("3차 실측: 앱에 범위 행이 0(처음 들여오는 워크)이면 50곳 상한·첫 회차 보류 없이 전부 insert + stats.firstImport", () => {
@@ -288,14 +289,65 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
       { id: 1, name: "휴스틸 14층", address: addr, label: "G1" }, { id: 2, name: "휴스틸 15층", address: addr, label: "G4" },
     ] }]);
     expect(d.fresh).toHaveLength(25); // 표본(20)과 달리 상한 없음
-    expect(d.fresh[0]).toEqual({ extId: "n0", seq: 100, name: "새곳0 2층", address: "", labelColor: 0 });
-    expect(d.unmatchedLocal.map((x) => [x.id, x.label])).toEqual([[1, "G1"], [2, "G4"]]);
+    expect(d.fresh[0]).toEqual({ extId: "n0", seq: 100, name: "새곳0 2층", address: "", labelColor: 0, similarLocal: null });
+    expect(d.unmatchedLocal.map((x) => [x.id, x.label, x.duplicateOfMatched])).toEqual([[1, "G1", false], [2, "G4", false]]);
     expect(d.downgrades).toEqual([
       { id: 3, name: "단계곳", appLabel: "G2", workinmapLabel: "G1", reason: "progress_down" },
       { id: 4, name: "완료곳", appLabel: "G5", workinmapLabel: "G2", reason: "completion_down" },
     ]);
     expect(d.labelChanges).toEqual([{ id: 3, name: "단계곳", from: "G2", to: "G1" }, { id: 4, name: "완료곳", from: "G5", to: "G2" }, { id: 5, name: "올림곳", from: "G2", to: "G3" }]);
     expect(d.memoAdds).toEqual([{ id: 4, name: "완료곳", added: ["새 메모"] }]);
+  });
+
+  it("4차 실측: 같은 이름·같은 주소 N:N(N≥2)은 순서로 1:1(exact_name_order), N:M 이면 ambiguous, 앱 쪽 남는 중복은 duplicateOfMatched", () => {
+    const nm = "9V주식회사 지평주조송파구사무실매월마감", addr = "서울 송파구 올림픽로 1";
+    const remote = [rp({ extId: "j3", name: nm, seq: 30, address: addr }), rp({ extId: "j1", name: nm, seq: 10, address: addr }), rp({ extId: "j2", name: nm, seq: 20, address: addr })];
+    const local = [lp({ id: 571, name: nm, number: 8, address: addr }), lp({ id: 405, name: nm, number: 2, address: addr }), lp({ id: 900, name: nm, number: 15, address: addr })];
+    const m = matchPlaces(remote, local);
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["j1", 405, "exact_name_order"], ["j2", 571, "exact_name_order"], ["j3", 900, "exact_name_order"]]);
+    expect(m.ambiguous).toEqual([]);
+    // 주소가 다른 행이 섞이면 순서 짝 안 함
+    const m2 = matchPlaces(remote, [...local.slice(0, 2), lp({ id: 900, name: nm, number: 15, address: "부산 해운대구 해운대로 9" })]);
+    expect(m2.pairs.filter((p) => p.by === "exact_name_order")).toEqual([]);
+    // N:M(워킨맵 2 · 앱 3) → ambiguous, 그리고 detail 에서 짝 안 된 앱 중복 표시
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
+    const p = planPull({ workId: WORK, accountNo: 1, parse, remote: remote.slice(0, 2), local, firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 15, withDetail: true });
+    expect(p.stats.byExactNameOrder).toBe(0);
+    expect(p.detail!.ambiguous.map((a) => a.reason)).toEqual(["multiple_candidates", "multiple_candidates"]);
+    // 2:2 + 앱 쪽 중복 1(다른 주소 표기 없음) — 순서 짝 뒤 남은 앱 행은 duplicateOfMatched
+    const p2 = planPull({ workId: WORK, accountNo: 1, parse, remote: remote.slice(0, 2), local: local.slice(0, 2), firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 15, withDetail: true });
+    expect(p2.stats.byExactNameOrder).toBe(2);
+    const dupLocal = [...local.slice(0, 2), lp({ id: 1, name: "다른곳", number: 1 })];
+    const p3 = planPull({ workId: WORK, accountNo: 1, parse, remote: [remote[1]], local: [lp({ id: 405, name: nm, number: 2, address: addr }), ...dupLocal.slice(2)], firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 15, withDetail: true });
+    expect(p3.detail!.unmatchedLocal.map((x) => [x.id, x.duplicateOfMatched])).toEqual([[1, false]]);
+    const p4 = planPull({ workId: WORK, accountNo: 1, parse, remote: [remote[1], remote[2]], local: [...local, lp({ id: 901, name: nm, number: 16, address: addr })].slice(0, 2).concat([lp({ id: 950, name: nm, number: 99, address: addr }), lp({ id: 951, name: nm, number: 98, address: addr })]), firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 99, withDetail: true });
+    // 워킨맵 2 · 앱 4 → N:M 이라 짝 없음 → 중복 표시 대상 아님
+    expect(p4.detail!.unmatchedLocal.every((x) => x.duplicateOfMatched === false)).toBe(true);
+  });
+
+  it("꼬리 반복 떼기(단순마감마감) + 그래도 안 맞으면 fresh 에 similarLocal(같은 주소 짝 안 된 앱 행) 표시", () => {
+    expect(tailNameKey("19SS㈜기산리더스5층단순마감마감")).toBe("19SS㈜기산리더스5층");
+    expect(tailNameKey("19SS㈜기산리더스5층단순마감마감")).toBe(tailNameKey("19SS㈜기산리더스5층매월마감"));
+    const addr = "서울 금천구 벚꽃로 1";
+    const m = matchPlaces([rp({ extId: "g1", name: "19SS㈜기산리더스5층단순마감마감", seq: 70, address: addr })], [lp({ id: 3, name: "19SS㈜기산리더스5층매월마감", number: 2, address: addr })]);
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["g1", 3, "tail_name"]]);
+    // 이름이 달라 짝이 안 되면 fresh 로 두고 같은 주소 앱 행을 힌트로
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
+    const p = planPull({ workId: WORK, accountNo: 1, parse, remote: [rp({ extId: "g2", name: "기산 5층 복합기", seq: 71, address: "서울특별시 금천구 벚꽃로 1, 5층" })],
+      local: [lp({ id: 9, name: "엉뚱한곳", number: 1, address: "부산 중구 중앙대로 1" }), lp({ id: 3, name: "19SS㈜기산리더스5층매월마감", number: 2, address: addr })],
+      firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 2, withDetail: true });
+    expect(p.stats.fresh).toBe(1);
+    expect(p.detail!.fresh[0].similarLocal).toEqual({ id: 3, name: "19SS㈜기산리더스5층매월마감" });
+  });
+
+  it("duplicateOfMatched: 같은 이름·주소의 다른 앱 행이 이미 짝되면 true", () => {
+    const nm = "19SS주식회사 뉴냅스-매월마감", addr = "서울 마포구 양화로 1";
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
+    // 한 곳은 ext_id 로 이미 붙어 있고, 같은 이름·주소 앱 행 하나가 더 있음
+    const remote = [rp({ extId: "x1", name: nm, seq: 5, address: addr })];
+    const local = [lp({ id: 10, name: nm, number: 5, address: addr, ext_id: "x1", ext_work_id: WORK }), lp({ id: 11, name: nm, number: 6, address: addr })];
+    const p = planPull({ workId: WORK, accountNo: 1, parse, remote, local, firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 6, withDetail: true });
+    expect(p.detail!.unmatchedLocal).toEqual([{ id: 11, number: 6, name: nm, address: addr, label: "G1", duplicateOfMatched: true }]);
   });
 
   it("planPull 표본: 새 장소(최대 20)·짝 안 된 앱 행(최대 20)·처음 짝 색 다름(최대 10)", () => {

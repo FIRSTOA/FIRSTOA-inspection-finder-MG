@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "b30c6685d1",
+    "date": "2026-10-31",
+    "note": "워킨맵 동기화 dry 3차 반영: 처음 들여오는 워크(앱 범위 0행)는 상한 없이 전부 추가, 꼬리(매월마감·분기마감…) 뗀 이름+주소 1:1 짝짓기, 첫 가져오기 완료 보존 스위치 WORKINMAP_KEEP_APP_DONE(기본 켬), dry detail:true 전체 목록(애매·새 장소·짝 안 된 앱 행·하강·색 변경·메모 추가)"
+  },
+  {
     "hash": "36432fb420",
     "date": "2026-10-31",
     "note": "워킨맵 동기화 dry 2차 반영: 정규화 전체 이름 완전 일치 짝짓기 우선(_x000d_ 키 오염 수정, 같은 주소 다기기 39건), 라벨은 워킨맵 값 그대로(사용자 \"기존 워킨맵이 주\") + 완료/단계 하강은 참고용 review(applied)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b53e877a4b",
     "date": "2026-10-10",
     "note": "노트북 작업 실행기(tools/worker): 심박 · 매일 02:30 전체 표 백업 · 카톡 PC 발송 중계 · 월요 포스터 · 일감(worker_jobs) 처리"
-  },
-  {
-    "hash": "17fdf7b24c",
-    "date": "2026-10-10",
-    "note": "카운터 문자전송: 카드마다 [삭제] — 한 업체만 목록에서 지우기 (통째 삭제뿐이던 것) · 전체 삭제 확인창 강화"
   }
 ];
