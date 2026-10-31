@@ -3,6 +3,7 @@
 -- 앵커(그날 마지막 필수 일정) 좌표에서 가까운 순 + 마지막 점검 경과일 기준.
 -- v2(2026-08-15): 점검이력을 거래처 코드로 먼저 잇고(이름 키는 폴백 — 미매칭 948→359곳),
 --                 최근 2회 점검(매수·토너·여분·폐통·특이사항)과 임대리스트 기기 목록을 함께 반환.
+-- ※ 2026-11-01 이후 라이브는 9인자(p_year 추가, 오늘=KST) — supabase/workin-year-20261101.sql 7). 이 파일을 다시 돌리면 8인자가 겹쳐 생겨 PostgREST PGRST203 → 다시 돌리지 말고 그 파일을 고칠 것.
 create or replace function safe_date_(v text) returns date language plpgsql immutable as $$
 declare m text; begin
   m := substring(coalesce(v,'') from '\d{4}[-./]\d{1,2}[-./]\d{1,2}');

@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a56e1e91ee",
+    "date": "2026-10-31",
+    "note": "AGENTS·worklog: 워킨맵 후속·자동 완료 기기 수 규칙 기록"
+  },
+  {
+    "hash": "7702c1594e",
+    "date": "2026-10-31",
+    "note": "FIELD 점검 전송 → 워킨맵 자동 완료를 양식 기기 수만큼(기기 1대 = 행 1개: 시리얼·자산기번 → 모델명 → 같은 업체 미완료 행 번호 순, 업체는 접두 일치) — src/workinAutoComplete.ts 분리, 후보 여럿 '자동 반영 제외' 제거, 메모 꼬리에 기기 n/m, 매뉴얼 03"
+  },
+  {
     "hash": "867ccd307b",
     "date": "2026-10-31",
     "note": "AGENTS: 워킨맵 동기화 숨김·확인 큐·id 충돌 후속 기록(31일 18시)"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "5954c771be",
     "date": "2026-10-10",
     "note": "카운터 전송: 폰에서 카메라가 바로 열리던 것 → 사진첩·파일 선택(고객에게 받은 사진을 고른다)"
-  },
-  {
-    "hash": "5023915adf",
-    "date": "2026-10-10",
-    "note": "점검 결과 수정: 실행기 심박 400 버그, 접수 1,000행 잘림, 페이지 경계 누락, XSS, 이중 실행"
-  },
-  {
-    "hash": "0882615602",
-    "date": "2026-10-10",
-    "note": "관리부 마감 목록 자동 반영 + 카운터 전송 이력·연락 금지를 통합검색에"
   }
 ];

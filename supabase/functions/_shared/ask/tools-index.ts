@@ -45,7 +45,7 @@ export const ASK_TOOLS: AskToolDef[] = [
   {
     name: "recontract_progress", label: "재계약 진행 보는 중",
     description: "워킨맵 재계약 지점의 팀별 진행(G5 완료·G6 진행·G7 제외, 홈 K35 와 같은 셈) + 미완료 지점의 재계약 표 마지막 갱신상태·위험도·진행상황 글. '재계약 진행률 낮은 팀과 원인'.",
-    parameters: obj({ team: TEAM, quarter: { type: "number", description: "분기 1~4(비우면 이번 분기)" } }),
+    parameters: obj({ team: TEAM, quarter: { type: "number", description: "분기 1~4(비우면 이번 분기)" }, year: { type: "number", description: "연도(예 2027, 비우면 그 분기에 가장 가까운 해 — 12월에 1분기면 다음 해)" } }),
     run: recontractProgress,
   },
   {

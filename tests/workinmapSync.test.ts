@@ -5,6 +5,7 @@ import {
   addressHeadKey, exactNameKey, looseNameKey, normText, tailNameKey,
   memoCompareKey, memoSlotOf, planMemoDateBackfill, stripMemoTail,
   APP_ONLY_HIDE_LIMIT, appOnlyHideAllowed, appOnlyMemo,
+  inWorkScope, isStaleDone, LEGACY_YEAR, localYear, scopeYearCond, scopeYearParam,
   type LocalPlace, type RemotePlace,
 } from "../supabase/functions/workinmap-sync/plan.ts";
 import { getIdToken, readAccounts, scrub, type TokenRow, type TokenStore } from "../supabase/functions/workinmap-sync/auth.ts";
@@ -659,7 +660,7 @@ describe("planPull", () => {
     expect(p.reviews).toEqual([]);
     expect(p.inserts).toHaveLength(1);
     expect(p.inserts[0].row).toEqual({
-      id: 1001, number: 31, team: "C", quarter: 4, kind: "quarter", label: "G5", visible: true, name: "새곳", comment: "", phone: "",
+      id: 1001, number: 31, team: "C", year: 2026, quarter: 4, kind: "quarter", label: "G5", visible: true, name: "새곳", comment: "", phone: "",
       address: "", address_detail: "", latitude: 37.1, longitude: 127.1, memos: ["메모 (워킨맵 2026-10-31)", "[G5 완료] 2026-10-31 (워킨맵)"],
       ext_id: "n1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026, ext_last_update: "2026-10-31T03:00:00.000Z", ext_synced_at: base.nowIso, updated_by: SYNC_ACTOR,
     });
@@ -719,12 +720,12 @@ describe("planPull — 워킨맵에 없는 앱 행 숨김", () => {
     expect(p.reviews.map((r) => [r.kind, r.field])).toEqual([["format", "app_only_too_many"]]);
   });
 
-  it("appOnlyHideAllowed: 같은 팀·분기·업무 최신 연도 워크가 하나일 때만", () => {
+  it("appOnlyHideAllowed: 같은 팀·연도·분기·업무 대상 워크가 하나일 때만(2026-10-31 연도 범위)", () => {
     const w = (id: string, team: string, year: number, kind = "quarter", status = "target") => ({ id, status, parse: { team, year, quarter: 4, kind } as never });
     const cur = w("a", "C", 2026);
     expect(appOnlyHideAllowed(cur, [cur, w("b", "D", 2026)])).toBe(true);
     expect(appOnlyHideAllowed(cur, [cur, w("old", "C", 2025)])).toBe(true);           // 작년 워크가 있어도 올해 워크는 됨
-    expect(appOnlyHideAllowed(w("old", "C", 2025), [cur, w("old", "C", 2025)])).toBe(false); // 작년 워크로는 숨기지 않음
+    expect(appOnlyHideAllowed(w("old", "C", 2025), [cur, w("old", "C", 2025)])).toBe(true); // 작년 워크는 작년 범위 행만 본다(연도 다른 같은 분기 = 다른 범위)
     expect(appOnlyHideAllowed(cur, [cur, w("x", "C", 2026)])).toBe(false);             // 같은 범위 워크 둘
     expect(appOnlyHideAllowed(cur, [cur, w("x", "C", 2026, "quarter", "excluded")])).toBe(true);
     expect(appOnlyHideAllowed(w("t", "T", 2026), [])).toBe(false);
@@ -733,6 +734,94 @@ describe("planPull — 워킨맵에 없는 앱 행 숨김", () => {
 });
 
 // ── 응답 정리 ─────────────────────────────────────────────────────
+// ── 연도 범위(2026-10-31 설계 workin-year-rollover §3-4) ─────────────
+describe("planPull — 연도 범위(27년 1분기 워크 + 26년 1분기 잔존 행)", () => {
+  const p27 = { team: "C" as const, year: 2027, quarter: 1 as const, kind: "quarter" as const };
+  const base = { workId: WORK, accountNo: 1, parse: p27, nowIso: "2026-12-15T21:10:00.000Z", idBase: 5_000, scopeMaxNumber: 0, firstPull: true, previousCount: null };
+  // 26년 1분기 잔존 행 — 같은 이름·주소. year 칸이 있든(백필 뒤) 없든(백필 전 = 2026 간주) 짝 후보가 아니다
+  const old26 = lp({ id: 11, name: "가나상사", quarter: 1, year: 2026, address: "서울 강남구 테헤란로 1", label: "G5" });
+  const oldNull = lp({ id: 12, name: "다라물산", quarter: 1, address: "부산 해운대구 센텀로 5" });
+  const remote = [
+    rp({ extId: "n1", name: "가나상사", seq: 1, address: "서울 강남구 테헤란로 1", label: "G1", lastUpdate: "2026-12-14T01:00:00.000Z" }),
+    rp({ extId: "n2", name: "다라물산", seq: 2, address: "부산 해운대구 센텀로 5", label: "G5", lastUpdate: "2026-03-20T01:00:00.000Z" }), // 지난 해 칠한 완료색
+    rp({ extId: "n3", name: "마바", seq: 3, label: "G12", lastUpdate: "2027-01-02T01:00:00.000Z" }), // 분기 안 = 정상
+  ];
+
+  it("범위가 비었으면(scopeEmpty) firstImport — 옛 행은 짝 안 됨, 전부 insert(year 2027), 옛 행 쓰기 0", () => {
+    const p = planPull({ ...base, remote, local: [old26, oldNull], scopeEmpty: true });
+    expect(p.stop).toBeNull();
+    expect(p.stats.firstImport).toBe(true);
+    expect(p.stats.matched).toBe(0);
+    expect(p.stats.outOfScope).toBe(2);
+    expect(p.patches).toEqual([]);
+    expect(p.inserts.map((x) => [x.row.ext_id, x.row.year, x.row.quarter, x.row.number])).toEqual([["n1", 2027, 1, 1], ["n2", 2027, 1, 2], ["n3", 2027, 1, 3]]);
+    // 지난 분기 완료색 의심: n2 만(n1 은 완료 아님, n3 은 분기 안) — 색은 워킨맵 값 그대로
+    expect(p.inserts.find((x) => x.row.ext_id === "n2")!.row.label).toBe("G5");
+    expect(p.reviews.map((r) => [r.kind, r.field, r.ext_id, r.place_id])).toEqual([["stale_done", "label", "n2", p.inserts[1].row.id]]);
+    expect(p.stats.staleDone).toBe(1);
+  });
+
+  it("새 장소 60곳이어도 처음 들여오기면 중단하지 않음(옛 행이 남아 있어도)", () => {
+    const many = Array.from({ length: 60 }, (_, i) => rp({ extId: `m${i}`, name: `새곳${i}`, seq: i + 1, address: `대전 ${i}` }));
+    const p = planPull({ ...base, firstPull: false, remote: many, local: [old26, oldNull], scopeEmpty: true });
+    expect(p.stop).toBeNull();
+    expect(p.inserts).toHaveLength(60);
+  });
+
+  it("stale_done 은 처음 들여오기에서만, isStaleDone 은 분기 시작(KST 0시) 기준", () => {
+    const p = planPull({ ...base, remote, local: [], scopeEmpty: false, firstPull: false, previousCount: 3 });
+    expect(p.reviews.filter((r) => r.kind === "stale_done")).toEqual([]);
+    const q4 = { year: 2026, quarter: 4 as const };
+    expect(isStaleDone("G5", "2026-09-20T01:00:00.000Z", q4)).toBe(true);
+    expect(isStaleDone("G5", "2026-09-30T15:30:00.000Z", q4)).toBe(false); // KST 10-01 00:30
+    expect(isStaleDone("G5", "2026-09-30T14:30:00.000Z", q4)).toBe(true); // KST 09-30 23:30
+    expect(isStaleDone("G5", "2026-10-02T01:00:00.000Z", q4)).toBe(false);
+    expect(isStaleDone("G1", "2026-09-20T01:00:00.000Z", q4)).toBe(false);
+    expect(isStaleDone("G12", null, q4)).toBe(false);
+  });
+
+  it("다른 범위 워크에 붙은 ext_id 행은 옮기지 않고 새로 넣지도 않음(format other_scope)", () => {
+    const moved = lp({ id: 21, name: "가나상사", quarter: 1, year: 2026, ext_id: "n1", ext_work_id: "a".repeat(24), ext_year: 2026 });
+    const p = planPull({ ...base, remote: [remote[0]], local: [moved], scopeEmpty: true });
+    expect(p.patches).toEqual([]);
+    expect(p.inserts).toEqual([]);
+    expect(p.reviews.map((r) => [r.kind, r.field, r.ext_id, r.place_id])).toEqual([["format", "other_scope", "n1", 21]]);
+    // 같은 범위(팀·연도·분기·업무) 다른 워크 행은 예전처럼 옮긴다(워킨맵 이동)
+    const same = lp({ id: 22, name: "가나상사", quarter: 1, year: 2027, ext_id: "n1", ext_work_id: "a".repeat(24), ext_year: 2027 });
+    const q = planPull({ ...base, remote: [remote[0]], local: [same], scopeEmpty: false, firstPull: false, previousCount: 1 });
+    expect(q.patches.map((x) => [x.id, x.set.ext_work_id])).toEqual([[22, WORK]]);
+    expect(q.patches[0].set).not.toHaveProperty("year");
+  });
+
+  it("이 워크에 붙은 행인데 연도가 다르면 잇지 않음(format year_mismatch, 경보)", () => {
+    const wrong = lp({ id: 31, name: "가나상사", quarter: 1, year: 2026, ext_id: "n1", ext_work_id: WORK, ext_year: 2026 });
+    const p = planPull({ ...base, remote: [remote[0]], local: [wrong], scopeEmpty: false, firstPull: false, previousCount: 1 });
+    expect(p.patches).toEqual([]);
+    expect(p.inserts).toEqual([]);
+    expect(p.reviews.map((r) => [r.kind, r.field])).toEqual([["format", "year_mismatch"]]);
+  });
+
+  it("26년 워크 + year 빈 옛 행(백필 전) → 2026 으로 보고 짝, 잇는 김에 year 채움", () => {
+    const p26 = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "quarter" as const };
+    const p = planPull({ ...base, parse: p26, remote: [rp({ extId: "e1", name: "가나상사", seq: 1 })], local: [lp({ id: 41, name: "가나상사", number: 1 })], firstPull: false, previousCount: 1 });
+    expect(p.patches.map((x) => [x.id, x.set.year, x.set.ext_year])).toEqual([[41, 2026, 2026]]);
+    // 이미 이어지고 year 도 있으면 쓰기 없음
+    const linked = lp({ id: 42, name: "가나상사", year: 2026, ext_id: "e1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026, ext_last_update: "2026-10-31T03:00:00.000Z" });
+    const q = planPull({ ...base, parse: p26, remote: [rp({ extId: "e1", name: "가나상사", seq: 1 })], local: [linked], firstPull: false, previousCount: 1 });
+    expect(q.patches).toEqual([]);
+  });
+
+  it("범위 조건 조각: 2026 은 year 빈 옛 행 포함, 다른 해는 eq", () => {
+    expect(scopeYearCond(2026)).toBe("or(year.eq.2026,year.is.null)");
+    expect(scopeYearCond(2027)).toBe("year.eq.2027");
+    expect(scopeYearParam(2026)).toBe("or=(year.eq.2026,year.is.null)");
+    expect(scopeYearParam(2027)).toBe("year=eq.2027");
+    expect(localYear({ year: null })).toBe(LEGACY_YEAR);
+    expect(inWorkScope(lp({ id: 1, name: "x", quarter: 1, year: 2026 }), p27)).toBe(false);
+    expect(inWorkScope(lp({ id: 1, name: "x", quarter: 1, year: 2027 }), p27)).toBe(true);
+  });
+});
+
 describe("normalizeRemoteWork", () => {
   it("work2.js 모양 → RemotePlace, escapeHTML 풀기", () => {
     const r = normalizeRemoteWork({
@@ -906,6 +995,11 @@ describe("runAction(fetch 주입)", () => {
     expect(samples).toBeDefined();
     expect(Array.isArray(samples.fresh) && Array.isArray(samples.unmatchedLocal) && Array.isArray(samples.colorDiff)).toBe(true);
     expect(samples.colorDiff.length).toBeGreaterThan(0);
+    // 범위 조회에 연도(26년 워크 → year 빈 옛 행 포함) — E1 loadLocal · E2 최대 번호
+    const placeGets = calls.filter((c) => c.method === "GET" && c.url.includes("/rest/v1/workin_map_places"));
+    expect(placeGets.some((c) => c.url.includes("and(ext_id.is.null,team.eq.C,or(year.eq.2026,year.is.null),quarter.eq.4,kind.eq.quarter)"))).toBe(true);
+    expect(placeGets.some((c) => c.url.includes("select=number&team=eq.C&or=(year.eq.2026,year.is.null)&quarter=eq.4&kind=eq.quarter"))).toBe(true);
+    expect(placeGets.every((c) => !c.url.includes("select=id,") || c.url.includes(",year,"))).toBe(true);
     // 응답에 비밀값 없음
     const text = JSON.stringify(out.body);
     for (const s of [ACC.email, ACC.password, "IDTOKEN-SECRET", "RT-SECRET", "SERVICE-KEY"]) expect(text).not.toContain(s);
@@ -1006,7 +1100,8 @@ describe("묶음 쓰기 · 일정", () => {
     expect(g.map((b) => b.rows)).toEqual([[{ id: 1, label: "G5", ext_id: "e1", ...u }, { id: 2, ext_id: "e2", ...u }], [{ id: 3, visible: false, ...u }]]);
     // rpc 허용 칸만 — 실제 계획이 만든 키도 검사
     const allowed = new Set(["id", "name", "comment", "phone", "address", "address_detail", "latitude", "longitude", "label", "visible", "memos",
-      "ext_id", "ext_work_id", "ext_account_no", "ext_year", "ext_last_update", "ext_synced_at", "ext_missing_at", "updated_by", "updated_at"]);
+      "ext_id", "ext_work_id", "ext_account_no", "ext_year", "ext_last_update", "ext_synced_at", "ext_missing_at", "updated_by", "updated_at",
+      "year"]); // year = supabase/workin-year-20261101.sql 이 허용 칸에 더함(year 빈 옛 행을 잇는 김에 채울 때만 보냄)
     const plan = planPull({
       workId: WORK, accountNo: 1, parse: { team: "C", year: 2026, quarter: 4, kind: "quarter" }, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1, scopeMaxNumber: 0,
       remote: [rp({ extId: "e1", name: "새", label: "G5", comment: "c", phone: "p", address: "a", addressDetail: "d", latitude: 37, longitude: 127, memos: ["m"], visible: false })],

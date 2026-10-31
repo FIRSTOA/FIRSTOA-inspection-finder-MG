@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACTIVITY_SOURCES, countActivity, inspectionGaps, mergeUnhandledNow, misuFollowup, misuFollowupTool, misuLatestDay, personActivity, pinnedOrders, renewalByTeam, roomFor, scheduleView, summarizeAlbums,
+  nearestYearOf, yearArg,
 } from "../supabase/functions/_shared/ask/tools-field.ts";
 import { askerMaySee, dateRange, inYmd, loadRoster, parseOkrPeriod, rosterTeam, textDateLoose, ymdOf, type AskToolCtx } from "../supabase/functions/_shared/ask/tool-util.ts";
 import { askMask } from "../supabase/functions/_shared/ask/mask.ts";
@@ -90,6 +91,16 @@ describe("T6 재계약", () => {
     expect(t).toHaveLength(1);
     expect(t[0]).toMatchObject({ team: "C", target: 2, done: 1, inProgress: 1, excludedG7: 1, pct: 50 });
     expect(t[0].open[0]).toMatchObject({ name: "(주)나나", 갱신상태: "보류", 갱신위험도: "상", 기록일: "2026-10-01" });
+  });
+  it("연도: 비우면 그 분기에 가장 가까운 해(12월 1분기 → 다음 해, 1월 4분기 → 작년), 2자리 연도", () => {
+    expect(nearestYearOf(1, "2026-12-20")).toBe(2027);
+    expect(nearestYearOf(4, "2026-12-20")).toBe(2026);
+    expect(nearestYearOf(4, "2027-01-05")).toBe(2026);
+    expect(nearestYearOf(2, "2026-11-01")).toBe(2026); // 동점 → 과거
+    expect(yearArg(27)).toBe(2027);
+    expect(yearArg("2026년")).toBe(2026);
+    expect(yearArg("")).toBeNull();
+    expect(yearArg(1999)).toBeNull();
   });
 });
 

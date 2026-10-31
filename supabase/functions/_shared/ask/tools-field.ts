@@ -177,16 +177,37 @@ export function renewalByTeam(places: RenewalPlace[], recontract: RecontractRow[
   });
 }
 
+/**
+ * 분기 번호만 있을 때의 연도 — 오늘(KST YYYY-MM-DD)의 (연, 분기)에서 가장 가까운 해, 동점이면 지난 쪽.
+ * 12월에 1분기 → 다음 해, 1월에 4분기 → 작년. src/workinPlaces.ts nearestYearFor · SQL workin_nearest_year_ 와 같은 규칙(2026-10-31)
+ */
+export function nearestYearOf(quarter: number, todayYmd: string): number {
+  const y = Number(todayYmd.slice(0, 4));
+  const here = y * 4 + quarterNo(todayYmd);
+  let best = y - 1;
+  for (const c of [y - 1, y, y + 1]) if (Math.abs(c * 4 + quarter - here) < Math.abs(best * 4 + quarter - here)) best = c;
+  return best;
+}
+/** 연도 인자 — 2자리(27)면 2027, 비었거나 이상하면 null */
+export function yearArg(v: unknown): number | null {
+  const n = Math.trunc(Number(str(v).replace(/년/g, "").trim()));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const y = n < 100 ? 2000 + n : n;
+  return y >= 2020 && y <= 2100 ? y : null;
+}
+
 export async function recontractProgress(args: AskToolArgs, ctx: AskToolCtx) {
   const team = teamArg(args.team) || undefined;
   const q = Math.min(4, Math.max(1, num(args.quarter, quarterNo(ctx.today))));
+  // 같은 분기 번호가 해마다 있다(workin_map_places.year, 2026-10-31) — 연도를 안 주면 가장 가까운 해
+  const year = yearArg(args.year) ?? nearestYearOf(q, ctx.today);
   try {
     const [places, rec] = await Promise.all([
-      ctx.rest.getAll<RenewalPlace>("workin_map_places", `select=id,team,label,name&kind=eq.renewal&quarter=eq.${q}`, { max: 5000 }),
+      ctx.rest.getAll<RenewalPlace>("workin_map_places", `select=id,team,label,name&kind=eq.renewal&year=eq.${year}&quarter=eq.${q}`, { max: 5000 }),
       ctx.rest.getAll<RecontractRow>("recontract", `select=${["날짜", "_업체명", "담당팀", "계약종료일", "진행상황", "갱신상태", "갱신위험도", "최종상태", "다음확인일"].map(qc).join(",")}&_hidden=not.is.true&${qc("날짜")}=gte.${addDays(ctx.today, -400)}`, { max: 6000, orderBy: "날짜" }),
     ]);
     return ctx.mask({
-      quarter: `${q}분기`, teams: renewalByTeam(places.rows, rec.rows, team),
+      quarter: `${String(year).slice(2)}년 ${q}분기`, teams: renewalByTeam(places.rows, rec.rows, team),
       rule: "대상 = 워킨맵 재계약(kind renewal) 그 분기 지점 중 G7(전략영업 V·SS) 뺀 전부, 완료 = G5, 진행 = G6 — 홈 K35 와 같은 셈. 재계약 표는 업체 키로 마지막 기록(최근 400일)을 붙였다.",
       ...(rec.truncated ? { note: "재계약 표가 상한에 걸려 일부만 읽음" } : {}),
     });

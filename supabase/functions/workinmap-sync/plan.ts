@@ -269,6 +269,8 @@ export type LocalPlace = {
   ext_work_id?: string | null;
   ext_account_no?: number | null;
   ext_year?: number | null;
+  /** 연도(supabase/workin-year-20261101.sql). null = SQL 백필 전 옛 행 → LEGACY_YEAR 로 본다 */
+  year?: number | null;
   ext_last_update?: string | null;
   ext_synced_at?: string | null;
   ext_missing_at?: string | null;
@@ -917,7 +919,9 @@ export function planMemoDateBackfill(logs: BackfillLog[], places: BackfillPlace[
 // ── 한 워크 계획 ──────────────────────────────────────────────────
 
 /** workin_sync_review.kind (SQL check 와 같은 값) */
-export type ReviewKind = "unmatched" | "ambiguous" | "new" | "missing" | "downgrade" | "conflict" | "field_diff" | "loop" | "format";
+export type ReviewKind = "unmatched" | "ambiguous" | "new" | "missing" | "downgrade" | "conflict" | "field_diff" | "loop" | "format"
+  /** 지난 분기 완료색 의심(워킨맵 G5·G12 인데 last_update 가 그 분기 시작 전) — workin-year-20261101.sql 이 check 에 더한다 */
+  | "stale_done";
 export type PlannedReview = { kind: ReviewKind; field: string; place_id: number | null; ext_id: string | null; work_id: string; account_no: number; detail: Record<string, unknown> };
 /** workin_sync_log.field (SQL check 와 같은 값) */
 export type LogField = "label" | "visible" | "memo" | "name" | "comment" | "phone" | "address" | "address_detail" | "latitude" | "longitude" | "number"
@@ -942,10 +946,10 @@ export type PullInput = {
   /** 새 행 id 시작값(앱과 같은 Date.now() 방식) · 이미 쓰는 id(충돌 피함) */
   idBase: number;
   takenIds?: Set<number>;
-  /** 범위(팀·분기·업무) 안 최대 번호 — 새 장소는 그 뒤로 */
+  /** 범위(팀·연도·분기·업무) 안 최대 번호 — 새 장소는 그 뒤로 */
   scopeMaxNumber: number;
   /**
-   * 앱에 그 범위(팀·분기·업무) 행이 하나도 없음 = 처음 들여오는 워크(2026-10-31 3차 실측: 계약종료 A·B).
+   * 앱에 그 범위(팀·연도·분기·업무) 행이 하나도 없음 = 처음 들여오는 워크(2026-10-31 3차 실측: 계약종료 A·B).
    * 이때는 새 장소 상한(50)·첫 회차 보류를 걸지 않고 전부 insert(응답 0곳·형식 이상 가드는 그대로)
    */
   scopeEmpty?: boolean;
@@ -955,10 +959,44 @@ export type PullInput = {
   withDetail?: boolean;
   /**
    * 워킨맵에 없는 앱 행 자동 숨김(2026-10-31 사용자 결정) — sync.ts 가 appOnlyHideAllowed 로 정한다
-   * (그 범위의 최신 연도 대상 워크가 이 워크 하나일 때만). 팀 T·E·첫 회차는 planPull 이 한 번 더 막는다
+   * (같은 범위(팀·연도·분기·업무) 대상 워크가 이 워크 하나일 때만). 팀 T·E·첫 회차는 planPull 이 한 번 더 막는다
    */
   hideAppOnly?: boolean;
 };
+
+// ── 연도 범위(2026-10-31 설계 docs/tasks/workin-year-rollover-2026-10-31.md §3-4) ──
+// 앱 범위 키 = (team, year, quarter, kind). 27년 1분기 워크가 26년 1분기 잔존 행을 짝 후보로 끌어오거나(E1)
+// "범위가 비지 않음"으로 보고 첫 들여오기를 막지(E2) 않게 모든 범위 조회·판단에 연도를 넣는다.
+
+/** year 칸이 비어 있는 옛 행(SQL 백필 전 과도기)의 연도 — 지금 행은 전부 2026 년 분기다 */
+export const LEGACY_YEAR = 2026;
+/** 앱 행의 연도(null → LEGACY_YEAR) */
+export const localYear = (l: { year?: number | null }): number => {
+  const y = Number(l.year);
+  return Number.isInteger(y) && y > 2000 ? y : LEGACY_YEAR;
+};
+/** PostgREST 논리식 안(and(…)) 연도 조건 — LEGACY_YEAR 면 year 빈 옛 행도 포함 */
+export const scopeYearCond = (year: number): string =>
+  year === LEGACY_YEAR ? `or(year.eq.${LEGACY_YEAR},year.is.null)` : `year.eq.${Math.trunc(year)}`;
+/** PostgREST 쿼리 인자 연도 조건(앞에 & 없음) — LEGACY_YEAR 면 year 빈 옛 행도 포함. 이 쿼리엔 다른 or= 를 쓰지 말 것 */
+export const scopeYearParam = (year: number): string =>
+  year === LEGACY_YEAR ? `or=(year.eq.${LEGACY_YEAR},year.is.null)` : `year=eq.${Math.trunc(year)}`;
+/** 앱 행이 이 워크 범위(team·year·quarter·kind)인가 */
+export const inWorkScope = (l: Pick<LocalPlace, "team" | "quarter" | "kind" | "year">, parse: WorkParse): boolean =>
+  l.team === parse.team && Number(l.quarter) === parse.quarter && l.kind === parse.kind && localYear(l) === parse.year;
+
+/** 그 분기 시작 시각(KST 0시)의 epoch ms */
+export const quarterStartMs = (year: number, quarter: number): number => Date.UTC(year, (quarter - 1) * 3, 1) - 9 * 3600_000;
+/**
+ * 지난 분기 완료색 의심(설계 R5) — 워킨맵 색이 G5·G12 인데 그 장소 last_update 가 워크 분기 시작(KST) 전.
+ * 워킨맵 담당이 새 분기 워크를 지난 분기 워크 복사로 만들면 색이 따라온다. 적용은 그대로(워킨맵 G5 를 앱이 내리지 않는다) + 확인 큐 참고.
+ * last_update 를 모르면 false.
+ */
+export function isStaleDone(label: string | null | undefined, lastUpdate: string | null | undefined, parse: Pick<WorkParse, "year" | "quarter">): boolean {
+  if (!isDone(label)) return false;
+  const t = lastUpdate ? Date.parse(lastUpdate) : NaN;
+  return Number.isFinite(t) && t < quarterStartMs(parse.year, parse.quarter);
+}
 
 // ── 워킨맵에 없는 앱 행 숨김(2026-10-31 사용자: "미래에이비엠 철수 2대가 앱에 남아 있음 → 문제없게") ──
 
@@ -970,17 +1008,15 @@ export const APP_ONLY_HIDE_LIMIT = 50;
 const hasAppOnlyMemo = (memos: unknown) => Array.isArray(memos) && memos.some((m) => String(m ?? "").trim().startsWith(APP_ONLY_MEMO_HEAD));
 
 /**
- * 이 워크로 앱 행을 숨겨도 되는가 — 앱 범위(팀·분기·업무)에는 연도가 없어서, 같은 팀·분기·업무 대상 워크가
- * 여러 개면(작년 같은 분기 워크·계약종료+재계약 등) 한 워크 기준으로 숨기면 다른 워크의 장소를 숨길 수 있다.
- * → 같은 범위 대상 워크 중 연도가 가장 높고, 그 연도에 이 워크 하나뿐일 때만 true. 팀 T·E 는 false.
+ * 이 워크로 앱 행을 숨겨도 되는가 — 같은 범위(팀·연도·분기·업무) 대상 워크가 이 워크 하나일 때만 true
+ * (계약종료+재계약 두 워크가 같은 범위면 한 워크 기준 숨김이 다른 워크 장소를 숨길 수 있다). 팀 T·E 는 false.
+ * 2026-10-31 연도 칸 도입 전에는 범위에 연도가 없어 "최고 연도 워크 1개" 우회 규칙이었다(설계 R4 로 단순화).
  */
 export function appOnlyHideAllowed(work: { id: string; parse: WorkParse | null }, all: Array<{ id: string; status: string; parse: WorkParse | null }>): boolean {
   const p = work.parse;
   if (!p || p.team === "T" || p.team === "E") return false;
-  const same = all.filter((w) => w.status === "target" && w.parse && w.parse.team === p.team && w.parse.quarter === p.quarter && w.parse.kind === p.kind);
-  const maxYear = Math.max(p.year, ...same.map((w) => (w.parse as WorkParse).year));
-  if (p.year !== maxYear) return false;
-  const ids = new Set(same.filter((w) => (w.parse as WorkParse).year === maxYear).map((w) => w.id));
+  const ids = new Set(all.filter((w) => w.status === "target" && w.parse && w.parse.team === p.team && w.parse.year === p.year
+    && w.parse.quarter === p.quarter && w.parse.kind === p.kind).map((w) => w.id));
   ids.add(work.id);
   return ids.size === 1;
 }
@@ -1004,6 +1040,13 @@ export type PullPlan = {
     appOnlyHidden: number;
     /** 숨겼던 줄이 메모에 있는데 사람이 다시 켠(visible=true) 행 — 다시 숨기지 않음 */
     appOnlyKeptByUser: number;
+    /**
+     * 범위가 다른 앱 행이라 짝 후보에서 뺀 수(2026-10-31 연도 칸) — 다른 워크(다른 연도·분기)에 붙은 ext_id 행(E3)·
+     * 이 워크에 붙었는데 연도가 다른 행(year_mismatch, 경보용)·연도가 다른 미연결 행
+     */
+    outOfScope: number;
+    /** 처음 들여오기에서 지난 분기 완료색 의심으로 확인 큐(stale_done)에 올린 곳 — 적용은 워킨맵 값 그대로 */
+    staleDone: number;
   };
   /** 색 검증(v2 P1-3): label_color 분포와 처음 짝지은 곳의 앱 색 일치 수 */
   colorCheck: { histogram: Record<string, number>; firstMatchSame: number; firstMatchDiff: number };
@@ -1091,7 +1134,7 @@ export function planPull(input: PullInput): PullPlan {
   const stats: PullPlan["stats"] = {
     remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byExactNameOrder: 0, byAddressRename: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0, memoReplaces: 0,
     fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0, keptAppDone: 0, firstImport: false,
-    appOnlyHidden: 0, appOnlyKeptByUser: 0,
+    appOnlyHidden: 0, appOnlyKeptByUser: 0, outOfScope: 0, staleDone: 0,
   };
   const histogram: Record<string, number> = {};
   for (const r of remote) { const k = r.labelColor === null ? "없음" : String(r.labelColor); histogram[k] = (histogram[k] || 0) + 1; }
@@ -1103,14 +1146,30 @@ export function planPull(input: PullInput): PullPlan {
   const guard = workGuard(remote.length, input.previousCount);
   if (guard) return stopped(guard, guard === "empty" ? "응답 0곳 — 전부 삭제로 보지 않고 중단" : `응답 ${remote.length}곳 < 평소 ${input.previousCount}곳의 절반`);
 
-  const m = matchPlaces(remote, input.local, { workId });
+  // 범위 밖 앱 행 거르기(연도 칸 도입, 설계 §3-4-4·7):
+  //   이 워크에 붙은 행 = 연도만 본다(다르면 year_mismatch — 1·4가 맞으면 안 생김, 경보용). 사람이 팀·분기를 고친 행은 예전처럼 둔다
+  //   다른 워크에 붙은 행(ext_id 로 찾은 워킨맵 이동) = 팀·연도·분기·업무가 모두 같아야 — 다르면 옮기지 않는다(작년 행을 끌어오지 않게)
+  //   미연결 행 = 연도만 본다(sync.ts loadLocal 이 이미 범위로 읽음, 방어)
+  // 거른 행의 ext_id 를 가진 워킨맵 장소는 새 장소로도 넣지 않는다(ext_id 부분 unique 인덱스 — 넣으면 묶음 전체 실패) → 확인 큐 format 한 줄
+  const blockedExt = new Map<string, { local: LocalPlace; reason: "year_mismatch" | "other_scope" }>();
+  const local = input.local.filter((l) => {
+    const ok = l.ext_id && l.ext_work_id !== workId ? inWorkScope(l, parse) : localYear(l) === parse.year;
+    if (!ok) {
+      stats.outOfScope += 1;
+      if (l.ext_id) blockedExt.set(l.ext_id, { local: l, reason: l.ext_work_id === workId ? "year_mismatch" : "other_scope" });
+    }
+    return ok;
+  });
+  const m = matchPlaces(remote, local, { workId });
+  const blockedFresh = m.fresh.filter((r) => blockedExt.has(r.extId));
+  if (blockedFresh.length) m.fresh = m.fresh.filter((r) => !blockedExt.has(r.extId));
   stats.fresh = m.fresh.length;
   stats.ambiguous = m.ambiguous.length;
   stats.missing = m.missing.length;
   samples.fresh = m.fresh.slice(0, SAMPLE_FRESH).map((r) => ({ extId: r.extId, seq: r.seq, name: r.name, address: r.address, labelColor: r.labelColor }));
   samples.unmatchedLocal = m.unmatchedLocal.slice(0, SAMPLE_UNMATCHED).map((l) => ({ id: l.id, number: l.number, name: l.name, address: l.address }));
   samples.unmatchedLocalTotal = m.unmatchedLocal.length;
-  const localById = new Map(input.local.map((l) => [l.id, l]));
+  const localById = new Map(local.map((l) => [l.id, l]));
   samples.ambiguous = m.ambiguous.slice(0, SAMPLE_AMBIGUOUS).map((a) => ({
     extId: a.remote.extId, seq: a.remote.seq, name: a.remote.name, address: a.remote.address, labelColor: a.remote.labelColor,
     candidates: a.candidates.map((id) => localById.get(id)).filter((l): l is LocalPlace => Boolean(l)).map((l) => ({ id: l.id, number: l.number, name: l.name, address: l.address })),
@@ -1151,6 +1210,17 @@ export function planPull(input: PullInput): PullPlan {
     ext_id: r.extId, ext_work_id: workId, ext_account_no: accountNo, ext_year: parse.year,
     ext_last_update: r.lastUpdate, ext_synced_at: nowIso, updated_by: SYNC_ACTOR,
   });
+  for (const r of blockedFresh) {
+    const b = blockedExt.get(r.extId)!;
+    pushReview({
+      kind: "format", field: b.reason, place_id: b.local.id, ext_id: r.extId,
+      detail: {
+        reason: b.reason, name: r.name, work: { team: parse.team, year: parse.year, quarter: parse.quarter, kind: parse.kind },
+        app: { id: b.local.id, team: b.local.team, year: b.local.year ?? null, quarter: b.local.quarter, kind: b.local.kind, ext_work_id: b.local.ext_work_id ?? null },
+        note: b.reason === "year_mismatch" ? "이 워크에 붙은 앱 행의 연도가 워크 연도와 다름 — 잇지 않음" : "다른 범위 워크에 붙은 장소 id — 옮기지도 새로 넣지도 않음",
+      },
+    });
+  }
   const dayOf = (r: RemotePlace) => kstYmdOf(r.lastUpdate, new Date(nowIso));
   /** 메모 날짜 꼬리의 기본 날짜(항목 last_update 가 없을 때) = 이 회차 KST 날짜 */
   const todayYmd = kstYmdOf(nowIso);
@@ -1236,14 +1306,16 @@ export function planPull(input: PullInput): PullPlan {
       if (full && (addedItems.length || replacedItems.length)) full.memoAdds.push({ id: l.id, name: oneLine(l.name), added: addedItems, ...(replacedItems.length ? { replaced: replacedItems } : {}) });
     }
 
-    const needsLink = l.ext_id !== r.extId || l.ext_work_id !== workId || Number(l.ext_account_no ?? NaN) !== accountNo || Number(l.ext_year ?? NaN) !== parse.year;
+    // year 가 빈 옛 행(백필 전)은 잇는 김에 워크 연도로 채운다(rpc 허용 칸 year). 값이 있으면 보내지 않는다(범위 거르기에서 같음을 확인함)
+    const fillYear = l.year === null || l.year === undefined;
+    const needsLink = l.ext_id !== r.extId || l.ext_work_id !== workId || Number(l.ext_account_no ?? NaN) !== accountNo || Number(l.ext_year ?? NaN) !== parse.year || fillYear;
     const unmissing = Boolean(l.ext_missing_at);
     if (!fields.length && !needsLink && !unmissing) continue;
     if (fields.length) stats.changed += 1; else stats.linkedOnly += 1;
     if (keepDone) logs.push({ field: "label", before_value: l.label, after_value: l.label, note: "keep_done" });
     if (l.ext_id !== r.extId) logs.push({ field: "_link", before_value: l.ext_id ?? null, after_value: { ext_id: r.extId, work_id: workId, account_no: accountNo, by }, ...(by === "address_rename" ? { note: "rename" } : {}) });
     if (unmissing) { set.ext_missing_at = null; logs.push({ field: "_unmissing", before_value: l.ext_missing_at, after_value: null }); }
-    patches.push({ id: l.id, ext_id: r.extId, set: { ...set, ...linkCols(r) }, fields, by, logs });
+    patches.push({ id: l.id, ext_id: r.extId, set: { ...set, ...linkCols(r), ...(fillYear ? { year: parse.year } : {}) }, fields, by, logs });
   }
 
   for (const a of m.ambiguous) {
@@ -1308,13 +1380,21 @@ export function planPull(input: PullInput): PullPlan {
       if (entry) memos.push(entry);
       // 행 모양 = src/WalkingMap.tsx handleExcelImport → toDbPlace 와 같은 칸(updated_at 은 서버 트리거가 채움) + ext_*
       const row = {
-        id: nextId, number: nextNumber, team: parse.team, quarter: parse.quarter, kind: parse.kind,
+        id: nextId, number: nextNumber, team: parse.team, year: parse.year, quarter: parse.quarter, kind: parse.kind,
         label, visible: r.visible ?? true, name: r.name, comment: r.comment ?? "", phone: r.phone ?? "",
         address: r.address ?? "", address_detail: r.addressDetail ?? "",
         latitude: r.latitude ?? 0, longitude: r.longitude ?? 0, memos,
         ...linkCols(r),
       };
       inserts.push({ row, log: { field: "_insert", before_value: null, after_value: row } });
+      // 처음 들여오기에서 워킨맵 색이 완료인데 그 분기 시작 전에 칠해진 곳 → 참고 확인 큐(설계 R5). 색은 워킨맵 값 그대로 넣는다
+      if (stats.firstImport && isStaleDone(r.label, r.lastUpdate, parse)) {
+        stats.staleDone += 1;
+        pushReview({
+          kind: "stale_done", field: "label", place_id: nextId, ext_id: r.extId,
+          detail: { name: r.name, label: r.label, workinmap_last_update: r.lastUpdate, quarter_start: new Date(quarterStartMs(parse.year, parse.quarter)).toISOString(), applied: true, note: "지난 분기 완료색 의심 — 워킨맵 값 그대로 넣음" },
+        });
+      }
       nextId += 1;
     }
     stats.inserted = inserts.length;

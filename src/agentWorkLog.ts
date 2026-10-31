@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "7702c1594e",
+    "agent": "developer",
+    "summary": "FIELD 점검 전송 → 워킨맵 자동 완료를 양식 기기 수만큼(기기 1대 = 행 1개: 시리얼·자산기번 → 모델명 → 같은 업체 미완료 행 번호 순, 업체는 접두 일치) — src/workinAutoComplete.ts 분리, 후보 여럿 '자동 반영 제외' 제거, 메모 꼬리에 기기 n/m, 매뉴얼 03"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "9c3cb0f52c",
     "agent": "developer",
     "summary": "워킨맵 동기화: 워킨맵에 없는 앱 행 자동 숨김(철수분, 메모·로그·확인 큐, 안전장치 4), 확인 큐 수 = 처리 필요 종류만(참고 접이식·모두 확인함), 새 장소 id 회차 충돌(23505) 수정, 워킨맵 화면 확인 줄 제거"

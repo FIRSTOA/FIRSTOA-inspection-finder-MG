@@ -369,4 +369,27 @@ sameYQ(row, yq)          // placeYear(row) === yq.year && row.quarter === yq.qua
 
 ## 8. 실측 결과 (팀장이 M1~M6 실행 뒤 붙임)
 
-(비어 있음)
+실측: 2026-10-31 밤, 데이터실 표다빈(MCP execute_sql 읽기 전용). "라이브" = DB 에서 읽은 값, "파일" = 저장소 SQL 에 적힌 값.
+
+- **표 크기**: workin_map_places 7,983행(라이브). 파일 workin-sync-20261031.sql 머리 주석은 7,895(그 전 값). DB TimeZone = UTC.
+- **M1 범위별**
+  | 분기 | 범위 | 행 | 비고 |
+  |---|---|---|---|
+  | 1 | A quarter·monthly·renewal 각 1 | 3 | 2026-07-19 이민구 시험 행, 미연결 (quarter 1행은 G5) |
+  | 2 | B monthly·renewal 각 1 | 2 | 〃 |
+  | 3 | A·B·C·D quarter/renewal(+C monthly) | 3,586 | 전부 미연결(ext_id null), 마지막 수정 9/22~9/30, 완료 G5/G12 3,314 |
+  | 4 | A~D 연결 범위 + E 381·D monthly 1(미연결) | 4,392 | 연결 3,983(= ext_year 있는 행, 전부 2026) |
+  → 1월 W1 고장 대상(27년 1분기 범위가 "비지 않음"): **A 팀 quarter·monthly·renewal**(각 1행). 2분기(4월) 대상: B monthly·renewal. 3분기(7월): A~D 전부.
+- **M2** ext_year ≠ 2026: **0행**. ext_year null 4,000행 → 백필 `coalesce(ext_year, 2026)` 그대로 맞음.
+- **M3** 4분기 분기점검 G5/G12 중 10월 완료 메모 없는 행 = **350**(브리프 "9곳"보다 훨씬 많음):
+  P3 선반영(정상) 52(A 8·B 38·D 6) · P1/P4 엑셀·수동 1(B) · **완료 메모 없음 297**(A 95·B 48·C 139·E 15, G12 19 포함, E 외 전부 연결 행).
+  - M3-b: 이 350행 중 workin_sync_log 에 label 변경 기록이 있는 행 **0** → 동기화가 G5 로 바꾼 게 아니라 **연결 전부터 앱에 G5 였다**(엑셀 [교체]로 들여온 색, 또는 메모 없이 사람이 칠한 색). P2(동기화) 경로는 지금 데이터에선 0.
+  - 297행은 "지난 분기 색"인지 "메모 없이 칠한 이번 분기 완료"인지 DB 만으로 못 가른다 → 워킨맵 쪽 해당 장소 last_update·FIELD 10월 점검 실적과 대조 필요(팀장/한설계).
+- **M4 (같은 ext_id 가 다른 ext_work_id 에?)**: places 내 ext_id 중복 0(유일 인덱스) · `_link` 로그 3,895건 중 before 값 있는 것(=다른 행/워크에서 옮김) **0** · 로그·확인 큐에서 ext_id 하나가 work_id 2개 이상 **0** · 연결 행의 (team, quarter, kind, ext_year) ↔ workin_sync_works 불일치 0 · 연결됐는데 works 에 없는 워크 0.
+  **단서**: 지금까지 pull 한 워크는 4분기 11개(A~D 10 + T)뿐, 3분기·2분기 워크 12개는 last_pulled_at null → "워킨맵이 복사 워크에서 장소 _id 를 재사용하나"는 DB 로 증명 불가. **결정: §3-1 9) ext_id 유일 키 전환은 켜지 않는다.** 27년 1분기(또는 T 리허설) 첫 pull 에서 insert 23505 가 나면 그때 켠다(SQL 파일에 주석으로 준비). 엣지 3-4-4(다른 범위 ext_id 행은 옮기지 않음)는 그대로 구현.
+- **워크 목록(workin_sync_works)**: 26년 2분기 renewal 4 · 3분기 9 · 4분기 10 + T 1 · excluded 2(영업확장성리스트) · unparsed 2(PC 영업 FORM). 이름 규칙 `수도권X_26년n분기점검(날짜)`·`계약종료X_26년n분기(월,월,월)(날짜)`. 27년 워크 아직 없음.
+- **M5** 1·2분기 잔여 5행: id 1(A q1 quarter G5 "14SS (주)이오플랜 본사 1 매월마감") · 5(A q1 monthly G2) · 9(A q1 renewal G11 "제주 지점 휴면관리") · 2(B q2 monthly G3) · 6(B q2 renewal G6). 전부 이민구 2026-07-19 시험 행 → 백필 2026. 지워도 되는지는 사용자 확인(이번 SQL 은 안 지움).
+- **M6** 같은 이름이 2개 이상 분기에 있는 이름 **2,233개**(F21 주소·전화 자동 수정이 오래된 행을 고치는 규모).
+- **확인 큐 지금 kind**: downgrade 218 · conflict 68 · missing 22 · field_diff 8 · new 6 · ambiguous 4 → stale_done 추가 check 에 전부 포함(기존 행 안전).
+- **함수(라이브)**: suggest_workin_candidates 8인자, 본문 = auto-schedule.sql 과 같고 라이브에만 `set search_path = public`. workin_sync_update_places = workin-sync-20261031.sql 과 같음(service_role 만). pg_default_acl(함수) = anon·authenticated EXECUTE 자동 → 새 트리거 함수는 revoke 필요(SQL 에 반영).
+- **SQL 확정본**: supabase/workin-year-20261101.sql (설계 초안과 다른 점: 인덱스는 새 이름 대신 **workin_map_scope_idx 이름 유지·정의 교체**(옛 SQL 재실행 시 옛 정의 부활 방지) · 트리거에 `WHEN (new.year is null)` · 동기화 RPC 허용 칸·NOT NULL 칸에 year **넣음**(팀장 결정) · nearest 인자 이름 p_q/p_at(`at` 은 AT TIME ZONE 과 헷갈림) · suggest p_year 는 맨 끝 인자 · 백필 대안 B(updated_at 보존) 주석).

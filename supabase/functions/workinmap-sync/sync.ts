@@ -15,7 +15,7 @@
 import { fetchWork, fetchWorkList, type WorkListItem } from "./api.ts";
 import { FIREBASE_WEB_API_KEY_FALLBACK, getIdToken, readAccounts, type Account, type AuthCtx, type FetchFn, type TokenRow, type TokenStore } from "./auth.ts";
 import {
-  appOnlyHideAllowed, classifyWork, DEFAULT_EXCLUDE_WORKS, DEFERRED_PREFIX, chunkPatchRows, kstParts, nextScheduledRun, PULL_HOURS_KST, listConfig, normalizeRemoteWork, planMemoDateBackfill, planPull, reviewKey,
+  appOnlyHideAllowed, classifyWork, scopeYearCond, scopeYearParam, DEFAULT_EXCLUDE_WORKS, DEFERRED_PREFIX, chunkPatchRows, kstParts, nextScheduledRun, PULL_HOURS_KST, listConfig, normalizeRemoteWork, planMemoDateBackfill, planPull, reviewKey,
   BACKFILL_NOTE_DEDUPE, BACKFILL_NOTE_TAIL, type BackfillLog, switchOn, SYNC_ACTOR,
   type LocalPlace, type PlannedLog, type PlannedReview, type PullPlan, type SyncRequest, type WorkParse, type WorkStatus,
 } from "./plan.ts";
@@ -34,7 +34,7 @@ export type SyncResponse = { status: number; body: Record<string, unknown> };
 export const CONFIG_KEYS = [
   "WORKINMAP_SYNC_ENABLED", "WORKINMAP_EXCLUDE_WORKS", "WORKINMAP_TEST_WORK", "WORKINMAP_ACCOUNT_LABELS", "WORKINMAP_API_KEY", "WORKINMAP_KEEP_APP_DONE",
 ] as const;
-const PLACE_COLS = "id,number,team,quarter,kind,label,visible,name,comment,phone,address,address_detail,latitude,longitude,memos,updated_at,updated_by,ext_id,ext_work_id,ext_account_no,ext_year,ext_last_update,ext_synced_at,ext_missing_at";
+const PLACE_COLS = "id,number,team,year,quarter,kind,label,visible,name,comment,phone,address,address_detail,latitude,longitude,memos,updated_at,updated_by,ext_id,ext_work_id,ext_account_no,ext_year,ext_last_update,ext_synced_at,ext_missing_at";
 const ACCOUNT_STATUS_COLS = "account_no,label,expires_at,fail_count,paused,last_login_at,last_ok_at,last_error,updated_at"; // 토큰 칸 없음
 const WORK_COLS = "account_no,work_id,name,team,year,quarter,kind,status,place_count,override_skip,first_pulled_at,last_pulled_at,last_work_modified,last_error";
 const READ_TIMEOUT_MS = 45_000;
@@ -191,8 +191,13 @@ type WorkResult = {
   detail?: PullPlan["detail"];
 };
 
+/**
+ * 이 워크의 앱 행 = 이 워크에 붙은 행 + 같은 범위(팀·연도·분기·업무)의 미연결 행 + 다른 워크에 붙은 같은 ext_id 행.
+ * 연도(2026-10-31): 27년 1분기 워크가 26년 1분기 미연결 행을 짝 후보로 끌어오지 않게(E1). year 빈 옛 행은 2026 으로 본다(백필 전 과도기).
+ * 다른 워크에 붙은 행 중 범위가 다른 것은 planPull 이 짝 후보에서 뺀다(E3).
+ */
 async function loadLocal(db: Db, workId: string, parse: WorkParse, remoteIds: string[]): Promise<LocalPlace[]> {
-  const scope = `and(ext_id.is.null,team.eq.${parse.team},quarter.eq.${parse.quarter},kind.eq.${parse.kind})`;
+  const scope = `and(ext_id.is.null,team.eq.${parse.team},${scopeYearCond(parse.year)},quarter.eq.${parse.quarter},kind.eq.${parse.kind})`;
   const rows = await db.getAll<LocalPlace>(`workin_map_places?select=${PLACE_COLS}&or=(ext_work_id.eq.${encodeURIComponent(workId)},${scope})&order=id.asc`);
   const have = new Set(rows.map((r) => r.ext_id).filter(Boolean) as string[]);
   const extra = remoteIds.filter((id) => !have.has(id) && /^[0-9a-z]+$/i.test(id));
@@ -240,7 +245,8 @@ async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: Sto
   const remote = norm.work.places;
 
   const local = await loadLocal(db, w.id, parse, remote.map((r) => r.extId));
-  const maxRows = await db.get<Array<{ number: number }>>(`workin_map_places?select=number&team=eq.${parse.team}&quarter=eq.${parse.quarter}&kind=eq.${parse.kind}&order=number.desc&limit=1`);
+  // 범위(팀·연도·분기·업무) 최대 번호·비었나 — 작년 같은 분기 행이 남아 있어도 새 해 워크는 "처음 들여오기"(E2)
+  const maxRows = await db.get<Array<{ number: number }>>(`workin_map_places?select=number&team=eq.${parse.team}&${scopeYearParam(parse.year)}&quarter=eq.${parse.quarter}&kind=eq.${parse.kind}&order=number.desc&limit=1`);
   const openRows = await db.getAll<{ kind: string; field: string; work_id: string | null; ext_id: string | null; place_id: number | null }>(
     `workin_sync_review?select=kind,field,work_id,ext_id,place_id&work_id=eq.${encodeURIComponent(w.id)}&resolved_at=is.null&order=id.asc`,
   );

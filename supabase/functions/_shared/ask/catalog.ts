@@ -92,8 +92,8 @@ export const CATALOG: Record<string, Cat> = {
     cols: ["id", "등록일", "등록자", "_업체명", "미팅지역", "거래처등급", "품목(원문)", "영업진행상황", "예상 발주금액(만원)", "예상 발주시기(YYYY-MM)", "최종결과(대기 등)", "체크일"] },
   counter_sms_targets: { desc: "마감(카운터) 문자 대상. team A~E. sent_at 보낸 시각, done_at 완료. list_kind '' 일반/'CMS'.", vendor: "vendor", date: "added_at", team: "team",
     cols: ["id", "team", "vendor", "grade_group", "sent_at", "sent_by", "done_at", "done_by", "list_kind", "cms_day", "added_at"] },
-  workin_map_places: { desc: "워킨맵(분기 점검 대상). team A~E, quarter 1~4, kind quarter(분기 점검)/monthly(매월 점검)/renewal(재계약), label G1~G12 — 재계약(renewal)은 G5 완료·G6 진행·G7 제외(K35 재계약 진행 기준). name 은 '30S업체명…' 꼴.", vendor: "name", team: "team",
-    cols: ["id", "team", "quarter", "kind", "label", "name", "address", "comment", "visible"] },
+  workin_map_places: { desc: "워킨맵(분기 점검 대상). team A~E, year(연도) + quarter 1~4 — 같은 분기 번호가 해마다 있으니(지난 분기 행도 보관) 반드시 year+quarter 로 거를 것. kind quarter(분기 점검)/monthly(매월 점검)/renewal(재계약), label G1~G12 — 재계약(renewal)은 G5 완료·G6 진행·G7 제외(K35 재계약 진행 기준). name 은 '30S업체명…' 꼴.", vendor: "name", team: "team",
+    cols: ["id", "team", "year", "quarter", "kind", "label", "name", "address", "comment", "visible"] },
   logistics_records: { desc: "물류(납품·교체·철수·여분). 작성일 'YYYY-MM-DD'. 구분·품목·수량.", vendor: "_업체명", date: "작성일", author: "작성자", hidden: "_hidden=not.is.true",
     cols: ["id", "작성일", "작성자", "구분", "_업체명", "품목", "수량", "특이사항"] },
 
