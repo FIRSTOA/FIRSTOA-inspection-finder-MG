@@ -4,6 +4,18 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "999527d501",
+    "agent": "feature-planner",
+    "summary": "워킨맵 양방향 동기화 설계안 v2(한설계, 조사만): 계정 2개·A~D 워크 이름 규칙·색 Gn=label_color n-1·가져오기(10분)·되밀기(props 색/숨김, modify2 메모는 읽고-쓰기 한정)·트리거 큐·핑퐁 방지·P1 3일/P2 3일"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "0032b39d59",
+    "agent": "feature-planner",
+    "summary": "워킨맵(workinmap.com) 동기화 타당성 설계안(한설계, 조사만): 로그인 토큰 필요 실측, 엑셀 머리줄 동일, 1단계 '바뀐 것만 반영' 추천·2단계 서버 가져오기 조건부·양방향 불가"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "c4b6302aac",
     "agent": "ui-designer",
     "summary": "전체 디버깅 2차: 오버홀 시트 파일 교체(ID 설정화), 영업 시트 A열 머리 완화, 담당자변경 날짜 수식 중복 차단(dedupe.ts)+정리 SQL, 방문 판단 추가일정 같은 건물만(주소 미확인 표시), REST 읽기45/쓰기30초 타임아웃, 문자 상한 조회 실패 차단, GAS·OpenAI·CalDAV 타임아웃 11함수, 일정 카드 폰 높이 축소, 매뉴얼 ops05·08·user06·14"

@@ -1,0 +1,520 @@
+import { describe, expect, it } from "vitest";
+import {
+  applyRules, classifyWork, colorOf, decodeHtml, diffPlace, isAuthorized, labelOf, matchPlaces, mergeMemos, newPlaceGuard,
+  chunkPatchRows, nextScheduledRun, normalizeRemoteWork, parseRequest, parseWorkName, planPull, SYNC_ACTOR, workGuard,
+  type LocalPlace, type RemotePlace,
+} from "../supabase/functions/workinmap-sync/plan.ts";
+import { getIdToken, readAccounts, scrub, type TokenRow, type TokenStore } from "../supabase/functions/workinmap-sync/auth.ts";
+import { parseWorkList } from "../supabase/functions/workinmap-sync/api.ts";
+import { runAction, type SyncDeps } from "../supabase/functions/workinmap-sync/sync.ts";
+
+// ── parseWorkName ────────────────────────────────────────────────
+describe("parseWorkName — 실측 워크 이름(설계 v2-A3)", () => {
+  const cases: Array<[string, string, number, number, string]> = [
+    ["수도권C_26년4분기점검(26.10.26)", "C", 2026, 4, "quarter"],
+    ["계약종료C_26년4분기(10월,11월,01월)(260927)", "C", 2026, 4, "renewal"],
+    ["수도권D_26년4분기점검(26.10.26)", "D", 2026, 4, "quarter"],
+    ["수도권C_26년4분기매월점검(26.09.29)", "C", 2026, 4, "monthly"],
+    ["계약종료D_26년4분기(10월,11월,01월)(260927)", "D", 2026, 4, "renewal"],
+    ["수도권A_26년4분기점검(26.10.26)", "A", 2026, 4, "quarter"],
+    ["수도권B_26년4분기점검(26.10.26)", "B", 2026, 4, "quarter"],
+    ["계약종료B_26년4분기(10월,11월,01월)(260927)", "B", 2026, 4, "renewal"],
+    ["계약종료A_26년4분기(10월,11월,01월)(260927)", "A", 2026, 4, "renewal"],
+    ["수도권B_26년3분기점검(26.08.31)", "B", 2026, 3, "quarter"],
+    ["수도권A_26년3분기점검(26.08.31)", "A", 2026, 3, "quarter"],
+    ["계약종료A_26년2분기(5월,6월,7월)(260527)", "A", 2026, 2, "renewal"],
+    ["계약종료A_26년3분기(8월,9월,10월)_260527", "A", 2026, 3, "renewal"],
+    ["계약종료B_26년3분기(8월,9월,10월)(260527)", "B", 2026, 3, "renewal"],
+    ["계약종료B_26년2분기(5월,6월,7월)(260527)", "B", 2026, 2, "renewal"],
+    // C·D 2·3분기는 정확한 이름 미수령 — 같은 형식 가정(설계 v2-G Q1)
+    ["계약종료C_26년3분기(8월,9월,10월)(260527)", "C", 2026, 3, "renewal"],
+    ["계약종료D_26년2분기(5월,6월,7월)(260527)", "D", 2026, 2, "renewal"],
+    ["수도권C_26년3분기점검(26.08.31)", "C", 2026, 3, "quarter"],
+    ["수도권D_26년3분기점검(26.08.31)", "D", 2026, 3, "quarter"],
+    ["수도권C_26년3분기매월점검(26.06.30)", "C", 2026, 3, "monthly"],
+  ];
+  it.each(cases)("%s", (name, team, year, quarter, kind) => {
+    expect(parseWorkName(name)).toEqual({ team, year, quarter, kind });
+  });
+
+  it("제외·해석 불가", () => {
+    expect(parseWorkName("영업확장성리스트_박P_워킨맵표현")).toBeNull();
+    expect(classifyWork({ id: "a".repeat(24), name: "영업확장성리스트_박P_워킨맵표현" }).status).toBe("excluded");
+    expect(classifyWork({ id: "b".repeat(24), name: "아무 워크" }).status).toBe("unparsed");
+    expect(parseWorkName("수도권C_4분기점검")).toBeNull();          // 연도 없음
+    expect(parseWorkName("수도권CD_26년4분기점검")).toBeNull();      // 팀 글자 경계
+    expect(parseWorkName("수도권C_26년4분기(26.10.26)")).toBeNull(); // 업무 글자 없음
+    expect(classifyWork({ id: "c".repeat(24), name: "수도권C_26년4분기점검(26.10.26)" }, { exclude: ["c".repeat(24)] }).status).toBe("excluded");
+  });
+
+  it("테스트 워크 = 팀 T(이름 또는 id 로 지정)", () => {
+    expect(parseWorkName("26.10.31 동기화 테스트")).toBeNull();
+    expect(parseWorkName("26.10.31 동기화 테스트", { testWork: "26.10.31 동기화 테스트" })).toEqual({ team: "T", year: 2026, quarter: 4, kind: "quarter", test: true });
+    const byId = classifyWork({ id: "d".repeat(24), name: "26.10.31 동기화 테스트" }, { testWork: "d".repeat(24) });
+    expect(byId.status).toBe("target");
+    expect(byId.parse?.team).toBe("T");
+  });
+});
+
+// ── 색 ───────────────────────────────────────────────────────────
+describe("labelOf / colorOf", () => {
+  it("0~11 ↔ G1~G12 왕복", () => {
+    for (let n = 0; n < 12; n += 1) {
+      expect(labelOf(n)).toBe(`G${n + 1}`);
+      expect(colorOf(labelOf(n))).toBe(n);
+    }
+    expect(labelOf("4")).toBe("G5");
+    expect(labelOf(12)).toBeNull();
+    expect(labelOf(-1)).toBeNull();
+    expect(labelOf(null)).toBeNull();
+    expect(colorOf("G13")).toBeNull();
+    expect(colorOf("x")).toBeNull();
+  });
+});
+
+// ── 공용 재료 ─────────────────────────────────────────────────────
+const WORK = "6aaa410a66d17921d76c9c65";
+const WORK2 = "7bbb410a66d17921d76c9c66";
+const rp = (o: Partial<RemotePlace> & { extId: string; name: string }): RemotePlace => ({
+  seq: 1, comment: "", phone: "", address: "", addressDetail: "", latitude: null, longitude: null, label: "G1", visible: true,
+  memos: [], lastUpdate: "2026-10-31T03:00:00.000Z", labelColor: 0, ...o,
+});
+const lp = (o: Partial<LocalPlace> & { id: number; name: string }): LocalPlace => ({
+  number: 1, team: "C", quarter: 4, kind: "quarter", label: "G1", visible: true, comment: "", phone: "", address: "", address_detail: "",
+  latitude: 0, longitude: 0, memos: [], ext_id: null, ...o,
+});
+
+// ── 짝짓기 ───────────────────────────────────────────────────────
+describe("matchPlaces — ext_id → 번호+이름 → 이름+주소", () => {
+  it("3단계 순서와 새 장소", () => {
+    const remote = [
+      rp({ extId: "e1", name: "가나상사", seq: 1 }),
+      rp({ extId: "e2", name: "(주)다라물산", seq: 2 }),
+      rp({ extId: "e3", name: "마바산업", seq: 9, address: "서울 강남구 테헤란로 1" }),
+      rp({ extId: "e4", name: "새로운곳", seq: 4 }),
+    ];
+    const local = [
+      lp({ id: 10, name: "가나상사", ext_id: "e1", number: 7 }),
+      lp({ id: 11, name: "다라물산", number: 2 }),
+      lp({ id: 12, name: "마바산업", number: 3, address: "서울 강남구 테헤란로 1" }),
+    ];
+    const m = matchPlaces(remote, local);
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([
+      ["e1", 10, "ext_id"], ["e2", 11, "number_name"], ["e3", 12, "name_address"],
+    ]);
+    expect(m.fresh.map((r) => r.extId)).toEqual(["e4"]);
+    expect(m.ambiguous).toEqual([]);
+  });
+
+  it("같은 건물 2지점(후보 2개+)은 짝짓지 않고 ambiguous", () => {
+    const remote = [rp({ extId: "x1", name: "한빛", seq: 50, address: "서울 중구 1" })];
+    const local = [lp({ id: 1, name: "한빛", number: 3, address: "서울 중구 1" }), lp({ id: 2, name: "한빛", number: 4, address: "서울 중구 1" })];
+    const m = matchPlaces(remote, local);
+    expect(m.pairs).toEqual([]);
+    expect(m.ambiguous).toEqual([{ remote: remote[0], candidates: [1, 2] }]);
+  });
+
+  it("워킨맵 쪽에 같은 이름+주소가 둘이면 앱 행이 하나여도 둘 다 ambiguous", () => {
+    const remote = [rp({ extId: "y1", name: "한빛", seq: 50, address: "A동" }), rp({ extId: "y2", name: "한빛", seq: 51, address: "A동" })];
+    const m = matchPlaces(remote, [lp({ id: 1, name: "한빛", number: 3, address: "A동" })]);
+    expect(m.pairs).toEqual([]);
+    expect(m.ambiguous.map((a) => a.remote.extId)).toEqual(["y1", "y2"]);
+  });
+
+  it("이 워크에 붙었던 행이 응답에 없으면 missing", () => {
+    const m = matchPlaces([rp({ extId: "e1", name: "가" })], [lp({ id: 1, name: "가", ext_id: "e1", ext_work_id: WORK }), lp({ id: 2, name: "나", ext_id: "gone", ext_work_id: WORK })], { workId: WORK });
+    expect(m.missing.map((l) => l.id)).toEqual([2]);
+  });
+});
+
+// ── 메모 ─────────────────────────────────────────────────────────
+describe("mergeMemos — 합집합(상대에 없는 것만 덧붙임)", () => {
+  it("1,2,3 + 1,2,3,4 → 4만 추가", () => {
+    expect(mergeMemos(["1", "2", "3", "4"], ["1", "2", "3"])).toEqual({ merged: ["1", "2", "3", "4"], added: ["4"] });
+  });
+  it("앱 순서 유지 + 워킨맵 순서대로 뒤에, 지우지 않음", () => {
+    expect(mergeMemos(["b", "x", "a", "y"], ["a", "b", "[G5 완료] 2026-10-01"])).toEqual({ merged: ["a", "b", "[G5 완료] 2026-10-01", "x", "y"], added: ["x", "y"] });
+    expect(mergeMemos([], ["a"]).merged).toEqual(["a"]);
+  });
+  it("빈 줄·공백 차이·워킨맵 안 중복·가린 주민번호는 붙이지 않음", () => {
+    const r = mergeMemos(["", "  ", "키맨  홍길동", "새 줄", "새 줄", "900101-1******"], ["키맨 홍길동"]);
+    expect(r.added).toEqual(["새 줄"]);
+    expect(r.merged).toEqual(["키맨 홍길동", "새 줄"]);
+  });
+});
+
+// ── 차이·규칙 ─────────────────────────────────────────────────────
+describe("diffPlace · applyRules", () => {
+  it("싹 다 가져온다: 색·숨김·이름·주소·전화·좌표·코멘트·메모", () => {
+    const r = rp({ extId: "e", name: "새이름", label: "G3", visible: false, comment: "c2", phone: "010", address: "주소2", addressDetail: "2층", latitude: 37.5, longitude: 127, memos: ["m1", "m2"] });
+    const l = lp({ id: 1, name: "옛이름", label: "G1", memos: ["m1"] });
+    const fields = diffPlace(r, l).map((c) => c.field);
+    expect(fields).toEqual(["label", "visible", "name", "comment", "phone", "address", "address_detail", "coords", "memos"]);
+    const res = applyRules(diffPlace(r, l), {});
+    expect(res.apply.map((c) => c.field)).toEqual(fields);
+    expect(res.review).toEqual([]);
+  });
+
+  it("응답에 없는 칸(null)·(0,0) 좌표·가린 코멘트는 건드리지 않음", () => {
+    const r = rp({ extId: "e", name: "가", comment: "900101-1******", phone: null, address: null, addressDetail: null, latitude: 0, longitude: 0 });
+    expect(diffPlace(r, lp({ id: 1, name: "가", comment: "원본", phone: "02", address: "서울" }))).toEqual([]);
+  });
+
+  it("완료 G5 가 G2 로 내려가면 확인 큐, 다른 칸은 반영", () => {
+    const d = diffPlace(rp({ extId: "e", name: "가", label: "G2", phone: "010" }), lp({ id: 1, name: "가", label: "G5", phone: "02" }));
+    const res = applyRules(d, {});
+    expect(res.review.map((c) => [c.field, c.before, c.after])).toEqual([["label", "G5", "G2"]]);
+    expect(res.apply.map((c) => c.field)).toEqual(["phone"]);
+  });
+
+  it("색은 워킨맵 우선(G5 로 올라가는 것·G12 끼리 아닌 것)", () => {
+    const res = applyRules(diffPlace(rp({ extId: "e", name: "가", label: "G5" }), lp({ id: 1, name: "가", label: "G3" })), {
+      localUpdatedAt: "2026-10-31T01:00:00Z", localUpdatedBy: SYNC_ACTOR, extSyncedAt: "2026-10-30T00:00:00Z", extLastUpdate: "2026-10-30T00:00:00Z", remoteLastUpdate: "2026-10-31T00:30:00Z",
+    });
+    expect(res.apply.map((c) => c.after)).toEqual(["G5"]);
+  });
+
+  it("워킨맵이 지난 동기화 뒤로 안 바뀌었으면 손대지 않음 · 둘 다 바뀌면 늦은 쪽", () => {
+    const d = diffPlace(rp({ extId: "e", name: "가", label: "G1" }), lp({ id: 1, name: "가", label: "G3" }));
+    expect(applyRules(d, { extLastUpdate: "2026-10-31T00:00:00Z", remoteLastUpdate: "2026-10-31T00:00:00Z" }).kept[0].reason).toBe("remote_unchanged");
+    const both = { localUpdatedBy: "김기사", extSyncedAt: "2026-10-30T00:00:00Z", extLastUpdate: "2026-10-30T00:00:00Z" };
+    expect(applyRules(d, { ...both, localUpdatedAt: "2026-10-31T02:00:00Z", remoteLastUpdate: "2026-10-31T01:00:00Z" }).kept[0].reason).toBe("local_newer");
+    expect(applyRules(d, { ...both, localUpdatedAt: "2026-10-31T01:00:00Z", remoteLastUpdate: "2026-10-31T02:00:00Z" }).apply[0].after).toBe("G1");
+  });
+
+  it("가드: 0곳·절반 미만·새 장소 첫 회차·50곳 초과", () => {
+    expect(workGuard(0, 100)).toBe("empty");
+    expect(workGuard(49, 100)).toBe("shrunk");
+    expect(workGuard(50, 100)).toBeNull();
+    expect(workGuard(3, null)).toBeNull();
+    expect(newPlaceGuard(3, true)).toBe("first_pull");
+    expect(newPlaceGuard(0, true)).toBe("ok");
+    expect(newPlaceGuard(51, false)).toBe("too_many");
+    expect(newPlaceGuard(50, false)).toBe("ok");
+  });
+});
+
+// ── planPull ─────────────────────────────────────────────────────
+describe("planPull", () => {
+  const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "quarter" as const };
+  const base = { workId: WORK, accountNo: 1, parse, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 30 };
+
+  it("0곳 응답이면 아무것도 쓰지 않고 중단", () => {
+    const p = planPull({ ...base, remote: [], local: [lp({ id: 1, name: "가", ext_id: "e", ext_work_id: WORK })], firstPull: false, previousCount: 5 });
+    expect(p.stop?.reason).toBe("empty");
+    expect(p.patches).toEqual([]);
+  });
+
+  it("완료 이력 메모·칸별 로그·짝 연결·확인 큐", () => {
+    const remote = [
+      rp({ extId: "e1", name: "가나", seq: 1, label: "G5", lastUpdate: "2026-10-30T16:00:00.000Z" }), // KST 10-31
+      rp({ extId: "e2", name: "다라", seq: 2, label: "G1" }),
+      rp({ extId: "e3", name: "신규", seq: 3 }),
+    ];
+    const local = [lp({ id: 1, name: "가나", number: 1, label: "G1", memos: ["키맨"] }), lp({ id: 2, name: "다라", number: 2, label: "G5" })];
+    const p = planPull({ ...base, remote, local, firstPull: true, previousCount: null });
+    const p1 = p.patches.find((x) => x.id === 1)!;
+    expect(p1.set.label).toBe("G5");
+    expect(p1.set.memos).toEqual(["키맨", "[G5 완료] 2026-10-31 (워킨맵)"]);
+    expect(p1.set).toMatchObject({ ext_id: "e1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026, updated_by: SYNC_ACTOR });
+    expect(p1.logs.map((l) => l.field)).toEqual(["label", "memo", "_link"]);
+    expect(p1.logs[0]).toEqual({ field: "label", before_value: "G1", after_value: "G5" });
+    // 2번: 완료 내려감 → 색은 안 바꾸고 짝만 연결 + downgrade 큐
+    const p2 = p.patches.find((x) => x.id === 2)!;
+    expect(p2.set.label).toBeUndefined();
+    expect(p.reviews.map((r) => [r.kind, r.field, r.ext_id])).toEqual([["downgrade", "label", "e2"], ["new", "", "e3"]]);
+    // 첫 회차: 새 장소는 넣지 않음
+    expect(p.inserts).toEqual([]);
+    expect(p.colorCheck).toMatchObject({ firstMatchSame: 0, firstMatchDiff: 2 });
+  });
+
+  it("두 번째 회차: 새 장소 insert 는 엑셀 불러오기 행 모양 + ext_*, 이미 열린 확인 큐는 다시 안 넣음", () => {
+    const remote = [rp({ extId: "e1", name: "가", label: "G2" }), rp({ extId: "n1", name: "새곳", seq: 2, label: "G5", memos: ["메모"], latitude: 37.1, longitude: 127.1 })];
+    const local = [lp({ id: 5, name: "가", label: "G5", ext_id: "e1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026 })];
+    const open = new Set(["downgrade|label|" + WORK + "|e1|5"]);
+    const p = planPull({ ...base, remote, local, firstPull: false, previousCount: 2, openReviewKeys: open, takenIds: new Set([1000]) });
+    expect(p.reviews).toEqual([]);
+    expect(p.inserts).toHaveLength(1);
+    expect(p.inserts[0].row).toEqual({
+      id: 1001, number: 31, team: "C", quarter: 4, kind: "quarter", label: "G5", visible: true, name: "새곳", comment: "", phone: "",
+      address: "", address_detail: "", latitude: 37.1, longitude: 127.1, memos: ["메모", "[G5 완료] 2026-10-31 (워킨맵)"],
+      ext_id: "n1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026, ext_last_update: "2026-10-31T03:00:00.000Z", ext_synced_at: base.nowIso, updated_by: SYNC_ACTOR,
+    });
+    expect(p.inserts[0].log.field).toBe("_insert");
+  });
+});
+
+// ── 응답 정리 ─────────────────────────────────────────────────────
+describe("normalizeRemoteWork", () => {
+  it("work2.js 모양 → RemotePlace, escapeHTML 풀기", () => {
+    const r = normalizeRemoteWork({
+      _id: WORK, name: "수도권C", places: [{
+        _id: "p1", name: "A&amp;B", comment: "x", number: "010-1", address: { address: "서울", detail_addr: "1층" }, position: { latitude: 37.5, longitude: 127 },
+        label_color: 4, hide: true, memo2: [{ _id: "m", content: "&lt;b&gt; 메모", last_update: "2026-10-31" }], last_update: 1761880000000,
+      }],
+    }, WORK);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.work.places[0]).toMatchObject({ extId: "p1", name: "A&B", phone: "010-1", address: "서울", addressDetail: "1층", latitude: 37.5, longitude: 127, label: "G5", visible: false, memos: ["<b> 메모"] });
+  });
+  it("토큰 오류·형식 변경은 ok:false", () => {
+    expect(normalizeRemoteWork({ error_code: 109, message: "토큰 인증에 실패했습니다.", status: 401 })).toMatchObject({ ok: false, code: 109 });
+    expect(normalizeRemoteWork({ _id: WORK, places: "x" }).ok).toBe(false);
+    expect(normalizeRemoteWork({ _id: WORK, places: [{ name: "id 없음" }] }).ok).toBe(false);
+    expect(decodeHtml("&#x2F;&#39;")).toBe("/'");
+  });
+  it("workList4 → 목록", () => {
+    expect(parseWorkList({ works: [{ _id: WORK, name: "수도권C", places: [1, 2] }, { name: "id 없음" }] })).toEqual([{ id: WORK, name: "수도권C", placeCount: 2, modified: null }]);
+    expect(parseWorkList({ nope: 1 })).toBeNull();
+  });
+});
+
+// ── 요청·인증 ─────────────────────────────────────────────────────
+describe("parseRequest · isAuthorized", () => {
+  it("액션", () => {
+    expect(parseRequest({ action: "pull" })).toEqual({ action: "pull", scope: "current", dryRun: false, manual: false });
+    expect(parseRequest({ action: "pull", scope: WORK, dryRun: true })).toEqual({ action: "pull", scope: { workId: WORK }, dryRun: true, manual: false });
+    expect(parseRequest({ action: "pull", manual: true })).toMatchObject({ manual: true });   // 관리 탭 수동 호출 — 실패여도 200(ok:false)
+    expect(parseRequest({ action: "pull", scope: "x" })).toHaveProperty("error");
+    expect(parseRequest({ action: "login_test", account: 2 })).toEqual({ action: "login_test", account: 2 });
+    expect(parseRequest({ action: "delete" })).toHaveProperty("error");
+  });
+  it("JWT ref·role", () => {
+    const jwt = (p: object) => `x.${btoa(JSON.stringify(p))}.y`;
+    expect(isAuthorized(`Bearer ${jwt({ role: "anon", ref: "abc" })}`, { projectRef: "abc", nowMs: 0 })).toBe(true);
+    expect(isAuthorized(`Bearer ${jwt({ role: "anon", ref: "zzz" })}`, { projectRef: "abc", nowMs: 0 })).toBe(false);
+    expect(isAuthorized(null, { projectRef: "abc", nowMs: 0 })).toBe(false);
+  });
+});
+
+// ── 로그인(fetch 주입) ────────────────────────────────────────────
+const memStore = (init: TokenRow | null = null): TokenStore & { row: TokenRow | null } => {
+  const s = {
+    row: init,
+    async load() { return s.row; },
+    async save(no: number, patch: Partial<TokenRow>) { s.row = { ...(s.row ?? { account_no: no }), ...patch } as TokenRow; },
+  };
+  return s;
+};
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const ACC = { no: 1, email: "secret-user@example.com", password: "pw-secret-123" };
+
+describe("auth", () => {
+  it("계정은 번호가 빌 때까지", () => {
+    const env: Record<string, string> = { WORKINMAP_1_EMAIL: "a", WORKINMAP_1_PASSWORD: "b", WORKINMAP_3_EMAIL: "c", WORKINMAP_3_PASSWORD: "d" };
+    expect(readAccounts((k) => env[k]).map((a) => a.no)).toEqual([1]);
+  });
+
+  it("캐시 → refresh → 비밀번호 순서", async () => {
+    const calls: string[] = [];
+    const fetchFn = async (url: string) => {
+      calls.push(url.split("?")[0]);
+      if (url.includes("securetoken")) return json({ error: { message: "TOKEN_EXPIRED" } }, 400);
+      return json({ idToken: "ID-NEW", refreshToken: "RT-NEW", expiresIn: "3600" });
+    };
+    const store = memStore({ account_no: 1, id_token: "OLD", refresh_token: "RT-OLD", expires_at: new Date(1000).toISOString() });
+    const r = await getIdToken({ fetchFn, apiKey: "k", account: ACC, store, nowMs: () => 10_000 });
+    expect(r).toEqual({ ok: true, idToken: "ID-NEW", via: "password" });
+    expect(calls).toEqual(["https://securetoken.googleapis.com/v1/token", "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"]);
+    expect(store.row).toMatchObject({ refresh_token: "RT-NEW", fail_count: 0, paused: false, last_error: "" });
+    const cached = await getIdToken({ fetchFn, apiKey: "k", account: ACC, store, nowMs: () => 10_000 });
+    expect(cached.ok && cached.via).toBe("cache");
+  });
+
+  it("비밀번호 3회 실패면 멈춤, 오류 문구에 이메일·비밀번호 없음", async () => {
+    const fetchFn = async () => json({ error: { message: `INVALID_PASSWORD ${ACC.email} ${ACC.password}` } }, 400);
+    const store = memStore();
+    let last;
+    for (let i = 0; i < 3; i += 1) last = await getIdToken({ fetchFn, apiKey: "k", account: ACC, store, nowMs: () => 0 });
+    expect(last).toMatchObject({ ok: false, paused: true });
+    expect(store.row?.paused).toBe(true);
+    const text = JSON.stringify([last, store.row]);
+    expect(text).not.toContain(ACC.email);
+    expect(text).not.toContain(ACC.password);
+    expect((await getIdToken({ fetchFn, apiKey: "k", account: ACC, store, nowMs: () => 0 })).ok).toBe(false);
+    expect(scrub("eyJabc.def.ghi 토큰", [])).toBe("*** 토큰");
+  });
+});
+
+// ── 실행부(가짜 서버) ─────────────────────────────────────────────
+type Call = { method: string; url: string; headers: Record<string, string>; body: unknown };
+function fakeServer(opts: { enabled: boolean; logFails?: boolean; firstPulled?: boolean; token109Once?: boolean; twoWorks?: boolean; tickPerWork?: number; storedWorks?: Array<Record<string, unknown>> }) {
+  const calls: Call[] = [];
+  let fail109 = Boolean(opts.token109Once);
+  let accountRow: Record<string, unknown> | null = null;
+  const clock = { now: Date.parse("2026-10-31T05:00:00Z"), tickPerWork: opts.tickPerWork ?? 0 };
+  const workPayload = {
+    _id: WORK, name: "수도권C_26년4분기점검(26.10.26)",
+    places: [
+      { _id: "p1", name: "가나상사", label_color: 4, hide: false, memo2: [{ content: "새 메모" }], last_update: "2026-10-31T01:00:00Z", address: { address: "서울", detail_addr: "" } },
+      { _id: "p2", name: "다라물산", label_color: 0, hide: false, memo2: [], last_update: "2026-10-31T01:00:00Z", address: { address: "부산", detail_addr: "" } },
+    ],
+  };
+  const local = [
+    { ...lp({ id: 101, name: "가나상사", number: 1, label: "G1", address: "서울" }) },
+    { ...lp({ id: 102, name: "다라물산", number: 2, label: "G1", address: "부산" }) },
+  ];
+  const fetchFn = async (url: string, init?: RequestInit): Promise<Response> => {
+    const method = init?.method || "GET";
+    const headers = (init?.headers || {}) as Record<string, string>;
+    const body = init?.body && typeof init.body === "string" ? (() => { try { return JSON.parse(init.body as string); } catch { return init.body; } })() : undefined;
+    calls.push({ method, url, headers, body });
+    if (url.includes("identitytoolkit")) return json({ idToken: "IDTOKEN-SECRET", refreshToken: "RT-SECRET", expiresIn: "3600" });
+    if (url.includes("api.solgit.co/api/v2/users/info")) return json({ works: [{ _id: WORK, name: workPayload.name, places: [1, 2] }, { _id: "f".repeat(24), name: "영업확장성리스트_박P_워킨맵표현" }, ...(opts.twoWorks ? [{ _id: WORK2, name: "수도권D_26년4분기점검(26.10.26)", places: [1] }] : [])] });
+    if (url.includes("api.solgit.co/api/v2/works/")) clock.now += clock.tickPerWork;
+    if (url.includes("api.solgit.co/api/v2/works/" + WORK2)) return json({ ...workPayload, _id: WORK2, places: [] });
+    if (url.includes(`api.solgit.co/api/v2/works/${WORK}`)) {
+      if (fail109) { fail109 = false; return json({ error_code: 109, message: "토큰 인증에 실패했습니다.", status: 401 }); }
+      return json(workPayload);
+    }
+    if (url.includes("/rest/v1/app_config")) return json([{ key: "WORKINMAP_SYNC_ENABLED", value: opts.enabled ? "true" : "false" }, { key: "WORKINMAP_API_KEY", value: "" }]);
+    if (url.includes("/rest/v1/rpc/workin_sync_take_lease")) return json(true);
+    if (url.includes("/rest/v1/rpc/workin_sync_release_lease")) return new Response("", { status: 200 });
+    if (url.includes("/rest/v1/rpc/workin_sync_update_places")) {
+      const rows = (body as { p_rows: Array<{ id: number }> }).p_rows;
+      return json(rows.filter((r) => r.id !== 102).length); // 102 = 읽은 뒤 앱에서 지워진 행
+    }
+    if (url.includes("/rest/v1/workin_sync_accounts")) {
+      if (method === "GET") return json(accountRow ? [accountRow] : []);
+      accountRow = { ...(accountRow ?? {}), ...(body as Array<Record<string, unknown>>)[0] };
+      return new Response(null, { status: 201 });
+    }
+    if (url.includes("/rest/v1/workin_sync_works")) {
+      if (method === "GET" && opts.storedWorks) return json(opts.storedWorks);
+      if (method === "GET") return json(opts.firstPulled ? [{ account_no: 1, work_id: WORK, place_count: 2, override_skip: false, first_pulled_at: "2026-10-30T00:00:00Z", last_pulled_at: "2026-10-30T00:00:00Z" }] : []);
+      return new Response(null, { status: method === "PATCH" ? 204 : 201 });
+    }
+    if (url.includes("/rest/v1/workin_sync_review")) return method === "GET" ? json([]) : new Response(null, { status: 201 });
+    if (url.includes("/rest/v1/workin_sync_log")) return opts.logFails ? new Response("boom", { status: 500 }) : new Response(null, { status: 201 });
+    if (url.includes("/rest/v1/workin_map_places")) {
+      if (method !== "GET") return new Response(null, { status: method === "PATCH" ? 204 : 201 });
+      if (url.includes("select=number")) return json([{ number: 40 }]);
+      if (url.includes("ext_id=in.")) return json([]);
+      return json(local);
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const deps: SyncDeps = {
+    fetchFn, supabaseUrl: "https://abc.supabase.co", serviceKey: "SERVICE-KEY",
+    getEnv: (k) => ({ WORKINMAP_1_EMAIL: ACC.email, WORKINMAP_1_PASSWORD: ACC.password } as Record<string, string>)[k],
+    now: () => clock.now, holder: "run-1",
+  };
+  return { calls, deps, clock };
+}
+const writesTo = (calls: Call[], part: string) => calls.filter((c) => c.method !== "GET" && c.url.includes(part));
+
+describe("runAction(fetch 주입)", () => {
+  it("스위치 꺼짐 → pull 은 dry: 장소·로그·확인 큐 쓰기 0, 응답에 disabled", async () => {
+    const { calls, deps } = fakeServer({ enabled: false });
+    const out = await runAction({ action: "pull", scope: "current", dryRun: false }, deps);
+    expect(out.body).toMatchObject({ dryRun: true, disabled: true });
+    for (const t of ["workin_map_places", "workin_sync_log", "workin_sync_review", "workin_sync_works", "rpc/workin_sync_take_lease"]) expect(writesTo(calls, t)).toEqual([]);
+    const results = out.body.results as Array<{ result: string; stats: { matched: number; labelChanges: number } }>;
+    expect(results[0]).toMatchObject({ result: "dry", stats: { matched: 2, labelChanges: 1 } });
+    // 응답에 비밀값 없음
+    const text = JSON.stringify(out.body);
+    for (const s of [ACC.email, ACC.password, "IDTOKEN-SECRET", "RT-SECRET", "SERVICE-KEY"]) expect(text).not.toContain(s);
+  });
+
+  it("켜짐 → 임대 → 로그 먼저 → rpc 묶음 쓰기(x-workin-sync 헤더) → 해제, 109 한 번은 재로그인 후 재시도", async () => {
+    const { calls, deps } = fakeServer({ enabled: true, firstPulled: true, token109Once: true });
+    const out = await runAction({ action: "pull", scope: "current", dryRun: false }, deps);
+    expect(out.status).toBe(200);
+    const rest = calls.filter((c) => c.url.includes("/rest/v1/"));
+    for (const c of rest) expect(c.headers["x-workin-sync"]).toBe("1");
+    const idx = (pred: (c: Call) => boolean) => calls.findIndex(pred);
+    const logAt = idx((c) => c.method === "POST" && c.url.includes("workin_sync_log"));
+    const patchAt = idx((c) => c.url.includes("rpc/workin_sync_update_places"));
+    expect(logAt).toBeGreaterThan(-1);
+    expect(patchAt).toBeGreaterThan(logAt);
+    expect(idx((c) => c.url.includes("take_lease"))).toBeLessThan(logAt);
+    expect(idx((c) => c.url.includes("release_lease"))).toBeGreaterThan(patchAt);
+    const rpcs = writesTo(calls, "rpc/workin_sync_update_places");
+    const rows = rpcs.flatMap((c) => (c.body as { p_rows: Array<Record<string, unknown>> }).p_rows);
+    expect(rows.find((r) => r.id === 101)).toMatchObject({ label: "G5", ext_id: "p1", ext_account_no: 1, updated_by: SYNC_ACTOR });
+    expect(rows.find((r) => r.id === 101)).not.toHaveProperty("team");
+    expect(rows.find((r) => r.id === 102)).toMatchObject({ ext_id: "p2" });
+    // 기존 행은 upsert·PATCH 로 쓰지 않는다(지운 행 되살아남 방지)
+    expect(writesTo(calls, "workin_map_places")).toEqual([]);
+    // 가짜 rpc 는 102 를 "이미 지워짐"으로 건너뜀 → skippedDeleted 1
+    expect(out.body.skippedDeleted).toBe(1);
+    expect((out.body.results as Array<{ writes: { patched: number; skippedDeleted: number } }>)[0].writes).toMatchObject({ patched: 1, skippedDeleted: 1 });
+    expect(calls.filter((c) => c.url.includes("identitytoolkit")).length).toBe(2); // 109 → 강제 재로그인
+    expect(JSON.stringify(out.body)).not.toContain("IDTOKEN-SECRET");
+  });
+
+  it("로그 insert 가 실패하면 그 묶음은 쓰지 않는다", async () => {
+    const { calls, deps } = fakeServer({ enabled: true, firstPulled: true, logFails: true });
+    const out = await runAction({ action: "pull", scope: "current", dryRun: false }, deps);
+    expect(writesTo(calls, "workin_map_places")).toEqual([]);
+    expect(writesTo(calls, "rpc/workin_sync_update_places")).toEqual([]);
+    expect(out.status).toBe(500);
+    expect((out.body.results as Array<{ writes: { patchFailed: number } }>)[0].writes.patchFailed).toBe(2);
+  });
+
+  it("works: 해석표 + 제외, push 는 건너뜀, login_test 응답에 토큰 없음", async () => {
+    const { deps } = fakeServer({ enabled: false });
+    const w = await runAction({ action: "works" }, deps);
+    expect((w.body.works as Array<{ status: string; team: string | null }>).map((x) => [x.status, x.team])).toEqual([["target", "C"], ["excluded", null]]);
+    expect(await runAction({ action: "push" }, deps)).toEqual({ status: 200, body: { ok: true, skipped: "push_disabled" } });
+    const lt = await runAction({ action: "login_test", account: 1 }, deps);
+    expect(lt.body).toEqual({ ok: true, account: 1, via: "password" });
+  });
+
+  it("120초를 넘기면 남은 워크는 다음 회차(deferred + 미완료 표시), 오래 안 받은 워크부터", async () => {
+    const stored = [
+      { account_no: 1, work_id: WORK, name: "C", place_count: 2, override_skip: false, first_pulled_at: "2026-10-30T00:00:00Z", last_pulled_at: "2026-10-31T00:00:00Z" },
+      { account_no: 1, work_id: WORK2, name: "D", place_count: 0, override_skip: false, first_pulled_at: null, last_pulled_at: null },
+    ];
+    const { calls, deps } = fakeServer({ enabled: true, twoWorks: true, tickPerWork: 130_000, storedWorks: stored });
+    const out = await runAction({ action: "pull", scope: "current", dryRun: false }, deps);
+    // WORK2(안 받은 적 있음)가 먼저 → 130초 경과 → WORK 는 미뤄짐
+    expect((out.body.results as Array<{ workId: string }>).map((r) => r.workId)).toEqual([WORK2]);
+    expect(out.body.deferred).toEqual([{ account: 1, workId: WORK, name: "수도권C_26년4분기점검(26.10.26)" }]);
+    const mark = calls.find((c) => c.method === "PATCH" && c.url.includes(`work_id=eq.${WORK}`));
+    expect(String((mark?.body as Record<string, unknown>).last_error)).toMatch(/^미완료:/);
+  });
+
+  it("status: 마지막 실행·다음 예정(09/12/15/18)·미완료 워크, 토큰 칸 없음", async () => {
+    const stored = [
+      { account_no: 1, work_id: WORK, name: "C", last_pulled_at: "2026-10-31T03:00:00Z", last_error: "미완료: 시간 초과(120초)로 다음 회차" },
+      { account_no: 2, work_id: WORK2, name: "D", last_pulled_at: "2026-10-31T03:10:00Z", last_error: "" },
+    ];
+    const { calls, deps } = fakeServer({ enabled: true, storedWorks: stored });
+    const out = await runAction({ action: "status" }, deps);
+    expect(out.body).toMatchObject({
+      lastRunAt: "2026-10-31T03:10:00.000Z", nextRunAt: "2026-10-31T06:00:00.000Z", scheduleKst: ["09:00", "12:00", "15:00", "18:00"],
+      incompleteWorks: [{ account: 1, workId: WORK, name: "C", lastPulledAt: "2026-10-31T03:00:00Z" }],
+    });
+    const accGet = calls.find((c) => c.url.includes("workin_sync_accounts"))!;
+    expect(accGet.url).not.toContain("token");
+  });
+});
+
+describe("묶음 쓰기 · 일정", () => {
+  it("chunkPatchRows: size 행씩, 행 = id + 바뀐 칸 + updated_by(team 등 안 붙임)", () => {
+    const mk = (id: number, set: Record<string, unknown>) => ({ id, ext_id: "e" + id, set, fields: [], by: "ext_id" as const, logs: [] });
+    const g = chunkPatchRows([mk(1, { label: "G5", ext_id: "e1" }), mk(2, { ext_id: "e2" }), mk(3, { visible: false })], 2);
+    const u = { updated_by: SYNC_ACTOR };
+    expect(g.map((b) => b.rows)).toEqual([[{ id: 1, label: "G5", ext_id: "e1", ...u }, { id: 2, ext_id: "e2", ...u }], [{ id: 3, visible: false, ...u }]]);
+    // rpc 허용 칸만 — 실제 계획이 만든 키도 검사
+    const allowed = new Set(["id", "name", "comment", "phone", "address", "address_detail", "latitude", "longitude", "label", "visible", "memos",
+      "ext_id", "ext_work_id", "ext_account_no", "ext_year", "ext_last_update", "ext_synced_at", "ext_missing_at", "updated_by", "updated_at"]);
+    const plan = planPull({
+      workId: WORK, accountNo: 1, parse: { team: "C", year: 2026, quarter: 4, kind: "quarter" }, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1, scopeMaxNumber: 0,
+      remote: [rp({ extId: "e1", name: "새", label: "G5", comment: "c", phone: "p", address: "a", addressDetail: "d", latitude: 37, longitude: 127, memos: ["m"], visible: false })],
+      local: [lp({ id: 1, name: "새", ext_id: "e1", ext_work_id: WORK }), lp({ id: 2, name: "없음", ext_id: "gone", ext_work_id: WORK })],
+      firstPull: false, previousCount: 1,
+    });
+    for (const row of chunkPatchRows(plan.patches).flatMap((b) => b.rows)) {
+      for (const k of Object.keys(row)) expect(allowed.has(k)).toBe(true);
+      expect(row.updated_by).toBe(SYNC_ACTOR);
+    }
+  });
+  it("nextScheduledRun: KST 09·12·15·18, 18시 뒤는 다음 날 09시", () => {
+    expect(nextScheduledRun(Date.parse("2026-10-31T05:00:00+09:00"))).toBe("2026-10-31T00:00:00.000Z");
+    expect(nextScheduledRun(Date.parse("2026-10-31T09:00:00+09:00"))).toBe("2026-10-31T03:00:00.000Z");
+    expect(nextScheduledRun(Date.parse("2026-10-31T16:30:00+09:00"))).toBe("2026-10-31T09:00:00.000Z");
+    expect(nextScheduledRun(Date.parse("2026-10-31T19:00:00+09:00"))).toBe("2026-11-01T00:00:00.000Z");
+  });
+});

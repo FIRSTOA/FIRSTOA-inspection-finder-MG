@@ -28,6 +28,7 @@
 | kakao-ingest | 새(2026-10-24, 배포 대기) | GAS `KakaoRaw.gs`(드라이브 수신함 처리 뒤) | 카톡 내보내기 TXT 조각(≤500KB) → `kakao_messages`(가림·분류 추정·hash 중복 무시) + `kakao_import_log`. 헤더 `x-ingest-token` 검사 | FIELD_INGEST_TOKEN |
 | kakao-search | 새(2026-10-24, 배포 대기) | 앱 탭 검색 [카톡 대화] | `kakao_messages` 읽기 대행(anon 권한 0 인 표). 스위치 `KAKAO_SEARCH_ENABLED` 꺼지면 빈 결과 | — |
 | schedule-report | 새(2026-10-31, 배포 대기) | cron `schedule-report-12`·`-14`(평일 KST 12:00·14:00), 앱 [지금 보내기]·미리 보기 | 팀 중간보고 글(화면 [📋 중간보고]와 같은 함수)을 만들어 `outbox` 로 `room_map 스케줄\|팀` 방에 넣음. 기록 `schedule_report_log` | OPENAI(OPENAI_REPORT_MODEL) |
+| workinmap-sync | 새(2026-10-31, 배포 대기) | cron `workinmap-sync-pull`(KST 09·12·15·18)·`-pull-old`(06:10)·`-push`(매분), 앱 관리 탭 [워킨맵 동기화] | 예전 워킨맵(workinmap.com) → `workin_map_places` 가져오기(색·ON/OFF·메모·새 장소), 확인 큐·변경 로그. 되밀기는 P2 전(건너뜀) | WORKINMAP_n_EMAIL·WORKINMAP_n_PASSWORD(n=1,2) |
 | report-polish, golden-card-transform, growth-note-transform, guide-tag, playbook-draft, okr-assist, quarter-result-quantify | 2~14 | 앱 | 각종 AI 문장 다듬기·태깅·초안 | OPENAI |
 
 Vercel 서버리스(`api/`, 엣지 함수 아님): `naver-connect.js`·`naver-callback.js`(네이버 OAuth 연결), `naver-add.js`, `naver-calendars.js`, `calendar-ics.js`(ICS 구독, `CALENDAR_ICS_TOKEN`). Vercel 배포와 함께 나간다.
@@ -147,6 +148,35 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 **확인**: `select kst_date, team, slot, status, reason, room, test, polished, outbox_id from schedule_report_log order by created_at desc limit 10;` · `select * from ops.edge_call_health where tag like 'schedule-report-%';`
 
 **되돌리기**: 급히 멈추기 = 관리 탭 `SCHEDULE_REPORT_AUTO` 끔(또는 "카톡 전송" 끔 = 전체 정지). 완전히 = `select cron.unschedule('schedule-report-12'); select cron.unschedule('schedule-report-14');` 후 함수 삭제(`npx supabase functions delete schedule-report --project-ref kkdiihazgzesbqxjytqv`). 이미 outbox 에 들어간 글은 봇이 보내기 전이면 outbox 행을 지워 막는다.
+
+## 워킨맵 동기화 — workinmap-sync (2026-10-31, P1 가져오기)
+설계 `docs/tasks/workinmap-sync-2026-10-31.md` v2, SQL `supabase/workin-sync-20261031.sql`. 소스 `supabase/functions/workinmap-sync/` — `index.ts`(Deno.serve·인증) · `sync.ts`(액션 실행, fetch 주입) · `plan.ts`(이름 규칙·짝짓기·규칙·가드, 순수) · `auth.ts`(Firebase 로그인·토큰 캐시) · `api.ts`(워킨맵 읽기). 앱 화면 `src/WorkinSyncAdmin.tsx`(관리 › 기타 설정), `src/workinSync.ts`(앱 쪽 순수 로직, `tests/workinSyncAdmin.test.tsx`).
+
+**액션**(`POST JSON`, 인증 = 이 프로젝트 anon/service_role JWT — schedule-report 와 같은 규칙)
+| action | 하는 일 |
+|---|---|
+| `status` | 계정(토큰 칸 없음)·워크 표·미처리 확인 큐 종류별 수·스위치·secrets 있는 계정 번호 |
+| `login_test`, `account: n` | 계정 n 의 멈춤을 풀고 로그인만 한 번. 응답에 토큰·이메일 없음 |
+| `works` | 계정별 워크 목록 → 이름 규칙 해석 → `workin_sync_works` upsert(사람 칸 override_skip 은 안 건드림) |
+| `pull`, `scope: "current"\|"old"\|<워크 id 24자리>`, `dryRun?` | 이번 분기 / 지난 분기(목록 수정일 바뀐 것만) / 워크 하나. dryRun 이거나 `WORKINMAP_SYNC_ENABLED` 가 'true' 가 아니면 쓰지 않고 차이만. 쓸 때는 `workin_sync_log`(전/후) 먼저, 로그 실패한 묶음은 고치지 않음. 임대(`workin_sync_take_lease`)로 겹침 방지(겹치면 `skipped:"busy"`) |
+| `push` | P2 전 — `{ ok:true, skipped:"push_disabled" }` |
+
+**크론**(SQL 8절, UTC): `workinmap-sync-pull` `0 0,3,6,9 * * *`(= KST 09·12·15·18) · `workinmap-sync-pull-old` `10 21 * * *`(= KST 06:10) — 둘 다 `WORKINMAP_SYNC_ENABLED='true'` 일 때만 HTTP 를 쏜다. `workinmap-sync-push` 매분 — `WORKINMAP_PUSH_ENABLED='true'` 이고 보낼 행이 있을 때만.
+**스위치**(관리 탭 전송 스위치): `WORKINMAP_SYNC_ENABLED`(가져오기) · `WORKINMAP_PUSH_ENABLED`(되밀기, 주의) · `WORKINMAP_PUSH_MEMO`(메모 되밀기, 주의). 기타 키: `WORKINMAP_EXCLUDE_WORKS`·`WORKINMAP_TEST_WORK`·`WORKINMAP_ACCOUNT_LABELS`·`WORKINMAP_API_KEY`·`WORKINMAP_PUSH_FIELDS`(SQL 이 없을 때만 기본값을 넣음).
+**앱 쪽 안전장치**: 웹앱 [엑셀 불러오기]의 "같은 목록 교체"는 그 팀·분기·업무에 `ext_id` 있는 장소가 하나라도 있으면 막힌다(`canReplaceScope`). 목록 줄 "동기화" 배지 = `ext_synced_at` 있음.
+
+**켜는 순서**
+1. SQL `supabase/workin-sync-20261031.sql` 실행(열 7개·표 6개·권한·트리거·키·크론 3개 — 스위치가 false 라 크론은 아무것도 안 쏨).
+2. 배포: `npx supabase functions deploy workinmap-sync --project-ref kkdiihazgzesbqxjytqv --use-api`.
+3. secrets(대시보드 Edge Functions › Secrets, 사용자가 직접): `WORKINMAP_1_EMAIL`·`WORKINMAP_1_PASSWORD`·`WORKINMAP_2_EMAIL`·`WORKINMAP_2_PASSWORD`. 코드·채팅·커밋에 값을 넣지 않는다.
+4. 관리 탭 › 기타 설정 › 워킨맵 동기화 › 계정마다 **[로그인 시험]**.
+5. **[워크 목록 갱신]** → 표의 범위(팀·연도·분기·업무)·상태가 맞는지, "이름 해석 안 됨"·"공유" 확인. 필요한 워크는 [건너뜀].
+6. **워크 하나씩 [미리보기(dry)]** → 짝 수·새 장소·바뀔 곳·색 검증(처음 짝 색 다름이 많으면 멈추고 확인)·중단 사유.
+7. 전송 스위치 **"워킨맵 가져오기"(WORKINMAP_SYNC_ENABLED) 켬** — [지금 동기화]가 열린다. 바로 써 보려면 워크 하나로 [지금 동기화].
+8. 다음 **09시** 첫 자동 회차 뒤 확인.
+
+**확인**: `select account_no, name, status, place_count, first_pulled_at, last_pulled_at, last_error from workin_sync_works order by 1,2;` · `select kind, count(*) from workin_sync_review where resolved_at is null group by 1;` · `select field, count(*) from workin_sync_log where created_at > now() - interval '1 day' group by 1;` · `select * from ops.edge_call_health where tag like 'workinmap-sync%';`
+**되돌리기**: 급히 멈추기 = 스위치 "워킨맵 가져오기" 끔. 칸 복구 = `workin_sync_log.before_value`. 완전히 = SQL 파일 맨 아래 되돌리기 절(크론 unschedule·열/표 삭제).
 
 ## 2026-10-31 전체 디버깅에서 바뀐 엣지 3개 (재배포 필요)
 - **contact-sheet-pull** — 담당자변경 공유가 `share.ts` 로 분리. ① 공유 전 `shared_at is null` 조건부 PATCH 로 먼저 잡아 10:00 에 `contact-sheet-pull-daily` 와 `contact-sheet-share` 가 같은 분에 돌아도 같은 글이 두 번 안 나감 ② outbox 넣기 실패면 잡기를 되돌려 다음 3분 실행이 다시 보냄 ③ 새 행이 없어도 공유를 돌림(10시 전 보류분이 다음 새 행까지 밀리던 것 해결) ④ 22시 이후는 보류(10시 전과 같음). 실측 근거: 10/22 09:39 D지역 건이 11:33 에야 공유됨.

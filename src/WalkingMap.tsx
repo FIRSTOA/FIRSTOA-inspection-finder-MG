@@ -23,6 +23,8 @@ import { UI } from "./ui/card";
 import { addressCore, mapQuery } from "./address";
 import { maskRrn } from "./privacy";
 import { restoreMaskedImport } from "./workinPrivacy";
+import { REPLACE_BLOCKED_MESSAGE, canReplaceScope } from "./workinSync";
+import WorkinSyncReviewLine from "./WorkinSyncReviewLine";
 import { monthlyUnits, teamWorkinProgress } from "./workinProgress";
 
 type MapLabel = {
@@ -52,6 +54,7 @@ type MapPlace = {
   longitude: number;
   memos: string[];
   updatedAt?: string; // DB의 updated_at — 증분 폴링이 "더 새로운 행만 덮어쓰기"를 판단하는 기준(로컬 임시 행은 없음)
+  ext_id?: string | null; ext_synced_at?: string | null; // 워킨맵 동기화 짝(select=* 로 따라옴, 2026-10-31) — 교체 막기·배지 표시용, 저장(toDbPlace)엔 안 보냄
 };
 
 type DbMapPlace = {
@@ -2493,6 +2496,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
 
   const applyExcelImport = async () => {
     // "교체"는 그 팀·분기·업무 목록을 통째로 지우고 넣는다 — 확인 없이 남의 팀 목록을 날릴 수 있어 반드시 묻는다(감사 #3)
+    if (importMode === "replace" && !canReplaceScope(places, { team: importTeam, quarter: importQuarter, kind: importKind })) { notify(REPLACE_BLOCKED_MESSAGE, "error"); return; } // 워킨맵 동기화 범위는 교체 금지(2026-10-31)
     if (importMode === "replace") {
       const existing = places.filter((place) => place.team === importTeam && place.quarter === importQuarter && place.kind === importKind).length;
       const kindLabel = workKinds.find((item) => item.value === importKind)?.label || importKind;
@@ -2659,6 +2663,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
           <button type="button" onClick={exportExcel} className={`${UI.btnGhost} text-xs!`}>현재 목록 내보내기</button>
           <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleExcelImport(file); }} />
         </div>
+        <WorkinSyncReviewLine />
         {(missingCoords.length > 0 || coordBusy) && (
           <button type="button" disabled={!!coordBusy} onClick={() => void fillMissingCoords()} className="mt-2 min-h-11 w-full rounded-full border border-amber-300 bg-amber-50 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-100 disabled:opacity-60">
             {coordBusy || `📍 좌표 없는 ${missingCoords.length}곳 — 주소로 지도에 올리기`}
@@ -2733,6 +2738,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                   <span className="flex items-baseline gap-2" title={place.name}>
                     <span className="min-w-0 flex-1 truncate text-sm font-black leading-5 text-slate-900">{displayName}</span>
                     {placeCode && <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">{placeCode}</span>}
+                    {place.ext_synced_at && <span className="shrink-0 rounded-full bg-sky-50 px-1.5 text-[11px] font-black text-sky-700" title="워킨맵(기존)과 동기화된 장소">동기화</span>}
                   </span>
                   <span className="mt-0.5 block truncate text-[11.5px] font-medium text-slate-500">{[place.comment || place.address, placeTail].filter(Boolean).join(" · ")}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}

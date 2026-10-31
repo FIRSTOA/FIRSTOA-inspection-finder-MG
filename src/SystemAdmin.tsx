@@ -12,6 +12,7 @@ import { OVERHAUL_SHEET_DEFAULT_TAB, OVERHAUL_SHEET_TAB_KEY } from "./overhaulSh
 import { UI } from "./ui/card";
 import StateBox from "./ui/StateBox";
 import KakaoCollectAdmin from "./KakaoCollectAdmin";
+import WorkinSyncAdmin from "./WorkinSyncAdmin";
 
 // 카드 머리(제목+설명이 세로로 쌓이는 형태) — UI.head 는 가로 flex 라 여기만 로컬. card.ts 에 올릴 후보(headBlock)
 const HEAD_BLOCK = "border-b border-slate-100 bg-slate-50 px-4 py-3 lg:px-5";
@@ -46,6 +47,9 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "VISIT_ADVICE_ENABLED", label: "AS 접수 방문 판단 안내글", desc: "켜면 복합기 AS 접수(와 IT→CS 방문이관) 글 뒤에 같은 방으로 마지막 점검·AS·워킨맵·추가일정과 점검여부 판단 글을 한 번 더 보냅니다. 할 일이 있을 때만(점검 필요·판단필요·추가일정 있음·못 찾음), 10~20시에만(밖이면 다음 영업일 10시). supabase/visit-advice-20261031.sql 을 먼저 실행한 뒤 켜세요." },
   { key: "SCHEDULE_REPORT_AUTO", label: "자동 중간보고(12:00·14:00)", desc: "켜면 평일 12:00·14:00 에 기타 설정의 대상 팀(SCHEDULE_REPORT_TEAMS, 기본 C) 중간보고를 서버가 만들어 카톡방 매핑 '스케줄|팀' 방으로 보냅니다. 공휴일·10시 전은 쉬고, 그 차수 60분 전부터 누가 [복사]했으면 건너뜁니다. 엣지 schedule-report 배포 → supabase/schedule-report-20261031.sql 실행 → 방 매핑 뒤에 켜세요. 꺼져 있어도 일정리스트의 [지금 보내기]는 됩니다.", danger: true },
   { key: "SCHEDULE_REPORT_TEST", label: "자동 중간보고 테스트방", desc: "켜져 있으면(기본) 자동 중간보고만 실제 스케줄방 대신 위 테스트 카톡방으로 갑니다(글 머리에 [테스트 · 원래는 ○○]). 하루 확인한 뒤 끄세요. 전역 테스트 모드가 켜져 있어도 테스트방으로 갑니다.", defaultOn: true },
+  { key: "WORKINMAP_SYNC_ENABLED", label: "워킨맵 가져오기(자동 09·12·15·18시)", desc: "켜면 예전 워킨맵(workinmap.com)의 색·메모를 웹앱 워킨맵으로 하루 4번(지난 분기는 06:10 한 번) 가져오고, 기타 설정 › 워킨맵 동기화의 [지금 동기화]가 열립니다. SQL 실행 → 엣지 배포 → secrets → dry 확인 뒤 켜세요." },
+  { key: "WORKINMAP_PUSH_ENABLED", label: "워킨맵 되밀기(웹앱 → 워킨맵)", desc: "켜면 웹앱에서 바꾼 색·지도 숨김이 워킨맵에도 써집니다(P2, 아직 엣지가 건너뜀). SQL 실행 → 엣지 배포 → secrets → dry 확인 뒤 켜세요.", danger: true },
+  { key: "WORKINMAP_PUSH_MEMO", label: "워킨맵 메모 되밀기", desc: "켜면 웹앱에서 추가한 메모 줄도 워킨맵에 붙입니다(되밀기 켜짐일 때만). SQL 실행 → 엣지 배포 → secrets → dry 확인 뒤 켜세요.", danger: true },
   { key: "SSO_REQUIRED", label: "그룹웨어 로그인 필수", desc: "켜면 그룹웨어 계정으로 로그인한 기기만 FIELD가 열립니다(앨범·설명서 같은 공개 페이지는 예외). 그룹웨어 담당자가 우리 주소를 허용목록에 올려 로그인이 되는 걸 확인한 뒤 켜세요.", danger: true },
 ];
 
@@ -486,6 +490,7 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
 
       {/* 거래처 코드 미매칭 확정 — 워킨맵 지점 ↔ 임대리스트 거래처 수동 연결 */}
       {view === "misc" && <VendorCodeAdmin />}
+      {view === "misc" && <WorkinSyncAdmin />}
     </div>
   );
 }
