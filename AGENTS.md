@@ -35,6 +35,14 @@
 4. 끝나면 이 파일 "작업 기록"에 날짜·요약·건드린 파일을 적는다.
 5. 비밀값(키, 비밀번호)은 코드에 넣지 않는다. anon key는 이미 `src/supabase.ts`에 있음.
 
+## Codex 협업 규칙 (2026-10-31, 사용자가 두 도구를 같이 씀)
+이 파일은 Claude Code(팀장 클로드)와 OpenAI Codex CLI 가 **둘 다** 읽는다. 둘은 서로를 부를 수 없고, 사용자가 각자 터미널에서 띄운다. 같은 저장소(main)에서 일하므로:
+- **역할**: Codex 기본 역할 = 2차 코드 리뷰어(클로드가 푸시한 커밋 diff 검토·버그·보안·단순화 제안) + 사용자가 따로 맡긴 독립 작업. 클로드 = 기획·구현·배포·기록 흐름(CLAUDE.md 팀 운영).
+- **같은 파일 동시 수정 금지**: 시작 전 `git status`·`git pull --ff-only` 로 깨끗한지 확인, 작업 중 다른 도구가 커밋했으면 `git pull --rebase` 뒤 테스트 다시. 큰 작업은 브랜치(`codex/<주제>`)에서 하고 PR 또는 사용자가 합친다.
+- **공통 금지(둘 다)**: App.tsx 는 진입점 1~3줄만 · 키·토큰·비밀번호를 코드/커밋/대화에 넣지 않음 · Supabase 쓰기 SQL 은 파일로 만들어 사용자가 실행(supabase/*.sql, 재실행 안전) · tools/kakao-pc·gas-and-bot 은 .claude/agents/kakao-pc-rules.md 금지 규칙(Ctrl+A/F/E·WM_SETTEXT·메뉴 클릭·한 번에 여러 방) 준수 · 카톡 자동 글은 KST 10시 이후, TEST_MODE 켜져 있으면 테스트방만 · IT 시트 등 남의 데이터는 읽기만 · git stash/checkout/reset 으로 남의 작업 날리지 않기.
+- **끝의 기준(둘 다)**: 대문자 경로 `C:/Users/MYCOM/inspection-finder-MG` 에서 `npm run build`·`npm test` 통과(소문자 c: 경로는 가짜 실패). 커밋 본문 마지막 줄 `투입: Codex` (클로드는 `투입: 이름, 이름`). 기능이면 docs/manual/, 이 파일 "작업 기록", docs/eval/2026-Q4-worklog.md 한 항목.
+- **리뷰 방식**: 사용자가 Codex 에서 `/review` 또는 "최근 커밋 <해시> diff 를 검토해줘". Codex 가 찾은 문제는 사용자가 클로드에게 붙여 넣거나 Codex 가 직접 고쳐 커밋(위 규칙대로). 클로드는 Codex 커밋을 pull 해서 이어 간다.
+
 ## 에이전트 팀 (역할)
 `.claude/agents/` 에 역할 10개. 팀장은 Claude Code 본체(클로드, Fable 5.1). 역할 파일 머리에 이름·부서·캐릭터·모델이 있고, 보고 첫 줄에 `[부서 이름]`을 붙인다. 홈 화면 "AI 에이전트 팀" 카드(src/agentTeam.ts)가 같은 목록을 보여 주므로 역할을 늘리거나 이름을 바꾸면 그 파일도 같이 고친다.
 - 기획실 한설계 feature-planner(opus): 설계·작업 분해, 코딩 안 함.
