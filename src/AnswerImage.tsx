@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
+import { kstDate } from "./visits";
 import { invokeEdgeFunction } from "./supabase";
 import { canvasToMmsJpeg, canvasToPng, captionFromRest, svgToCanvas, type SvgAnswer } from "./answerSvg";
 
@@ -33,7 +34,7 @@ export default function AnswerImage({ item, vendor, phones, author }: { item: Sv
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
   }, [item.svg, item.width, item.height]);
 
-  const fileName = `${(vendor || "안내").replace(/[\\/:*?"<>|\s]+/g, "_")}_${new Date().toISOString().slice(0, 10)}.png`;
+  const fileName = `${(vendor || "안내").replace(/[\\/:*?"<>|\s]+/g, "_")}_${kstDate()}.png`;
   const save = () => { if (!src) return; const a = document.createElement("a"); a.href = src; a.download = fileName; a.click(); };
   const copy = async () => {
     if (!canvas) return;

@@ -460,23 +460,27 @@ export default function CustomerReport({ author }: { author: string }) {
       // 2) 수신자마다 링크가 담긴 문자를 대표번호로 발송 (같은 번호 1통)
       const text = buildSmsText([viewerUrl]);
       const seen = new Set<string>();
-      let ok = 0; const fails: string[] = [];
+      let ok = 0; const fails: string[] = []; const logFails: string[] = [];
       for (const r of sendTargets) {
         const phone = r.phone.replace(/[^\d]/g, "");
         if (seen.has(phone)) continue;
         seen.add(phone);
         try {
           await invokeEdgeFunction("customer-message-send", { channel: "sms", type: "report", to: phone, text, vendor: report.vendor, author });
-          await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "sent", image_url: viewerUrl, sender: author });
-          ok += 1;
         } catch (e) {
           fails.push(r.name || phone);
           await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "failed", error: String((e as Error).message).slice(0, 200), image_url: viewerUrl, sender: author }).catch(() => undefined);
+          continue;
         }
+        // 문자는 나갔다 — 기록 저장 실패를 '발송 실패'로 세면 다시 보내 같은 고객이 두 번 받는다(2026-10-31). 따로 알린다
+        ok += 1;
+        await insertRow("report_send_log", { vendor: vendorCore, period: report.periodLabel, channel: "sms", recipient_name: r.name, phone, status: "sent", image_url: viewerUrl, sender: author })
+          .catch(() => { logFails.push(r.name || phone); });
       }
       setSendOpen(false);
       if (fails.length) notify(`발송 ${ok}명 완료 · 실패 ${fails.length}명 (${fails.join(", ")})`, "error");
       else notify(`리포트 문자 발송 완료 — ${ok}명 ✓`, "success");
+      if (logFails.length) notify(`보냈지만 발송 기록 저장 실패 ${logFails.length}명 (${logFails.join(", ")}) — 다시 보내지 마세요`, "error");
       if (queueIdx >= 0 && !fails.length) advanceQueue("sent");
       else void loadSendData(report.vendor);
     } catch (e) {

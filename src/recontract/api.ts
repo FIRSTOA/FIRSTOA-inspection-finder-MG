@@ -303,7 +303,7 @@ export function parseWorkinMemos(memos: string[], vendor: string): WorkinTerms {
     if (/^\d+$/.test(line)) continue;                          // 순번·사업자번호
     if (/^[가-힣]+\/[가-힣]+$/.test(line)) continue;             // "서울/강남구"
     if (/^(서울|경기|인천|부산|대구|광주|대전|울산|강원|충북|충남|전북|전남|경북|경남|제주|세종)\s/.test(line)) continue; // 주소
-    if (/^[A-Za-z0-9\-]+\/\d{6,}$/.test(line)) continue;       // "D450/800100607798"
+    if (/^[A-Za-z0-9-]+\/\d{6,}$/.test(line)) continue;       // "D450/800100607798"
     // 업체명만 적힌 줄은 버리되, 업체명이 앞에 붙은 긴 메모는 살린다
     // ("S 바이드뮬러코리아\n현재 영업팀이 갱신 진행중…" 같은 진행 메모가 방문 여부를 가른다)
     const flat = line.replace(/\s/g, "");

@@ -108,7 +108,6 @@ export default function DeptRequests({ author, embedded = false }: { author: str
     setFreshUpdates((current) => new Set([...current, ...mine.map((row) => row.id)]));
     // 서버 갱신도 화면 판정(토큰 완전일치)과 같은 행만 — ilike 부분일치는 "조윤"이 "조윤호"의 요청까지 확인 처리했다(2026-10-10 점검)
     void updateRows("dept_requests", `requester_ack=eq.false&id=in.(${mine.map((row) => row.id).join(",")})`, { requester_ack: true }).then(() => pingInbox()).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, author]);
 
   // 받은 = 내가 수신 대상이면서 내가 올린 게 아닌 것 / 보낸 = 내가 올린 것

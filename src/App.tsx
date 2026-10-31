@@ -32,7 +32,7 @@ import { visionForm, sendForm, sendPcForm, sendCopierExpansionForm, sendCategory
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { setServiceReceptionStatus, sendServiceReception } from "./api";
 import { checkSendRooms } from "./api";
-import { uploadPhoto, createAlbum, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
+import { uploadPhoto, createAlbum, getConfig, invokeEdgeFunction, selectAllRows, selectRows, updateRows, upsertRow } from "./supabase";
 import { findTicketToFinish } from "./field/ticketMatchOffer"; import { sameVendorBranch } from "./field/ticketMatch"; // 전송 뒤 일정 맞춤(2026-10-27)
 import { normalizeLogisticsKind, saveActivityEvent, teamForAuthor, type ActivityKind } from "./operations";
 
@@ -3143,8 +3143,16 @@ export default function App() {
   // Result blocks for the bottom panel, tagged with their device index so
   // selecting a device scrolls its block into view.
   // IT통합(PC) 폼 상태 (탭 전환에도 유지, 초기화 시 리셋)
-  // "bo" = IT파트장님이 만든 영업기회 관리(FIRSTOA BO) 통합판을 iframe으로 — 정식 공지 전이라 "테스트(사용금지)"로만 노출(2026-09-12)
-  const [pcSubTab, setPcSubTab] = useState<"it" | "copier" | "bo">("it");
+  // "bo" = IT파트장님이 만든 영업기회 관리(FIRSTOA BO) 통합판을 iframe 으로. 2026-10-31 사용자: 이것을 확장성 본 화면으로 쓰고
+  // IT·복합기 양식 탭은 당분간 숨김(관리 탭 FIELD_EXPANSION_LEGACY_TABS 를 켜면 세 탭이 다시 보임). BO 는 그쪽 배포가 곧 반영된다(붙여넣기 없음).
+  const [pcSubTab, setPcSubTab] = useState<"it" | "copier" | "bo">("bo");
+  const [legacyExpansionTabs, setLegacyExpansionTabs] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    getConfig().then((c) => { if (alive) setLegacyExpansionTabs(/^(true|1|on|yes)$/i.test(String(c.FIELD_EXPANSION_LEGACY_TABS || ""))); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => { if (!legacyExpansionTabs && pcSubTab !== "bo") setPcSubTab("bo"); }, [legacyExpansionTabs, pcSubTab]);
   const [pcForm, setPcForm] = useState<PcFormState>(() => ({ ...EMPTY_PC_FORM, ...(ss.pcForm as object || {}) }));
   const pcFilled = useMemo(() => Object.values(pcForm).some((v) => String(v).trim() !== ""), [pcForm]);
   const pcText = useMemo(() => buildPcText(pcForm, author), [pcForm, author]);
@@ -5436,9 +5444,9 @@ export default function App() {
             })}
           </div>
         )}
-        {mode === "pc" && (
+        {mode === "pc" && legacyExpansionTabs && (
           <div className="mt-2 flex gap-1 rounded-xl bg-white/10 p-1">
-            {([["it", "IT"], ["copier", "복합기(기타)"], ["bo", "테스트(사용금지)"]] as [typeof pcSubTab, string][]).map(([key, label]) => {
+            {([["bo", "영업기회(BO)"], ["it", "IT"], ["copier", "복합기(기타)"]] as [typeof pcSubTab, string][]).map(([key, label]) => {
               const active = pcSubTab === key;
               return (
                 <button
@@ -5595,11 +5603,11 @@ export default function App() {
           <div className="space-y-3">
             {pcSubTab === "bo" ? (
               <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12px] font-bold text-amber-800">
-                  <span>🧪 테스트 중 — IT파트장님이 만든 <b>영업기회 관리(BO)</b> 통합판입니다. 정식 공지 전이라 <b>실사용 금지</b>. 여기 입력한 내용은 이 앱이 아니라 BO 쪽에 저장됩니다.</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-[12px] font-bold text-slate-600">
+                  <span><b>영업기회 관리(BO)</b> — IT파트 통합판. 입력한 내용은 BO 에 저장됩니다(이 앱의 보내기 단추와 무관).</span>
                   <a href="https://firstoa-bo.vercel.app/" target="_blank" rel="noreferrer" className="shrink-0 rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-black text-white">새 창으로 열기 ↗</a>
                 </div>
-                <iframe title="FIRSTOA BO (테스트)" src="https://firstoa-bo.vercel.app/" allow="microphone; clipboard-write" className="h-[78vh] min-h-[560px] w-full rounded-xl border border-slate-200 bg-white" />
+                <iframe title="FIRSTOA BO" src="https://firstoa-bo.vercel.app/" allow="microphone; clipboard-write" className="h-[78vh] min-h-[560px] w-full rounded-xl border border-slate-200 bg-white" />
               </div>
             ) : pcSubTab === "it" ? (
               <PcForm

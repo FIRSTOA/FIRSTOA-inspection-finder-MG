@@ -118,7 +118,8 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   const saveNoMap = (next: string[]) => {
     setNoMap(next);
     try { localStorage.setItem(`${storageKey}:nomap`, JSON.stringify(next)); } catch { /* 무시 */ }
-    if (author.trim()) void upsertRow("plan_memos", { author, ticket_id: noMapKey, memo: JSON.stringify(next), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined);
+    if (author.trim()) void upsertRow("plan_memos", { author, ticket_id: noMapKey, memo: JSON.stringify(next), updated_at: new Date().toISOString() }, "author,ticket_id")
+      .catch(() => notify("지도 숨김을 서버에 저장하지 못했습니다 — 이 기기에만 바뀌었습니다", "error"));
   };
   const toggleNoMap = (id: string) => saveNoMap(noMap.includes(id) ? noMap.filter((x) => x !== id) : [...noMap, id]);
   const savePinned = (next: string[]) => {
@@ -141,7 +142,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
   }, [author]);
   const saveMemo = (ticketId: string, memo: string) => {
     setMemos((cur) => { const next = new Map(cur); if (memo.trim()) next.set(ticketId, memo); else next.delete(ticketId); return next; });
-    void upsertRow("plan_memos", { author, ticket_id: ticketId, memo, updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined);
+    // 메모는 '까먹지 않게' 적는 것 — 저장 실패를 삼키면 다시 열었을 때 사라진 걸로 보인다(2026-10-31)
+    void upsertRow("plan_memos", { author, ticket_id: ticketId, memo, updated_at: new Date().toISOString() }, "author,ticket_id")
+      .catch((e) => notify(`메모를 저장하지 못했습니다 — 다시 적어 주세요: ${(e as Error).message}`, "error"));
   };
 
   // 워킨맵 좌표 사전 — 업체명 정규화 키로 매칭 (팀 무관 전체, 한 번만)

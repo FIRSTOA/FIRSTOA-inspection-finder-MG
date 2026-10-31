@@ -81,8 +81,8 @@ export function looksLikeNaverSavedList(text: string): boolean {
 /** 메뉴 한 줄 — 네이버지도 "메뉴" 탭을 긁어 붙이면 그대로 읽는다. */
 export type MenuItem = { name: string; price: string; signature?: boolean };
 
-const PRICE_ONLY = /^([0-9][0-9,\.]*)\s*원?$/;                 // "3,900원" · "13000"
-const NAME_WITH_PRICE = /^(.+?)[\s|·\-–—]+([0-9][0-9,\.]*)\s*원?$/; // "네기마 3,900원"
+const PRICE_ONLY = /^([0-9][0-9,.]*)\s*원?$/;                 // "3,900원" · "13000"
+const NAME_WITH_PRICE = /^(.+?)[\s|·\-–—]+([0-9][0-9,.]*)\s*원?$/; // "네기마 3,900원"
 const SIGNATURE_MARK = /^(대표|시그니처|인기|추천|BEST|best)$/;
 const NOISE = /^(메뉴|가격|사진|리뷰|정보|더보기|메뉴판|이미지|원산지|\d+개|영업.*|휴무.*)$/;
 

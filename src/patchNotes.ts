@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "ca8f31e51e",
+    "date": "2026-10-31",
+    "note": "중간보고 업체 토막 규칙: \"/\" 제목에서 상호 표시(학원·병원·㈜·센터…) 든 토막 우선(손나래영어학원), 전화번호 토막 제외 + 실전 전환 기록"
+  },
+  {
     "hash": "e6e6476c61",
     "date": "2026-10-31",
     "note": "중간보고 연기 꼬리 범위: 이번 달 안 또는 7일 안 날짜만(다음 달로 미룬 건은 그 달에 — 사용자 결정) + 매뉴얼 07·기록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ed988148b7",
     "date": "2026-10-08",
     "note": "스위치가 꺼져 있으면 그룹웨어 로그인 줄을 어디에도 보이지 않게(검증용 ?sso=test 예외 제거)"
-  },
-  {
-    "hash": "d896192e0d",
-    "date": "2026-10-08",
-    "note": "로그아웃하면 FIELD 문 없이 그룹웨어 로그인 화면(/worklog/login)으로 바로 이동"
   }
 ];

@@ -328,7 +328,9 @@ export default function AutoSchedule({ author }: { author: string }) {
     }
     if (!chosenGroups.length && !manualPicks.length) return;
     setLoading(true);
-    const saveMemo = async (ticketId: string, memo: string) => { if (memo.trim()) await upsertRow("plan_memos", { author, ticket_id: ticketId, memo: memo.trim(), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => undefined); };
+    // 메모 저장 실패는 일정 등록을 막지 않되 숨기지도 않는다 — 완료 문구에 건수로(2026-10-31)
+    let memoFails = 0;
+    const saveMemo = async (ticketId: string, memo: string) => { if (memo.trim()) await upsertRow("plan_memos", { author, ticket_id: ticketId, memo: memo.trim(), updated_at: new Date().toISOString() }, "author,ticket_id").catch(() => { memoFails += 1; }); };
     try {
       // 그 달에 이미 열려 있는 점검 일정이 있는 업체는 건너뛴다 — 같은 업체가 3번 잡혀 완료 때 '3건 처리'로 뜨던 것(2026-09-24 제이엘케이)
       // 단 지난 날짜의 미완료 행은 어디서도 안 보이는 행이라 건너뛰지 않고 고른 날짜로 옮긴다(2026-10-26, src/autoScheduleSkip.ts)
@@ -379,7 +381,7 @@ export default function AutoSchedule({ author }: { author: string }) {
         await saveMemo(ticketId, m.memo);
       }
       setSaved((cur) => picksAfterRegister(cur, date, regTeam)); // 다른 팀에서 고른 건 남긴다
-      setNotice(`${chosenGroups.length - skipped.length + manualPicks.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${moved.length ? ` · ${moveNotice(moved)}` : ""}${skipped.length ? ` · ${skipNotice(skipped, today)}` : ""}`);
+      setNotice(`${chosenGroups.length - skipped.length + manualPicks.length}곳 등록 완료 (${author}) — 일정리스트에서 확인하세요.${moved.length ? ` · ${moveNotice(moved)}` : ""}${skipped.length ? ` · ${skipNotice(skipped, today)}` : ""}${memoFails ? ` · ⚠ 메모 ${memoFails}건 저장 실패(내 일정에서 다시 적어 주세요)` : ""}`);
       void loadTickets();
     } catch (e) {
       setNotice(`등록 실패: ${(e as Error).message}`);

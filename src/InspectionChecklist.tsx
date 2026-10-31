@@ -15,7 +15,7 @@ export default function InspectionChecklist({ resetToken }: { resetToken: string
   useEffect(() => { try { localStorage.setItem(OPEN_KEY, open ? "1" : "0"); } catch { /* 무시 */ } }, [open]);
   useEffect(() => { setChecked(new Set()); }, [resetToken]); // 새 양식이 오면 체크도 새로
   const total = GENERAL.length + SAMSUNG.length;
-  const toggle = (item: string) => setChecked((cur) => { const next = new Set(cur); next.has(item) ? next.delete(item) : next.add(item); return next; });
+  const toggle = (item: string) => setChecked((cur) => { const next = new Set(cur); if (next.has(item)) next.delete(item); else next.add(item); return next; });
   const Item = ({ label }: { label: string }) => {
     const on = checked.has(label);
     return (

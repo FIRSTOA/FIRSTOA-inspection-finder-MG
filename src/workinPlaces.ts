@@ -79,7 +79,7 @@ export function contractEnd(place: WorkinPlaceLike, baseYear: number): ContractE
 /** 계약 종료일 — 메모에 일자까지 있으면 그것까지(YYYY-MM-DD), 없으면 월 말일 */
 export function contractEndYmd(place: WorkinPlaceLike, baseYear: number): string {
   const exact = [place.name, ...(place.memos || [])].join(" ")
-    .match(/계약종료(?:년월일?)?\s*[-/:.]?\s*(\d{2})[-.\/](\d{1,2})[-.\/](\d{1,2})/);
+    .match(/계약종료(?:년월일?)?\s*[-/:.]?\s*(\d{2})[-./](\d{1,2})[-./](\d{1,2})/);
   if (exact) return `20${exact[1]}-${exact[2].padStart(2, "0")}-${exact[3].padStart(2, "0")}`;
   const end = contractEnd(place, baseYear);
   if (!end) return "";

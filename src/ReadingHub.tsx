@@ -92,7 +92,7 @@ const REC_GENRES = Object.keys(BOOK_RECS);
 function dailyRecPicks(genre: string): Array<{ t: string; a: string }> {
   const pool = BOOK_RECS[genre] || [];
   if (pool.length <= 3) return pool;
-  const seed = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ""));
+  const seed = Number(kstDate().replace(/-/g, "")); // KST 날짜 — UTC 면 아침 9시에야 바뀌었다
   const start = seed % pool.length;
   return [0, 1, 2].map((offset) => pool[(start + offset) % pool.length]);
 }

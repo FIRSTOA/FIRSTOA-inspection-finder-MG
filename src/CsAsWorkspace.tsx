@@ -1448,7 +1448,6 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     for (const t of baseRows) c[statusOf(t)] += 1;
     for (const ev of naverBase) c[ev.completed ? "완료" : "미배정"] += 1;
     return c;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseRows, naverBase]);
   const scheduleRows = baseRows.filter((ticket) => !(statusPick && statusOf(ticket) !== statusPick)).sort((a, b) => {
     // 이름별로 묶어서 표시 — 미배정 먼저, 그 다음 이름순 (여러 직원 일정이 섞여 뒤죽박죽되지 않게)

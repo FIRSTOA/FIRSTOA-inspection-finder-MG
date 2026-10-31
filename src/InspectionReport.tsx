@@ -325,9 +325,11 @@ export default function InspectionReportBoard({ author, switcher }: { author: st
     if (text == null) return;
     const now = new Date().toISOString();
     const sid = sourceIdOf(kind, selected.id);
-    await insertRow("message_jobs", { id: crypto.randomUUID(), source_type: "inspection_report", source_id: sid, channel: "sms", recipient: to, message: text, payload: { type: "inspection_report", kind, vendor: data.vendor, author, date: selected.작성일, keyman: data.keymanName }, status: "sent", scheduled_at: now, sent_at: now, created_by: author }).catch(() => undefined);
+    await insertRow("message_jobs", { id: crypto.randomUUID(), source_type: "inspection_report", source_id: sid, channel: "sms", recipient: to, message: text, payload: { type: "inspection_report", kind, vendor: data.vendor, author, date: selected.작성일, keyman: data.keymanName }, status: "sent", scheduled_at: now, sent_at: now, created_by: author })
+      .then(() => notify(`${data.vendor}에 리포트를 보냈습니다`, "success"))
+      // 문자는 이미 나갔다 — 기록이 없으면 새로고침 뒤 '이미 보냄' 확인이 사라져 같은 고객에게 또 나갈 수 있다(2026-10-31)
+      .catch((e) => notify(`${data.vendor}에 보냈지만 발송 기록 저장 실패 — 다시 보내지 마세요: ${(e as Error).message}`, "error"));
     setSent((cur) => new Map(cur).set(sid, now));
-    notify(`${data.vendor}에 리포트를 보냈습니다`, "success");
   };
   // 테스트 발송 — 직원 번호로 같은 이미지. 기록하지 않고 업무시간도 묻지 않는다
   const sendTest = async () => {

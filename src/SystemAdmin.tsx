@@ -37,6 +37,7 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "FIELD_SHEET_SYNC_ENABLED", label: "시트 동기화", desc: "끄면 FIELD 기록이 구글시트에 기입되지 않습니다." },
   { key: "TEST_MODE", label: "테스트 모드", desc: "켜면 모든 카카오톡 전송이 실제 방 대신 아래 테스트 카톡방으로만 갑니다.", danger: true },
   { key: "FIELD_SHEET_TEST_MODE", label: "시트 테스트 모드", desc: "켜면 시트 기입이 테스트 탭으로만 갑니다.", danger: true },
+  { key: "FIELD_EXPANSION_LEGACY_TABS", label: "확장성 IT·복합기 양식 탭 보이기", desc: "꺼져 있으면(기본) FIELD 확장성 탭은 IT파트 영업기회 관리(BO) 화면만 보입니다(2026-10-31 결정). 켜면 예전 IT·복합기(기타) 양식 탭이 BO 옆에 다시 보입니다." },
   { key: "FIELD_OCR", label: "매수·잔량 사진 분석(시험)", desc: "켜면 FIELD 점검 양식의 매수·잔량 칸 옆에 [📷 매수 분석]·[📷 잔량 분석]이 보입니다. 사진 한 장당 AI 비용이 듭니다." },
   { key: "NAVER_CALENDAR_ENABLED", label: "네이버 캘린더 미러", desc: "켜면 일정 등록 시 네이버 캘린더에도 자동 등록됩니다 (원본은 웹앱 일정리스트)." },
   { key: "DEPT_RECEPTION_ENABLED", label: "서비스접수 지원 3종(경영·운영·영업)", desc: "켜면 서비스접수 종류 선택기에 경영지원·운영지원·전략영업 줄과 부서 접수 폼이 보입니다. supabase/reception-dept-types.sql 과 reception-dept-types-rename.sql 을 먼저 실행해야 저장이 됩니다." },
@@ -469,7 +470,7 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
                 )}
                 {state !== "완료" && (
                   <button type="button" disabled={busy === `retry-${job.id}`}
-                    onClick={() => { void (async () => { setBusy(`retry-${job.id}`); try { await invokeEdgeFunction("field-sheet-sync", { jobId: job.id }); await load(); } catch { /* 결과는 목록 갱신으로 확인 */ } finally { setBusy(""); } })(); }}
+                    onClick={() => { void (async () => { setBusy(`retry-${job.id}`); try { await invokeEdgeFunction("field-sheet-sync", { jobId: job.id }); await load(); } catch (e) { notify(`다시 실행 실패: ${(e as Error).message}`, "error"); } finally { setBusy(""); } })(); }}
                     className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-4 text-xs font-black text-blue-700 transition hover:bg-blue-100 disabled:opacity-40 lg:min-h-9">
                     {busy === `retry-${job.id}` ? "실행 중…" : "다시 실행"}
                   </button>

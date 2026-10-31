@@ -1155,7 +1155,7 @@ const MapCanvasKakao = memo(function MapCanvasKakao({ kakao, places, selectedId,
       const pin = document.createElement("div");
       pin.style.cssText = "display:inline-block";
       pin.innerHTML = permanentLabel
-        ? `<span style="position:relative;display:block;width:21px;height:21px;margin:0 auto;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)">${group.length > 1 ? `<b style=\"position:absolute;right:-12px;top:-12px;display:flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:white;font:700 10px sans-serif;transform:rotate(45deg)\">${group.length}</b>` : ""}</span>`
+        ? `<span style="position:relative;display:block;width:21px;height:21px;margin:0 auto;background:${meta.color};border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(15,23,42,.35)">${group.length > 1 ? `<b style="position:absolute;right:-12px;top:-12px;display:flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:9px;background:#0f172a;color:white;font:700 10px sans-serif;transform:rotate(45deg)">${group.length}</b>` : ""}</span>`
         : `<span style="display:block;width:${group.length > 1 ? 16 : 12}px;height:${group.length > 1 ? 16 : 12}px;background:${meta.color};border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(15,23,42,.4)"></span>`;
       pin.addEventListener("click", (event) => { event.stopPropagation(); handleClick(); });
       container.appendChild(pin);

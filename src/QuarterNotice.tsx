@@ -191,7 +191,7 @@ function QuarterNoticeBoard({ author, switcher }: { author: string; switcher?: R
           {loading && <div className="py-14 text-center text-sm font-bold text-slate-400">이번 분기 대상을 불러오는 중…</div>}
           {!loading && targets.map((t) => (
             <label key={t.place.id} className="flex cursor-pointer items-center gap-3 px-4 py-2 hover:bg-slate-50">
-              <input type="checkbox" checked={checkedIds.has(t.place.id)} onChange={() => setCheckedIds((cur) => { const next = new Set(cur); next.has(t.place.id) ? next.delete(t.place.id) : next.add(t.place.id); return next; })} className="h-4 w-4 shrink-0 accent-blue-600" />
+              <input type="checkbox" checked={checkedIds.has(t.place.id)} onChange={() => setCheckedIds((cur) => { const next = new Set(cur); if (next.has(t.place.id)) next.delete(t.place.id); else next.add(t.place.id); return next; })} className="h-4 w-4 shrink-0 accent-blue-600" />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate text-sm font-black text-slate-900">{workinVendorName(t.place.name) || t.place.name}</span>

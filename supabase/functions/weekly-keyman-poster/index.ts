@@ -411,7 +411,7 @@ Deno.serve(async (req) => {
 
     const token = await accessToken();
     let queuedAny = false;
-    const out: Array<{ region: string; url: string; style?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string }> = [];
+    const out: Array<{ region: string; url: string; style?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string; error?: string }> = [];
 
     for (const [letter, list] of byRegion) {
       const persons = dedupe(list.filter(isPerson));
@@ -439,11 +439,6 @@ Deno.serve(async (req) => {
       const H = toPt(info.pageSize?.height, 405);
       if (!pageId) return Response.json({ error: "새 슬라이드의 첫 장을 못 찾았습니다" }, { status: 502, headers: jsonHeaders });
 
-      const items = [
-        ...persons.map((row) => ({ row, kind: "키맨" as const })),
-        ...addresses.map((row) => ({ row, kind: "주소" as const })),
-        ...names.map((row) => ({ row, kind: "업체명" as const })),
-      ];
       const reqs: Req[] = [];
       let seq = 0;
       const nid = () => `obj_${letter}_${String(seq++).padStart(3, "0")}`; // 슬라이드 objectId는 5자 이상이어야 한다
@@ -685,7 +680,7 @@ Deno.serve(async (req) => {
       const posterUrl = url;
       const pageUrl = `${APP_URL}/brief/?r=${letter}&w=${week.from}`; // 눌러서 보는 안내문(원하면 문구에 쓸 수 있다)
 
-      const entry: { region: string; url: string; style?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string } = {
+      const entry: { region: string; url: string; style?: string; poster?: string; page?: string; counts: Record<string, number>; room?: string; queued?: boolean; text?: string; error?: string } = {
         region: letter, url, style: st.key, poster: posterUrl, page: pageUrl || undefined,
         counts: { 키맨: persons.length, 주소: addresses.length, 업체명: names.length },
       };
@@ -747,9 +742,11 @@ Deno.serve(async (req) => {
           entry.text = text;
           if (body.dry) { entry.queued = false; } // 실제 발송 없이 방·문구만 확인
           else {
-            await fetch(`${restBase}/outbox`, { method: "POST", headers: { ...restHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ room, text }) });
-            entry.queued = true;
-            if (!testMode) queuedAny = true; // 테스트 발송은 '보냈음' 표시를 남기지 않는다
+            // 넣기 실패를 '보냈음'으로 치지 않는다(2026-10-31) — 예전엔 응답을 보지 않아 실패해도 queued·SENT 표시가 남아 PC 안전망까지 건너뛰었다
+            const queued = await fetch(`${restBase}/outbox`, { method: "POST", headers: { ...restHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ room, text }) });
+            entry.queued = queued.ok;
+            if (!queued.ok) entry.error = `outbox 넣기 실패(${queued.status}) ${(await queued.text().catch(() => "")).slice(0, 160)}`;
+            else if (!testMode) queuedAny = true; // 테스트 발송은 '보냈음' 표시를 남기지 않는다
           }
         }
       }
@@ -764,6 +761,8 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ key: SENT_KEY, value: week.from }),
       });
     }
+    const queueFailed = out.filter((e) => e.error).map((e) => e.region);
+    if (queueFailed.length) return Response.json({ ok: false, error: `카톡 넣기 실패: ${queueFailed.join(", ")}지역`, week, action, regions: out }, { status: 502, headers: jsonHeaders });
     return Response.json({ ok: true, week, action, regions: out }, { headers: jsonHeaders });
   } catch (error) {
     return Response.json({ error: (error as Error).message }, { status: 500, headers: jsonHeaders });

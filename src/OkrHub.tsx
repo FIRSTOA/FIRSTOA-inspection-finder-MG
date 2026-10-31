@@ -173,8 +173,12 @@ export default function OkrHub({ author }: { author: string }) {
   const flushPending = async () => {
     const cs = pendingCyclesRef.current; pendingCyclesRef.current = [];
     const rs = pendingReportsRef.current; pendingReportsRef.current = [];
-    for (const c of cs) await saveOkrCycle(c, author).catch(() => undefined);
-    for (const r of rs) await saveOkrReport(r, author).catch(() => undefined);
+    // 달을 바꾸거나 화면을 나갈 때 막 적은 글 — 실패를 삼키면 글이 사라진 걸 아무도 모른다(2026-10-31). 화면 밖에서도 보이는 전역 알림으로
+    let failed = 0; let firstError = "";
+    const fail = (e: unknown) => { failed += 1; if (!firstError) firstError = (e as Error)?.message || String(e); };
+    for (const c of cs) await saveOkrCycle(c, author).catch(fail);
+    for (const r of rs) await saveOkrReport(r, author).catch(fail);
+    if (failed) notify(`OKR 글 ${failed}건을 저장하지 못했습니다 — 그 달로 돌아가 다시 적어 주세요: ${firstError}`, "error");
   };
   useEffect(() => () => { void flushPending(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- 언마운트 시 1회
   // [엑셀](2026-10-28) — 막 적은 글부터 저장(flush) → 보는 분기 전체를 파일 하나로. 모듈·exceljs 는 누를 때만 읽는다(번들 분리)

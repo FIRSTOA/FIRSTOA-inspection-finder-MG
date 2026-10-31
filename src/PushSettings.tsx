@@ -31,7 +31,7 @@ export default function PushSettings({ author }: { author: string }) {
       setState("off");
     }
   };
-  useEffect(() => { void refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void refresh(); }, []);
 
   const toggleMaster = async () => {
     if (busy) return;

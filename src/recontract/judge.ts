@@ -47,13 +47,13 @@ const 권한밖 = [
 /** 거래 시작 연도 — 보증금 입금일 > 임대개시 명시 > 적요의 가장 빠른 계약 시작 > 첫 거래내역 */
 function earliestYear(analysis: LedgerAnalysis): number | null {
   const remarks = analysis.remarks;
-  const deposit = remarks.match(/보증금[^\n]*?(\d{2})[.\/](\d{1,2})[.\/](\d{1,2})\s*입?/)
-    || remarks.match(/보\s*\d+만?\s*\(\s*(\d{2})[.\/](\d{1,2})[.\/](\d{1,2})\s*入/);
+  const deposit = remarks.match(/보증금[^\n]*?(\d{2})[./](\d{1,2})[./](\d{1,2})\s*입?/)
+    || remarks.match(/보\s*\d+만?\s*\(\s*(\d{2})[./](\d{1,2})[./](\d{1,2})\s*入/);
   if (deposit) return 2000 + Number(deposit[1]);
-  const start = remarks.match(/임대\s*개시[^0-9]*(\d{2})[.\/](\d{1,2})[.\/](\d{1,2})/)
-    || remarks.match(/최초임대\s*\(?\s*(\d{2})[.\/](\d{1,2})[.\/](\d{1,2})/);
+  const start = remarks.match(/임대\s*개시[^0-9]*(\d{2})[./](\d{1,2})[./](\d{1,2})/)
+    || remarks.match(/최초임대\s*\(?\s*(\d{2})[./](\d{1,2})[./](\d{1,2})/);
   if (start) return 2000 + Number(start[1]);
-  const years = Array.from(remarks.matchAll(/(\d{2})[.\/]\d{1,2}[.\/]\d{1,2}\s*~/g)).map((m) => 2000 + Number(m[1]));
+  const years = Array.from(remarks.matchAll(/(\d{2})[./]\d{1,2}[./]\d{1,2}\s*~/g)).map((m) => 2000 + Number(m[1]));
   if (years.length) return Math.min(...years);
   const first = analysis.months[0]?.ym;
   return first ? Number(first.slice(0, 4)) : null;

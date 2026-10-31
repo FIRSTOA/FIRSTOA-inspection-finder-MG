@@ -17,6 +17,7 @@ import { isKeymanChange, recentChangesFor, daysSince, type ContactChange } from 
 import { normalizeId, parseInspectionBlocks, vendorMatchKey, type InspBlock } from "./ids";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { notify } from "./toast";
+import { kstDate } from "./visits";
 import { maskRrn, maskRrnValue } from "./privacy";
 
 /**
@@ -631,7 +632,7 @@ export default function UnifiedHistory({ vendor, accent, open, onClose, onError,
           const swap = /^\d{5}$/.test(raw)
             ? new Date(Date.UTC(1899, 11, 30) + Number(raw) * 86400000).toISOString().slice(0, 10)
             : (raw.match(/\d{4}-\d{2}-\d{2}/)?.[0] || "");
-          if (swap && swap >= yearAgo && swap > summary.recentSwap && swap <= new Date().toISOString().slice(0, 10)) summary.recentSwap = swap;
+          if (swap && swap >= yearAgo && swap > summary.recentSwap && swap <= kstDate()) summary.recentSwap = swap;
         }
         setDevices(summary);
       })

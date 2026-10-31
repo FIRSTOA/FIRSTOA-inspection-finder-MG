@@ -147,3 +147,10 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 **확인**: `select kst_date, team, slot, status, reason, room, test, polished, outbox_id from schedule_report_log order by created_at desc limit 10;` · `select * from ops.edge_call_health where tag like 'schedule-report-%';`
 
 **되돌리기**: 급히 멈추기 = 관리 탭 `SCHEDULE_REPORT_AUTO` 끔(또는 "카톡 전송" 끔 = 전체 정지). 완전히 = `select cron.unschedule('schedule-report-12'); select cron.unschedule('schedule-report-14');` 후 함수 삭제(`npx supabase functions delete schedule-report --project-ref kkdiihazgzesbqxjytqv`). 이미 outbox 에 들어간 글은 봇이 보내기 전이면 outbox 행을 지워 막는다.
+
+## 2026-10-31 전체 디버깅에서 바뀐 엣지 3개 (재배포 필요)
+- **contact-sheet-pull** — 담당자변경 공유가 `share.ts` 로 분리. ① 공유 전 `shared_at is null` 조건부 PATCH 로 먼저 잡아 10:00 에 `contact-sheet-pull-daily` 와 `contact-sheet-share` 가 같은 분에 돌아도 같은 글이 두 번 안 나감 ② outbox 넣기 실패면 잡기를 되돌려 다음 3분 실행이 다시 보냄 ③ 새 행이 없어도 공유를 돌림(10시 전 보류분이 다음 새 행까지 밀리던 것 해결) ④ 22시 이후는 보류(10시 전과 같음). 실측 근거: 10/22 09:39 D지역 건이 11:33 에야 공유됨.
+- **kakao-ingest** — kakao_messages(27만 행, 가림 트리거·trgm 인덱스) 적재가 500행 묶음에서 8초 statement timeout(57014) 으로 0행 실패(10/29~31 강남C as 3·점검방 1). 이제 `_shared/rest-batch.ts` 로 250행씩 넣고 57014 면 그 묶음만 반으로 쪼개 재시도(최소 25행). hash 중복 무시라 다시 넣어도 중복 없음. GAS 쪽 57014 재시도(clasp push 대기)와 별개로 서버에서 먼저 막는다.
+- **weekly-keyman-poster** — outbox 넣기 응답을 확인하지 않고 `queued=true`·KEYMAN_POSTER_SENT 를 찍던 것 → 실패면 그 지역 오류 + 502, SENT 미기록(노트북 안전망이 다시 시도). dry 경로(poster_send.py)는 그대로.
+- 배포(프로젝트 폴더에서): `npx supabase functions deploy contact-sheet-pull` · `kakao-ingest` · `weekly-keyman-poster` (각각 `--project-ref kkdiihazgzesbqxjytqv`).
+- 보고만 된 것(수정 안 함, 결정 대기): customer-message-send 발송 상한 조회 실패 시 통과(실패 시 막을지), photo-drive-archive GAS 호출 타임아웃 없음(7일 83회 150초 초과), weekly-keyman-poster 크론·수동 겹침 잠금 없음, OpenAI 호출 타임아웃 없는 함수 8개, weekly-keyman-poster run/dry 응답 text 에 키맨 전화 원문, 담당자변경 시트 '청현세무회계컨설팅' 행이 매일 자정 1건씩 재생성(날짜 칸 수식 추정 → 시트 담당이 값으로 고정).

@@ -208,7 +208,7 @@ function parseVouchers(lines: string[]): LedgerVoucher[] {
   const out: LedgerVoucher[] = [];
   for (const line of lines) {
     if (!line.trim()) continue;
-    const cells = line.split("\t").map((cell) => cell.replace(/ /g, " ").trim());
+    const cells = line.split("\t").map((cell) => cell.replace(/\u00A0/g, " ").trim());
     const first = cells.find((cell) => cell) || "";           // 선행 빈 셀은 건너뛴다
     if (/^(일자|이월잔액|누계)/.test(first) || /^\d{4}[./-]\d{2}\s*계$/.test(first)) continue; // 머리·이월·월계·누계 줄
     const stamp = first.match(VOUCHER_DATE);
@@ -291,7 +291,7 @@ const INFO_LABELS = ["사업자등록번호", "대표자", "여신한도", "전�
 
 /** 대장 텍스트 전체 → 구조 */
 export function parseLedger(text: string): LedgerParsed {
-  const clean = String(text || "").replace(/\r\n?/g, "\n").replace(/ /g, " ");
+  const clean = String(text || "").replace(/\r\n?/g, "\n").replace(/\u00A0/g, " ");
   const lines = clean.split("\n");
 
   const titleLine = lines.find((line) => /관리대장\(거래명세서별\)/.test(line)) || "";

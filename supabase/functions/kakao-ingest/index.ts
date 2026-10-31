@@ -17,10 +17,12 @@
  *  - 한 요청 text 최대 500KB(UTF-8). 넘으면 413 — GAS 가 더 잘게 자른다.
  *  - 방은 kakao_collect_rooms(enabled·keep_raw) 에 있어야 한다(공백 무시 비교). 없으면 403 — 개인방·잡담방은 넣지 않는다.
  *  - 가림·분류 추정·중복 키는 _shared/kakao-parse.ts. DB 트리거가 한 번 더 가린다.
- *  - insert 는 on_conflict=hash + ignore-duplicates(이미 있는 글은 건너뜀). 500행씩.
+ *  - insert 는 on_conflict=hash + ignore-duplicates(이미 있는 글은 건너뜀). 250행씩, statement timeout(57014)이면 반씩 쪼개 다시
+ *    (2026-10-31: 500행 묶음이 8초 한도를 넘어 0행 적재로 끝나던 것 — _shared/rest-batch.ts).
  *  - 조각마다 kakao_import_log 1행(본문 없음). 기록 실패는 응답 log_error 로 알린다(삼키지 않음).
  */
 import { MAX_INGEST_BYTES, parseKakaoText, toRows, utf8Bytes, type KakaoRow } from "../_shared/kakao-parse.ts";
+import { insertInChunks } from "../_shared/rest-batch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,7 +39,8 @@ const REST = `${SUPABASE_URL}/rest/v1`;
 const H = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" };
 const enc = encodeURIComponent;
 const SOURCES = new Set(["gas-drive", "app-upload", "phone-export"]);
-const BATCH = 500;
+const BATCH = 250;
+const MIN_BATCH = 25;
 
 async function rest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${REST}${path}`, { ...init, headers: { ...H, ...(init.headers || {}) } });
@@ -70,16 +73,14 @@ async function botNicks(): Promise<Set<string>> {
 }
 
 async function insertRows(rows: Record<string, unknown>[]): Promise<number> {
-  let inserted = 0;
-  for (let i = 0; i < rows.length; i += BATCH) {
+  return await insertInChunks(rows, async (chunk) => {
     const got = await rest<Array<{ hash: string }>>("/kakao_messages?on_conflict=hash&select=hash", {
       method: "POST",
-      body: JSON.stringify(rows.slice(i, i + BATCH)),
+      body: JSON.stringify(chunk),
       headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
     });
-    inserted += Array.isArray(got) ? got.length : 0;
-  }
-  return inserted;
+    return Array.isArray(got) ? got.length : 0;
+  }, { size: BATCH, minSize: MIN_BATCH });
 }
 
 async function writeLog(row: Record<string, unknown>): Promise<{ id: number | null; error: string }> {
