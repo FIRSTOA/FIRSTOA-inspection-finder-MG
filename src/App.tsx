@@ -43,7 +43,7 @@ import { detectUnifiedInputMode, detectReportTypesFromInput } from "./fieldModes
 import { nextBusinessDay } from "./planDate";
 import { AUTHOR_TEAMS, CS_DEPT, EXTERNAL_AUTHORS, displayTitle, teamLabel, useAuthorBook, useMembers } from "./authors";
 import { buildActionBlock } from "./actionBlock";
-import { isDividerLine, isSpareNoteBlock, itemStartFlags, noteBlockLineFlags, splitTableReceptionBlocks } from "./inspectionBlocks";
+import { isDividerLine, isSpareNoteBlock, itemStartFlags, joinFormSections, noteBlockLineFlags, rebuildDeviceText, splitTableReceptionBlocks } from "./inspectionBlocks";
 import { regionLetter, tableVisitRegion } from "./region";
 import { ProcessingFormPanel } from "./field/ProcessingFormPanel";
 import { AirPurifierFormPanel } from "./field/AirPurifierFormPanel";
@@ -2732,12 +2732,7 @@ function inspectionDeviceParts(text: string): { header: string[]; devices: strin
 }
 
 function rebuildInspectionDevices(header: string[], devices: string[][], footer: string[]): string {
-  const numbered = devices.map((block, i) => {
-    const next = block.map((line, li) => li === 0 ? line.replace(/^\s*\d+\./, `${i + 1}.`) : line);
-    if (!isDividerLine(next[next.length - 1] || "")) next.push(ITEM_DIVIDER);
-    return next;
-  });
-  return [...header, ...numbered.flat(), ...footer].join("\n");
+  return rebuildDeviceText(header, devices, footer, ITEM_DIVIDER); // 블록 끝 구분선 한 줄 규칙은 inspectionBlocks.ts(테스트 공유)
 }
 
 function extractInspectionItemLabels(text: string): string[] {
@@ -4625,7 +4620,7 @@ export default function App() {
         ITEM_DIVIDER,
       ];
       const firstDevice = ["1.", ...(firstForm.location ? firstForm.location.split("\n") : []), ...NEW_DEVICE_LINES];
-      setTextOutput([...blankHeader, ...firstDevice, ...STANDARD_PARTS_SECTION].join("\n"));
+      setTextOutput(joinFormSections(blankHeader, firstDevice, STANDARD_PARTS_SECTION).join("\n")); // 새 기기 끝 구분선 + 부품신청 앞 구분선 겹침 방지(2026-10-31)
       setListOutput([]);
       setItemForms([firstForm]);
       setSharedForm((current) => ({ ...current, author, level: current.level || "1" }));

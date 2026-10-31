@@ -113,3 +113,44 @@ export function splitTableReceptionBlocks(input: string): string[][] {
   if (current.length) blocks.push(current);
   return blocks;
 }
+
+/**
+ * 양식 조각(머리·기기 블록·부품신청 꼬리)을 이어 붙이되, 조각 경계에서 구분선이 두 줄로 겹치지 않게 한다.
+ * 앞 조각이 구분선(뒤 빈 줄 무시)으로 끝났는데 다음 조각이 구분선으로 시작하면 다음 조각의 첫 구분선을 뺀다.
+ * — [＋ 추가]로 첫 기기를 만들 때 새 기기 줄(끝 구분선) + 부품신청 칸(앞 구분선)이 붙어 "특이사항: / ㅡㅡ / ㅡㅡ / ※부품신청※"가
+ *   카톡방에 그대로 올라가던 것(2026-10-31 보고, 10/12~10/30 점검 원문 약 7%). 조각 안쪽 줄은 건드리지 않는다.
+ */
+export function joinFormSections(...sections: string[][]): string[] {
+  const out: string[] = [];
+  for (const section of sections) {
+    let lastFilled = out.length - 1;
+    while (lastFilled >= 0 && out[lastFilled].trim() === "") lastFilled -= 1;
+    const skipFirst = section.length > 0 && lastFilled >= 0 && isDividerLine(out[lastFilled]) && isDividerLine(section[0]);
+    out.push(...(skipFirst ? section.slice(1) : section));
+  }
+  return out;
+}
+
+/**
+ * 기기 블록 끝을 구분선 정확히 한 줄로 맞춘다 — 끝 빈 줄은 떼고, 구분선이 없으면 붙이고, 겹쳐 있으면 하나만 남긴다.
+ * 예전엔 "마지막 줄이 구분선이 아니면 붙인다"만 해서 이미 겹친 구분선(위 사고로 생긴 것)이 기기를 추가할 때마다 그대로 남았다.
+ */
+export function closeDeviceBlock(block: string[], divider: string): string[] {
+  const out = [...block];
+  while (out.length > 1 && out[out.length - 1].trim() === "") out.pop();
+  if (!isDividerLine(out[out.length - 1] ?? "")) return [...out, divider];
+  for (;;) {
+    let prev = out.length - 2;
+    while (prev > 0 && out[prev].trim() === "") prev -= 1;
+    if (prev <= 0 || !isDividerLine(out[prev])) break;
+    out.splice(prev + 1);
+  }
+  return out;
+}
+
+/** 기기 블록 번호를 1부터 다시 매기고 각 블록 끝 구분선을 한 줄로 맞춰 양식 글을 다시 만든다(추가·삭제·순서 바꾸기 공용). */
+export function rebuildDeviceText(header: string[], devices: string[][], footer: string[], divider: string): string {
+  const numbered = devices.map((block, i) =>
+    closeDeviceBlock(block.map((line, li) => li === 0 ? line.replace(/^\s*\d+\./, `${i + 1}.`) : line), divider));
+  return joinFormSections(header, ...numbered, footer).join("\n");
+}

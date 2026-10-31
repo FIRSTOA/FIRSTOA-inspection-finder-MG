@@ -422,56 +422,81 @@ export function buildItKakaoCard(src: ItCardSource, now: Date = new Date()): str
     return [card, ...photos, tail].filter(Boolean).join("\n");
   }, content);
 }
+// ── IT 일정·네이버 제목(2026-10-31 IT 파트 요청 새 형식) ─────────────────
+// as_tickets.calendarTitle·네이버 제목·일정리스트가 모두 이 한 줄을 쓴다(탭 구분, 탭은 공백으로 바꾸지 않는다).
+//   IT A/S⇥등급⇥자산번호⇥시리얼⇥품목⇥모델명⇥증상⇥거래처명
+// 거래처명이 맨 끝 칸이라 fieldTicketVendor(_shared/ticket-title.ts)가 탭 칸으로 정확히 꺼낸다 —
+// 한글 품목("노트북")·증상이 업체명 앞에 와도 섞이지 않는다(2026-10-27 새 카드 첫 줄 사고 재발 방지).
+// 빈 값은 칸만 비우고 탭 수(7개)는 유지한다. 기존 일정은 바꾸지 않는다(신규 접수부터).
 
-// ── IT 일정·네이버 제목(옛 형식 유지, 2026-10-27 검수아 지적) ─────────────────
-// IT 카톡 본문은 새 카드지만, as_tickets.calendarTitle·네이버 제목은 예전 IT 글 첫 줄 그대로 둔다.
-// 새 카드 첫 줄("IT⇥AS⇥V⇥노트북⇥업체")을 쓰면 fieldTicketVendor 가 한글 품목("노트북")을 업체명 앞에 붙였다.
+/** 제목 칸 머리 — fieldTicketVendor 의 IT 탭 형식 판별과 같은 글자 */
+export const IT_TITLE_HEAD = "IT A/S";
+/** 제목의 증상 칸 최대 글자 — 넘으면 자르고 "…" */
+export const IT_TITLE_SYMPTOM_MAX = 30;
 
-/** 옛 ServiceReception fmtDot(범위 검사 없음) — 옛 제목과 글자까지 같게 */
-function legacyDot(value: string): string {
-  const p = /^\d{5}(\.\d+)?$/.test(str(value)) ? parseDate(value) : null;
-  const source = p ? `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}` : String(value ?? "");
-  const m = source.match(/(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})/);
-  return m ? `${m[1]}. ${Number(m[2])}. ${Number(m[3])}` : String(value || "").trim();
+const titleCell = (v: unknown): string => spaceLine(v);
+
+/** 새 IT 일정 제목인가 — "IT A/S" 로 시작하는 탭 8칸(옛 IT 제목은 10칸 이상이라 여기서 갈린다) */
+export function isItScheduleTitle(line: string): boolean {
+  const cells = String(line || "").split("\t");
+  return cells.length === 8 && cells[0] === IT_TITLE_HEAD;
 }
-const legacyDotYY = (value: string) => legacyDot(value).replace(/^\d{2}(\d{2})\./, "$1.");
+
+/** 증상 칸: 한 줄로 펴고 30자에서 자른다(뒤 "…") */
+export function itTitleSymptom(symptom: unknown): string {
+  const s = titleCell(symptom);
+  return s.length > IT_TITLE_SYMPTOM_MAX ? `${s.slice(0, IT_TITLE_SYMPTOM_MAX).trimEnd()}…` : s;
+}
+
+function itTitleFromCells(cells: { grade: string; assetNo: string; serial: string; item: string; model: string; symptom: string; vendor: string }): string {
+  return [IT_TITLE_HEAD, cells.grade, cells.assetNo, cells.serial, cells.item, cells.model, itTitleSymptom(cells.symptom), cells.vendor]
+    .map(titleCell).join("\t");
+}
 
 /**
- * 옛 IT 글 첫 줄(탭 구분) — 2026-10-27 전 ServiceReception report 첫 줄과 같은 식:
- * `IT A/S⇥등급⇥모델명⇥{발행+등급}업체명[⇥마감구분]⇥종료일⇥YY. M. D⇥지역⇥{지역}⇥접수일⇥M. D`
+ * IT 접수 일정 제목 — `IT A/S⇥등급⇥자산번호⇥시리얼⇥품목⇥모델명⇥증상⇥거래처명`.
+ * 값: 임대리스트 행(IT_CARD 와 같은 키) + 폼 증상(증상 없으면 제목). 거래처명은 sheetVendorName(발행·등급 접두 없음).
  */
-export function legacyItHeadLine(lease: Lease, region: string, now: Date = new Date()): string {
+export function itScheduleTitle(lease: Lease, symptom: string): string {
   const L = (...keys: string[]) => pickRaw(lease, ...keys);
-  const 등급 = L("등급");
-  const 마감일 = L("발행");
-  const 마감구분Raw = L("누적방식 (월/분/반/년)");
-  const 마감구분 = 마감구분Raw ? (마감구분Raw.endsWith("마감") ? 마감구분Raw : `${마감구분Raw}마감`) : "";
-  const 업체명 = sheetVendorName(lease as Record<string, string> | null);
-  const T = "\t";
-  return `IT A/S${T}${등급}${T}${L("모델명", "기종")}${T}${마감일 ? `${마감일}${등급}` : ""}${업체명}${마감구분 ? `${T}${마감구분}` : ""}${T}종료일${T}${legacyDotYY(L("종료일"))}${T}지역${T}${region}${T}접수일${T}${receiptMD(now)}`;
+  return itTitleFromCells({
+    grade: L("등급"),
+    assetNo: L("자산번호"),
+    serial: L("시리얼번호(기번)", "기번"),
+    item: L("품목"),
+    model: L("모델명", "기종"),
+    symptom,
+    vendor: sheetVendorName(lease as Record<string, string> | null),
+  });
 }
 
-/** 저장된 새 IT 카드 글에서 옛 모양 제목 줄을 다시 만든다(접수일·발행 접두는 카드에 없어 빠진다). 새 IT 카드가 아니면 null */
-function itCardToLegacyHead(reportText: string): string | null {
+/** 저장된 새 IT 카드 글에서 일정 제목 줄을 다시 만든다(title_line 이 빈 행 대비). 새 IT 카드가 아니면 null */
+function itCardToTitle(reportText: string): string | null {
   const lines = String(reportText || "").split("\n");
   const head = lines[0].split("\t");
   if (!(head[0] === "IT" && /^A\/?S$/.test(head[1] || ""))) return null;
   const cellsOf = (label: string) => lines.map((l) => l.split("\t")).find((c) => c.includes(label)) || [];
   const after = (label: string) => { const c = cellsOf(label); const i = c.indexOf(label); return i >= 0 ? str(c[i + 1]) : ""; };
-  const end = after("종료일");
-  const p = parseDate(end);
-  const endYY = p ? `${String(p.y).slice(2)}. ${p.m}. ${p.d}` : end;
-  const model = after("기종").split("/")[0].trim();
-  return ["IT A/S", str(head[2]), model, str(head[4]), "종료일", endYY, "지역", after("지역")].join("\t");
+  return itTitleFromCells({
+    grade: str(head[2]),
+    assetNo: after("자산번호"),
+    serial: after("시리얼번호"),
+    item: str(head[3]),
+    model: after("기종").split("/")[0].trim(), // 카드 기종 칸은 "모델명/옵션"
+    symptom: after("증상"),
+    vendor: str(head[4]),
+  });
 }
 
 /**
  * 일정(as_tickets.calendarTitle)·네이버 제목 줄 — 보고양식 첫 줄(탭→공백).
- * 새 IT 카드면 옛 IT 제목 모양으로 바꿔서 돌려준다. legacyHead(저장 직후 폼에서 만든 정확한 옛 첫 줄)가 있으면 그것.
+ * IT 는 새 일정 제목 형식(탭 유지). legacyHead(저장 직후 폼에서 만든 정확한 제목 줄, title_line)가 있으면 그것.
  */
 export function receptionTitleLine(reportText: string | null | undefined, legacyHead?: string): string {
   const text = String(reportText || "");
-  const first = (legacyHead && legacyHead.trim()) || itCardToLegacyHead(text) || text.split("\n")[0] || "";
+  const head = String(legacyHead ?? "").replace(/[\r\n]+/g, "");
+  const first = (head.trim() ? head : "") || itCardToTitle(text) || text.split("\n")[0] || "";
+  if (isItScheduleTitle(first)) return first; // 탭 칸 유지(끝 칸이 비어도 탭 수 그대로)
   return first.replace(/\t/g, " ").trim();
 }
 

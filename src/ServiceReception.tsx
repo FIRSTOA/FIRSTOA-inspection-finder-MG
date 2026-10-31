@@ -14,7 +14,7 @@ import { createAlbum, deleteRows, getConfig, invokeEdgeFunction, selectAllRows, 
 import { readOrStop } from "./ticketGuard";
 import { mergeReceptionHandling, sendReceptionCopierSheetJob, sendReceptionRemoteSheetJob } from "./api";
 import { sheetVendorName } from "./vendorName";
-import { buildItKakaoCard, legacyItHeadLine, receptionTitleLine } from "./receptionKakaoCard";
+import { buildItKakaoCard, itScheduleTitle, receptionTitleLine } from "./receptionKakaoCard";
 import { prepareImageForUpload, type PreparedImage } from "./imageUpload";
 import { useAuthorBook } from "./authors";
 import { getServiceReceptionById } from "./api";
@@ -1223,7 +1223,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
   ) => {
     const TEAM_TIME: Record<string, string> = { A: "09:00", B: "12:00", C: "15:00", D: "18:00", E: "21:00" };
     const reportText = String(row.report_text || "").replace(/\t/g, " ");
-    const firstLine = receptionTitleLine(row.report_text, row.title_line); // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로(IT 는 새 카드여도 옛 제목 모양, 2026-10-27)
+    const firstLine = receptionTitleLine(row.report_text, row.title_line); // 보고양식 첫 줄 = 수기 캘린더 제목 형식 그대로(IT 는 title_line 새 일정 제목, 2026-10-31)
     // IT 접수는 IT 캘린더로(2026-09-17) — CS 이관 복제(forceDefaultCal)는 익일통합as로
     const calId = !opts.forceDefaultCal && row.type === "IT" ? await itCalendarId() : "";
     const description = reportText || [`증상: ${(row.symptom || row.title || "").slice(0, 200)}`, row.model ? `기종: ${row.model}` : ""].filter(Boolean).join("\n");
@@ -1265,7 +1265,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
       model: row.model, serial: row.serial, asset: row.asset_no, grade: row.grade, keyman: row.keyman_info || "",
       issue: (row.symptom || row.title || "").slice(0, 500) || "서비스접수 연동",
       note: String(row.report_text || ""), // 카톡 보고양식 전문 — 일정에서도 원문 확인 가능
-      calendarTitle: receptionTitleLine(row.report_text, row.title_line).slice(0, 120) || "", // 네이버 제목과 동일 (배정 시 이름 접두사) — IT 는 옛 제목 모양(2026-10-27)
+      calendarTitle: receptionTitleLine(row.report_text, row.title_line).slice(0, 200) || "", // 네이버 제목과 동일 (배정 시 이름 접두사) — IT 는 새 일정 제목(2026-10-31), 거래처명이 끝 칸이라 120자 자름에 잘리지 않게 200(동기화 상한과 같음)
       assignee: "", status: "접수", scheduleType: "AS", receptionId: row.id,
       ...(source ? { source } : {}),
     }, "id");
@@ -1342,7 +1342,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     title: manual.제목, symptom: manual.증상,
     address: manual.주소.trim() || pick(reportSource, "주소(실납품주소,도로명주소)", "주소"),
     report_text: report, // 네이버 캘린더 제목·설명은 보고양식(수기 등록과 동일 형식)을 그대로 쓴다
-    title_line: type === "IT" && reportSource ? legacyItHeadLine(reportSource, region) : "", // IT 본문은 새 카드, 제목은 옛 첫 줄 그대로(2026-10-27)
+    title_line: type === "IT" && reportSource ? itScheduleTitle(reportSource, manual.증상.trim() || manual.제목.trim()) : "", // IT 일정 제목: IT A/S⇥등급⇥자산번호⇥시리얼⇥품목⇥모델명⇥증상⇥거래처명(2026-10-31)
   });
 
   // 새 주소를 앱 데이터(워킨맵 + Supabase 임대리스트)에 자동 반영.

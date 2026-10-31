@@ -9,7 +9,7 @@ import {
   KAKAO_CARD_MAX,
 } from "../src/receptionKakaoCard";
 import { isTableReceptionHead } from "../src/inspectionBlocks";
-import { legacyItHeadLine, receptionTitleLine } from "../src/receptionKakaoCard";
+import { isItScheduleTitle, itScheduleTitle, itTitleSymptom, receptionTitleLine } from "../src/receptionKakaoCard";
 import { fieldTicketVendor } from "../src/ids";
 import { buildActionBlock } from "../src/actionBlock";
 
@@ -279,36 +279,62 @@ describe("값 규칙", () => {
   });
 });
 
-describe("IT 일정·네이버 제목은 옛 형식 그대로(검수아 지적 2026-10-27)", () => {
+describe("IT 일정 제목 = IT A/S⇥등급⇥자산번호⇥시리얼⇥품목⇥모델명⇥증상⇥거래처명(2026-10-31 IT 파트)", () => {
   const lease = {
-    업체명: "25#V주식회사 가짜테크", 등급: "V", 발행: "25", "누적방식 (월/분/반/년)": "매월", 품목: "노트북", 모델명: "16ZD90SU",
-    종료일: "2028-01-20", 순: "10001", 임대여부: "임대중",
+    업체명: "25#V주식회사 올리브인터내셔널", 등급: "V", 발행: "25", "누적방식 (월/분/반/년)": "매월", 품목: "노트북", 모델명: "15Z90S-GP56ML",
+    자산번호: "P2175", "시리얼번호(기번)": "510QCUK567078", 종료일: "2028-01-20", 순: "10001", 임대여부: "임대중",
   };
-  const manual = { 접수자성함: "백지연", 접수자연락처: "010-0000-7942", 증상: "키보드 불량" };
+  const HEAD = `IT A/S${T}V${T}P2175${T}510QCUK567078${T}노트북${T}15Z90S-GP56ML${T}화면 깜빡임${T}주식회사 올리브인터내셔널`;
+  const manual = { 접수자성함: "백지연", 접수자연락처: "010-0000-7942", 증상: "화면 깜빡임" };
   const card = buildItKakaoCard({ lease, manual, route: "카카오", region: "수도권C", author: "홍길동" }, NOW);
-  // 2026-10-27 전 ServiceReception report 첫 줄 식: IT A/S⇥등급⇥모델명⇥{발행+등급}업체명⇥마감구분⇥종료일⇥YY⇥지역⇥{지역}⇥접수일⇥M. D
-  const OLD_HEAD = `IT A/S${T}V${T}16ZD90SU${T}25V주식회사 가짜테크${T}매월마감${T}종료일${T}28. 1. 20${T}지역${T}수도권C${T}접수일${T}10. 26`;
-  it("저장 직후 폼에서 만든 제목 = 옛 첫 줄과 같은 글자", () => {
-    expect(legacyItHeadLine(lease, "수도권C", NOW)).toBe(OLD_HEAD);
-    const title = receptionTitleLine(card, legacyItHeadLine(lease, "수도권C", NOW));
-    expect(title).toBe(OLD_HEAD.replace(/\t/g, " "));
-    expect(fieldTicketVendor(title).vendor).toBe("주식회사 가짜테크");
+
+  it("요청 표본 그대로 — 발행·등급 접두, 마감구분·종료일·지역·접수일 꼬리 없음", () => {
+    expect(itScheduleTitle(lease, "화면 깜빡임")).toBe(HEAD);
+    expect(isItScheduleTitle(HEAD)).toBe(true);
   });
-  it("DB 에서 다시 읽은 새 카드(제목 줄 없음)도 옛 모양으로 바꿔 품목이 업체명에 붙지 않는다", () => {
-    expect(card.split("\n")[0]).toBe(`IT${T}AS${T}V${T}노트북${T}주식회사 가짜테크`);
-    const title = receptionTitleLine(card);
-    expect(title).toBe("IT A/S V 16ZD90SU 주식회사 가짜테크 종료일 28. 1. 20 지역 수도권C");
-    expect(fieldTicketVendor(title).vendor).toBe("주식회사 가짜테크");
+  it("calendarTitle·네이버 제목(receptionTitleLine)은 탭을 지킨 같은 글자", () => {
+    expect(receptionTitleLine(card, itScheduleTitle(lease, "화면 깜빡임"))).toBe(HEAD);
   });
-  it("CS 글은 첫 줄 그대로(탭→공백)", () => {
+  it("빈 값은 칸만 비우고 탭 7개 유지(거래처명이 비어도 끝 탭 보존)", () => {
+    const title = itScheduleTitle({ 업체명: "가짜업체", 등급: "S", 품목: "모니터" }, "");
+    expect(title).toBe(`IT A/S${T}S${T}${T}${T}모니터${T}${T}${T}가짜업체`);
+    const noVendor = itScheduleTitle({ 등급: "S" }, "고장");
+    expect(noVendor.split(T)).toHaveLength(8);
+    expect(receptionTitleLine("", noVendor).split(T)).toHaveLength(8);
+  });
+  it("증상은 한 줄로 펴고 30자에서 자른다(뒤 …)", () => {
+    expect(itTitleSymptom("전원\n안 켜짐\t재부팅")).toBe("전원 안 켜짐 재부팅");
+    const long = "가".repeat(29) + "나다라마";
+    expect(itTitleSymptom(long)).toBe(`${"가".repeat(29)}나…`);
+    expect(itTitleSymptom("가".repeat(30))).toBe("가".repeat(30));
+    const title = itScheduleTitle(lease, `${long}\n둘째 줄`);
+    expect(title.split(T)[6]).toBe(`${"가".repeat(29)}나…`);
+  });
+  it("fieldTicketVendor 가 업체명만 — 한글 품목·증상·시리얼·모델이 앞에 와도", () => {
+    expect(fieldTicketVendor(HEAD)).toEqual({ vendor: "주식회사 올리브인터내셔널", gubun: "A/S" });
+    expect(fieldTicketVendor(`홍길동-${HEAD}`).vendor).toBe("주식회사 올리브인터내셔널"); // 배정 머리
+    expect(fieldTicketVendor(`김A 외 2명-${HEAD}`).vendor).toBe("주식회사 올리브인터내셔널");
+    // 증상에 행위어·마감 같은 글자가 있어도 업체명 칸만
+    const tricky = itScheduleTitle(lease, "셋팅요청 분기마감 종료일 30S다른업체");
+    expect(fieldTicketVendor(tricky).vendor).toBe("주식회사 올리브인터내셔널");
+  });
+  it("DB 에서 다시 읽은 새 카드(title_line 없음)도 새 제목 모양으로", () => {
+    expect(receptionTitleLine(card)).toBe(HEAD);
+    expect(fieldTicketVendor(receptionTitleLine(card)).vendor).toBe("주식회사 올리브인터내셔널");
+  });
+  it("옛 IT 제목(10칸 이상)·CS 글은 예전처럼 탭→공백", () => {
+    const OLD = `IT A/S${T}V${T}16ZD90SU${T}25V주식회사 가짜테크${T}매월마감${T}종료일${T}28. 1. 20${T}지역${T}수도권C${T}접수일${T}10. 26`;
+    expect(isItScheduleTitle(OLD)).toBe(false);
+    expect(receptionTitleLine("", OLD)).toBe(OLD.replace(/\t/g, " "));
+    expect(fieldTicketVendor(receptionTitleLine("", OLD)).vendor).toBe("주식회사 가짜테크");
     expect(receptionTitleLine(`A/S${T}S${T}SL-X4220${T}업체${T}종료일\n작성자${T}홍길동`)).toBe("A/S S SL-X4220 업체 종료일");
   });
-  it("완료 카톡 블록 업체명이 '주식회사 가짜테크'", () => {
+  it("완료 카톡 블록 업체명이 거래처명만", () => {
     const block = buildActionBlock(
-      { vendor: "주식회사 가짜테크", calendarTitle: receptionTitleLine(card).slice(0, 120), note: card, model: "16ZD90SU" },
-      { author: "홍길동", reason: "키보드 교체 완료" },
+      { vendor: "주식회사 올리브인터내셔널", calendarTitle: receptionTitleLine(card), note: card, model: "15Z90S-GP56ML" },
+      { author: "홍길동", reason: "액정 교체 완료" },
     );
-    expect(block).toContain("업체명: 주식회사 가짜테크");
+    expect(block).toContain("업체명: 주식회사 올리브인터내셔널");
     expect(block).not.toContain("노트북 주식회사");
   });
 });

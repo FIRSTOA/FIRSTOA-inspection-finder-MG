@@ -9,7 +9,17 @@
 // "유상A/S" — 유상 수리 접수 제목("유상A/S\t \t\t북마을")이 업체명에 행위어째 남던 것(2026-10-24 실측 2건)
 const FIELD_TITLE_ACTION = /^(이전)?(셋팅|세팅)(요청)?$|^(여분|자가|점검|방문|철수|납품|교체|AS|A\/S)요청$|^요청$|^(유상)?(as|a\/s)$/i;
 
+// IT 접수 일정 제목(2026-10-31, src/receptionKakaoCard.ts itScheduleTitle): "IT A/S⇥등급⇥자산번호⇥시리얼⇥품목⇥모델명⇥증상⇥거래처명".
+// 탭 8칸이고 거래처명은 끝 칸 — 한글 품목·증상이 업체명 앞에 붙지 않게 칸으로 꺼낸다. 배정 머리("홍길동-"·"김A 외 2명-")가 첫 칸에 붙어도 된다.
+function itTabTitleVendor(raw: string): string | null {
+  const cells = String(raw || "").replace(/_x000d_|\r|\n/g, "").split("\t");
+  if (cells.length !== 8 || !/(?:^|-)\s*IT A\/S$/.test(cells[0].trim())) return null;
+  return cells[7].replace(/\s+/g, " ").trim();
+}
+
 export function fieldTicketVendor(raw: string): { vendor: string; gubun: string } {
+  const itVendor = itTabTitleVendor(raw);
+  if (itVendor) return { vendor: itVendor, gubun: "A/S" };
   const flat = String(raw || "").replace(/_x000d_|\r|\n|\t/g, " ").replace(/\s+/g, " ").trim();
   const tokens = flat.split(" ");
   const gubun = tokens.some((token) => /^(이전)?(셋팅|세팅)(요청)?$/.test(token)) ? "세팅"
@@ -110,6 +120,8 @@ export function logisticsTicketInfo(raw: string, note = ""): { vendor: string; i
  * 그 외는 FIELD 변환과 같은 업체명부. 연차·휴가 일정은 회사가 아니라 화면 필터(/휴가|연차/)가 업체명 칸을 보므로 제목을 그대로 둔다.
  */
 export function importedTicketVendor(title: string, description = "", delivery = false): string {
+  const itVendor = itTabTitleVendor(title); // FIELD IT 접수 제목(탭 8칸)만 — 아래에서 탭을 펴기 전에 칸으로 읽는다. 다른 제목은 그대로
+  if (itVendor) return itVendor.slice(0, 80);
   const flat = String(title || "").replace(/_x000d_/g, " ").replace(/\s+/g, " ").trim();
   if (!flat) return "";
   if (/휴가|연차|반차/.test(flat)) return flat.slice(0, 80);

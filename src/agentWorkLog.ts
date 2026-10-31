@@ -3,6 +3,18 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-30",
+    "hash": "c9571b295c",
+    "agent": "debugger",
+    "summary": "필드 🔍 최근 이력을 작성일 순으로(카톡 백필로 id 순이 옛 기록을 위로 올리던 것) + 관리 탭 카톡 원문 검색 스위치 추가 + GAS 원문 적재 일시 오류 재시도·물류 확인 URL 분할"
+  },
+  {
+    "date": "2026-10-30",
+    "hash": "c9571b295c",
+    "agent": "qa-checker",
+    "summary": "필드 🔍 최근 이력을 작성일 순으로(카톡 백필로 id 순이 옛 기록을 위로 올리던 것) + 관리 탭 카톡 원문 검색 스위치 추가 + GAS 원문 적재 일시 오류 재시도·물류 확인 URL 분할"
+  },
+  {
     "date": "2026-10-29",
     "hash": "ccc3bf9542",
     "agent": "developer",

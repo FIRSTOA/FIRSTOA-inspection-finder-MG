@@ -249,7 +249,7 @@ export default function Home({ onGoField, onNavigate }: { onGoField: () => void;
             {([
               ["미처리", head.unhandled === null ? "—" : head.unhandled.toLocaleString("ko-KR"), head.unhandled ? "text-rose-200" : head.unhandled === 0 ? "text-emerald-300" : "text-slate-500"],
               ["OKR", head.okrPct === null ? "—" : `${head.okrPct}%`, head.okrPct === null ? "text-slate-500" : "text-white"],
-              ["분기 점검", head.inspectionPct === null ? "—" : `${head.inspectionPct}%`, head.inspectionPct === null ? "text-slate-500" : "text-white"],
+              ["분기 점검(CS 전체)", head.inspectionPct === null ? "—" : `${head.inspectionPct}%`, head.inspectionPct === null ? "text-slate-500" : "text-white"],
             ] as const).map(([label, value, tone]) => (
               <span key={label} className="flex min-w-0 items-baseline gap-1">
                 <span className="text-[11px] font-bold text-slate-400">{label}</span>

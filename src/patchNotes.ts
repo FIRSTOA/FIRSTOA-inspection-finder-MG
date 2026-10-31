@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "a0c6be2507",
+    "date": "2026-10-31",
+    "note": "AGENTS.md: Codex 협업 규칙(역할·같은 파일 동시 수정 금지·공통 금지·끝의 기준·리뷰 방식) — Codex CLI 도 이 파일을 읽음"
+  },
+  {
+    "hash": "c9571b295c",
+    "date": "2026-10-30",
+    "note": "필드 🔍 최근 이력을 작성일 순으로(카톡 백필로 id 순이 옛 기록을 위로 올리던 것) + 관리 탭 카톡 원문 검색 스위치 추가 + GAS 원문 적재 일시 오류 재시도·물류 확인 URL 분할"
+  },
+  {
     "hash": "ccc3bf9542",
     "date": "2026-10-29",
     "note": "카톡 대화 저장 재시도: 저장 창 안 뜨면 한 번 더(늦은 창 먼저 확인), 맨 앞 실패 재시도, 실패 방 끝에서 다시, 중단은 연속 실패 3번만 — 실행기 2026-10-29b"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "5ce0fcce71",
     "date": "2026-10-08",
     "note": "OKR 줄바꿈 유실·전주 실제결과 불러오기, 배운점 모아보기 한 목록, 내 일정 주소 수정·고정 순서 동기화·카톡 복사 번호, 조회 인원별 건수"
-  },
-  {
-    "hash": "0be957639a",
-    "date": "2026-10-03",
-    "note": "IT 학습·처리이력: Supabase 복사 철회 — IT파트 소유 시트는 읽기만, AS 등록은 담당자 Apps Script로"
-  },
-  {
-    "hash": "dd2385ae47",
-    "date": "2026-10-03",
-    "note": "IT 상세 카드: 머리띠를 모달 가장자리까지, \"A / B\" 항목도 단계로 쪼갬"
   }
 ];

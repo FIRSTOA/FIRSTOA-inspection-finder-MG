@@ -113,3 +113,19 @@ describe("쓰기 전 조회 실패는 멈춘다", () => {
     expect(block).toMatch(/\.catch\(\(e: Error\) => \{ throw new Error\(/);
   });
 });
+
+describe("IT 접수 일정 제목 탭 8칸(2026-10-31) — 엣지 공용 파서도 거래처명 칸만", () => {
+  const T = "\t";
+  const titles: Array<[string, string]> = [
+    [`IT A/S${T}V${T}P2175${T}510QCUK567078${T}노트북${T}15Z90S-GP56ML${T}화면 깜빡임${T}주식회사 올리브인터내셔널`, "주식회사 올리브인터내셔널"],
+    [`IT A/S${T}S${T}${T}5CG1234XYZ${T}데스크탑${T}HP 400 G7${T}부팅 안 됨 셋팅요청${T}(주)한빛 / 강남지점`, "(주)한빛 / 강남지점"],
+    [`이호준-IT A/S${T}N${T}${T}${T}모니터${T}${T}${T}다온세무회계`, "다온세무회계"],
+  ];
+  it.each(titles)("%s → %s", (title, vendor) => {
+    expect(fieldTicketVendor(title).vendor).toBe(vendor);
+    expect(importedTicketVendor(title)).toBe(vendor);
+  });
+  it("탭이 공백으로 바뀐 옛 IT 제목은 예전 규칙 그대로", () => {
+    expect(fieldTicketVendor("IT A/S V 16ZD90SU 25V주식회사 가짜테크 매월마감 종료일 28. 1. 20").vendor).toBe("주식회사 가짜테크");
+  });
+});
