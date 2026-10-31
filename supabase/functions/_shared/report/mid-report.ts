@@ -86,6 +86,13 @@ const shortModel = (model: string) => {
   return cut(model.replace(/^(SL-|APEOS-|ApeosPort-?V?\s*|ECOSYS-|DocuCentre-?V?\s*|DocuPrint-?)/i, "").trim(), 9);
 };
 const DEFER_MARK = /\(\d{1,2}\/\d{1,2}로 연기\)/;
+/** 연기 꼬리에 넣는 범위 — 오늘과 같은 달이거나 7일 안(월말에 다음 달 초 건이 끊기지 않게) */
+export const DEFERRED_TAIL_DAYS = 7;
+export function inDeferredWindow(dateYmd: string, todayYmd: string): boolean {
+  if (dateYmd.slice(0, 7) === todayYmd.slice(0, 7)) return true;
+  const days = (Date.parse(`${dateYmd}T00:00:00Z`) - Date.parse(`${todayYmd}T00:00:00Z`)) / 86_400_000;
+  return Number.isFinite(days) && days >= 0 && days <= DEFERRED_TAIL_DAYS;
+}
 const mdOf = (ymd: string) => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}`;
 
 /** 규칙 기반 한 줄 "•업체 기종 [구분] 내용" */
@@ -168,9 +175,10 @@ export function buildMidReportPlan<T extends ReportTicket>(opts: MidReportOption
   const tomorrows = day === "next" ? [] : eligible.filter((ticket) =>
     ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || hasReportMember(ticket, order)));
   // 모레 이후(주말 포함)로 연기한 건 — 연기 기록 "(M/D로 연기)"가 남아 있으면 연기 이력으로 본다.
+  // 단, 이번 달 안이거나 7일 안의 날짜만(2026-10-31 사용자: 다음 달로 미룬 건까지 다 넣으면 꼬리가 너무 길다 → 그 달이 되거나 월말 1주 전부터 뜬다).
   const deferredLater = day === "next" ? [] : eligible.filter((ticket) =>
     ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.status !== "완료"
-    && DEFER_MARK.test(ticket.note || ""));
+    && DEFER_MARK.test(ticket.note || "") && inDeferredWindow(ticket.date, todayYmd));
 
   // 규칙 기반 초안
   const groups: string[] = [];

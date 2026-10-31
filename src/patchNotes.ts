@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "341b2873c7",
+    "date": "2026-10-31",
+    "note": "중간보고 한 줄: 업체 칸 첫 토막이 담당자 이름뿐이면 다음 토막으로(빈 '• → 11/6' 줄 방지, 전화번호 토막 제외) — schedule-report dryRun 실측 반영 + 기록"
+  },
+  {
     "hash": "56df61bc5c",
     "date": "2026-10-31",
     "note": "사용자 할 일 ⑦ 2026-10-31 한 장 정리(엣지 배포·SQL 2장·GAS·결정 4개·시트 일)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "73af63e4ed",
     "date": "2026-10-08",
     "note": "로그아웃 뒤 바로 재로그인되던 것 — 로그아웃한 탭은 자동 이동 대신 FIELD 문을 띄우고, 그룹웨어 로그인이 살아 있다는 안내"
-  },
-  {
-    "hash": "c693ed74dd",
-    "date": "2026-10-08",
-    "note": "로그인 필수일 땐 '사용자 선택' 없이 그룹웨어 로그인 이름이 곧 작성자 — 어디서 바꿔도 되돌리고, 사용자 창은 내 계정(이름·부서·사번·로그아웃)만. 스위치를 끄면 예전 그대로"
   }
 ];

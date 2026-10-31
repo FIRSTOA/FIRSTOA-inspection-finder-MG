@@ -155,3 +155,26 @@ describe("보고 한 줄 — 업체 칸 첫 토막이 담당자 이름뿐일 때
     expect(line).not.toMatch(/010-\d{4}-\d{4}/);
   });
 });
+
+describe("연기 꼬리 범위 — 이번 달 또는 7일 안(2026-10-31 사용자: 다음 달 건은 그 달에)", () => {
+  it("inDeferredWindow", async () => {
+    const { inDeferredWindow } = await import("../supabase/functions/_shared/report/mid-report.ts");
+    expect(inDeferredWindow("2026-10-28", "2026-10-15")).toBe(true);   // 같은 달
+    expect(inDeferredWindow("2026-11-04", "2026-10-30")).toBe(true);   // 다음 달이지만 5일 안
+    expect(inDeferredWindow("2026-11-20", "2026-10-30")).toBe(false);  // 다음 달·3주 뒤
+    expect(inDeferredWindow("2027-02-02", "2026-10-31")).toBe(false);  // 산모피아 실측(일부러 미룬 건)
+    expect(inDeferredWindow("2026-11-20", "2026-11-02")).toBe(true);   // 그 달이 되면 뜬다
+  });
+  it("계획: 3주 뒤로 미룬 건은 꼬리에서 빠지고, 같은 달 건은 남는다", () => {
+    const base = { team: "C", status: "익일", scheduleType: "익일AS", source: "", assignee: "이민구", calendarTitle: "", model: "", issue: "소음" };
+    const plan = buildMidReportPlan({
+      tickets: [
+        toReportTicket({ ...base, date: "2026-11-20", vendor: "멀리상사", note: "(11/20로 연기)" }),
+        toReportTicket({ ...base, date: "2026-10-29", vendor: "가까운상사", note: "(10/29로 연기)" }),
+      ],
+      team: "C", order: ["이민구"], todayYmd: "2026-10-27", tomorrowYmd: "2026-10-28", stamp: "12:00",
+    });
+    expect(plan.draft).toContain("가까운상사");
+    expect(plan.draft).not.toContain("멀리상사");
+  });
+});
