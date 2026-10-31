@@ -2732,7 +2732,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                   <span className="flex items-baseline gap-2" title={place.name}>
                     <span className="min-w-0 flex-1 truncate text-sm font-black leading-5 text-slate-900">{displayName}</span>
                     {placeCode && <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">{placeCode}</span>}
-                    {place.ext_synced_at && <span className="shrink-0 rounded-full bg-sky-50 px-1.5 text-[11px] font-black text-sky-700" title={`기존 워킨맵에서 가져온 장소 · 마지막 맞춤 ${String(place.ext_synced_at).slice(5, 16).replace("T", " ")}`}>워킨맵</span>}
+                    {/* 워킨맵 연결 배지는 사용자 요청으로 뺌(2026-10-31 "괜히 헷갈려") — ext_synced_at 은 교체 막기 판단에만 쓴다 */}
                   </span>
                   <span className="mt-0.5 block truncate text-[11.5px] font-medium text-slate-500">{[place.comment || place.address, placeTail].filter(Boolean).join(" · ")}</span>
                   {!place.visible && <span className="mt-1 block text-[11px] font-bold text-slate-400">지도 숨김</span>}
