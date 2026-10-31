@@ -101,8 +101,10 @@ export function reportLineOf(ticket: ReportTicket, order: string[]): string {
   // 업체명: 법인표기·위치 꼬리를 벗긴 핵심 이름만. 줄 머리에서 떼어낼 이름표 — 배정 칸 원문("김A,이B"), 없으면 제목 추정 1명
   const name = reportHeadOf(ticket, order);
   // "A/S"의 슬래시는 구분자가 아니다 — 잠깐 다른 글자로 바꿔 보호하고 자른 뒤 되돌린다
-  let raw = ticket.vendor.replace(/A\/S/g, "A\u2044S").split(/\s*>\s*/)[0].split("/")[0].replace(/A\u2044S/g, "A/S");
-  if (name) raw = raw.replace(new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]*`), "");
+  const stripName = (part: string) => (name ? part.replace(new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]*`), "") : part);
+  const parts = ticket.vendor.replace(/A\/S/g, "A⁄S").split(/\s*>\s*/)[0].split("/").map((part) => stripName(part).replace(/A⁄S/g, "A/S"));
+  // 첫 토막이 담당자 이름뿐이면("신정훈 / 계약갱신제안 / … / 010-…") 다음 토막으로 — 빈 "•" 줄 방지, 전화번호 토막은 건너뜀(2026-10-31 dryRun 실측)
+  const raw = parts.find((part) => part.trim() && !/\d{2,4}-\d{3,4}-\d{4}/.test(part)) ?? parts[0];
   const vendor = cut(historyCoreName(raw) || fieldTicketVendor(raw).vendor || raw.trim(), 12);
   const issue = extractIssue(ticket.issue, ticket.note).replace(/\s+/g, " ");
   const category = extractCategory(ticket.vendor, ticket.calendarTitle, name);

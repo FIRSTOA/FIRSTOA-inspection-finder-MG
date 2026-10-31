@@ -141,3 +141,17 @@ describe("polish.ts 입력·출력 정리(report-polish 와 같은 규칙)", () 
     expect(parsePolishOutput({ output: [{ content: [{ text: "{\"lines\":[\"a\"]}" }] }] })).toEqual(["a"]);
   });
 });
+
+describe("보고 한 줄 — 업체 칸 첫 토막이 담당자 이름뿐일 때(2026-10-31 dryRun '• → 11/6')", () => {
+  it("다음 토막으로 넘어가고 전화번호 토막은 쓰지 않는다", async () => {
+    const { reportLineOf } = await import("../supabase/functions/_shared/report/mid-report.ts");
+    const line = reportLineOf(toReportTicket({
+      team: "C", date: "2026-11-06", status: "익일", scheduleType: "익일AS", source: "naver", assignee: "신정훈",
+      vendor: "신정훈 / 계약갱신제안 2차체크 / SS/ C / 손나래영어학원 / 이다연 010-6669-0973",
+      calendarTitle: "신정훈 / 계약갱신제안 2차체크 / SS/ C / 손나래영어학원 / 이다연 010-6669-0973", note: "", issue: "", model: "",
+    }), ["이민구", "신정훈"]);
+    expect(line).toMatch(/^•\S/);
+    expect(line).toContain("계약갱신제안");
+    expect(line).not.toMatch(/010-\d{4}-\d{4}/);
+  });
+});

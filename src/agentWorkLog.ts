@@ -4,6 +4,36 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "67e39018b2",
+    "agent": "feature-planner",
+    "summary": "C팀 12·14시 자동 중간보고: 엣지 schedule-report(claim·영업일/10시/공휴일·copy 60분 건너뜀·AI 다듬기 실패 시 초안·테스트방 머리) + 보고 창 발송 띠·[지금 보내기]·[복사] 기록 + 관리 탭 스위치(AUTO 기본 꺼짐·TEST 기본 켬·TEAMS·방 종류 스케줄) + 익일 0건 \"없음\""
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "67e39018b2",
+    "agent": "db-schema",
+    "summary": "C팀 12·14시 자동 중간보고: 엣지 schedule-report(claim·영업일/10시/공휴일·copy 60분 건너뜀·AI 다듬기 실패 시 초안·테스트방 머리) + 보고 창 발송 띠·[지금 보내기]·[복사] 기록 + 관리 탭 스위치(AUTO 기본 꺼짐·TEST 기본 켬·TEAMS·방 종류 스케줄) + 익일 0건 \"없음\""
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "67e39018b2",
+    "agent": "developer",
+    "summary": "C팀 12·14시 자동 중간보고: 엣지 schedule-report(claim·영업일/10시/공휴일·copy 60분 건너뜀·AI 다듬기 실패 시 초안·테스트방 머리) + 보고 창 발송 띠·[지금 보내기]·[복사] 기록 + 관리 탭 스위치(AUTO 기본 꺼짐·TEST 기본 켬·TEAMS·방 종류 스케줄) + 익일 0건 \"없음\""
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "67e39018b2",
+    "agent": "qa-checker",
+    "summary": "C팀 12·14시 자동 중간보고: 엣지 schedule-report(claim·영업일/10시/공휴일·copy 60분 건너뜀·AI 다듬기 실패 시 초안·테스트방 머리) + 보고 창 발송 띠·[지금 보내기]·[복사] 기록 + 관리 탭 스위치(AUTO 기본 꺼짐·TEST 기본 켬·TEAMS·방 종류 스케줄) + 익일 0건 \"없음\""
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "67e39018b2",
+    "agent": "sql-review",
+    "summary": "C팀 12·14시 자동 중간보고: 엣지 schedule-report(claim·영업일/10시/공휴일·copy 60분 건너뜀·AI 다듬기 실패 시 초안·테스트방 머리) + 보고 창 발송 띠·[지금 보내기]·[복사] 기록 + 관리 탭 스위치(AUTO 기본 꺼짐·TEST 기본 켬·TEAMS·방 종류 스케줄) + 익일 0건 \"없음\""
+  },
+  {
+    "date": "2026-10-31",
     "hash": "f110dd809a",
     "agent": "feature-planner",
     "summary": "거래처 3단 명칭 통합 실행 계획(한설계) + 팀장 MCP 실측(이름 매칭 55~78%, 42% 업체 표기 2개+, 청오 전수)"
