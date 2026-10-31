@@ -300,7 +300,7 @@ declare
     'label', 'visible', 'memos',
     'ext_id', 'ext_work_id', 'ext_account_no', 'ext_year', 'ext_last_update', 'ext_synced_at', 'ext_missing_at',
     'updated_by', 'updated_at'];
-  notnull  constant text[] := array[
+  required_cols constant text[] := array[
     'name', 'comment', 'phone', 'address', 'address_detail', 'latitude', 'longitude',
     'label', 'visible', 'memos', 'updated_by', 'updated_at'];
 begin
@@ -319,7 +319,7 @@ begin
     if bad is not null then
       raise exception 'workin_sync_update_places: 허용하지 않는 칸 %', bad using errcode = '22023';
     end if;
-    select string_agg(k, ',') into bad from jsonb_object_keys(p) as k where k = any (notnull) and jsonb_typeof(p -> k) = 'null';
+    select string_agg(k, ',') into bad from jsonb_object_keys(p) as k where k = any (required_cols) and jsonb_typeof(p -> k) = 'null';   -- (변수명 notnull 은 예약어라 42601 — 2026-10-31 실행 실패로 교체)
     if bad is not null then
       raise exception 'workin_sync_update_places: NOT NULL 칸에 null (id %, 칸 %)', p ->> 'id', bad using errcode = '23502';
     end if;
