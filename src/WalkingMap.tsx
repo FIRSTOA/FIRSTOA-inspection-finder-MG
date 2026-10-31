@@ -1942,11 +1942,11 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
 
   const latestInspectionByPlace = useMemo(() => new Map(places.map((place) => [place.id, inspectionHistoryByPlace.get(place.id)?.[0]?.workDate || ""])), [inspectionHistoryByPlace, places]);
 
-  // 분기점검 간략보기용: 같은 팀 기준 이번/전분기 재계약 워킨맵에 같은 거래처가 있는지와 계약종료월.
+  // 분기점검 간략보기용: 같은 팀 기준 **이번 분기** 재계약 워킨맵에 같은 거래처가 있는지와 계약종료월.
   // 재계약은 점검보다 한 달 앞서 진행돼 분기가 겹치므로, 이번 점검분기(예: 3Q=7,8,9월)에 계약이
-  // 종료되는 건만 추린다. → 재계약 3Q(8,9,10) 중 8·9월 + 재계약 2Q(5,6,7) 중 7월이 걸린다.
+  // 종료되는 건만 추린다. 전분기 재계약 워킨맵(예: 4분기 점검 화면의 재계약 3분기)은 2026-11-01 사용자 지시로 보지 않는다
+  // ("전분기껀 보여주지마") — 지난 분기 건이 "재계약 3분기 워킨맵(전분기)" 띠로 섞여 혼란.
   const renewalMatchByPlaceId = useMemo(() => {
-    const prevQuarter = (quarterFilter === 1 ? 4 : quarterFilter - 1) as Quarter;
     const baseYear = new Date().getFullYear();
     const startMonth = (quarterFilter - 1) * 3;
     const inspectionMonths = [startMonth + 1, startMonth + 2, startMonth + 3];
@@ -1954,7 +1954,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
     const byCode = new Map<string, { place: MapPlace; end: ReturnType<typeof contractEnd> }[]>();
     for (const place of places) {
       if (place.kind !== "renewal" || place.team !== teamFilter) continue;
-      if (place.quarter !== quarterFilter && place.quarter !== prevQuarter) continue;
+      if (place.quarter !== quarterFilter) continue;
       const end = contractEnd(place, baseYear);
       if (end && !inspectionMonths.includes(end.month)) continue; // 종료월이 점검분기 밖이면 제외
       const key = vendorMatchKey(place.name);
@@ -1969,7 +1969,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
         if (list) list.push({ place, end }); else byCode.set(code, [{ place, end }]);
       }
     }
-    const result = new Map<number, { quarter: Quarter; isPrev: boolean; dueLabel: string; done: boolean }>();
+    const result = new Map<number, { quarter: Quarter; dueLabel: string; done: boolean }>();
     if (!byKey.size && !byCode.size) return result;
     // 종료월은 이번 점검분기(같은 해)로 확정되므로 연도는 올해로 투영해 표시한다.
     // (자동연장 계약이라 데이터의 최초 종료연도(예: 21년)가 아니라 현재 주기 기준이 맞다.)
@@ -1981,9 +1981,8 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
       const matches = (code ? byCode.get(code) : undefined) ?? (key ? byKey.get(key) : undefined);
       if (!matches || !matches.length) continue;
       const best = [...matches].sort((a, b) => (a.end?.month || 99) - (b.end?.month || 99))[0];
-      const isPrev = best.place.quarter === prevQuarter;
       const done = matches.every((match) => match.place.label === "G5");
-      result.set(place.id, { quarter: isPrev ? prevQuarter : quarterFilter, isPrev, dueLabel: best.end ? `${dueYear}년 ${best.end.month}월` : "", done });
+      result.set(place.id, { quarter: quarterFilter, dueLabel: best.end ? `${dueYear}년 ${best.end.month}월` : "", done });
     }
     return result;
   }, [places, teamFilter, quarterFilter, placeCodeById]);
@@ -2795,7 +2794,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
                     <span className="mt-1 flex flex-wrap gap-1">
                       {place.kind === "quarter" && renewalMatch && (renewalMatch.done
                         ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-400">재계약 완료 · {renewalMatch.quarter}분기 워킨맵</span>
-                        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵{renewalMatch.isPrev ? "(전분기)" : ""} · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
+                        : <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-black text-rose-600">재계약 {renewalMatch.quarter}분기 워킨맵 · {renewalMatch.dueLabel ? `종료 ${renewalMatch.dueLabel}` : "종료월 확인필요"}</span>)}
                       {misu && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-black text-amber-700">{(misuMonths || misuBal) ? `미수 ${misuMonths ? `${misuMonths}개월` : ""}${misuMonths && misuBal ? " · " : ""}${misuBal}` : "미수 확인필요"}</span>}
                       {overage && <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-black text-purple-700">초과 {misuBalanceLabel(overage.total)}{overage.date ? ` (${overage.date.slice(2, 7)})` : ""}</span>}
                       {bulman && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-black text-red-700" title={bulman.content}>불만 {bulman.date.slice(2, 4)}년 {Number(bulman.date.slice(5, 7))}월{bulman.content ? ` · ${bulman.content.slice(0, 14)}` : ""}</span>}
