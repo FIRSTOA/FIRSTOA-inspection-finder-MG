@@ -127,6 +127,8 @@ export type RemotePlace = {
   label: string | null;
   visible: boolean | null;
   memos: string[];
+  /** memos 와 같은 순서의 항목별 워킨맵 last_update(ISO, 없으면 null) — 앱에 덧붙일 때 날짜 꼬리(2026-10-31). 옛 memo(":::")면 없음 */
+  memoDates?: Array<string | null>;
   /** ISO 문자열(파싱 실패 시 null) */
   lastUpdate: string | null;
   /** 원본 label_color — 색 검증 분포용 */
@@ -180,18 +182,24 @@ function coordsOf(p: Record<string, unknown>): { latitude: number | null; longit
   };
 }
 
-function memosOf(p: Record<string, unknown>): string[] {
+function memosOf(p: Record<string, unknown>): { memos: string[]; memoDates?: Array<string | null> } {
   if (Array.isArray(p.memo2) && p.memo2.length) {
-    return p.memo2.map((m) => {
+    const memos: string[] = [];
+    const memoDates: Array<string | null> = [];
+    for (const m of p.memo2) {
       if (m && typeof m === "object") {
         const o = m as Record<string, unknown>;
-        return normText(decodeHtml(o.content ?? o.text ?? ""));
+        memos.push(normText(decodeHtml(o.content ?? o.text ?? "")));
+        memoDates.push(toIso(o.last_update));
+      } else {
+        memos.push(normText(decodeHtml(m)));
+        memoDates.push(null);
       }
-      return normText(decodeHtml(m));
-    });
+    }
+    return { memos, memoDates };
   }
-  if (typeof p.memo === "string" && p.memo) return p.memo.split(":::").map((x) => normText(decodeHtml(x)));
-  return [];
+  if (typeof p.memo === "string" && p.memo) return { memos: p.memo.split(":::").map((x) => normText(decodeHtml(x))) };
+  return { memos: [] };
 }
 
 /**
@@ -228,7 +236,7 @@ export function normalizeRemoteWork(raw: unknown, expectWorkId?: string): { ok: 
       longitude,
       label: labelOf(p.label_color),
       visible: typeof p.hide === "boolean" ? !p.hide : p.hide === undefined || p.hide === null ? null : !p.hide,
-      memos: memosOf(p),
+      ...memosOf(p),
       lastUpdate: toIso(p.last_update),
       labelColor: colorNum !== null && Number.isInteger(colorNum) ? colorNum : null,
     });
@@ -488,21 +496,117 @@ export const hasMaskMark = (s: string): boolean => /\d{6}(?:\d{2})?-\d\*{6}/.tes
 const memoKey = (s: string) => String(s ?? "").replace(/\s+/g, " ").trim();
 
 /**
- * 합집합 — 앱 줄은 그대로(순서·내용) 두고, 워킨맵 줄 중 앱에 없는 것만 워킨맵 순서대로 뒤에 붙인다.
- * 지우기·덮어쓰기 없음. 빈 줄·워킨맵 안 중복·가린 줄(******)은 붙이지 않는다. 비교는 공백 정리 후.
+ * 메모 날짜 꼬리(2026-10-31 사용자 "메모가 추가될 때 웹앱에는 날짜가 표시되도록") — 끝의 " (워킨맵 2026-10-20)" ·
+ * " (앱 2026-10-21)" · "(홍길동 2026-10-22)" 처럼 괄호 안 "이름(공백·괄호 없는 1~20자) + 공백 + YYYY-MM-DD". 여러 개 이어져도 전부.
+ * SQL public.workin_memo_key(supabase/workin-sync-memo-tail-20261031.sql)와 같은 규칙 — 바꾸면 둘 다.
+ * "[G5 완료] 2026-10-20 (워킨맵)" 의 "(워킨맵)" 은 날짜가 없어 꼬리가 아니다.
  */
-export function mergeMemos(remoteLines: string[], localLines: string[]): { merged: string[]; added: string[] } {
-  const local = Array.isArray(localLines) ? localLines.map((x) => String(x ?? "")) : [];
-  const seen = new Set(local.map(memoKey));
-  const added: string[] = [];
-  for (const raw of Array.isArray(remoteLines) ? remoteLines : []) {
-    const line = normText(raw);
-    const key = memoKey(line);
-    if (!key || seen.has(key) || hasMaskMark(line)) continue;
-    seen.add(key);
-    added.push(line);
+const MEMO_TAIL_RE = /(?:\s*\([^()\s]{1,20}\s+\d{4}-\d{2}-\d{2}\))+\s*$/;
+export const MEMO_TAIL_SOURCE = "워킨맵";
+/** 가져오기로 덧붙이는 항목의 꼬리 */
+export const memoTail = (ymd: string) => ` (${MEMO_TAIL_SOURCE} ${ymd})`;
+export const hasMemoTail = (text: string): boolean => {
+  const s = String(text ?? "");
+  const m = MEMO_TAIL_RE.exec(s);
+  return Boolean(m) && s.slice(0, m!.index).trim() !== "";
+};
+/** 꼬리를 뗀 본문(앞뒤 공백 정리). 꼬리뿐이면(본문 없음) 원문 그대로 — 2단계 되밀기 때 워킨맵에 보낼 값 */
+export function stripMemoTail(text: string): string {
+  const s = String(text ?? "");
+  const body = s.replace(MEMO_TAIL_RE, "").trim();
+  return body || s.trim();
+}
+/** 항목 비교 키 = 공백 정리 → 꼬리 떼기(SQL workin_memo_key 와 같은 순서) */
+export const memoCompareKey = (s: string): string => {
+  const k = memoKey(s);
+  const body = k.replace(MEMO_TAIL_RE, "").trim();
+  return body || k;
+};
+
+/**
+ * 정형 줄 머리글(2026-10-31 실측 엔티에스 성수: 연평균임대료 숫자만 달라 통째로 새 항목이 붙음) — 줄이 이 머리글로 시작하면
+ * 같은 머리글의 앱 줄을 워킨맵 값으로 **교체**(덧붙이지 않음). 긴 것부터 비교, 머리글 바로 뒤가 한글 음절이면(예 "한조님") 머리글 아님.
+ */
+export const MEMO_SLOT_KEYS = ["기본임대료", "연평균임대료", "컬러기본", "흑백기본", "미수금", "계약종료년월", "방문주기", "한조", "연평균"] as const;
+const SLOT_KEYS_LONG_FIRST = [...MEMO_SLOT_KEYS].sort((a, b) => b.length - a.length);
+/** 한 줄의 정형 머리글(없으면 null). 여러 줄이면 첫 줄 기준 */
+export function memoSlotOf(line: string): string | null {
+  const t = stripMemoTail(String(line ?? "").split(/\r?\n/)[0] ?? "").trim();
+  for (const key of SLOT_KEYS_LONG_FIRST) {
+    if (t.startsWith(key) && !/^[\uac00-\ud7a3]/.test(t.slice(key.length))) return key;
   }
-  return { merged: [...local, ...added], added };
+  return null;
+}
+
+export type MergeMemoOpts = {
+  /** remoteLines 와 같은 순서의 항목별 워킨맵 last_update(ISO) — 있으면 그 KST 날짜 */
+  dates?: Array<string | null | undefined>;
+  /** 항목 날짜가 없을 때 쓸 날짜(그 회차 KST YYYY-MM-DD). 이 값이 있어야 꼬리를 붙인다(없으면 예전처럼 본문만) */
+  fallbackYmd?: string;
+};
+export type MemoReplace = { index: number; before: string; after: string };
+
+/**
+ * 합집합 + 정형 줄 교체.
+ * - 워킨맵 항목 안 줄바꿈은 줄마다 따로 본다(앱은 줄 단위 항목). 비교 키 = 공백 정리 + 날짜 꼬리 뗀 본문(앱 여러 줄 항목은 줄마다도 비교).
+ * - 자유 글 줄: 앱에 없는 것만 워킨맵 순서대로 뒤에 붙인다(지우기·덮어쓰기 없음).
+ * - 정형 줄(MEMO_SLOT_KEYS): 워킨맵 안 같은 머리글은 마지막 줄만 본다. 앱에 같은 머리글 줄이 있으면(뒤에서부터 첫 줄) 그 줄만 교체
+ *   (여러 줄 앱 항목이면 그 줄만 바꾼다), 없으면 덧붙인다.
+ * - 빈 줄·워킨맵 안 중복·가린 줄(******)은 붙이지 않는다.
+ * - opts.fallbackYmd 가 있으면 붙이거나 교체하는 줄 끝에 " (워킨맵 YYYY-MM-DD)"(이미 꼬리가 있는 줄은 그대로).
+ */
+export function mergeMemos(remoteLines: string[], localLines: string[], opts: MergeMemoOpts = {}): { merged: string[]; added: string[]; replaced: MemoReplace[] } {
+  const local = Array.isArray(localLines) ? localLines.map((x) => String(x ?? "")) : [];
+  const merged = [...local];
+  const seen = new Set<string>();
+  const addSeen = (s: string) => {
+    const k = memoCompareKey(s);
+    if (k) seen.add(k);
+    for (const ln of s.split(/\r?\n/)) { const lk = memoCompareKey(ln); if (lk) seen.add(lk); }
+  };
+  local.forEach(addSeen);
+
+  const cand: Array<{ line: string; date: string | null | undefined }> = [];
+  (Array.isArray(remoteLines) ? remoteLines : []).forEach((raw, i) => {
+    for (const ln of normText(raw).split("\n")) {
+      const line = ln.trim();
+      if (line) cand.push({ line, date: opts.dates?.[i] });
+    }
+  });
+  const lastOfSlot = new Map<string, number>();
+  cand.forEach((c, j) => { const slot = memoSlotOf(c.line); if (slot) lastOfSlot.set(slot, j); });
+
+  const withTail = (c: { line: string; date: string | null | undefined }) => {
+    if (!opts.fallbackYmd || hasMemoTail(c.line)) return c.line;
+    const ymd = c.date && Number.isFinite(Date.parse(c.date)) ? kstYmdOf(c.date) : opts.fallbackYmd;
+    return `${c.line}${memoTail(ymd)}`;
+  };
+
+  const added: string[] = [];
+  const replaced: MemoReplace[] = [];
+  cand.forEach((c, j) => {
+    const slot = memoSlotOf(c.line);
+    if (slot && lastOfSlot.get(slot) !== j) return;
+    const key = memoCompareKey(c.line);
+    if (!key || seen.has(key) || hasMaskMark(c.line)) return;
+    seen.add(key);
+    const out = withTail(c);
+    if (slot) {
+      for (let x = merged.length - 1; x >= 0; x -= 1) {
+        const lines = merged[x].split(/\r?\n/);
+        const y = lines.map((ln) => memoSlotOf(ln)).lastIndexOf(slot);
+        if (y < 0) continue;
+        const before = merged[x];
+        lines[y] = out;
+        merged[x] = lines.join("\n");
+        replaced.push({ index: x, before, after: merged[x] });
+        return;
+      }
+    }
+    merged.push(out);
+    added.push(out);
+  });
+  return { merged, added, replaced };
 }
 
 // ── 차이 ─────────────────────────────────────────────────────────
@@ -517,7 +621,7 @@ const COORD_EPS = 1e-6;
  * 짝지은 두 장소의 바뀐 칸. 응답에 없는 칸(null)·빈 이름·(0,0) 좌표·가린 코멘트는 바꾸지 않는다. 메모는 붙일 줄이 있을 때만.
  * 텍스트 칸은 normText 로 비교(줄바꿈 CRLF/LF·빈 줄·앞뒤 공백 차이만이면 변경 아님)하고, 바꿀 값(after)도 정규화한 LF 값이다.
  */
-export function diffPlace(remote: RemotePlace, local: LocalPlace): Change[] {
+export function diffPlace(remote: RemotePlace, local: LocalPlace, opts: { todayYmd?: string } = {}): Change[] {
   const out: Change[] = [];
   if (remote.label && remote.label !== local.label) out.push({ field: "label", before: local.label, after: remote.label });
   if (remote.visible !== null && remote.visible !== (local.visible !== false)) out.push({ field: "visible", before: local.visible, after: remote.visible });
@@ -536,8 +640,8 @@ export function diffPlace(remote: RemotePlace, local: LocalPlace): Change[] {
       out.push({ field: "coords", before: { latitude: local.latitude, longitude: local.longitude }, after: { latitude: lat, longitude: lng } });
     }
   }
-  const memo = mergeMemos(remote.memos, local.memos || []);
-  if (memo.added.length) out.push({ field: "memos", before: local.memos || [], after: memo.merged });
+  const memo = mergeMemos(remote.memos, local.memos || [], opts.todayYmd ? { dates: remote.memoDates, fallbackYmd: opts.todayYmd } : {});
+  if (memo.added.length || memo.replaced.length) out.push({ field: "memos", before: local.memos || [], after: memo.merged });
   return out;
 }
 
@@ -638,6 +742,141 @@ export function completionMemo(label: string, ymd: string): string | null {
   return null;
 }
 
+// ── 메모 날짜 보정(1회 액션 memo_date_backfill) ─────────────────────
+
+/** 보정 액션이 남기는 로그 note — 다음 보정 때 이 로그는 재료로 쓰지 않는다 */
+export const BACKFILL_NOTE_TAIL = "backfill_tail";
+export const BACKFILL_NOTE_DEDUPE = "backfill_dedupe";
+/** "[G5 완료] 2026-10-20 (워킨맵)" 류 — 이미 날짜가 있는 이력 메모 */
+const isDatedHistoryMemo = (s: string) => /^\[[^\]]+\]\s*\d{4}-\d{2}-\d{2}/.test(String(s ?? "").trim());
+
+export type BackfillLog = { id?: number; place_id: number | null; created_at: string; after_value: unknown; note?: string | null };
+export type BackfillPlace = { id: number; memos: unknown };
+export type BackfillChange = { place_id: number; kind: "tail" | "split" | "dedupe"; before: string; after: string | string[] | null };
+export type BackfillPlan = {
+  rows: Array<{ id: number; memos: string[]; updated_by: string }>;
+  changes: BackfillChange[];
+  stats: {
+    logs: number; tailed: number; split: number; deduped: number; places: number;
+    skipped: { alreadyTailed: number; completion: number; notText: number; noPlace: number; notFound: number; badDate: number; backfillLog: number; dupNoLog: number };
+  };
+};
+
+const logLines = (v: unknown): string[] => (Array.isArray(v) ? v : [v]).filter((x): x is string => typeof x === "string")
+  .flatMap((x) => normText(x).split("\n")).map((x) => x.trim()).filter(Boolean);
+
+/**
+ * 이미 붙은 메모 보정(순수) — workin_sync_log(direction pull·field memo) 행과 그 장소들의 지금 memos 로 계획.
+ * 1) 로그 본문이 장소 memos 에 꼬리 없이 그대로 있으면 → "본문 (워킨맵 로그 KST 날짜)". 여러 줄 항목이면 줄마다 나눠
+ *    꼬리를 붙이고, 다른 항목에 이미 있는 줄은 버린다(가져오기 줄 단위 규칙과 맞춤). 이미 꼬리·"[G5 완료]" 류는 건너뜀.
+ * 2) 같은 장소에 같은 정형 머리글(MEMO_SLOT_KEYS) 줄이 2개 이상이면 워킨맵에서 온(로그에 있는) 가장 늦은 줄만 남기고
+ *    나머지 제거(제거한 줄은 changes 에 before 로 — 엣지가 로그에 남긴다). 로그에서 온 줄이 하나도 없으면 손대지 않음(dupNoLog).
+ * 같은 결과를 두 번 돌려도 바뀌는 것 없음(보정 로그 note 는 재료에서 뺀다).
+ */
+export function planMemoDateBackfill(logs: BackfillLog[], places: BackfillPlace[]): BackfillPlan {
+  const skipped = { alreadyTailed: 0, completion: 0, notText: 0, noPlace: 0, notFound: 0, badDate: 0, backfillLog: 0, dupNoLog: 0 };
+  const stats: BackfillPlan["stats"] = { logs: logs.length, tailed: 0, split: 0, deduped: 0, places: 0, skipped };
+  const changes: BackfillChange[] = [];
+  const memoMap = new Map<number, string[]>();
+  const original = new Map<number, string[]>();
+  for (const p of places) {
+    if (!Array.isArray(p.memos)) continue;
+    const arr = p.memos.map((x) => String(x ?? ""));
+    memoMap.set(Number(p.id), arr);
+    original.set(Number(p.id), [...arr]);
+  }
+  const sorted = [...logs].sort((a, b) => (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0) || Number(a.id ?? 0) - Number(b.id ?? 0));
+  // 워킨맵에서 온 줄(비교 키) → 가장 늦은 로그 시각(ms), 장소별
+  const fromLog = new Map<number, Map<string, number>>();
+  const mark = (pid: number, line: string, t: number) => {
+    const k = memoCompareKey(line);
+    if (!k) return;
+    const m = fromLog.get(pid) ?? new Map<string, number>();
+    m.set(k, Math.max(m.get(k) ?? -Infinity, t));
+    fromLog.set(pid, m);
+  };
+
+  for (const log of sorted) {
+    if (String(log.note ?? "").startsWith("backfill")) { skipped.backfillLog += 1; continue; }
+    const pid = Number(log.place_id);
+    const t = Date.parse(log.created_at);
+    if (log.place_id !== null && Number.isFinite(pid) && Number.isFinite(t)) for (const ln of logLines(log.after_value)) mark(pid, ln, t);
+    const text = typeof log.after_value === "string" ? log.after_value : "";
+    if (!text.trim()) { skipped.notText += 1; continue; }
+    if (isDatedHistoryMemo(text)) { skipped.completion += 1; continue; }
+    if (hasMemoTail(text)) { skipped.alreadyTailed += 1; continue; }
+    const memos = memoMap.get(pid);
+    if (log.place_id === null || !memos) { skipped.noPlace += 1; continue; }
+    if (!Number.isFinite(t)) { skipped.badDate += 1; continue; }
+    const key = memoKey(text);
+    const at = memos.findIndex((m) => memoKey(m) === key && !hasMemoTail(m));
+    if (at < 0) {
+      if (memos.some((m) => memoCompareKey(m) === memoCompareKey(text))) skipped.alreadyTailed += 1; else skipped.notFound += 1;
+      continue;
+    }
+    const ymd = kstYmdOf(log.created_at);
+    const lines = normText(memos[at]).split("\n").map((x) => x.trim()).filter(Boolean);
+    if (lines.length <= 1) {
+      const after = `${lines[0] ?? memos[at].trim()}${memoTail(ymd)}`;
+      changes.push({ place_id: pid, kind: "tail", before: memos[at], after });
+      memos[at] = after;
+      stats.tailed += 1;
+      continue;
+    }
+    // 여러 줄 항목 → 줄마다. 다른 항목(또는 앞 줄)에 이미 있는 줄은 버린다
+    const others = new Set<string>();
+    memos.forEach((m, i) => { if (i === at) return; for (const ln of m.split(/\r?\n/)) { const k = memoCompareKey(ln); if (k) others.add(k); } });
+    const out: string[] = [];
+    for (const ln of lines) {
+      const k = memoCompareKey(ln);
+      if (!k || others.has(k)) continue;
+      others.add(k);
+      out.push(hasMemoTail(ln) || isDatedHistoryMemo(ln) ? ln : `${ln}${memoTail(ymd)}`);
+    }
+    changes.push({ place_id: pid, kind: "split", before: memos[at], after: out });
+    memos.splice(at, 1, ...out);
+    stats.split += 1;
+  }
+
+  // 2) 같은 정형 머리글 중복 정리
+  for (const [pid, memos] of memoMap) {
+    const groups = new Map<string, number[]>();
+    memos.forEach((m, i) => {
+      if (m.includes("\n")) return;   // 여러 줄 앱 항목은 건드리지 않는다
+      const slot = memoSlotOf(m);
+      if (slot) groups.set(slot, [...(groups.get(slot) ?? []), i]);
+    });
+    const drop = new Set<number>();
+    const seenLog = fromLog.get(pid) ?? new Map<string, number>();
+    for (const idx of groups.values()) {
+      if (idx.length < 2) continue;
+      let keep = -1, best = -Infinity;
+      for (const i of idx) {
+        const t = seenLog.get(memoCompareKey(memos[i]));
+        if (t !== undefined && t >= best) { best = t; keep = i; }
+      }
+      if (keep < 0) { skipped.dupNoLog += 1; continue; }
+      for (const i of idx) if (i !== keep) drop.add(i);
+    }
+    if (drop.size) {
+      for (const i of [...drop].sort((a, b) => a - b)) {
+        changes.push({ place_id: pid, kind: "dedupe", before: memos[i], after: null });
+        stats.deduped += 1;
+      }
+      memoMap.set(pid, memos.filter((_, i) => !drop.has(i)));
+    }
+  }
+
+  const rows: BackfillPlan["rows"] = [];
+  for (const [pid, memos] of memoMap) {
+    const before = original.get(pid) ?? [];
+    if (before.length === memos.length && before.every((x, i) => x === memos[i])) continue;
+    rows.push({ id: pid, memos, updated_by: SYNC_ACTOR });
+  }
+  stats.places = rows.length;
+  return { rows, changes, stats };
+}
+
 // ── 한 워크 계획 ──────────────────────────────────────────────────
 
 /** workin_sync_review.kind (SQL check 와 같은 값) */
@@ -687,6 +926,8 @@ export type PullPlan = {
   stats: {
     remote: number; matched: number; byExtId: number; byExactName: number; byExactNameOrder: number; byAddressRename: number; byNumberName: number; byTailName: number; byNameAddress: number;
     changed: number; labelChanges: number; memoAdds: number; fresh: number; inserted: number;
+    /** 정형 줄(MEMO_SLOT_KEYS) 교체 수(줄 단위) — memoAdds(메모가 바뀐 장소 수)와 별개 */
+    memoReplaces: number;
     ambiguous: number; missing: number; downgrades: number; keptLocalNewer: number; linkedOnly: number;
     /** 첫 짝짓기에서 앱 완료(G5·G12)를 지킨 곳(keepAppDone) — keptLocalNewer 에도 포함 */
     keptAppDone: number;
@@ -712,7 +953,7 @@ export type PullDetail = {
   /** completion_down = 완료(G5·G12)→낮음(반영+알림) · progress_down = 매월 단계 하강(반영+알림) · keep_app = 첫 가져오기 완료 보존(앱 유지) */
   downgrades: Array<{ id: number; name: string; appLabel: string; workinmapLabel: string | null; reason: "completion_down" | "progress_down" | "keep_app" }>;
   labelChanges: Array<{ id: number; name: string; from: string; to: string }>;
-  memoAdds: Array<{ id: number; name: string; added: string[] }>;
+  memoAdds: Array<{ id: number; name: string; added: string[]; replaced?: Array<{ before: string; after: string }> }>;
 };
 export const SAMPLE_FRESH = 20;
 export const SAMPLE_UNMATCHED = 20;
@@ -775,7 +1016,7 @@ export function nextScheduledRun(nowMs: number): string {
 export function planPull(input: PullInput): PullPlan {
   const { workId, accountNo, parse, remote, nowIso } = input;
   const stats: PullPlan["stats"] = {
-    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byExactNameOrder: 0, byAddressRename: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
+    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byExactNameOrder: 0, byAddressRename: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0, memoReplaces: 0,
     fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0, keptAppDone: 0, firstImport: false,
   };
   const histogram: Record<string, number> = {};
@@ -837,6 +1078,8 @@ export function planPull(input: PullInput): PullPlan {
     ext_last_update: r.lastUpdate, ext_synced_at: nowIso, updated_by: SYNC_ACTOR,
   });
   const dayOf = (r: RemotePlace) => kstYmdOf(r.lastUpdate, new Date(nowIso));
+  /** 메모 날짜 꼬리의 기본 날짜(항목 last_update 가 없을 때) = 이 회차 KST 날짜 */
+  const todayYmd = kstYmdOf(nowIso);
 
   for (const { remote: r, local: l, by } of m.pairs) {
     stats.matched += 1;
@@ -851,7 +1094,7 @@ export function planPull(input: PullInput): PullPlan {
 
     // 첫 가져오기 완료 보존(app_config WORKINMAP_KEEP_APP_DONE, 기본 켬): 아직 ext_id 없는 행에서 앱 G5·G12 인데
     // 워킨맵이 완료 아님이고 앱 updated_at 이 워킨맵 last_update 보다 늦으면(FIELD 자동 완료 등) 앱 색 유지 + conflict 한 줄
-    let diff = diffPlace(r, l);
+    let diff = diffPlace(r, l, { todayYmd });
     const keepDone = input.keepAppDone === true && !l.ext_id && isDone(l.label) && Boolean(r.label) && !isDone(r.label)
       && Number.isFinite(ms(l.updated_at)) && Number.isFinite(ms(r.lastUpdate)) && ms(l.updated_at) > ms(r.lastUpdate);
     if (keepDone) diff = diff.filter((c) => c.field !== "label");
@@ -905,11 +1148,18 @@ export function planPull(input: PullInput): PullPlan {
     }
     if (memos) {
       set.memos = memos;
-      // 메모는 추가 항목마다 로그 1행(before null) — SQL 머리 "엣지 규칙"
+      // 메모는 추가 항목마다 로그 1행(before null) — SQL 머리 "엣지 규칙". 정형 줄 교체는 그 자리 before/after + note replace_slot
+      const replacedItems: Array<{ before: string; after: string }> = [];
+      for (let i = 0; i < oldMemos.length; i += 1) {
+        if (memos[i] === oldMemos[i]) continue;
+        replacedItems.push({ before: oldMemos[i], after: memos[i] });
+        logs.push({ field: "memo", before_value: oldMemos[i], after_value: memos[i], note: "replace_slot" });
+      }
       for (const item of memos.slice(oldMemos.length)) logs.push({ field: "memo", before_value: null, after_value: item });
       if (rules.apply.some((c) => c.field === "memos")) stats.memoAdds += 1;
+      stats.memoReplaces += replacedItems.length;
       const addedItems = memos.slice(oldMemos.length);
-      if (full && addedItems.length) full.memoAdds.push({ id: l.id, name: oneLine(l.name), added: addedItems });
+      if (full && (addedItems.length || replacedItems.length)) full.memoAdds.push({ id: l.id, name: oneLine(l.name), added: addedItems, ...(replacedItems.length ? { replaced: replacedItems } : {}) });
     }
 
     const needsLink = l.ext_id !== r.extId || l.ext_work_id !== workId || Number(l.ext_account_no ?? NaN) !== accountNo || Number(l.ext_year ?? NaN) !== parse.year;
@@ -947,7 +1197,7 @@ export function planPull(input: PullInput): PullPlan {
       taken.add(nextId);
       nextNumber += 1;
       const label = r.label || "G12";
-      const memos = mergeMemos(r.memos, []).merged;
+      const memos = mergeMemos(r.memos, [], { dates: r.memoDates, fallbackYmd: todayYmd }).merged;
       const entry = completionMemo(label, dayOf(r));
       if (entry) memos.push(entry);
       // 행 모양 = src/WalkingMap.tsx handleExcelImport → toDbPlace 와 같은 칸(updated_at 은 서버 트리거가 채움) + ext_*
@@ -974,7 +1224,8 @@ export type SyncRequest =
   | { action: "pull"; scope: "current" | "old" | { workId: string }; dryRun: boolean; manual?: boolean; detail?: true }
   | { action: "status" }
   | { action: "login_test"; account: number }
-  | { action: "push" };
+  | { action: "push" }
+  | { action: "memo_date_backfill"; dryRun: boolean };
 
 export function parseRequest(body: unknown): SyncRequest | { error: string } {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
@@ -985,6 +1236,7 @@ export function parseRequest(body: unknown): SyncRequest | { error: string } {
     if (!Number.isInteger(n) || n < 1 || n > 9) return { error: "account 는 1~9" };
     return { action, account: n };
   }
+  if (action === "memo_date_backfill") return { action, dryRun: b.dryRun === true };
   if (action === "pull") {
     const raw = String(b.scope ?? "current").trim();
     const scope = raw === "current" || raw === "old" ? raw : /^[0-9a-f]{24}$/i.test(raw) ? { workId: raw } : null;
@@ -993,7 +1245,7 @@ export function parseRequest(body: unknown): SyncRequest | { error: string } {
     // detail: dry 일 때만 결과마다 전체 목록(PullDetail)을 붙인다 — 쓰기 회차에는 무시
     return { action, scope, dryRun: b.dryRun === true, manual: b.manual === true, ...(b.detail === true ? { detail: true as const } : {}) };
   }
-  return { error: "action 은 works | pull | status | login_test | push" };
+  return { error: "action 은 works | pull | status | login_test | push | memo_date_backfill" };
 }
 
 /** schedule-report/logic.ts 와 같은 규칙 — 이 프로젝트 ref · role anon|service_role · 만료 전, 또는 service role 키 글자 일치 */

@@ -3,6 +3,7 @@ import {
   applyRules, classifyWork, colorOf, decodeHtml, diffPlace, isAuthorized, labelOf, matchPlaces, mergeMemos, newPlaceGuard,
   chunkPatchRows, nextScheduledRun, normalizeRemoteWork, parseRequest, parseWorkName, planPull, SYNC_ACTOR, workGuard,
   addressHeadKey, exactNameKey, looseNameKey, normText, tailNameKey,
+  memoCompareKey, memoSlotOf, planMemoDateBackfill, stripMemoTail,
   type LocalPlace, type RemotePlace,
 } from "../supabase/functions/workinmap-sync/plan.ts";
 import { getIdToken, readAccounts, scrub, type TokenRow, type TokenStore } from "../supabase/functions/workinmap-sync/auth.ts";
@@ -296,7 +297,7 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
       { id: 4, name: "완료곳", appLabel: "G5", workinmapLabel: "G2", reason: "completion_down" },
     ]);
     expect(d.labelChanges).toEqual([{ id: 3, name: "단계곳", from: "G2", to: "G1" }, { id: 4, name: "완료곳", from: "G5", to: "G2" }, { id: 5, name: "올림곳", from: "G2", to: "G3" }]);
-    expect(d.memoAdds).toEqual([{ id: 4, name: "완료곳", added: ["새 메모"] }]);
+    expect(d.memoAdds).toEqual([{ id: 4, name: "완료곳", added: ["새 메모 (워킨맵 2026-10-31)"] }]);
   });
 
   it("4차 실측: 같은 이름·같은 주소 N:N(N≥2)은 순서로 1:1(exact_name_order), N:M 이면 ambiguous, 앱 쪽 남는 중복은 duplicateOfMatched", () => {
@@ -407,16 +408,122 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
 // ── 메모 ─────────────────────────────────────────────────────────
 describe("mergeMemos — 합집합(상대에 없는 것만 덧붙임)", () => {
   it("1,2,3 + 1,2,3,4 → 4만 추가", () => {
-    expect(mergeMemos(["1", "2", "3", "4"], ["1", "2", "3"])).toEqual({ merged: ["1", "2", "3", "4"], added: ["4"] });
+    expect(mergeMemos(["1", "2", "3", "4"], ["1", "2", "3"])).toEqual({ merged: ["1", "2", "3", "4"], added: ["4"], replaced: [] });
   });
   it("앱 순서 유지 + 워킨맵 순서대로 뒤에, 지우지 않음", () => {
-    expect(mergeMemos(["b", "x", "a", "y"], ["a", "b", "[G5 완료] 2026-10-01"])).toEqual({ merged: ["a", "b", "[G5 완료] 2026-10-01", "x", "y"], added: ["x", "y"] });
+    expect(mergeMemos(["b", "x", "a", "y"], ["a", "b", "[G5 완료] 2026-10-01"])).toEqual({ merged: ["a", "b", "[G5 완료] 2026-10-01", "x", "y"], added: ["x", "y"], replaced: [] });
     expect(mergeMemos([], ["a"]).merged).toEqual(["a"]);
   });
   it("빈 줄·공백 차이·워킨맵 안 중복·가린 주민번호는 붙이지 않음", () => {
     const r = mergeMemos(["", "  ", "키맨  홍길동", "새 줄", "새 줄", "900101-1******"], ["키맨 홍길동"]);
     expect(r.added).toEqual(["새 줄"]);
     expect(r.merged).toEqual(["키맨 홍길동", "새 줄"]);
+  });
+});
+
+describe("메모 날짜 꼬리 · 줄 단위 · 정형 줄 교체(2026-10-31)", () => {
+  it("stripMemoTail: 끝의 (이름 YYYY-MM-DD) 꼬리를 전부 뗀다, 날짜 없는 (워킨맵)·꼬리뿐인 메모는 그대로", () => {
+    expect(stripMemoTail("키맨 홍길동 (워킨맵 2026-10-20)")).toBe("키맨 홍길동");
+    expect(stripMemoTail("키맨 (앱 2026-10-21)")).toBe("키맨");
+    expect(stripMemoTail("키맨(홍길동 2026-10-22)")).toBe("키맨");
+    expect(stripMemoTail("a (워킨맵 2026-10-20) (앱 2026-10-21)  ")).toBe("a");
+    expect(stripMemoTail("[G5 완료] 2026-10-20 (워킨맵)")).toBe("[G5 완료] 2026-10-20 (워킨맵)");
+    expect(stripMemoTail(" (워킨맵 2026-10-20)")).toBe("(워킨맵 2026-10-20)");
+    expect(stripMemoTail("방문 (2026-11-01)")).toBe("방문 (2026-11-01)"); // 이름 없는 날짜 괄호는 꼬리 아님
+    expect(memoCompareKey("키맨  홍길동 (워킨맵 2026-10-20)")).toBe(memoCompareKey("키맨 홍길동"));
+  });
+
+  it("같은 본문 + 다른 꼬리 = 같은 항목(다시 안 붙음), 새 줄은 항목 last_update 의 KST 날짜, 없으면 회차 날짜", () => {
+    const r = mergeMemos(["키맨 홍길동", "a (앱 2026-10-01)", "새 줄", "또 새 줄"], ["키맨 홍길동 (워킨맵 2026-10-20)", "a (워킨맵 2026-10-02)"],
+      { dates: [null, null, "2026-10-19T16:30:00.000Z", null], fallbackYmd: "2026-10-31" });
+    expect(r.added).toEqual(["새 줄 (워킨맵 2026-10-20)", "또 새 줄 (워킨맵 2026-10-31)"]);
+    expect(r.replaced).toEqual([]);
+    // 꼬리 붙은 결과로 한 번 더 돌려도 붙는 것 없음
+    expect(mergeMemos(["키맨 홍길동", "새 줄", "또 새 줄"], r.merged, { fallbackYmd: "2026-11-01" }).added).toEqual([]);
+  });
+
+  it("워킨맵 한 항목 안 줄바꿈은 줄마다 비교 — 있는 줄은 안 붙고, 정형 줄은 같은 머리글 앱 줄을 교체(엔티에스 성수 실측)", () => {
+    const app = ["키맨 김", "기본임대료7700000/연평균임대료7450272.72727273/컬러기본 A4 88000", "A3 6000/흑백기본62000"];
+    const remote = ["기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000\nA3 6000/흑백기본62000"];
+    const r = mergeMemos(remote, app, { dates: ["2026-10-20T01:00:00.000Z"], fallbackYmd: "2026-10-31" });
+    expect(r.added).toEqual([]);
+    expect(r.merged).toEqual(["키맨 김", "기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000 (워킨맵 2026-10-20)", "A3 6000/흑백기본62000"]);
+    expect(r.replaced).toEqual([{ index: 1, before: app[1], after: r.merged[1] }]);
+    // 다음 회차: 바뀐 것 없음
+    const again = mergeMemos(remote, r.merged, { fallbackYmd: "2026-11-01" });
+    expect([again.added, again.replaced]).toEqual([[], []]);
+  });
+
+  it("정형 머리글: 긴 것 먼저, 뒤가 한글이면 아님, 워킨맵 안 같은 머리글은 마지막 줄만, 앱에 없으면 덧붙임", () => {
+    expect(memoSlotOf("연평균임대료 8109000")).toBe("연평균임대료");
+    expect(memoSlotOf("연평균 300")).toBe("연평균");
+    expect(memoSlotOf("한조님 방문")).toBeNull();
+    expect(memoSlotOf("한조 2명 (워킨맵 2026-10-20)")).toBe("한조");
+    expect(memoSlotOf("키맨 기본임대료 100")).toBeNull();
+    const r = mergeMemos(["미수금 100", "미수금 200", "방문주기 2개월"], ["미수금 50"]);
+    expect(r.merged).toEqual(["미수금 200", "방문주기 2개월"]);
+    expect(r.replaced).toEqual([{ index: 0, before: "미수금 50", after: "미수금 200" }]);
+    // 여러 줄 앱 항목이면 그 줄만 교체
+    const m = mergeMemos(["미수금 9"], ["키맨\n미수금 1"]);
+    expect(m.merged).toEqual(["키맨\n미수금 9"]);
+  });
+
+  it("planPull: 정형 줄 교체 로그(before 옛 줄 · note replace_slot) + 추가 로그, stats.memoReplaces", () => {
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "quarter" as const };
+    const p = planPull({
+      workId: WORK, accountNo: 1, parse, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 1, firstPull: false, previousCount: null,
+      remote: [rp({ extId: "e1", name: "가", memos: ["미수금 200\n새 줄"], memoDates: ["2026-10-29T00:00:00.000Z"] })],
+      local: [lp({ id: 1, name: "가", memos: ["미수금 50"], ext_id: "e1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026 })],
+    });
+    const x = p.patches[0];
+    expect(x.set.memos).toEqual(["미수금 200 (워킨맵 2026-10-29)", "새 줄 (워킨맵 2026-10-29)"]);
+    expect(x.logs.filter((l) => l.field === "memo")).toEqual([
+      { field: "memo", before_value: "미수금 50", after_value: "미수금 200 (워킨맵 2026-10-29)", note: "replace_slot" },
+      { field: "memo", before_value: null, after_value: "새 줄 (워킨맵 2026-10-29)" },
+    ]);
+    expect(p.stats).toMatchObject({ memoAdds: 1, memoReplaces: 1 });
+  });
+
+  it("normalizeRemoteWork: memo2 항목별 last_update → memoDates", () => {
+    const n = normalizeRemoteWork({ _id: WORK, places: [{ _id: "p1", name: "가", memo2: [{ content: "a", last_update: "2026-10-20T00:00:00.000Z" }, { content: "b" }] }] }, WORK);
+    if (!n.ok) throw new Error(n.error);
+    expect(n.work.places[0]).toMatchObject({ memos: ["a", "b"], memoDates: ["2026-10-20T00:00:00.000Z", null] });
+  });
+});
+
+describe("planMemoDateBackfill — 이미 붙은 메모 보정", () => {
+  const T1 = "2026-10-30T23:30:00.000Z"; // KST 10-31
+  it("꼬리 없는 본문 → 로그 날짜 꼬리, 이미 꼬리·[G5 완료]·없는 본문·없는 장소는 건너뜀, 여러 줄은 나누고 있는 줄은 버림", () => {
+    const plan = planMemoDateBackfill([
+      { id: 1, place_id: 1, created_at: T1, after_value: "키맨 홍" },
+      { id: 2, place_id: 1, created_at: T1, after_value: "[G5 완료] 2026-10-31 (워킨맵)" },
+      { id: 3, place_id: 1, created_at: T1, after_value: "이미 (워킨맵 2026-10-20)" },
+      { id: 4, place_id: 1, created_at: T1, after_value: "지워진 메모" },
+      { id: 5, place_id: 9, created_at: T1, after_value: "x" },
+      { id: 6, place_id: 2, created_at: "2026-10-20T01:00:00.000Z", after_value: "기본임대료7700000/연평균임대료8109000\nA3 6000/흑백기본62000" },
+      { id: 7, place_id: 1, created_at: T1, after_value: "키맨 홍", note: "backfill_tail" },
+    ], [
+      { id: 1, memos: ["앱 글", "키맨 홍", "[G5 완료] 2026-10-31 (워킨맵)", "이미 (워킨맵 2026-10-20)"] },
+      { id: 2, memos: ["기본임대료7700000/연평균임대료7450272.7", "A3 6000/흑백기본62000", "기본임대료7700000/연평균임대료8109000\nA3 6000/흑백기본62000"] },
+    ]);
+    expect(plan.rows).toEqual([
+      { id: 1, memos: ["앱 글", "키맨 홍 (워킨맵 2026-10-31)", "[G5 완료] 2026-10-31 (워킨맵)", "이미 (워킨맵 2026-10-20)"], updated_by: SYNC_ACTOR },
+      // 2번: 여러 줄 → 줄 나눔(있는 줄 버림) → 같은 머리글(기본임대료) 중 로그에서 온 줄만 남김
+      { id: 2, memos: ["A3 6000/흑백기본62000", "기본임대료7700000/연평균임대료8109000 (워킨맵 2026-10-20)"], updated_by: SYNC_ACTOR },
+    ]);
+    expect(plan.stats).toMatchObject({ logs: 7, tailed: 1, split: 1, deduped: 1, places: 2 });
+    expect(plan.stats.skipped).toMatchObject({ completion: 1, alreadyTailed: 1, notFound: 1, noPlace: 1, backfillLog: 1 });
+    expect(plan.changes.find((c) => c.kind === "dedupe")).toEqual({ place_id: 2, kind: "dedupe", before: "기본임대료7700000/연평균임대료7450272.7", after: null });
+  });
+
+  it("두 번 돌려도 바뀌는 것 없음 · 로그에서 온 줄이 없는 중복은 손대지 않음(dupNoLog)", () => {
+    const logs = [{ id: 1, place_id: 1, created_at: T1, after_value: "미수금 200" }];
+    const first = planMemoDateBackfill(logs, [{ id: 1, memos: ["미수금 50", "미수금 200"] }]);
+    expect(first.rows[0].memos).toEqual(["미수금 200 (워킨맵 2026-10-31)"]);
+    expect(planMemoDateBackfill(logs, [{ id: 1, memos: first.rows[0].memos }]).rows).toEqual([]);
+    const noLog = planMemoDateBackfill([], [{ id: 1, memos: ["미수금 50", "미수금 70"] }]);
+    expect(noLog.rows).toEqual([]);
+    expect(noLog.stats.skipped.dupNoLog).toBe(1);
   });
 });
 
@@ -529,7 +636,7 @@ describe("planPull", () => {
     expect(p.inserts).toHaveLength(1);
     expect(p.inserts[0].row).toEqual({
       id: 1001, number: 31, team: "C", quarter: 4, kind: "quarter", label: "G5", visible: true, name: "새곳", comment: "", phone: "",
-      address: "", address_detail: "", latitude: 37.1, longitude: 127.1, memos: ["메모", "[G5 완료] 2026-10-31 (워킨맵)"],
+      address: "", address_detail: "", latitude: 37.1, longitude: 127.1, memos: ["메모 (워킨맵 2026-10-31)", "[G5 완료] 2026-10-31 (워킨맵)"],
       ext_id: "n1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026, ext_last_update: "2026-10-31T03:00:00.000Z", ext_synced_at: base.nowIso, updated_by: SYNC_ACTOR,
     });
     expect(p.inserts[0].log.field).toBe("_insert");
@@ -813,5 +920,48 @@ describe("묶음 쓰기 · 일정", () => {
     expect(nextScheduledRun(Date.parse("2026-10-31T09:00:00+09:00"))).toBe("2026-10-31T03:00:00.000Z");
     expect(nextScheduledRun(Date.parse("2026-10-31T16:30:00+09:00"))).toBe("2026-10-31T09:00:00.000Z");
     expect(nextScheduledRun(Date.parse("2026-10-31T19:00:00+09:00"))).toBe("2026-11-01T00:00:00.000Z");
+  });
+});
+
+describe("runAction memo_date_backfill(fetch 주입)", () => {
+  const setup = () => {
+    const calls: Call[] = [];
+    const fetchFn = async (url: string, init?: RequestInit): Promise<Response> => {
+      const method = init?.method || "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      calls.push({ method, url, headers: (init?.headers || {}) as Record<string, string>, body });
+      if (url.includes("/rest/v1/app_config")) return json([]);
+      if (url.includes("/rest/v1/workin_sync_log") && method === "GET") return json([{ id: 1, place_id: 7, created_at: "2026-10-30T23:30:00.000Z", after_value: "키맨 홍", note: "" }]);
+      if (url.includes("/rest/v1/workin_sync_log")) return new Response(null, { status: 201 });
+      if (url.includes("/rest/v1/workin_map_places")) return json([{ id: 7, memos: ["키맨 홍"] }]);
+      if (url.includes("rpc/workin_sync_take_lease")) return json(true);
+      if (url.includes("rpc/workin_sync_release_lease")) return new Response("", { status: 200 });
+      if (url.includes("rpc/workin_sync_update_places")) return json(1);
+      return new Response("not found", { status: 404 });
+    };
+    const deps: SyncDeps = { fetchFn, supabaseUrl: "https://abc.supabase.co", serviceKey: "SERVICE-KEY", getEnv: () => undefined, now: () => Date.parse("2026-10-31T05:00:00Z"), holder: "run-1" };
+    return { calls, deps };
+  };
+  it("dryRun: 건수만, 쓰기·임대 0", async () => {
+    const { calls, deps } = setup();
+    const out = await runAction({ action: "memo_date_backfill", dryRun: true }, deps);
+    expect(out.body).toMatchObject({ ok: true, dryRun: true, stats: { tailed: 1, places: 1 } });
+    expect(calls.filter((c) => c.method !== "GET" && !c.url.includes("app_config"))).toEqual([]);
+  });
+  it("쓰기: 임대 → 로그(note backfill_tail) → rpc(updated_by·x-workin-sync) → 해제", async () => {
+    const { calls, deps } = setup();
+    const out = await runAction({ action: "memo_date_backfill", dryRun: false }, deps);
+    expect(out.body).toMatchObject({ ok: true, writes: { patched: 1, logs: 1 } });
+    const order = calls.filter((c) => c.method !== "GET").map((c) => c.url.split("/rest/v1/")[1].split("?")[0]);
+    expect(order).toEqual(["rpc/workin_sync_take_lease", "workin_sync_log", "rpc/workin_sync_update_places", "rpc/workin_sync_release_lease"]);
+    const rpc = calls.find((c) => c.url.includes("workin_sync_update_places"))!;
+    expect(rpc.headers["x-workin-sync"]).toBe("1");
+    expect((rpc.body as { p_rows: unknown[] }).p_rows).toEqual([{ id: 7, memos: ["키맨 홍 (워킨맵 2026-10-31)"], updated_by: SYNC_ACTOR }]);
+    const log = calls.find((c) => c.method === "POST" && c.url.includes("workin_sync_log"))!;
+    expect((log.body as Array<Record<string, unknown>>)[0]).toMatchObject({ place_id: 7, field: "memo", direction: "pull", before_value: "키맨 홍", note: "backfill_tail" });
+  });
+  it("parseRequest 가 액션을 읽는다", () => {
+    expect(parseRequest({ action: "memo_date_backfill", dryRun: true })).toEqual({ action: "memo_date_backfill", dryRun: true });
+    expect(parseRequest({ action: "memo_date_backfill" })).toEqual({ action: "memo_date_backfill", dryRun: false });
   });
 });

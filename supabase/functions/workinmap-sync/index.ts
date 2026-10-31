@@ -10,6 +10,8 @@
  *   { action: "status" }                                        계정(토큰 칸 없음)·워크·미처리 확인 큐 수
  *   { action: "login_test", account: n }                        계정 n 멈춤 풀고 로그인만(응답에 토큰·이메일 없음)
  *   { action: "push" }                                          P2 전 — { ok:true, skipped:"push_disabled" }
+ *   { action: "memo_date_backfill", dryRun?: true }             1회 보정: 이미 붙은 가져오기 메모에 " (워킨맵 YYYY-MM-DD)" 꼬리(로그 시각 KST),
+ *                                                               여러 줄 항목 줄 나누기, 같은 정형 머리글(기본임대료 등) 중복 정리. dryRun 은 건수·표본만
  * 인증: schedule-report 와 같은 규칙(이 프로젝트 anon/service_role JWT · 만료 전, 또는 service role 키). 크론은 ops.call_edge(vault field_cron_jwt).
  * secrets: WORKINMAP_n_EMAIL / WORKINMAP_n_PASSWORD (n=1..9) — 사용자가 대시보드에 직접. 코드·로그·응답에 값 없음.
  * 실행부는 sync.ts(fetch 주입, vitest 로 검사), 규칙은 plan.ts, 로그인은 auth.ts, 워킨맵 읽기는 api.ts.

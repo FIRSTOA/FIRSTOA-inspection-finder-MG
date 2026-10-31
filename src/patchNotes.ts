@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "848073c700",
+    "date": "2026-10-31",
+    "note": "AGENTS: 워킨맵 동기화 P1 가동 기록(2026-10-31 16시 실측 수치·교훈)"
+  },
+  {
+    "hash": "230a52b4ac",
+    "date": "2026-10-31",
+    "note": "워킨맵 동기화: 상호 변경 자동 잇기(address_rename — 같은 주소 유일한 미짝 앱 행 1:1, 참고 review field_diff) + 테스트"
+  },
+  {
     "hash": "360ffffe2d",
     "date": "2026-10-31",
     "note": "워킨맵 동기화 dry 4차 반영: 같은 이름 N:N(주소 동일)은 순서로 1:1 짝(exact_name_order), 꼬리 반복 제거, detail fresh.similarLocal·unmatchedLocal.duplicateOfMatched 힌트"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "ca837094e4",
     "date": "2026-10-10",
     "note": "통합 검색: 상태 카드에 현장 메모(특이사항·출근/점심·워킨맵 메모·임대 조건) + \"전체 데이터에 묻기\"(data-ask: 팀·달·등급으로 추리는 질문)"
-  },
-  {
-    "hash": "845881b767",
-    "date": "2026-10-10",
-    "note": "통합 검색 360 2차: 기기 검색 탭 흡수 · 첫 화면 안내형 · 질문만으로 찾기 · 표 28개로 확장 · 내 일정 주소 제안"
-  },
-  {
-    "hash": "6983e10192",
-    "date": "2026-10-10",
-    "note": "통합 검색 360: 자산기번·시리얼·업체명 하나로 23개 표의 모든 기록을 한 화면에 + \"이 업체에 대해 물어보기\"(entity-ask)"
   }
 ];

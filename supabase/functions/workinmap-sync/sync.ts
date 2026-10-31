@@ -15,7 +15,8 @@
 import { fetchWork, fetchWorkList, type WorkListItem } from "./api.ts";
 import { FIREBASE_WEB_API_KEY_FALLBACK, getIdToken, readAccounts, type Account, type AuthCtx, type FetchFn, type TokenRow, type TokenStore } from "./auth.ts";
 import {
-  classifyWork, DEFAULT_EXCLUDE_WORKS, DEFERRED_PREFIX, chunkPatchRows, kstParts, nextScheduledRun, PULL_HOURS_KST, listConfig, normalizeRemoteWork, planPull, reviewKey, switchOn, SYNC_ACTOR,
+  classifyWork, DEFAULT_EXCLUDE_WORKS, DEFERRED_PREFIX, chunkPatchRows, kstParts, nextScheduledRun, PULL_HOURS_KST, listConfig, normalizeRemoteWork, planMemoDateBackfill, planPull, reviewKey,
+  BACKFILL_NOTE_DEDUPE, BACKFILL_NOTE_TAIL, type BackfillLog, switchOn, SYNC_ACTOR,
   type LocalPlace, type PlannedLog, type PlannedReview, type PullPlan, type SyncRequest, type WorkParse, type WorkStatus,
 } from "./plan.ts";
 
@@ -303,6 +304,60 @@ async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: Sto
   return { ...base, result: errors.length ? "error" : "applied", stats: plan.stats, colorCheck: plan.colorCheck, writes, error: errors.length ? errors.join(" / ") : undefined };
 }
 
+// ── 메모 날짜 보정(1회) ──────────────────────────────────────────
+
+/**
+ * { action:"memo_date_backfill", dryRun? } — 이미 붙은 가져오기 메모에 날짜 꼬리 + 여러 줄 항목 줄 나누기 + 같은 정형 머리글 중복 정리.
+ * 재료 = workin_sync_log(direction pull·field memo). 쓰기 = 로그 먼저(묶음별, 실패 묶음은 쓰지 않음) → rpc workin_sync_update_places.
+ * pull 과 겹치지 않게 같은 임대 키 'pull' 을 잡는다(dry 는 임대 없이).
+ */
+async function memoDateBackfill(db: Db, deps: SyncDeps, dry: boolean): Promise<SyncResponse> {
+  if (!dry) {
+    const got = await db.rpc<boolean>("workin_sync_take_lease", { p_key: "pull", p_holder: deps.holder, p_ttl_seconds: 170 });
+    if (got !== true) return { status: 200, body: { ok: true, skipped: "busy" } };
+  }
+  try {
+    const logs = await db.getAll<BackfillLog>("workin_sync_log?select=id,place_id,created_at,after_value,note&direction=eq.pull&field=eq.memo&order=id.asc");
+    const ids = [...new Set(logs.map((l) => Number(l.place_id)).filter((n) => Number.isFinite(n) && n > 0))];
+    const places: Array<{ id: number; memos: unknown }> = [];
+    for (let i = 0; i < ids.length; i += 150) {
+      places.push(...await db.get<Array<{ id: number; memos: unknown }>>(`workin_map_places?select=id,memos&id=in.(${ids.slice(i, i + 150).join(",")})`));
+    }
+    const plan = planMemoDateBackfill(logs, places);
+    const sample = plan.changes.slice(0, 30);
+    if (dry) return { status: 200, body: { ok: true, dryRun: true, stats: plan.stats, sample } };
+
+    const writes = { patched: 0, patchFailed: 0, skippedDeleted: 0, logs: 0 };
+    const errors: string[] = [];
+    for (let i = 0; i < plan.rows.length; i += UPSERT_CHUNK) {
+      const rows = plan.rows.slice(i, i + UPSERT_CHUNK);
+      const idSet = new Set(rows.map((r) => r.id));
+      const logRows = plan.changes.filter((c) => idSet.has(c.place_id)).map((c) => ({
+        place_id: c.place_id, ext_id: null, account_no: null, work_id: null, direction: "pull", field: "memo",
+        before_value: c.before, after_value: c.after, actor: SYNC_ACTOR, note: c.kind === "dedupe" ? BACKFILL_NOTE_DEDUPE : BACKFILL_NOTE_TAIL,
+      }));
+      try {
+        if (logRows.length) await db.insert("workin_sync_log", logRows);
+        writes.logs += logRows.length;
+      } catch (e) {
+        writes.patchFailed += rows.length;
+        errors.push(`로그 실패로 ${rows.length}행 건너뜀: ${errMsg(e)}`);
+        continue;
+      }
+      try {
+        const updated = Number(await db.rpc<number>("workin_sync_update_places", { p_rows: rows }));
+        const n = Number.isFinite(updated) ? Math.max(0, Math.min(updated, rows.length)) : 0;
+        writes.patched += n;
+        writes.skippedDeleted += rows.length - n;
+      } catch (e) { writes.patchFailed += rows.length; if (errors.length < 5) errors.push(`${rows.length}행 묶음: ${errMsg(e)}`); }
+    }
+    const ok = !errors.length;
+    return { status: ok ? 200 : 500, body: { ok, dryRun: false, stats: plan.stats, writes, sample, error: ok ? undefined : errors.join(" / ") } };
+  } finally {
+    if (!dry) await db.rpc("workin_sync_release_lease", { p_key: "pull", p_holder: deps.holder }).catch((e) => console.error("lease release 실패", errMsg(e)));
+  }
+}
+
 // ── 액션 ─────────────────────────────────────────────────────────
 
 export async function runAction(req: SyncRequest, deps: SyncDeps): Promise<SyncResponse> {
@@ -348,6 +403,11 @@ export async function runAction(req: SyncRequest, deps: SyncDeps): Promise<SyncR
     await store.save(account.no, { paused: false, fail_count: 0 });
     const t = await getIdToken(authOf(account), { force: true });
     return { status: 200, body: t.ok ? { ok: true, account: account.no, via: t.via } : { ok: false, account: account.no, error: t.error, paused: t.paused } };
+  }
+
+  if (req.action === "memo_date_backfill") {
+    try { return await memoDateBackfill(db, deps, req.dryRun); }
+    catch (e) { return { status: 500, body: { ok: false, error: `메모 날짜 보정 실패: ${errMsg(e)}` } }; }
   }
 
   if (!accounts.length) return { status: 500, body: { ok: false, error: "워킨맵 계정 secrets 없음(WORKINMAP_1_EMAIL/PASSWORD)" } };
