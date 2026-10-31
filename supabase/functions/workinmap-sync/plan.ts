@@ -270,6 +270,12 @@ export type LocalPlace = {
 const nameKey = (name: string) => { const n = normText(name); return vendorMatchKey(n) || n.replace(/\s+/g, "").toLowerCase(); };
 /** 전체 이름 완전 일치 키 — normText(_x000d_·CR/LF·빈 줄) 뒤 모든 공백을 한 칸으로. 등급 접두·층·부서는 그대로 */
 export const exactNameKey = (name: string) => normText(name).replace(/\s+/g, " ").trim();
+/**
+ * 꼬리 뗀 이름 키(3차 실측) — exactNameKey 에서 '>' 뒤 메모와 끝의 마감 꼬리(매월마감·분기마감·단순마감·매주마감·월말마감·마감)를 뗀 값.
+ * 주소가 같고 1:1 일 때만 짝짓기에 쓴다(matchPlaces ②-2)
+ */
+export const tailNameKey = (name: string) => exactNameKey(name).split(">")[0]
+  .replace(/\s*(?:매월마감|분기마감|단순마감|매주마감|월말마감|마감)\s*$/, "").trim();
 /** src/workinPlaces.ts addressGroupKey 와 같은 규칙(엣지에서 src 를 import 하지 않으려고 복사) */
 export const addressKey = (address: string | null | undefined) => String(address || "").replace(/\s+/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
 
@@ -302,13 +308,15 @@ export function addressHeadKey(address: string | null | undefined): string {
 
 // ── 짝짓기(v2-B2) ────────────────────────────────────────────────
 
-export type MatchBy = "ext_id" | "exact_name" | "number_name" | "name_address";
+export type MatchBy = "ext_id" | "exact_name" | "number_name" | "tail_name" | "name_address";
+/** multiple_candidates = 이 워킨맵 장소에 앱 후보가 2개+ · shared_candidate = 후보 1개지만 그 앱 행을 다른 워킨맵 장소도 후보로 잡음 */
+export type AmbiguousReason = "multiple_candidates" | "shared_candidate";
 export type MatchResult = {
   pairs: Array<{ remote: RemotePlace; local: LocalPlace; by: MatchBy }>;
   /** 후보 0 — 새 장소 */
   fresh: RemotePlace[];
   /** 후보 2개 이상(또는 같은 키 워킨맵 장소가 둘 이상) — 확인 큐 unmatched */
-  ambiguous: Array<{ remote: RemotePlace; candidates: number[] }>;
+  ambiguous: Array<{ remote: RemotePlace; candidates: number[]; reason: AmbiguousReason }>;
   /** 이 워크에 붙어 있던 앱 행인데 이번 응답에 없음 — 확인 큐 missing(지우지 않는다) */
   missing: LocalPlace[];
   /** ext_id 빈 앱 행 중 이번에 짝 안 된 행(ambiguous 후보 포함) — dry 표본용 */
@@ -317,7 +325,7 @@ export type MatchResult = {
 
 /**
  * ① ext_id 같음 → ①-2(2차 실측 뒤) 정규화한 전체 이름 완전 일치, 워킨맵·앱 양쪽 다 1개 → ② (ext_id 빈 행 중) 번호 = 응답 순서 + 이름 키 같음,
- *   후보 1개 → ③ 이름 + 주소, 후보 1개.
+ *   후보 1개 → ②-2(3차 실측 뒤) 꼬리(마감·'>' 뒤 메모) 뗀 이름 완전 일치 + 같은 주소, 1:1 → ③ 이름 + 주소, 후보 1개.
  * ③(2026-10-31 첫 dry 실측 뒤 강화): 이름은 비교키(vendorMatchKey) 또는 느슨한 키(looseNameKey) 중 하나라도 같고,
  *   주소는 전체 키(addressKey) 또는 앞부분 키(addressHeadKey: 시·도 표기 무시, 번지까지) 중 하나라도 같으면 후보.
  * ③에서 후보 2개 이상이면 ambiguous(②의 후보 여럿은 ③으로 넘긴다). ③에서 한 앱 행을 워킨맵 장소 둘 이상이 후보로 잡으면 그 장소들 모두 ambiguous(같은 건물 2지점).
@@ -367,13 +375,36 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
   }
   rest = afterStep2;
 
-  // ③ 이름 + 주소
-  type Keys = { names: string[]; addrs: string[] };
-  const keysOf = (name: string, address: string | null | undefined): Keys => {
+  const addrKeys = (address: string | null | undefined): string[] => {
     const full = addressKey(address), head = addressHeadKey(address);
-    return { names: [nameKey(name), looseNameKey(name)].filter(Boolean), addrs: [full ? `f:${full}` : "", head ? `h:${head}` : ""].filter(Boolean) };
+    return [full ? `f:${full}` : "", head ? `h:${head}` : ""].filter(Boolean);
   };
   const overlap = (a: string[], b: string[]) => a.some((x) => b.includes(x));
+
+  // ②-2(3차 실측 뒤) 꼬리 뗀 이름 완전 일치 + 같은 주소, 1:1 일 때만 — "…3603호 안쪽매월마감" vs "…3603호 안쪽"
+  {
+    const lk = new Map<number, { t: string; a: string[] }>();
+    for (const l of unlinked) if (!used.has(l.id)) lk.set(l.id, { t: tailNameKey(l.name), a: addrKeys(l.address) });
+    const candOf2 = new Map<string, LocalPlace[]>();
+    const claims2 = new Map<number, number>();
+    for (const r of rest) {
+      const t = tailNameKey(r.name), a = addrKeys(r.address);
+      const cands = t && a.length ? unlinked.filter((l) => { const k = lk.get(l.id); return Boolean(k && k.t === t && overlap(a, k.a)); }) : [];
+      candOf2.set(r.extId, cands);
+      for (const c of cands) claims2.set(c.id, (claims2.get(c.id) || 0) + 1);
+    }
+    const afterTail: RemotePlace[] = [];
+    for (const r of rest) {
+      const cands = candOf2.get(r.extId) || [];
+      if (cands.length === 1 && claims2.get(cands[0].id) === 1) { pairs.push({ remote: r, local: cands[0], by: "tail_name" }); used.add(cands[0].id); }
+      else afterTail.push(r);
+    }
+    rest = afterTail;
+  }
+
+  // ③ 이름 + 주소
+  type Keys = { names: string[]; addrs: string[] };
+  const keysOf = (name: string, address: string | null | undefined): Keys => ({ names: [nameKey(name), looseNameKey(name)].filter(Boolean), addrs: addrKeys(address) });
   const same = (a: Keys, b: Keys) => overlap(a.names, b.names) && overlap(a.addrs, b.addrs);
   const localKeys = new Map<number, Keys>();
   for (const l of unlinked) if (!used.has(l.id)) localKeys.set(l.id, keysOf(l.name, l.address));
@@ -389,7 +420,7 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
     const cands = candOf.get(r.extId) || [];
     if (cands.length === 0) { fresh.push(r); continue; }
     if (cands.length === 1 && (claims.get(cands[0].id) || 0) === 1) { pairs.push({ remote: r, local: cands[0], by: "name_address" }); used.add(cands[0].id); continue; }
-    ambiguous.push({ remote: r, candidates: cands.map((c) => c.id) });
+    ambiguous.push({ remote: r, candidates: cands.map((c) => c.id), reason: cands.length > 1 ? "multiple_candidates" : "shared_candidate" });
   }
 
   const remoteIds = new Set(remote.map((r) => r.extId));
@@ -563,7 +594,7 @@ export type PlannedReview = { kind: ReviewKind; field: string; place_id: number 
 /** workin_sync_log.field (SQL check 와 같은 값) */
 export type LogField = "label" | "visible" | "memo" | "name" | "comment" | "phone" | "address" | "address_detail" | "latitude" | "longitude" | "number"
   | "_insert" | "_missing" | "_unmissing" | "_link" | "_unlink";
-export type PlannedLog = { field: LogField; before_value: unknown; after_value: unknown };
+export type PlannedLog = { field: LogField; before_value: unknown; after_value: unknown; note?: string };
 export type PlannedPatch = { id: number; ext_id: string; set: Record<string, unknown>; fields: Field[]; by: MatchBy | "missing"; logs: PlannedLog[] };
 export type PlannedInsert = { row: Record<string, unknown> & { id: number; ext_id: string }; log: PlannedLog };
 
@@ -585,6 +616,15 @@ export type PullInput = {
   takenIds?: Set<number>;
   /** 범위(팀·분기·업무) 안 최대 번호 — 새 장소는 그 뒤로 */
   scopeMaxNumber: number;
+  /**
+   * 앱에 그 범위(팀·분기·업무) 행이 하나도 없음 = 처음 들여오는 워크(2026-10-31 3차 실측: 계약종료 A·B).
+   * 이때는 새 장소 상한(50)·첫 회차 보류를 걸지 않고 전부 insert(응답 0곳·형식 이상 가드는 그대로)
+   */
+  scopeEmpty?: boolean;
+  /** app_config WORKINMAP_KEEP_APP_DONE(기본 true) — 첫 짝짓기에서 앱이 더 늦게 매긴 완료(G5·G12)는 지킨다 */
+  keepAppDone?: boolean;
+  /** true 면 plan.detail 을 채운다(dry detail:true) */
+  withDetail?: boolean;
 };
 
 export type PullPlan = {
@@ -593,18 +633,37 @@ export type PullPlan = {
   inserts: PlannedInsert[];
   reviews: PlannedReview[];
   stats: {
-    remote: number; matched: number; byExtId: number; byExactName: number; byNumberName: number; byNameAddress: number;
+    remote: number; matched: number; byExtId: number; byExactName: number; byNumberName: number; byTailName: number; byNameAddress: number;
     changed: number; labelChanges: number; memoAdds: number; fresh: number; inserted: number;
     ambiguous: number; missing: number; downgrades: number; keptLocalNewer: number; linkedOnly: number;
+    /** 첫 짝짓기에서 앱 완료(G5·G12)를 지킨 곳(keepAppDone) — keptLocalNewer 에도 포함 */
+    keptAppDone: number;
+    /** 처음 들여오는 워크(scopeEmpty) — 가드 없이 전부 insert */
+    firstImport: boolean;
   };
   /** 색 검증(v2 P1-3): label_color 분포와 처음 짝지은 곳의 앱 색 일치 수 */
   colorCheck: { histogram: Record<string, number>; firstMatchSame: number; firstMatchDiff: number };
   /** dry 판단용 표본(2026-10-31 첫 실측 뒤) — "이름 차이인지 진짜 새 장소인지"·"label_color→G 대응이 맞는지" 사람이 눈으로 보게 */
   samples: PullSamples;
+  /** dry + detail:true 일 때만 — 그 워크 전체 목록(상한 없음) */
+  detail?: PullDetail;
+};
+/** 이름 한 줄(normText 후 줄바꿈·연속 공백 → 한 칸) */
+const oneLine = (s: unknown) => normText(s).replace(/\s+/g, " ").trim();
+/** dry detail:true 전체 목록(2026-10-31 사용자 "어떤 워크에 어디가 다른지 구체적으로") */
+export type PullDetail = {
+  ambiguous: Array<{ extId: string; name: string; address: string | null; labelColor: number | null; candidates: Array<{ id: number; name: string; address: string; label: string }>; reason: AmbiguousReason }>;
+  fresh: Array<{ extId: string; seq: number; name: string; address: string | null; labelColor: number | null }>;
+  unmatchedLocal: Array<{ id: number; number: number; name: string; address: string; label: string }>;
+  /** completion_down = 완료(G5·G12)→낮음(반영+알림) · progress_down = 매월 단계 하강(반영+알림) · keep_app = 첫 가져오기 완료 보존(앱 유지) */
+  downgrades: Array<{ id: number; name: string; appLabel: string; workinmapLabel: string | null; reason: "completion_down" | "progress_down" | "keep_app" }>;
+  labelChanges: Array<{ id: number; name: string; from: string; to: string }>;
+  memoAdds: Array<{ id: number; name: string; added: string[] }>;
 };
 export const SAMPLE_FRESH = 20;
 export const SAMPLE_UNMATCHED = 20;
 export const SAMPLE_COLOR_DIFF = 10;
+export const SAMPLE_AMBIGUOUS = 20;
 export type PullSamples = {
   /** 새 장소(짝 없음) 앞 20곳 — 워킨맵 순서·이름·주소·label_color */
   fresh: Array<{ extId: string; seq: number; name: string; address: string | null; labelColor: number | null }>;
@@ -613,6 +672,8 @@ export type PullSamples = {
   unmatchedLocalTotal: number;
   /** 처음 짝지은 곳 중 색이 다른 곳 앞 10곳 — 앱 G · 워킨맵 label_color · 그 번호를 G 로 바꾼 값 */
   colorDiff: Array<{ id: number; name: string; appLabel: string; workinmapColor: number | null; workinmapLabel: string | null }>;
+  /** 후보 여럿(ambiguous) 앞 20곳 — 워킨맵 이름·주소·label_color + 후보 앱 행들 */
+  ambiguous: Array<{ extId: string; seq: number; name: string; address: string | null; labelColor: number | null; candidates: Array<{ id: number; number: number; name: string; address: string }> }>;
 };
 
 /** 확인 큐 중복 키 — SQL workin_sync_review_open_uq(kind, field, work_id, ext_id, place_id)와 같은 칸 */
@@ -660,14 +721,15 @@ export function nextScheduledRun(nowMs: number): string {
 export function planPull(input: PullInput): PullPlan {
   const { workId, accountNo, parse, remote, nowIso } = input;
   const stats: PullPlan["stats"] = {
-    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byNumberName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
-    fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0,
+    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
+    fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0, keptAppDone: 0, firstImport: false,
   };
   const histogram: Record<string, number> = {};
   for (const r of remote) { const k = r.labelColor === null ? "없음" : String(r.labelColor); histogram[k] = (histogram[k] || 0) + 1; }
   const colorCheck = { histogram, firstMatchSame: 0, firstMatchDiff: 0 };
-  const samples: PullSamples = { fresh: [], unmatchedLocal: [], unmatchedLocalTotal: 0, colorDiff: [] };
-  const stopped = (reason: "empty" | "shrunk" | "too_many_new", detail: string): PullPlan => ({ stop: { reason, detail }, patches: [], inserts: [], reviews: [], stats, colorCheck, samples });
+  const samples: PullSamples = { fresh: [], unmatchedLocal: [], unmatchedLocalTotal: 0, colorDiff: [], ambiguous: [] };
+  const full: PullDetail | undefined = input.withDetail ? { ambiguous: [], fresh: [], unmatchedLocal: [], downgrades: [], labelChanges: [], memoAdds: [] } : undefined;
+  const stopped = (reason: "empty" | "shrunk" | "too_many_new", detail: string): PullPlan => ({ stop: { reason, detail }, patches: [], inserts: [], reviews: [], stats, colorCheck, samples, ...(full ? { detail: full } : {}) });
 
   const guard = workGuard(remote.length, input.previousCount);
   if (guard) return stopped(guard, guard === "empty" ? "응답 0곳 — 전부 삭제로 보지 않고 중단" : `응답 ${remote.length}곳 < 평소 ${input.previousCount}곳의 절반`);
@@ -679,7 +741,21 @@ export function planPull(input: PullInput): PullPlan {
   samples.fresh = m.fresh.slice(0, SAMPLE_FRESH).map((r) => ({ extId: r.extId, seq: r.seq, name: r.name, address: r.address, labelColor: r.labelColor }));
   samples.unmatchedLocal = m.unmatchedLocal.slice(0, SAMPLE_UNMATCHED).map((l) => ({ id: l.id, number: l.number, name: l.name, address: l.address }));
   samples.unmatchedLocalTotal = m.unmatchedLocal.length;
-  const freshGuard = newPlaceGuard(m.fresh.length, input.firstPull);
+  const localById = new Map(input.local.map((l) => [l.id, l]));
+  samples.ambiguous = m.ambiguous.slice(0, SAMPLE_AMBIGUOUS).map((a) => ({
+    extId: a.remote.extId, seq: a.remote.seq, name: a.remote.name, address: a.remote.address, labelColor: a.remote.labelColor,
+    candidates: a.candidates.map((id) => localById.get(id)).filter((l): l is LocalPlace => Boolean(l)).map((l) => ({ id: l.id, number: l.number, name: l.name, address: l.address })),
+  }));
+  if (full) {
+    full.ambiguous = m.ambiguous.map((a) => ({
+      extId: a.remote.extId, name: oneLine(a.remote.name), address: a.remote.address, labelColor: a.remote.labelColor, reason: a.reason,
+      candidates: a.candidates.map((id) => localById.get(id)).filter((l): l is LocalPlace => Boolean(l)).map((l) => ({ id: l.id, name: oneLine(l.name), address: l.address, label: l.label })),
+    }));
+    full.fresh = m.fresh.map((r) => ({ extId: r.extId, seq: r.seq, name: oneLine(r.name), address: r.address, labelColor: r.labelColor }));
+    full.unmatchedLocal = m.unmatchedLocal.map((l) => ({ id: l.id, number: l.number, name: oneLine(l.name), address: l.address, label: l.label }));
+  }
+  stats.firstImport = input.scopeEmpty === true && remote.length > 0;
+  const freshGuard = stats.firstImport ? "ok" : newPlaceGuard(m.fresh.length, input.firstPull);
   if (freshGuard === "too_many") return stopped("too_many_new", `새 장소 ${m.fresh.length}곳 > ${NEW_PLACE_LIMIT}곳`);
 
   const open = input.openReviewKeys ?? new Set<string>();
@@ -701,7 +777,7 @@ export function planPull(input: PullInput): PullPlan {
 
   for (const { remote: r, local: l, by } of m.pairs) {
     stats.matched += 1;
-    if (by === "ext_id") stats.byExtId += 1; else if (by === "exact_name") stats.byExactName += 1; else if (by === "number_name") stats.byNumberName += 1; else stats.byNameAddress += 1;
+    if (by === "ext_id") stats.byExtId += 1; else if (by === "exact_name") stats.byExactName += 1; else if (by === "number_name") stats.byNumberName += 1; else if (by === "tail_name") stats.byTailName += 1; else stats.byNameAddress += 1;
     if (by !== "ext_id" && r.label) {
       if (r.label === l.label) colorCheck.firstMatchSame += 1;
       else {
@@ -710,12 +786,24 @@ export function planPull(input: PullInput): PullPlan {
       }
     }
 
-    const rules = applyRules(diffPlace(r, l), {
+    // 첫 가져오기 완료 보존(app_config WORKINMAP_KEEP_APP_DONE, 기본 켬): 아직 ext_id 없는 행에서 앱 G5·G12 인데
+    // 워킨맵이 완료 아님이고 앱 updated_at 이 워킨맵 last_update 보다 늦으면(FIELD 자동 완료 등) 앱 색 유지 + conflict 한 줄
+    let diff = diffPlace(r, l);
+    const keepDone = input.keepAppDone === true && !l.ext_id && isDone(l.label) && Boolean(r.label) && !isDone(r.label)
+      && Number.isFinite(ms(l.updated_at)) && Number.isFinite(ms(r.lastUpdate)) && ms(l.updated_at) > ms(r.lastUpdate);
+    if (keepDone) diff = diff.filter((c) => c.field !== "label");
+    const rules = applyRules(diff, {
       localUpdatedAt: l.updated_at, localUpdatedBy: l.updated_by, extSyncedAt: l.ext_synced_at, extLastUpdate: l.ext_last_update, remoteLastUpdate: r.lastUpdate, kind: parse.kind,
     });
-    if (rules.kept.some((k) => k.reason === "local_newer")) stats.keptLocalNewer += 1;
+    if (keepDone || rules.kept.some((k) => k.reason === "local_newer")) stats.keptLocalNewer += 1;
+    if (keepDone) {
+      stats.keptAppDone += 1;
+      full?.downgrades.push({ id: l.id, name: oneLine(l.name), appLabel: l.label, workinmapLabel: r.label, reason: "keep_app" });
+      pushReview({ kind: "conflict", field: "label", place_id: l.id, ext_id: r.extId, detail: { keep: "app", from: l.label, to: r.label, name: l.name, app_updated_at: l.updated_at, workinmap_last_update: r.lastUpdate } });
+    }
     for (const c of rules.review) {
       stats.downgrades += 1;
+      full?.downgrades.push({ id: l.id, name: oneLine(l.name), appLabel: String(c.before ?? ""), workinmapLabel: (c.after as string | null) ?? null, reason: c.reason });
       pushReview({ kind: "downgrade", field: c.field, place_id: l.id, ext_id: r.extId, detail: { applied: true, from: c.before, to: c.after, reason: c.reason, note: "이미 반영됨, 참고(되돌리기는 동기화 기록 before)", name: l.name, workinmap_last_update: r.lastUpdate } });
     }
 
@@ -741,6 +829,7 @@ export function planPull(input: PullInput): PullPlan {
     // 완료로 바뀌면 이력 메모(주차분석 completionDate 가 읽는다) — 날짜는 워킨맵 last_update 의 KST 날짜
     if (typeof set.label === "string") {
       stats.labelChanges += 1;
+      full?.labelChanges.push({ id: l.id, name: oneLine(l.name), from: l.label, to: set.label });
       const entry = completionMemo(set.label, dayOf(r));
       const base = memos ?? oldMemos;
       const head = entry ? memoKey(entry).replace(/ \(워킨맵\)$/, "") : "";
@@ -754,12 +843,15 @@ export function planPull(input: PullInput): PullPlan {
       // 메모는 추가 항목마다 로그 1행(before null) — SQL 머리 "엣지 규칙"
       for (const item of memos.slice(oldMemos.length)) logs.push({ field: "memo", before_value: null, after_value: item });
       if (rules.apply.some((c) => c.field === "memos")) stats.memoAdds += 1;
+      const addedItems = memos.slice(oldMemos.length);
+      if (full && addedItems.length) full.memoAdds.push({ id: l.id, name: oneLine(l.name), added: addedItems });
     }
 
     const needsLink = l.ext_id !== r.extId || l.ext_work_id !== workId || Number(l.ext_account_no ?? NaN) !== accountNo || Number(l.ext_year ?? NaN) !== parse.year;
     const unmissing = Boolean(l.ext_missing_at);
     if (!fields.length && !needsLink && !unmissing) continue;
     if (fields.length) stats.changed += 1; else stats.linkedOnly += 1;
+    if (keepDone) logs.push({ field: "label", before_value: l.label, after_value: l.label, note: "keep_done" });
     if (l.ext_id !== r.extId) logs.push({ field: "_link", before_value: l.ext_id ?? null, after_value: { ext_id: r.extId, work_id: workId, account_no: accountNo, by } });
     if (unmissing) { set.ext_missing_at = null; logs.push({ field: "_unmissing", before_value: l.ext_missing_at, after_value: null }); }
     patches.push({ id: l.id, ext_id: r.extId, set: { ...set, ...linkCols(r) }, fields, by, logs });
@@ -807,14 +899,14 @@ export function planPull(input: PullInput): PullPlan {
     stats.inserted = inserts.length;
   }
 
-  return { stop: null, patches, inserts, reviews, stats, colorCheck, samples };
+  return { stop: null, patches, inserts, reviews, stats, colorCheck, samples, ...(full ? { detail: full } : {}) };
 }
 
 // ── 요청·인증 ─────────────────────────────────────────────────────
 
 export type SyncRequest =
   | { action: "works" }
-  | { action: "pull"; scope: "current" | "old" | { workId: string }; dryRun: boolean; manual?: boolean }
+  | { action: "pull"; scope: "current" | "old" | { workId: string }; dryRun: boolean; manual?: boolean; detail?: true }
   | { action: "status" }
   | { action: "login_test"; account: number }
   | { action: "push" };
@@ -833,7 +925,8 @@ export function parseRequest(body: unknown): SyncRequest | { error: string } {
     const scope = raw === "current" || raw === "old" ? raw : /^[0-9a-f]{24}$/i.test(raw) ? { workId: raw } : null;
     if (!scope) return { error: "scope 는 current | old | 워크 id(24자리)" };
     // manual: 관리 탭에서 누른 호출 — 일부 실패여도 200(ok:false)으로 결과 표를 돌려준다. 크론(manual 없음)은 500 → edge_call_health 가 잡는다
-    return { action, scope, dryRun: b.dryRun === true, manual: b.manual === true };
+    // detail: dry 일 때만 결과마다 전체 목록(PullDetail)을 붙인다 — 쓰기 회차에는 무시
+    return { action, scope, dryRun: b.dryRun === true, manual: b.manual === true, ...(b.detail === true ? { detail: true as const } : {}) };
   }
   return { error: "action 은 works | pull | status | login_test | push" };
 }

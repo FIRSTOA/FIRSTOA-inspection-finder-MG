@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "36432fb420",
+    "agent": "developer",
+    "summary": "워킨맵 동기화 dry 2차 반영: 정규화 전체 이름 완전 일치 짝짓기 우선(_x000d_ 키 오염 수정, 같은 주소 다기기 39건), 라벨은 워킨맵 값 그대로(사용자 \"기존 워킨맵이 주\") + 완료/단계 하강은 참고용 review(applied)"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "f619fcc5fd",
     "agent": "developer",
     "summary": "워킨맵 동기화 dry 실측 반영(줄바꿈 정규화 비교·저장, 느슨한 이름+주소 번지 짝짓기, dry 표본 fresh/unmatchedLocal/colorDiff) + 방문 판단 매월점검 = 마감일 전 영업일 5일 창(VISIT_ADVICE_MONTHLY_WINDOW_DAYS, 라벨 완료 개월 반영) + 매뉴얼 06·기록"

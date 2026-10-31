@@ -31,7 +31,7 @@ export type SyncDeps = {
 export type SyncResponse = { status: number; body: Record<string, unknown> };
 
 export const CONFIG_KEYS = [
-  "WORKINMAP_SYNC_ENABLED", "WORKINMAP_EXCLUDE_WORKS", "WORKINMAP_TEST_WORK", "WORKINMAP_ACCOUNT_LABELS", "WORKINMAP_API_KEY",
+  "WORKINMAP_SYNC_ENABLED", "WORKINMAP_EXCLUDE_WORKS", "WORKINMAP_TEST_WORK", "WORKINMAP_ACCOUNT_LABELS", "WORKINMAP_API_KEY", "WORKINMAP_KEEP_APP_DONE",
 ] as const;
 const PLACE_COLS = "id,number,team,quarter,kind,label,visible,name,comment,phone,address,address_detail,latitude,longitude,memos,updated_at,updated_by,ext_id,ext_work_id,ext_account_no,ext_year,ext_last_update,ext_synced_at,ext_missing_at";
 const ACCOUNT_STATUS_COLS = "account_no,label,expires_at,fail_count,paused,last_login_at,last_ok_at,last_error,updated_at"; // 토큰 칸 없음
@@ -114,7 +114,7 @@ export function dbTokenStore(db: Db, labels: Record<string, string>): TokenStore
   };
 }
 
-type Config = { enabled: boolean; exclude: string[]; testWork: string; labels: Record<string, string>; apiKey: string };
+type Config = { enabled: boolean; exclude: string[]; testWork: string; labels: Record<string, string>; apiKey: string; keepAppDone: boolean };
 
 async function readConfig(db: Db): Promise<Config> {
   const keys = CONFIG_KEYS.map((k) => encodeURIComponent(k)).join(",");
@@ -131,6 +131,8 @@ async function readConfig(db: Db): Promise<Config> {
     testWork: (map.WORKINMAP_TEST_WORK || "").trim(),
     labels,
     apiKey: (map.WORKINMAP_API_KEY || "").trim() || FIREBASE_WEB_API_KEY_FALLBACK,
+    // 첫 가져오기 완료 보존 — 값이 없으면 켬(사용자 결정 대기 중 기본 'true'), 'false' 만 끔
+    keepAppDone: (map.WORKINMAP_KEEP_APP_DONE || "").trim() === "" ? true : switchOn(map.WORKINMAP_KEEP_APP_DONE),
   };
 }
 
@@ -184,6 +186,8 @@ type WorkResult = {
   sample?: Array<Record<string, unknown>>;
   /** dry·중단 때 판단용 표본(새 장소·짝 안 된 앱 행·처음 짝 색 다름) */
   samples?: PullPlan["samples"];
+  /** dry + detail:true — 그 워크 전체 목록 */
+  detail?: PullPlan["detail"];
 };
 
 async function loadLocal(db: Db, workId: string, parse: WorkParse, remoteIds: string[]): Promise<LocalPlace[]> {
@@ -216,7 +220,7 @@ async function insertReviews(db: Db, reviews: PlannedReview[]): Promise<number> 
   return n;
 }
 
-async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: StoredWork | undefined, dry: boolean, nowMs: number): Promise<WorkResult> {
+async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: StoredWork | undefined, dry: boolean, nowMs: number, keepAppDone = true, withDetail = false): Promise<WorkResult> {
   const base = { workId: w.id, name: w.name, account: w.accountNo };
   const parse = w.parse as WorkParse;
   const nowIso = new Date(nowMs).toISOString();
@@ -245,7 +249,7 @@ async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: Sto
     firstPull: !stored?.first_pulled_at,
     previousCount: Math.max(Number(stored?.place_count || 0), linked) || null,
     nowIso, openReviewKeys: new Set(openRows.map(reviewKey)),
-    idBase: nowMs, takenIds: new Set(local.map((l) => l.id)), scopeMaxNumber: Number(maxRows[0]?.number || 0),
+    idBase: nowMs, takenIds: new Set(local.map((l) => l.id)), scopeMaxNumber: Number(maxRows[0]?.number || 0), scopeEmpty: maxRows.length === 0, keepAppDone, withDetail: dry && withDetail,
   });
 
   const sample = plan.patches.slice(0, 15).map((p) => ({ id: p.id, by: p.by, fields: p.fields, logs: p.logs.filter((l) => l.field !== "_link").slice(0, 4) }));
@@ -254,16 +258,16 @@ async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: Sto
       await markWork({ last_error: clip(`중단(${plan.stop.reason}): ${plan.stop.detail}`) });
       await insertReviews(db, [{ kind: "format", field: plan.stop.reason, place_id: null, ext_id: null, work_id: w.id, account_no: w.accountNo, detail: { reason: plan.stop.reason, detail: plan.stop.detail, remote: remote.length } }]);
     }
-    return { ...base, result: "stopped", stop: plan.stop, stats: plan.stats, colorCheck: plan.colorCheck, samples: plan.samples };
+    return { ...base, result: "stopped", stop: plan.stop, stats: plan.stats, colorCheck: plan.colorCheck, samples: plan.samples, ...(plan.detail ? { detail: plan.detail } : {}) };
   }
-  if (dry) return { ...base, result: "dry", stats: plan.stats, colorCheck: plan.colorCheck, sample, samples: plan.samples, stop: null };
+  if (dry) return { ...base, result: "dry", stats: plan.stats, colorCheck: plan.colorCheck, sample, samples: plan.samples, ...(plan.detail ? { detail: plan.detail } : {}), stop: null };
 
   // ── 쓰기: 200행 묶음 → 그 묶음 로그 먼저, 로그 실패한 묶음은 쓰지 않음 → rpc workin_sync_update_places ──
   // (한 회차 현재 분기 워크 ~12개·장소 ~4,000 을 150초 안에. 없는 id 는 rpc 가 건너뜀 → skippedDeleted)
   const writes = { patched: 0, patchFailed: 0, skippedDeleted: 0, inserted: 0, insertFailed: 0, reviews: 0, logs: 0 };
   const errors: string[] = [];
   for (const batch of chunkPatchRows(plan.patches, UPSERT_CHUNK)) {
-    const logs = batch.patches.flatMap((p) => p.logs.map((l) => logRow(p.id, p.ext_id || null, w.accountNo, w.id, l)));
+    const logs = batch.patches.flatMap((p) => p.logs.map((l) => logRow(p.id, p.ext_id || null, w.accountNo, w.id, l, l.note ?? "")));
     try {
       if (logs.length) await db.insert("workin_sync_log", logs);
       writes.logs += logs.length;
@@ -395,7 +399,7 @@ export async function runAction(req: SyncRequest, deps: SyncDeps): Promise<SyncR
     for (const w of picked) {
       if (deps.now() - startedMs > PULL_BUDGET_MS) { deferred.push({ account: w.accountNo, workId: w.id, name: w.name }); continue; }
       const account = accounts.find((a) => a.no === w.accountNo) as Account;
-      try { results.push(await pullOneWork(db, authOf(account), w, storedBy.get(`${w.accountNo}|${w.id}`), dry, nowMs)); }
+      try { results.push(await pullOneWork(db, authOf(account), w, storedBy.get(`${w.accountNo}|${w.id}`), dry, nowMs, cfg.keepAppDone, req.detail === true)); }
       catch (e) { results.push({ workId: w.id, name: w.name, account: w.accountNo, result: "error", error: errMsg(e) }); }
     }
     // 시간 초과로 못 한 워크 — status 의 "미완료 워크"(last_error 머리 DEFERRED_PREFIX). 다음 회차에 성공하면 '' 로 지워진다

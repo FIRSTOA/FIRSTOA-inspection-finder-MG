@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "36432fb420",
+    "date": "2026-10-31",
+    "note": "워킨맵 동기화 dry 2차 반영: 정규화 전체 이름 완전 일치 짝짓기 우선(_x000d_ 키 오염 수정, 같은 주소 다기기 39건), 라벨은 워킨맵 값 그대로(사용자 \"기존 워킨맵이 주\") + 완료/단계 하강은 참고용 review(applied)"
+  },
+  {
     "hash": "f619fcc5fd",
     "date": "2026-10-31",
     "note": "워킨맵 동기화 dry 실측 반영(줄바꿈 정규화 비교·저장, 느슨한 이름+주소 번지 짝짓기, dry 표본 fresh/unmatchedLocal/colorDiff) + 방문 판단 매월점검 = 마감일 전 영업일 5일 창(VISIT_ADVICE_MONTHLY_WINDOW_DAYS, 라벨 완료 개월 반영) + 매뉴얼 06·기록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "17fdf7b24c",
     "date": "2026-10-10",
     "note": "카운터 문자전송: 카드마다 [삭제] — 한 업체만 목록에서 지우기 (통째 삭제뿐이던 것) · 전체 삭제 확인창 강화"
-  },
-  {
-    "hash": "488952d853",
-    "date": "2026-10-10",
-    "note": "카운터 문자전송: CMS 마감 목록(따로 올라옴)은 종류를 구분해 같은 종류끼리만 맞추기 — 일반 마감이 지워지지 않게"
   }
 ];

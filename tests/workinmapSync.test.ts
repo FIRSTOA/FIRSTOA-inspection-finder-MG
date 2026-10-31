@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyRules, classifyWork, colorOf, decodeHtml, diffPlace, isAuthorized, labelOf, matchPlaces, mergeMemos, newPlaceGuard,
   chunkPatchRows, nextScheduledRun, normalizeRemoteWork, parseRequest, parseWorkName, planPull, SYNC_ACTOR, workGuard,
-  addressHeadKey, exactNameKey, looseNameKey, normText,
+  addressHeadKey, exactNameKey, looseNameKey, normText, tailNameKey,
   type LocalPlace, type RemotePlace,
 } from "../supabase/functions/workinmap-sync/plan.ts";
 import { getIdToken, readAccounts, scrub, type TokenRow, type TokenStore } from "../supabase/functions/workinmap-sync/auth.ts";
@@ -112,7 +112,7 @@ describe("matchPlaces — ext_id → 번호+이름 → 이름+주소", () => {
     const local = [lp({ id: 1, name: "한빛", number: 3, address: "서울 중구 1" }), lp({ id: 2, name: "한빛", number: 4, address: "서울 중구 1" })];
     const m = matchPlaces(remote, local);
     expect(m.pairs).toEqual([]);
-    expect(m.ambiguous).toEqual([{ remote: remote[0], candidates: [1, 2] }]);
+    expect(m.ambiguous).toEqual([{ remote: remote[0], candidates: [1, 2], reason: "multiple_candidates" }]);
   });
 
   it("워킨맵 쪽에 같은 이름+주소가 둘이면 앱 행이 하나여도 둘 다 ambiguous", () => {
@@ -166,7 +166,7 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
     const local = [lp({ id: 1, name: "(주)마바산업", number: 3, address: "서울특별시 강남구 테헤란로 1, 2층" }), lp({ id: 2, name: "마바산업 주식회사", number: 4, address: "서울 강남구 테헤란로 1 5층" })];
     const m = matchPlaces(remote, local);
     expect(m.pairs).toEqual([]);
-    expect(m.ambiguous).toEqual([{ remote: remote[0], candidates: [1, 2] }]);
+    expect(m.ambiguous).toEqual([{ remote: remote[0], candidates: [1, 2], reason: "multiple_candidates" }]);
     expect(m.fresh.map((r) => r.extId)).toEqual(["r2"]);
     expect(m.unmatchedLocal.map((l) => l.id)).toEqual([1, 2]);
   });
@@ -186,6 +186,116 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
     const local = [lp({ id: 1, name: "휴스틸", number: 1, address: "서울 중구 세종대로 1" }), lp({ id: 2, name: "휴스틸", number: 2, address: "서울 중구 세종대로 1" })];
     const m = matchPlaces(remote, local);
     expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["a", 1, "number_name"], ["b", 2, "number_name"]]);
+  });
+
+  it("3차 실측: 앱에 범위 행이 0(처음 들여오는 워크)이면 50곳 상한·첫 회차 보류 없이 전부 insert + stats.firstImport", () => {
+    const parse = { team: "A" as const, year: 2026, quarter: 4 as const, kind: "renewal" as const };
+    const remote = Array.from({ length: 79 }, (_, i) => rp({ extId: `r${i}`, name: `계약종료${i}`, seq: i + 1, label: "G1" }));
+    const common = { workId: WORK, accountNo: 1, parse, remote, local: [], firstPull: true, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 0 };
+    const p = planPull({ ...common, scopeEmpty: true });
+    expect(p.stop).toBeNull();
+    expect(p.stats).toMatchObject({ fresh: 79, inserted: 79, firstImport: true });
+    expect(p.inserts.map((x) => x.row.number)).toEqual(Array.from({ length: 79 }, (_, i) => i + 1));
+    expect(p.reviews).toEqual([]);
+    // 범위에 행이 있으면(scopeEmpty 아님) 기존 가드 그대로
+    const guarded = planPull({ ...common, scopeEmpty: false });
+    expect(guarded.stop?.reason).toBe("too_many_new");
+    expect(guarded.stats.firstImport).toBe(false);
+  });
+
+  it("처음 들여오는 워크라도 응답 0곳이면 중단(empty)", () => {
+    const parse = { team: "B" as const, year: 2026, quarter: 4 as const, kind: "renewal" as const };
+    const p = planPull({ workId: WORK, accountNo: 1, parse, remote: [], local: [], firstPull: true, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 0, scopeEmpty: true });
+    expect(p.stop?.reason).toBe("empty");
+    expect(p.inserts).toEqual([]);
+  });
+
+  it("3차 실측: 꼬리(매월마감·'>' 뒤 메모) 뗀 이름 + 같은 주소 1:1 이면 tail_name 으로 짝, 같은 꼬리 키가 둘이면 짝 안 함", () => {
+    expect(tailNameKey("25V(주)미래에이비엠(본사)3603호 안쪽매월마감")).toBe(tailNameKey("25V(주)미래에이비엠(본사)3603호 안쪽"));
+    expect(tailNameKey("가나상사 2층 > 키맨 홍길동")).toBe("가나상사 2층");
+    const addr = "서울 강남구 테헤란로 7";
+    const remote = [rp({ extId: "t1", name: "25V(주)미래에이비엠(본사)3603호 안쪽", seq: 80, address: addr }), rp({ extId: "t2", name: "25V(주)미래에이비엠(본사)3603호 바깥", seq: 81, address: addr })];
+    const local = [
+      lp({ id: 1, name: "25V(주)미래에이비엠(본사)3603호 안쪽매월마감", number: 5, address: addr }),
+      lp({ id: 2, name: "25V(주)미래에이비엠(본사)3603호 바깥매월마감", number: 6, address: addr }),
+    ];
+    const m = matchPlaces(remote, local);
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["t1", 1, "tail_name"], ["t2", 2, "tail_name"]]);
+    // 주소가 다르면 이 단계로는 짝짓지 않음
+    const m2 = matchPlaces([rp({ extId: "t1", name: "미래 3603호", seq: 80, address: addr })], [lp({ id: 1, name: "미래 3603호 매월마감", number: 5, address: "부산 해운대구 해운대로 1" })]);
+    expect(m2.pairs.filter((p) => p.by === "tail_name")).toEqual([]);
+  });
+
+  it("samples.ambiguous: 워킨맵 이름·주소·labelColor + 후보 앱 행", () => {
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "quarter" as const };
+    const addr = "서울 중구 세종대로 1";
+    const remote = [rp({ extId: "h1", name: "휴스틸 본사", seq: 9, address: addr, labelColor: 2, label: "G3" })];
+    const local = [lp({ id: 1, name: "휴스틸 14층", number: 1, address: addr }), lp({ id: 2, name: "휴스틸 15층", number: 2, address: addr })];
+    const p = planPull({ workId: WORK, accountNo: 1, parse, remote, local, firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 2 });
+    expect(p.stats.ambiguous).toBe(1);
+    expect(p.samples.ambiguous).toEqual([{ extId: "h1", seq: 9, name: "휴스틸 본사", address: addr, labelColor: 2, candidates: [
+      { id: 1, number: 1, name: "휴스틸 14층", address: addr }, { id: 2, number: 2, name: "휴스틸 15층", address: addr },
+    ] }]);
+  });
+
+  it("첫 가져오기 완료 보존(keepAppDone): 앱 G5 가 워킨맵보다 늦으면 앱 색 유지 + conflict + 로그 keep_done, 꺼지면 워킨맵 값", () => {
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "quarter" as const };
+    const remote = [rp({ extId: "d1", name: "완료곳", seq: 1, label: "G2", lastUpdate: "2026-10-20T00:00:00.000Z", phone: "010" })];
+    const local = [lp({ id: 1, name: "완료곳", number: 1, label: "G5", phone: "02", updated_at: "2026-10-25T00:00:00.000Z" })];
+    const common = { workId: WORK, accountNo: 1, parse, remote, local, firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 1 };
+    const on = planPull({ ...common, keepAppDone: true });
+    const patch = on.patches[0];
+    expect(patch.set.label).toBeUndefined();
+    expect(patch.set.phone).toBe("010"); // 다른 칸은 반영
+    expect(patch.logs.find((l) => l.note === "keep_done")).toEqual({ field: "label", before_value: "G5", after_value: "G5", note: "keep_done" });
+    expect(on.stats).toMatchObject({ keptAppDone: 1, keptLocalNewer: 1, downgrades: 0 });
+    expect(on.reviews.map((r) => [r.kind, r.field, r.detail])).toEqual([["conflict", "label", expect.objectContaining({ keep: "app", from: "G5", to: "G2" })]]);
+    // 워킨맵이 더 늦으면 보존하지 않음(워킨맵 값 + 알림 downgrade)
+    const later = planPull({ ...common, remote: [{ ...remote[0], lastUpdate: "2026-10-30T00:00:00.000Z" }], keepAppDone: true });
+    expect(later.patches[0].set.label).toBe("G2");
+    expect(later.reviews.map((r) => r.kind)).toEqual(["downgrade"]);
+    // 이미 ext_id 가 붙은 행은 대상 아님
+    const linked = planPull({ ...common, local: [{ ...local[0], ext_id: "d1", ext_work_id: WORK }], keepAppDone: true });
+    expect(linked.patches[0].set.label).toBe("G2");
+    // 스위치 끔 → 워킨맵 값
+    const off = planPull({ ...common, keepAppDone: false });
+    expect(off.patches[0].set.label).toBe("G2");
+    expect(off.stats.keptAppDone).toBe(0);
+  });
+
+  it("dry detail:true — 그 워크 전체 목록(애매·새 장소·앱만 남은 행·하강·색 변경·메모 추가), 이름은 한 줄", () => {
+    expect(parseRequest({ action: "pull", scope: WORK, dryRun: true, detail: true })).toEqual({ action: "pull", scope: { workId: WORK }, dryRun: true, manual: false, detail: true });
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
+    const addr = "서울 중구 세종대로 1";
+    const remote = [
+      rp({ extId: "a1", name: "휴스틸 본사", seq: 50, address: addr, labelColor: 2, label: "G3" }),
+      ...Array.from({ length: 25 }, (_, i) => rp({ extId: `n${i}`, name: `새곳${i}
+2층`, seq: 100 + i, labelColor: 0 })),
+      rp({ extId: "d1", name: "단계곳", seq: 1, label: "G1", labelColor: 0 }),
+      rp({ extId: "d2", name: "완료곳", seq: 2, label: "G2", labelColor: 1, memos: ["새 메모"] }),
+      rp({ extId: "u1", name: "올림곳", seq: 3, label: "G3", labelColor: 2 }),
+    ];
+    const local = [
+      lp({ id: 1, name: "휴스틸 14층", number: 40, address: addr }), lp({ id: 2, name: "휴스틸 15층", number: 41, address: addr, label: "G4" }),
+      lp({ id: 3, name: "단계곳", number: 1, label: "G2" }),
+      lp({ id: 4, name: "완료곳", number: 2, label: "G5", memos: ["옛 메모"] }),
+      lp({ id: 5, name: "올림곳", number: 3, label: "G2" }),
+    ];
+    const common = { workId: WORK, accountNo: 1, parse, remote, local, firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 41 };
+    expect(planPull(common).detail).toBeUndefined();
+    const d = planPull({ ...common, withDetail: true }).detail!;
+    expect(d.ambiguous).toEqual([{ extId: "a1", name: "휴스틸 본사", address: addr, labelColor: 2, reason: "multiple_candidates", candidates: [
+      { id: 1, name: "휴스틸 14층", address: addr, label: "G1" }, { id: 2, name: "휴스틸 15층", address: addr, label: "G4" },
+    ] }]);
+    expect(d.fresh).toHaveLength(25); // 표본(20)과 달리 상한 없음
+    expect(d.fresh[0]).toEqual({ extId: "n0", seq: 100, name: "새곳0 2층", address: "", labelColor: 0 });
+    expect(d.unmatchedLocal.map((x) => [x.id, x.label])).toEqual([[1, "G1"], [2, "G4"]]);
+    expect(d.downgrades).toEqual([
+      { id: 3, name: "단계곳", appLabel: "G2", workinmapLabel: "G1", reason: "progress_down" },
+      { id: 4, name: "완료곳", appLabel: "G5", workinmapLabel: "G2", reason: "completion_down" },
+    ]);
+    expect(d.labelChanges).toEqual([{ id: 3, name: "단계곳", from: "G2", to: "G1" }, { id: 4, name: "완료곳", from: "G5", to: "G2" }, { id: 5, name: "올림곳", from: "G2", to: "G3" }]);
+    expect(d.memoAdds).toEqual([{ id: 4, name: "완료곳", added: ["새 메모"] }]);
   });
 
   it("planPull 표본: 새 장소(최대 20)·짝 안 된 앱 행(최대 20)·처음 짝 색 다름(최대 10)", () => {
