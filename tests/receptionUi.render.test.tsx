@@ -102,7 +102,8 @@ describe("접수 개편 표시 컴포넌트 렌더", () => {
     expect(html).not.toContain("일정 미처리");
     expect(html).toContain("마바물류");
     expect(html).toContain("납품");
-    expect(html).toContain("네이버 캘린더에서 완료 처리하면 다음 동기화(1분) 뒤 사라집니다");
+    expect(html).toContain("일정리스트 [완료]로 처리하면 사라집니다 — 네이버 캘린더는 영업부가 관리(그대로 둠)"); // 2026-10-31 (나)안
+    expect(html).not.toContain("네이버 캘린더에서 완료");
     expect(html).not.toContain("일정리스트에서 처리");
     expect(html).not.toContain('role="button"');
     expect(renderToString(createElement(ReceptionBoard, { ...base, selectedType: "IT" }))).not.toContain("마바물류");

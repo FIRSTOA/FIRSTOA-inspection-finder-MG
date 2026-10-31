@@ -11,8 +11,9 @@
  *   ②~⑦ 실패는 삼키지 않고 warnings 로 돌려준다(완료 자체는 유지).
  * - App.tsx finishTicket(FIELD 전송 뒤 완료)은 세 번째 사본으로 남아 있다 — 후속 과제.
  *
- * 물류(납품철수교체) 네이버: 2026-08-26 "영업부 소관 — 안 건드림" 결정을 2026-10-25 사용자가 바꿈 →
- * 그 캘린더 그 자리에서 완료 체크만 한다. 옮기기·지우기·내용 덧붙이기는 여전히 하지 않는다.
+ * 물류(납품철수교체) 네이버: 일정리스트에서만 완료하고 네이버 캘린더는 건드리지 않는다 — 영업부가 관리(그대로 둠).
+ * (2026-08-26 "안 건드림" → 2026-10-25 "제자리 완료 체크" → 2026-10-31 사용자 결정 (나)안으로 다시 "안 건드림".)
+ * 앱에서 완료한 물류를 네이버 동기화가 되돌리지 않는 근거: supabase/functions/_shared/naver-linked-patch.ts(완료 보존).
  */
 import type { AsTicket } from "./CsAsWorkspace";
 import { buildActionBlock, type ActionTicketLike } from "./actionBlock";
@@ -23,6 +24,8 @@ import { kstDate, saveVisit, type VisitDraft } from "./visits";
 
 /** 납품철수교체휴가교육 네이버 캘린더 id (CsAsWorkspace NAVER_DELIVERY_CAL 과 같은 값) */
 export const NAVER_DELIVERY_CAL_ID = "75632617";
+/** 물류 완료 안내 한 문장 — 홈 미처리·완료 창·현황판·일정리스트가 같은 뜻으로 쓴다(2026-10-31 (나)안) */
+export const DELIVERY_DONE_NOTE = "물류 일정은 일정리스트에서만 완료됩니다 — 네이버 캘린더는 영업부가 관리(그대로 둠)";
 /** 완료되면 창에 쏘는 이벤트 — 떠 있는 일정리스트가 다시 읽는다 */
 export const TICKETS_CHANGED_EVENT = "tickets-changed";
 
@@ -38,14 +41,14 @@ export function isDeliveryTicket(t: { scheduleType?: string | null }): boolean {
 
 /**
  * 네이버 완료 방식.
- * - none: 네이버 미러 없음
- * - check: 그 캘린더 그 자리에서 완료 체크(IT 캘린더·물류 캘린더). writeNote=false 면 내용 덧붙이기도 안 함(물류)
+ * - none: 네이버를 건드리지 않음 — 미러 없음, 또는 물류(일정리스트에서만 완료, 2026-10-31 (나)안)
+ * - check: 그 캘린더 그 자리에서 완료 체크(IT 캘린더)
  * - move: 팀 완료 캘린더로 이동 + 완료 체크(caldav_move)
  * calId 가 비면 엣지 함수가 설정 캘린더(NAVER_CALENDAR_ID)에서 찾는다.
  */
 export type NaverCompletePlan =
   | { kind: "none" }
-  | { kind: "check"; calId: string; writeNote: boolean; target: "it" | "delivery" }
+  | { kind: "check"; calId: string; writeNote: boolean; target: "it" }
   | { kind: "move"; team: string; writeNote: true };
 
 export function naverCompleteAction(
@@ -53,7 +56,8 @@ export function naverCompleteAction(
   opts: { itCalId?: string } = {},
 ): NaverCompletePlan {
   if (!String(t.naverUid || "").trim()) return { kind: "none" };
-  if (isDeliveryTicket(t)) return { kind: "check", calId: NAVER_DELIVERY_CAL_ID, writeNote: false, target: "delivery" };
+  // 물류: 네이버 캘린더는 영업부가 관리 — 완료 체크·이동·내용 기록 전부 안 함(2026-10-31 사용자 결정 (나)안)
+  if (isDeliveryTicket(t)) return { kind: "none" };
   if (t.source === "it") return { kind: "check", calId: opts.itCalId || "", writeNote: true, target: "it" };
   return { kind: "move", team: String(t.team || ""), writeNote: true };
 }
@@ -221,6 +225,7 @@ export async function completeTicket(
   let itCalId = ctx.itCalId || "";
   if (row.naverUid && row.source === "it" && !itCalId) itCalId = await deps.loadItCalId().catch(() => "");
   const plan = naverCompleteAction(row, { itCalId });
+  if (delivery && row.naverUid) infos.push(DELIVERY_DONE_NOTE);
   if (plan.kind !== "none") {
     steps.push(`naver:${plan.kind}`);
     const uid = String(row.naverUid);
@@ -232,7 +237,7 @@ export async function completeTicket(
       }
       if (plan.kind === "check") {
         await deps.naver({ action: "caldav_check", uid, done: true, ...calPart });
-        infos.push(plan.target === "it" ? "네이버: IT 캘린더에서 완료 체크 ✓" : "네이버: 납품철수교체 캘린더에서 완료 체크 ✓ (이동 없음)");
+        infos.push("네이버: IT 캘린더에서 완료 체크 ✓");
       } else {
         const r = await deps.naver<{ status?: string }>({ action: "caldav_move", uid, team: plan.team });
         if (r.status === "moved") infos.push(`네이버: ${plan.team}팀 완료 캘린더로 이동 + 완료 체크 ✓`);

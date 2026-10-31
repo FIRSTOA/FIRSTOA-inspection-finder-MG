@@ -9,7 +9,7 @@ export type KindFilter = "" | OverdueKind;
 export const LOGISTICS_SCHEDULE_TYPES = ["물류", "납품철수교체휴가교육"] as const;
 export const isLogisticsSchedule = (scheduleType: string): boolean => (LOGISTICS_SCHEDULE_TYPES as readonly string[]).includes(String(scheduleType || ""));
 
-/** 물류(납품철수교체휴가교육·물류)는 네이버 캘린더에서 완료, 그 밖(AS·익일AS)은 AS — 일정리스트에서 처리 */
+/** 물류(납품철수교체휴가교육·물류)와 그 밖(AS·익일AS) 구분 — 둘 다 일정리스트 [완료]로 처리(물류는 네이버 캘린더를 건드리지 않음, 2026-10-31) */
 export const overdueKind = (scheduleType: string): OverdueKind => (isLogisticsSchedule(scheduleType) ? "물류" : "AS");
 
 export const overdueBadge = (scheduleType: string): string =>

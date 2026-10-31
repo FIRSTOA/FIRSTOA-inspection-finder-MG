@@ -3,7 +3,7 @@
 //        · selectedType(그 종류 열만 넓게) · deptEnabled(기본 true, false 면 지원 3종 숨김)
 //        · compact(오른쪽 기둥용 압축형: 작은 타일 + 세로 스택 + 열마다 접기)
 //        · scheduleRows(물류 미처리 → "물류 미처리" 열, 현장 3종 뒤; 숫자 띠 타일을 누르면 그 열만 넓게, 다시 누르면 전체 — 내부 상태)
-//        · onOpenSchedule(호환용으로 남김, 쓰지 않음 — 물류 카드는 읽기 전용, 처리는 네이버 캘린더에서).
+//        · onOpenSchedule(호환용으로 남김, 쓰지 않음 — 물류 카드는 읽기 전용, 처리는 일정리스트 [완료]에서 — 네이버 캘린더는 영업부 관리).
 // 경과 3일↑ 노랑, 7일↑ 빨강, 예정일 지난 건은 빨간 테두리. 열마다 20장까지만 먼저 보이고 "더 보기"로 펼친다.
 import { useState, type ReactNode } from "react";
 import { AlertCircle, CalendarClock, CalendarX2, Check, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
@@ -225,8 +225,8 @@ export default function ReceptionBoard({ rows, today, onSelectType, renderAction
     );
   };
 
-  // 물류 미처리는 읽기 전용: 일정리스트는 네이버 캘린더에 관여하지 않으므로 처리 단추 없이 안내만 둔다
-  const scheduleNote = <p className="text-[11px] font-bold leading-snug text-slate-500">네이버 캘린더에서 완료 처리하면 다음 동기화(1분) 뒤 사라집니다</p>;
+  // 물류 미처리는 읽기 전용: 완료는 일정리스트 [완료]로만 한다 — 네이버 캘린더는 영업부가 관리(2026-10-31 (나)안)
+  const scheduleNote = <p className="text-[11px] font-bold leading-snug text-slate-500">일정리스트 [완료]로 처리하면 사라집니다 — 네이버 캘린더는 영업부가 관리(그대로 둠)</p>;
 
   const scheduleList = (shown: ScheduleRow[], hidden: number) => (
     <div className={compact ? "pb-1" : "space-y-2 px-2 pb-2"}>

@@ -194,7 +194,7 @@ export default function HomeUnhandledPanel({ bundle, onOpenOverdue, onOpenRecept
         )}
         {rows !== null && groups.logistics.length > 0 && (
           <section>
-            <h4 className="sticky top-0 bg-slate-900/95 px-3 py-1.5 text-[10.5px] font-black tracking-wide text-slate-300">물류 <span className="font-mono text-rose-200">{groups.logistics.length}건</span> <span className="ml-1 text-[10px] font-bold text-slate-500">줄을 눌러 [완료] — 네이버 일정에도 완료 체크</span></h4>
+            <h4 className="sticky top-0 bg-slate-900/95 px-3 py-1.5 text-[10.5px] font-black tracking-wide text-slate-300">물류 <span className="font-mono text-rose-200">{groups.logistics.length}건</span> <span className="ml-1 text-[10px] font-bold text-slate-500">줄을 눌러 [완료] — 일정리스트에서만 완료(네이버는 그대로)</span></h4>
             <ul className="divide-y divide-white/[0.06]">{groups.logistics.map((r) => <li key={r.key}>{renderRow(r)}</li>)}</ul>
           </section>
         )}
@@ -292,7 +292,7 @@ export function UnhandledDetail({ row, onClose, onOpen, actions = false, author 
           네이버 캘린더 열기<ExternalLink size={12} aria-hidden />
         </a>
       )}
-      {row.kind === "물류" && <p className="text-[12px] font-bold text-slate-500">[완료]를 누르면 일정리스트에서 완료되고 네이버 캘린더 일정에도 완료 체크됩니다(이동 없음).</p>}
+      {row.kind === "물류" && <p className="text-[12px] font-bold text-slate-500">[완료]를 누르면 일정리스트에서 완료됩니다 — 네이버 캘린더는 영업부가 관리(그대로 둠).</p>}
     </FormModal>
   );
 }

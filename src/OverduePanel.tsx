@@ -73,7 +73,7 @@ export default function OverduePanel({ onOpen }: { onOpen: () => void }) {
               <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold text-slate-100">{fieldTicketVendor(r.vendor).vendor || r.vendor}</span>
               <span className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-black text-slate-300">{overdueBadge(r.scheduleType)}</span>
               <span className={`w-14 shrink-0 truncate text-right text-[11px] font-black ${r.assignee ? "text-slate-400" : "text-rose-300"}`}>{formatAssignees(r.assignee, { short: true }) || "미배정"}</span>
-              {logistics && <span className="shrink-0 text-[11px] font-bold text-slate-400">네이버 캘린더에서 완료</span>}
+              {logistics && <span className="shrink-0 text-[11px] font-bold text-slate-400">일정리스트 [완료]로 처리</span>}
             </>
           );
           return (
@@ -86,7 +86,7 @@ export default function OverduePanel({ onOpen }: { onOpen: () => void }) {
         })}
       </ul>
       {kind === "물류"
-        ? <p className="mt-2 text-[11px] font-bold text-slate-500">물류는 네이버 캘린더에서 완료 처리하면 다음 동기화 뒤 사라집니다</p>
+        ? <p className="mt-2 text-[11px] font-bold text-slate-500">물류는 일정리스트 [완료]로 처리합니다 — 네이버 캘린더는 영업부가 관리(그대로 둠)</p>
         : <button type="button" onClick={onOpen} className="mt-1 inline-flex min-h-11 items-center text-xs font-black text-blue-300 transition hover:text-white">AS 는 일정리스트에서 처리 →</button>}
     </div>
   );

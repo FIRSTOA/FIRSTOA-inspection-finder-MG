@@ -13,17 +13,19 @@ import { getServiceReceptionById, sendServiceReception, setServiceReceptionStatu
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
-import { fieldTicketVendor, historyCoreName, logisticsTicketInfo, slashTrainVendor } from "./ids";
+import { fieldTicketVendor, historyCoreName, slashTrainVendor } from "./ids";
 import FitTitle from "./FitTitle";
 import { buildActionBlock as buildShareBlock, type ActionTicketLike } from "./actionBlock";
 import { vendorNameByCode } from "./vendorCodes";
 import { COMPANY_MEMBERS } from "./companyDirectory";
 import { useAuthorBook, teamLabel } from "./authors";
-import { escapeRegExp, extractCategory, extractIssue, groupReportTickets, hasReportMember, reportHeadOf } from "./reportAssignee";
+// 중간보고 본문·명단 순서 — 자동 중간보고 엣지(schedule-report)와 같은 파일(2026-10-31)
+import { buildMidReportPlan } from "../supabase/functions/_shared/report/mid-report.ts";
+import { reportOrderOf, teamAssigneesOf } from "../supabase/functions/_shared/report/team-order.ts";
 import { addedAssignees, formatAssignees, titleAssigneeLabel } from "./assignees";
 import AssigneePicker from "./AssigneePicker";
 import DoneReasonModal from "./DoneReasonModal";
-import { copierDoneKind, copierDoneText, isDeliveryTicket, naverCompleteAction, NAVER_DELIVERY_CAL_ID, receptionStatusFromSiblings, TICKETS_CHANGED_EVENT } from "./ticketCompletion";
+import { copierDoneKind, copierDoneText, DELIVERY_DONE_NOTE, isDeliveryTicket, naverCompleteAction, receptionStatusFromSiblings, TICKETS_CHANGED_EVENT } from "./ticketCompletion";
 
 // 직원 이름이 통합이력 검색어가 되는 것 방지 — 네이버 수기 제목은 "이름 제목"으로 시작하는 관행
 const MEMBER_NAMES = new Set(COMPANY_MEMBERS.map((m) => m.name));
@@ -108,7 +110,6 @@ const DONE_CAL_LABEL: Record<Team, string> = { A: "강북서AB as", B: "강북�
 const NAVER_MAIN_CAL = "76de84c7-48a2-46c6-8de0-edc721a03f3f"; // 익일통합as — 접수·수기 일정이 모이는 대상 캘린더
 
 const storageKey = "cs_as_tickets_v4";
-const REPORT_SEP = "-------------------"; // 중간보고 구분선 — 카톡에서 섹션이 끊어 읽히게
 // 보고 머리의 시각 — 12시/14시 차수 대신 생성 시각 그대로("14:35 중간보고"). AI가 만드니 아무 때나 뽑아도 된다
 const reportStamp = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 // 날짜는 호출 시점마다 계산한다 — 모듈 로드 시 고정하면 자정 이후 금일/익일 분류가 전부 어긋난다.
@@ -556,28 +557,13 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
   // 팀 명단 — 관리탭 인원(cs_members) 실시간. 신입·퇴사·팀 이동이 보고와 배정에 바로 반영된다.
   const { book: memberBook } = useAuthorBook();
   const csLeaders = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
-  const teamAssignees = useMemo<Record<Team, string[]>>(() => {
-    const lead = memberBook["팀장"]?.length ? memberBook["팀장"] : ["신정훈"];
-    const css = (memberBook.E || []).filter((n) => !lead.includes(n)); // CSS팀 = E지역 담당이면서 A~D 지원도 나간다(2026-09-18)
-    const of = (t: "A" | "B" | "C" | "D" | "E") => {
-      const names = memberBook[t] || []; // DB를 못 읽어도 authors.ts의 시드(AUTHOR_BOOK)가 채워준다 — 예비 명단을 두 벌 두면 서로 어긋난다
-      const own = names.filter((n) => !lead.includes(n));
-      const helpers = t === "E" ? [] : css.filter((n) => !own.includes(n)); // 자기 팀 뒤에 CSS 지원 인원, 마지막에 팀장
-      return [...own, ...helpers, ...lead]; // 팀장은 어느 팀 화면에서든 선택 가능
-    };
-    return { A: of("A"), B: of("B"), C: of("C"), D: of("D"), E: of("E"), 기타: [] }; // E(지방)도 명단이 있으면 배정 가능
-  }, [memberBook]);
+  // 팀별 명단(자기 팀 → CSS 지원 → 팀장) — 본문은 _shared/report/team-order.ts(자동 중간보고 엣지와 같은 규칙, 2026-10-31)
+  const teamAssignees = useMemo<Record<Team, string[]>>(() => teamAssigneesOf(memberBook), [memberBook]);
   const teamCalViewTeam: Team = teamCalTeam
     || ((["A", "B", "C", "D", "E"] as Team[]).find((t) => teamAssignees[t].includes(author) && !csLeaders.includes(author)) as Team | undefined)
     || (teams.includes(team as Team) ? team as Team : "C");
   // 보고 순서: 팀장 최상단 → 명단 순서(부파트장이 첫 번째) 그대로
-  const reportOrder = (reportTeam: Team) => {
-    const mine = teamAssignees[reportTeam].filter((n) => !csLeaders.includes(n));
-    // 다른 지역으로 지원 나간 CS 인원의 건도 보고에 들어가야 한다 — 자기 팀 뒤에 나머지 CS 명단을 붙인다(건이 있을 때만 그룹이 생긴다)
-    const others = (["A", "B", "C", "D", "E"] as Team[]).filter((t) => t !== reportTeam)
-      .flatMap((t) => teamAssignees[t]).filter((n) => !csLeaders.includes(n) && !mine.includes(n));
-    return [...csLeaders, ...mine, ...Array.from(new Set(others))];
-  };
+  const reportOrder = (reportTeam: Team) => reportOrderOf(reportTeam, teamAssignees, csLeaders); // _shared/report/team-order.ts
   const [currentMonth, setCurrentMonth] = useState(monthStart(todayYmd));
   // 네이버 캘린더에서 직접 만든 일정(동기화 크론이 가져옴) — 캘린더(월)에 읽기 전용 표시
   type NaverEventRow = { uid: string; date: string; time: string; title: string; location: string; description: string; calendar_id: string; completed: boolean };
@@ -1002,10 +988,11 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
       const uncompletedNow = before.status === "완료" && changed.status !== "완료";
       // 완료 방식 판정은 ticketCompletion 한 곳(홈 미처리 [완료]와 같은 규칙)
       const plan = naverCompleteAction(changed, { itCalId });
-      if ((completedNow || uncompletedNow) && plan.kind === "check") {
-        // IT 접수 일정은 IT 캘린더(2026-09-17), 물류는 납품철수교체 캘린더(2026-10-25 사용자 결정 — 2026-08-26 "안 건드림"을 뒤집음)에서
-        // 제자리 완료 체크만 — 옮기거나 지우지 않는다. 완료 취소도 제자리에서 해제
-        const where = plan.target === "it" ? "IT" : "납품철수교체";
+      if ((completedNow || uncompletedNow) && isDeliveryTicket(changed)) {
+        // 물류: 일정리스트에서만 완료·완료 취소 — 네이버 캘린더는 영업부가 관리(2026-10-31 사용자 (나)안, 10-25 결정 되돌림)
+      } else if ((completedNow || uncompletedNow) && plan.kind === "check") {
+        // IT 접수 일정은 IT 캘린더(2026-09-17)에서 제자리 완료 체크만 — 옮기거나 지우지 않는다. 완료 취소도 제자리에서 해제
+        const where = "IT";
         void invokeEdgeFunction<{ status?: string }>("naver-calendar-push", { action: "caldav_check", uid: changed.naverUid, done: completedNow, ...(plan.calId ? { calId: plan.calId } : {}) })
           .then((r) => notify(r.status === "checked" ? `네이버: ${where} 캘린더에서 완료 체크 ✓` : `네이버: ${where} 캘린더 완료 체크 해제 ✓`, "success"))
           .catch((e) => notify(`네이버 ${where} 완료 체크 실패: ${(e as Error).message}`, "error"));
@@ -1203,14 +1190,8 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
     // 완료 방식 판정은 ticketCompletion 한 곳(홈 미처리 [완료]와 같은 규칙)
     const plan = naverCompleteAction(ticket, { itCalId });
     if (isDeliveryTicket(ticket) && opts.complete) {
-      // 물류: 납품철수교체 캘린더 그 자리에서 완료 체크만 — 내용 덧붙이기·이동·삭제 없음
-      // (2026-10-25 사용자 결정 — 2026-08-26 "영업부 소관이라 안 건드림"을 뒤집음)
-      try {
-        await invokeEdgeFunction("naver-calendar-push", { action: "caldav_check", uid: ticket.naverUid, done: true, calId: NAVER_DELIVERY_CAL_ID });
-        notify("네이버: 납품철수교체 캘린더에서 완료 체크 ✓ (이동 없음)", "success");
-      } catch (e) {
-        notify(`네이버 물류 완료 체크 실패: ${(e as Error).message}`, "error");
-      }
+      // 물류: 네이버 안 건드림(2026-10-31 사용자 (나)안) — 일정리스트에서만 완료
+      notify(DELIVERY_DONE_NOTE, "info");
       return;
     }
     try {
@@ -1302,174 +1283,30 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
 
   /**
    * 중간보고 본문 생성 — 팀 관행 양식 그대로:
-   *   "12시 1차 중간보고 / (진행중인 업무는 * 표시) / --- / 금일 처리예정 / #이름 / •이름 업체 기종 내용 …"
-   * 규칙: 완료된 건은 자동으로 빠진다(완료 여부를 눈으로 대조하던 일이 이 기능의 이유).
-   *       오늘 연기 처리한 건은 '익일변경'에 → 날짜와 함께. 진행중 * 표시는 사람이 아는 것이라 손으로.
+   *   "12:00 중간보고 / --- / 금일 처리예정 / #이름 / •업체 기종 내용 … / --- / 익일일정"
+   * 2026-10-31 사용자 결정: "(진행중인 업무는 * 표시)" 줄과 "특이사항" 칸은 뺐다(자동 발송과 같은 글). 규칙은 mid-report.ts 머리 주석.
    */
-  const buildMidReport = (reportTeam: Team, day: "today" | "next" = "today") => {
-    const targetYmd = day === "next" ? tomorrowYmd : todayYmd;
-    // 필수 일정만 — 자동일정으로 만든 점검 동선(source=autoplan)과 매월점검은 개인 계획이지 보고 대상이 아니다
-    const teamTickets = tickets.filter((ticket) =>
-      ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
-      && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검");
-    // CS 팀원 이름이 배정된 건만 — 물류 인원 등 다른 이름의 건은 그쪽에서 소화한다.
-    // 순서: 팀장 최상단 → 부파트장(명단 첫 번째) → 동급 순 (명단 순서 그대로)
-    const order = reportOrder(reportTeam);
-    // 줄 머리에서 떼어낼 이름표 — 배정 칸 원문("김A,이B"), 없으면 제목 추정 1명. 사람별 묶음은 groupReportTickets 가 맡는다(여러 명이면 각자 묶음에 한 줄씩)
-    const headOf = (ticket: AsTicket) => reportHeadOf(ticket, order);
-    const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
-    const cut =(value: string, max: number) => (value.length > max ? `${value.slice(0, max)}…` : value);
-    // 기종 초단축: 괄호 별명("헤라클래스")이 있으면 그것, 없으면 브랜드 접두를 뗀 짧은 표기
-    const shortModel = (model: string) => {
-      const nick = model.match(/\(([가-힣A-Za-z0-9]{2,8})\)/)?.[1];
-      if (nick) return nick;
-      return cut(model.replace(/^(SL-|APEOS-|ApeosPort-?V?\s*|ECOSYS-|DocuCentre-?V?\s*|DocuPrint-?)/i, "").trim(), 9);
-    };
-    const lineOf = (ticket: AsTicket) => {
-      // 납품·철수: 고객사 + 품목(괄호 설명 제거) + 구분만 — "•뉴트리원 노트북 2대 납품"
-      if (ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류") {
-        const info = logisticsTicketInfo((ticket.calendarTitle || "").trim() || ticket.vendor, ticket.note || ""); // 품목은 전체 제목에만 있다(vendor 는 고객사만, 2026-10-24)
-        if (info.vendor) {
-          const item = info.item.replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").trim();
-          return `•${cut(historyCoreName(info.vendor) || info.vendor, 12)} ${cut(item, 14)} ${info.category}`.replace(/\s+/g, " ").trim();
-        }
-      }
-      // 업체명: 법인표기·위치 꼬리를 벗긴 핵심 이름만
-      const name = headOf(ticket);
-      // "A/S"의 슬래시는 구분자가 아니다 — 잠깐 다른 글자로 바꿔 보호하고 자른 뒤 되돌린다
-      let raw = ticket.vendor.replace(/A\/S/g, "A\u2044S").split(/\s*>\s*/)[0].split("/")[0].replace(/A\u2044S/g, "A/S");
-      if (name) raw = raw.replace(new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]*`), "");
-      const vendor = cut(historyCoreName(raw) || fieldTicketVendor(raw).vendor || raw.trim(), 12);
-      const issue = extractIssue(ticket.issue, ticket.note).replace(/\s+/g, " ");
-      const category = extractCategory(ticket.vendor, ticket.calendarTitle, name);
-      return ["•" + vendor, ticket.model ? shortModel(ticket.model) : "", category, cut(issue, 14)].filter(Boolean).join(" ");
-    };
-    // 담당자가 아직 없는 건 — "#미배정"으로 묶어 빠뜨리지 않는다.
-    // 금일 보고는 이름 없는 납품을 뺀다(물류 몫). 익일 보고는 물류까지 전부 — 누락을 눈으로 잡아 직접 지우는 쪽이 안전하다(2026-08-28 요청)
-    const dayGroups = groupReportTickets(
-      teamTickets.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료"),
-      order, (ticket) => day === "next" || !isLogistics(ticket));
-    const groups: string[] = [];
-    for (const { name, tickets: mine } of dayGroups) {
-      if (groups.length) groups.push("");   // 이름 사이 빈 줄 — 카톡에서 사람별로 끊어 읽힌다
-      groups.push(`#${name}`, ...mine.flatMap((t) => (day === "next" ? [lineOf(t), ...reportDetailOf(t)] : [lineOf(t)])));
-    }
-    if (day === "next") {
-      // 익일스케줄 보고 — 내일 일정만, 미배정 포함 전부. 퇴근 전에 보내는 별도 보고(2026-08-28 요청)
-      // 양식 확정(2026-08-28): 머리말 한 줄 + 이름 그룹만 — 시각·구분선·특이사항 없이 짧게
-      return ["익일 스케줄", "", ...(groups.length ? groups : ["없음"])].join("\n");
-    }
-    // 익일일정 — 다음 영업일에 잡힌 팀 일정 전부. 누가 갈지 아직 모르니 이름 없이 적는다.
-    // 오늘 익일로 넘긴 건도 날짜가 내일이면 자연히 여기 들어오고, 이름 없는 납품은 물류 몫이라 금일과 같은 기준으로 뺀다.
-    const tomorrows = teamTickets.filter((ticket) =>
-      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || hasReportMember(ticket, order)));
-    // 모레 이후(주말 포함)로 연기한 건 — 연기 기록 "(M/D로 연기)"가 남아 있으면 연기 이력으로 본다.
-    // 마크의 날짜를 현재 날짜와 정확 대조하던 방식은 물류 건(status가 익일이 안 됨)과
-    // 연기 후 날짜를 다시 옮긴 건, 토요일로 연기한 건을 보고에서 통째로 빠뜨렸다.
-    const deferredLater = teamTickets.filter((ticket) =>
-      ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.status !== "완료"
-      && /\(\d{1,2}\/\d{1,2}로 연기\)/.test(ticket.note || ""));
-    const tomorrowLines = [
-      ...tomorrows.map(lineOf),
-      ...deferredLater.map((ticket) => `${lineOf(ticket)} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`),
-    ];
-    return [
-      `${reportStamp()} 중간보고`,
-      "(진행중인 업무는 * 표시)",
-      "",
-      REPORT_SEP,
-      "금일 처리예정",
-      "",
-      ...(groups.length ? groups : ["없음"]),
-      "",
-      REPORT_SEP,
-      "익일일정",
-      ...(tomorrowLines.length ? ["", ...tomorrowLines] : []),
-      "",
-      REPORT_SEP,
-      "특이사항",   // 자동으로 못 채우는 칸 — 보내기 전에 손으로 적거나 비워 둔다
-    ].join("\n");
-  };
+  const buildMidReport = (reportTeam: Team, day: "today" | "next" = "today") =>
+    // 거르기·묶음·익일·연기 꼬리·초안·AI 재료·조립은 _shared/report/mid-report.ts 하나 — 자동 중간보고 엣지(schedule-report)와 같은 글(2026-10-31)
+    buildMidReportPlan({ tickets, team: reportTeam, order: reportOrder(reportTeam), todayYmd, tomorrowYmd, day, stamp: reportStamp(), detailOf: reportDetailOf });
   /**
    * 보고 열기·재생성 — 규칙 기반 본문을 즉시 띄우고, AI(report-polish)가 줄을 사람 수준으로
    * 다듬어 교체한다("쇼군웨이크스노우보드 3220 용지제거 후 소음"). 실패하면 규칙 기반 그대로.
    */
   const composeMidReport = (reportTeam: Team, day: "today" | "next" = "today") => {
     const seq = ++midReportSeq.current;
-    const targetYmd = day === "next" ? tomorrowYmd : todayYmd;
-    // AI에 넘길 재료 — buildMidReport와 같은 필터·순서 (그쪽 규칙이 바뀌면 여기도 함께)
-    const order = reportOrder(reportTeam);
-    const eligible = tickets.filter((ticket) =>
-      ticket.team === reportTeam && !/휴가|연차/.test(ticket.vendor) && ticket.scheduleType !== "휴가"
-      && ticket.source !== "autoplan" && ticket.scheduleType !== "매월점검");
-    const isLogistics = (t: AsTicket) => t.scheduleType === "납품철수교체휴가교육" || t.scheduleType === "물류";
-    // 사람별 묶음 — buildMidReport 와 같은 함수(2명 일정은 두 사람 묶음에 각각 한 줄, AI 다듬기 재료도 두 번 들어간다)
-    const pending = groupReportTickets(
-      eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료"),
-      order, (ticket) => day === "next" || !isLogistics(ticket),
-    ).flatMap((group) => group.tickets.map((ticket) => ({ name: group.name, ticket })));
-    // 익일스케줄 보고에는 익일일정·연기 꼬리 섹션이 없다 — 본문이 곧 익일이다
-    const tomorrows = day === "next" ? [] : eligible.filter((ticket) =>
-      ticket.date === tomorrowYmd && ticket.status !== "완료" && (!isLogistics(ticket) || hasReportMember(ticket, order)));
-    const deferredLater = day === "next" ? [] : eligible.filter((ticket) =>
-      ticket.date > todayYmd && ticket.date !== tomorrowYmd && ticket.status !== "완료"
-      && /\(\d{1,2}\/\d{1,2}로 연기\)/.test(ticket.note || ""));
-    // 진단 줄 — "왜 안 뜨지?"를 원격으로 잡기 위한 단계별 건수 (모달에만 표시, 복사 안 됨)
-    const todayAll = tickets.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료");
-    const todayTeam = eligible.filter((ticket) => ticket.date === targetYmd && ticket.status !== "완료");
-    const diag = pending.length ? undefined
-      : `${day === "next" ? "익일" : "오늘"} ${targetYmd} · 전체 ${todayAll.length}건 → ${reportTeam}팀 ${todayTeam.length}건 → 이름매칭 0건 · 명단 ${order.join("·")}`;
     // 규칙 기반 초안은 화면에 먼저 보여주지 않는다 — 거친 줄이 헷갈리게 한다. AI 실패 시의 대체본으로만 쓴다.
-    const draft = buildMidReport(reportTeam, day);
-    const payload = [...pending.map((entry) => entry.ticket), ...tomorrows, ...deferredLater].map((ticket) => ({
-      vendor: ticket.vendor,
-      title: ticket.calendarTitle || "",
-      note: (ticket.note || "").split(/\n/).slice(0, 3).join(" ").slice(0, 240),
-      model: ticket.model,
-      issue: extractIssue(ticket.issue, ticket.note),
-      category: extractCategory(ticket.vendor, ticket.calendarTitle, reportHeadOf(ticket, order)),
-      kind: ticket.scheduleType === "납품철수교체휴가교육" || ticket.scheduleType === "물류" ? "물류" : "as",
-    }));
+    const plan = buildMidReport(reportTeam, day);
+    const { draft, payload, diag } = plan;
     if (!payload.length) { setMidReport({ team: reportTeam, day, text: draft, polishing: false, diag }); return; }
     setMidReport({ team: reportTeam, day, text: "", polishing: true, diag });
     const fallback = () => setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text: draft, polishing: false } : cur));
     void invokeEdgeFunction<{ lines: string[] }>("report-polish", { lines: payload })
       .then((res) => {
         if (midReportSeq.current !== seq) return;
-        // 개수 불일치(edge는 40건까지만 다듬는다)·빈 줄이면 통째로 초안 폴백 — "•undefined" 방지
-        if (!Array.isArray(res.lines) || res.lines.length !== payload.length
-          || res.lines.some((line) => typeof line !== "string" || !line.trim())) { fallback(); return; }
-        let index = 0;
-        const groups: string[] = [];
-        for (const name of [...order, "미배정"]) {
-          const mine = pending.filter((entry) => entry.name === name);
-          if (mine.length) {
-            if (groups.length) groups.push("");   // 이름 사이 빈 줄
-            groups.push(`#${name}`, ...mine.flatMap((entry) => (day === "next" ? [`•${res.lines[index++]}`, ...reportDetailOf(entry.ticket)] : [`•${res.lines[index++]}`])));
-          }
-        }
-        const tomorrowLines = [
-          ...tomorrows.map(() => `•${res.lines[index++]}`),
-          ...deferredLater.map((ticket) => `•${res.lines[index++]} → ${Number(ticket.date.slice(5, 7))}/${Number(ticket.date.slice(8, 10))}`),
-        ];
-        const text = (day === "next"
-          ? ["익일 스케줄", "", ...(groups.length ? groups : ["없음"])]
-          : [
-          `${reportStamp()} 중간보고`,
-          "(진행중인 업무는 * 표시)",
-          "",
-          REPORT_SEP,
-          "금일 처리예정",
-          "",
-          ...(groups.length ? groups : ["없음"]),
-          "",
-          REPORT_SEP,
-          "익일일정",
-          ...(tomorrowLines.length ? ["", ...tomorrowLines] : []),
-          "",
-          REPORT_SEP,
-          "특이사항",
-        ]).join("\n");
+        // 개수 불일치(edge는 40건까지만 다듬는다)·빈 줄이면 null → 통째로 초안 폴백 — "•undefined" 방지
+        const text = plan.assemble(res.lines);
+        if (text === null) { fallback(); return; }
         setMidReport((cur) => (cur && midReportSeq.current === seq ? { ...cur, text, polishing: false } : cur));
       })
       .catch(fallback);

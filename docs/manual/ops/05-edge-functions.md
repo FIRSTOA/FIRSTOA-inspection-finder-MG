@@ -27,6 +27,7 @@
 | entity-ask / data-ask | 6 / 12 | 앱 통합검색 | 업체 질문 / 전체 데이터 질문(AI). 사용량은 `ai_usage` 에 기록 | OPENAI |
 | kakao-ingest | 새(2026-10-24, 배포 대기) | GAS `KakaoRaw.gs`(드라이브 수신함 처리 뒤) | 카톡 내보내기 TXT 조각(≤500KB) → `kakao_messages`(가림·분류 추정·hash 중복 무시) + `kakao_import_log`. 헤더 `x-ingest-token` 검사 | FIELD_INGEST_TOKEN |
 | kakao-search | 새(2026-10-24, 배포 대기) | 앱 탭 검색 [카톡 대화] | `kakao_messages` 읽기 대행(anon 권한 0 인 표). 스위치 `KAKAO_SEARCH_ENABLED` 꺼지면 빈 결과 | — |
+| schedule-report | 새(2026-10-31, 배포 대기) | cron `schedule-report-12`·`-14`(평일 KST 12:00·14:00), 앱 [지금 보내기]·미리 보기 | 팀 중간보고 글(화면 [📋 중간보고]와 같은 함수)을 만들어 `outbox` 로 `room_map 스케줄\|팀` 방에 넣음. 기록 `schedule_report_log` | OPENAI(OPENAI_REPORT_MODEL) |
 | report-polish, golden-card-transform, growth-note-transform, guide-tag, playbook-draft, okr-assist, quarter-result-quantify | 2~14 | 앱 | 각종 AI 문장 다듬기·태깅·초안 | OPENAI |
 
 Vercel 서버리스(`api/`, 엣지 함수 아님): `naver-connect.js`·`naver-callback.js`(네이버 OAuth 연결), `naver-add.js`, `naver-calendars.js`, `calendar-ics.js`(ICS 구독, `CALENDAR_ICS_TOKEN`). Vercel 배포와 함께 나간다.
@@ -113,3 +114,36 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 - 글자 날짜 표(misu.입력일·bulman.날짜·overage_adjust.방문일)는 형식이 섞여 있어 서버 order/gte 를 쓰지 않고 읽은 뒤 ymdOf 로 거른다(catalog dateText).
 - **kpiDefs.ts 를 고치면** `node tools/build-ask-kpi-defs.mjs` 로 `_shared/ask/kpi-defs.json` 을 다시 만들고 data-ask 재배포(어긋나면 테스트가 잡음).
 - OKR 순수 규칙은 `_shared/ask/okr-rules.ts` 가 원본, src/okr.ts·kpiCompute.ts 는 재수출(앱·엣지 같은 계산).
+
+## 자동 중간보고 — schedule-report (2026-10-31)
+설계 `docs/tasks/schedule-report-auto-2026-10-31.md`, SQL `supabase/schedule-report-20261031.sql`. 소스 `supabase/functions/schedule-report/index.ts`(흐름) + `logic.ts`(순수 분기, `tests/scheduleReportEdge.test.ts`). 글은 `_shared/report/mid-report.ts`·`polish.ts`(화면과 같은 한 벌).
+
+**입력**: `POST { slot: "12"|"14"|"now", team?: "A".."E", dryRun?: true, actor?: "이름" }` — 크론은 `{slot}` 만(팀 = `SCHEDULE_REPORT_TEAMS`), 앱은 `{slot:"now", team, actor}` 또는 `dryRun`.
+**응답**: `{ ok, kstDate, results: [{ team, slot, status, reason, room, realRoom, test, text, lines, polished, outboxId, logId, chars }] }`. status = `queued`·`dry`·`skipped`·`failed`. 한 팀이라도 failed 면 HTTP 500(ops.edge_call_health 에 잡힘).
+**인증**: Bearer 가 이 프로젝트의 anon/service_role JWT(ref·role·만료 검사 — reception-sheet-open 과 같은 방식). 크론 vault `field_cron_jwt`(anon)·앱 anon 그대로 통과, 무인증·다른 프로젝트 403.
+
+**순서(팀마다, 한 팀 실패가 다음 팀을 막지 않음)**
+1. 12/14: `schedule_report_log` 에 claim 행 → 부분 unique 위반(409/23505)이면 `already`(그 차수는 하루 한 번). on_conflict 는 쓰지 않는다.
+2. 판정: `SCHEDULE_REPORT_AUTO` 꺼짐 `off`(now 는 무관) → `FIELD_KAKAO_SEND_ENABLED` 꺼짐 `kakao_off` → 주말·공휴일 `holiday` → 10시 전 `before10` → now 는 19시 뒤 `after19`. dryRun 은 판정 없이 글만.
+3. now: 같은 팀 now 가 10분 안에 queued/claim 이면 `too_soon`.
+4. 12/14: 같은 날 [복사] 기록(slot copy)이 차수 60분 전~지금이면 `manual_copied`.
+5. 재료: `as_tickets`(그 팀·오늘~다음 영업일 전부 + 그 뒤 120일 중 note 에 '연기') · `cs_members`(active). 오늘 대상 0건이면 `empty`.
+6. 방: `room_map` 종류 `스케줄`·지역 = 팀. 없으면 `no_room` — 테스트 모드여도 보내지 않는다.
+7. AI: `polishReportLines`(40초, 비용 태그 `schedule-report`). 실패·개수 불일치면 규칙 초안(reason `ai_fallback: …`, polished=false).
+8. `SCHEDULE_REPORT_TEST`(없으면 켜짐) 또는 전역 `TEST_MODE`(없으면 켜짐 취급) → `TEST_ROOM` 으로, 글 머리 `[테스트 · 원래는 강남C 스케줄]`, `real_room` 에 원래 방.
+9. `outbox` insert → 로그 queued(outbox_id·text·lines·polished·ai_model·draft_hash). 배달 확인은 `kakao_delivery_log.outbox_id`. 넣은 뒤 로그 갱신만 실패하면 결과는 queued + reason `log_update_failed`(응답 500).
+- 14시도 변동이 없어도 전체 글을 보낸다(사용자 결정 Q1, draft_hash 는 기록만). 글에 "(진행중인 업무는 * 표시)" 줄·특이사항 칸 없음(Q2).
+
+**환경**: SUPABASE_URL·SUPABASE_SERVICE_ROLE_KEY(자동), OPENAI_API_KEY, 선택 OPENAI_REPORT_MODEL(report-polish 와 같음). 없으면 AI 없이 규칙 초안으로 보낸다.
+**app_config**: SCHEDULE_REPORT_AUTO(기본 false)·SCHEDULE_REPORT_TEST(기본 true)·SCHEDULE_REPORT_TEAMS(기본 C)·TEST_MODE·TEST_ROOM·FIELD_KAKAO_SEND_ENABLED.
+
+**배포·켜기 순서**
+1. `npx supabase functions deploy schedule-report --project-ref kkdiihazgzesbqxjytqv --use-api` (`_shared/report/*`·`kr-holidays.ts` 가 바뀌었으면 `report-polish` 도 같은 명령으로 재배포).
+2. SQL `supabase/schedule-report-20261031.sql` 실행(표·키 3개·크론 `schedule-report-12` `0 3 * * 1-5`, `schedule-report-14` `0 5 * * 1-5` — UTC).
+3. 관리 탭 room_map `스케줄 | C | 강남C 스케줄`.
+4. 미리 보기 확인: 앱에서 `invokeEdgeFunction("schedule-report", { slot: "now", team: "C", dryRun: true })` → results[0].text 가 화면 [📋 중간보고] 초안과 같은지.
+5. `SCHEDULE_REPORT_AUTO` 켬(TEST 켜 둔 채) → 하루 테스트방 확인 → `SCHEDULE_REPORT_TEST` 끔.
+
+**확인**: `select kst_date, team, slot, status, reason, room, test, polished, outbox_id from schedule_report_log order by created_at desc limit 10;` · `select * from ops.edge_call_health where tag like 'schedule-report-%';`
+
+**되돌리기**: 급히 멈추기 = 관리 탭 `SCHEDULE_REPORT_AUTO` 끔(또는 "카톡 전송" 끔 = 전체 정지). 완전히 = `select cron.unschedule('schedule-report-12'); select cron.unschedule('schedule-report-14');` 후 함수 삭제(`npx supabase functions delete schedule-report --project-ref kkdiihazgzesbqxjytqv`). 이미 outbox 에 들어간 글은 봇이 보내기 전이면 outbox 행을 지워 막는다.

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { isDeliveryTicket, naverCompleteAction, type DoneMode } from "./ticketCompletion";
+import { DELIVERY_DONE_NOTE, isDeliveryTicket, naverCompleteAction, type DoneMode } from "./ticketCompletion";
 
 export type DoneReasonTicket = { vendor: string; scheduleType: string; team: string; naverUid?: string; source?: string };
 
@@ -17,7 +17,7 @@ export default function DoneReasonModal({ ticket, onClose, onApply }: { ticket: 
         <div className="text-lg font-black text-slate-950">✓ 완료 처리하시겠습니까?</div>
         <div className="mt-1 text-sm font-semibold text-slate-500">{ticket.vendor}</div>
         {isDelivery
-          ? <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">물류(납품·철수·교체) 일정입니다. 카톡은 보내지 않습니다 — 물류방 보고는 FIELD 물류 양식 [보내기]가 이미 했습니다.{plan.kind !== "none" && <><br />네이버 캘린더(납품철수교체)에는 그 자리에서 <b>완료 체크만</b> 합니다 — 옮기거나 지우지 않습니다.</>}</div>
+          ? <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold leading-5 text-slate-600">물류(납품·철수·교체) 일정입니다. 카톡은 보내지 않습니다 — 물류방 보고는 FIELD 물류 양식 [보내기]가 이미 했습니다.<br />{DELIVERY_DONE_NOTE}</div>
           : plan.kind === "check"
             ? <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">네이버 IT 캘린더에서 그 자리에 완료 체크됩니다.</div>
             : plan.kind === "move" && <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">네이버 캘린더 일정에 완료 체크됩니다. {ticket.team}팀 완료 캘린더로 이동합니다.</div>}

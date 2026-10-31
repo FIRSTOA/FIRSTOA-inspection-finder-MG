@@ -23,6 +23,8 @@ import { usageSpareAdvice } from "./spareAdvice";
 import { getVendorFlagsBatch, type VendorWorkFlags } from "./vendorFlags";
 import { VendorAlertChip } from "./VendorAlert";
 import UnifiedHistory from "./UnifiedHistory";
+import { visitAdviceNote } from "./visitAdviceNote";
+import VisitAdviceStatusLine from "./VisitAdviceStatusLine";
 import { notify } from "./toast";
 import { authorLocked } from "./sso";
 import ReceptionTypePicker, { RECEPTION_TYPES, type ReceptionType } from "./ReceptionTypePicker";
@@ -1103,6 +1105,25 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     }
   };
 
+  // 방문 판단 안내글(2026-10-31, docs/tasks/as-reception-visit-advice-2026-10-31.md) — 접수 글이 나간 직후 뒤에서 판정·큐 적재.
+  // 접수 흐름을 막지 않는다(await 안 함). 결과 꼬리는 onNote 로, 실패는 토스트 + 콘솔 경고. 큰 모듈이라 동적 import.
+  const followVisitAdvice = (target: ServiceReceptionRow | string, room: string, onNote: (note: string) => void) => {
+    void (async () => {
+      const rc = typeof target === "string" ? await getServiceReceptionById(target) : target;
+      if (!rc) throw new Error("방금 저장한 접수를 다시 읽지 못했습니다");
+      const { runVisitAdviceFor } = await import("./visitAdviceData");
+      return runVisitAdviceFor(rc, room);
+    })().then((result) => {
+      const note = visitAdviceNote(result);
+      if (result.status === "error") { console.warn("[방문 판단] 적재 실패", result.error); notify(note.replace(/^ · /, ""), "error"); }
+      if (note) onNote(note);
+    }).catch((e) => {
+      console.warn("[방문 판단] 실행 실패 — 접수는 정상", e);
+      notify("방문 판단 글 실패(접수는 정상)", "error");
+    });
+  };
+  const appendActionNote = (prefix: string) => (note: string) => setActionResult((cur) => (cur.startsWith(prefix) ? cur + note : cur));
+
   // 복합기 AS: 저장 + AS방 전송 — 선저장(접수) 후 전송, 성공 시 전송완료로 갱신.
   // 전송 실패 시 저장된 행을 기억해 재시도에서 중복 저장·중복 카톡을 막는다.
   const handleSaveAndSend = async (forceSend = false) => {
@@ -1135,6 +1156,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
       const sheetPending = custKind === "신규" || !!firstNo.trim(); // 복합기·IT 공통 (IT는 원격 탭에 기입)
       if (sheetPending) runSheetNote(writeReceptionSheet); else setSheetNote("");
       setActionResult(`전송 완료 — ${room}${res.testMode ? " (테스트 모드)" : ""}${scheduled ? " + 일정 등록됨" : ""}`);
+      if (type === "복합기 AS" && rowId) followVisitAdvice(rowId, room, appendActionNote(`전송 완료 — ${room}`));
       setSavedRowId(null);
       resetForm();
       await loadList(listDate, listPeriod);
@@ -1210,6 +1232,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
     if (!res.ok) throw new Error(res.error || "전송 실패");
     const room = String(res.message || "").replace("게시 대기: ", "");
     await updateServiceReception(id, { status: "전송완료", sent_room: room });
+    if (type === "복합기 AS") followVisitAdvice(id, room, appendActionNote("카톡 전송 완료"));
     return `— ${room}${res.testMode ? " (테스트 모드)" : ""}`;
   });
 
@@ -1321,7 +1344,9 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
       await mergeReceptionHandling(row.id, patch).catch(() => {});
       syncRemoteSheet(row, { ...meta, ...patch });
       setListRows((current) => current.map((item) => (item.id === row.id ? { ...item, remote_meta: { ...(item.remote_meta || {}), ...patch } } : item)));
-      notify(`CS 이관 완료 — ${created ? "일정리스트 등록 + " : ""}${String(res.message || "").replace("게시 대기: ", "")} 전송`, "success");
+      const csRoom = String(res.message || "").replace("게시 대기: ", "");
+      notify(`CS 이관 완료 — ${created ? "일정리스트 등록 + " : ""}${csRoom} 전송`, "success");
+      followVisitAdvice(row, csRoom, (note) => { if (!note.startsWith(" · ")) notify(`CS 이관${note}`, "success"); });
     } catch (e) {
       notify(`CS 이관 실패: ${(e as Error).message}`, "error");
     } finally {
@@ -1575,6 +1600,7 @@ export default function ServiceReception({ author: globalAuthor, onOpenSchedule 
                     <span>유상/무상 {row.paid}</span><span>접수 {kstTime(row.created_at)}</span>
                     {row.completed_at && <span className="text-blue-700">완료 {kstTime(row.completed_at)}{row.completed_by ? ` · ${row.completed_by}` : ""}</span>}
                   </div>
+                  {(row.type === "복합기 AS" || (row.type === "IT" && !!handlingOf(row).csTransferAt)) && <VisitAdviceStatusLine receptionId={row.id} />}
                   {row.address && <div className="mt-1.5">
                     <div><b className="text-slate-500">주소</b> {row.address}</div>
                     {row.address_changed && <div className="mt-1 flex flex-wrap items-center gap-1.5">

@@ -13,6 +13,7 @@
  */
 
 import { importedTicketVendor } from "../_shared/ticket-title.ts";
+import { linkedTicketPatch } from "../_shared/naver-linked-patch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -312,25 +313,8 @@ Deno.serve(async (req) => {
       // ① 연결된 일정(미러·수입): 네이버 쪽 날짜·시간·제목·완료 체크를 웹앱에 반영
       const linkedTicket = ticketByUid.get(ev.uid);
       if (linkedTicket && ev.date) {
-        const patchBody: Record<string, string> = {};
-        if (linkedTicket.status !== "완료") {
-          const newTime = ev.time || linkedTicket.time;
-          if (linkedTicket.date !== ev.date || (linkedTicket.time || "") !== (newTime || "")) {
-            patchBody.date = ev.date;
-            patchBody.time = newTime;
-          }
-          if (ev.title) {
-            const assignee = String(linkedTicket.assignee || "");
-            // 제목 머리: 3명까지는 저장값 그대로, 4명 이상은 "김A 외 n명"(src/assignees.ts titleAssigneeLabel 과 같은 규칙)
-            const names = assignee.split(/[,，/·・]/).map((n) => n.trim()).filter((n, i, a) => n && a.indexOf(n) === i);
-            const head = names.length > 3 ? `${names[0]} 외 ${names.length - 1}명` : assignee;
-            const stripped = head && ev.title.startsWith(`${head}-`) ? ev.title.slice(head.length + 1) : ev.title;
-            const current = (linkedTicket.calendarTitle || "").trim() || String(linkedTicket.vendor || "");
-            if (stripped.trim() && stripped.trim() !== current.trim()) patchBody.calendarTitle = stripped.trim().slice(0, 200);
-          }
-        }
-        // 영업부가 네이버에서 완료 체크(X-NAVER-COMPLETED) → 웹앱 상태도 완료
-        if ((ev.completed || kind === "done") && linkedTicket.status !== "완료") patchBody.status = "완료";
+        // 계산은 _shared/naver-linked-patch.ts(테스트 고정) — 앱에서 완료한 일정은 네이버 미완료로 되돌리지 않는다
+        const patchBody = linkedTicketPatch(linkedTicket, ev, kind);
         if (Object.keys(patchBody).length) {
           const patch = await fetch(`${rest}/as_tickets?id=eq.${encodeURIComponent(linkedTicket.id)}`, {
             method: "PATCH", headers: { ...restHeaders, Prefer: "return=minimal" },

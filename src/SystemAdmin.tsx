@@ -26,6 +26,12 @@ type ConfigRow = { key: string; value: string };
 type RoomRow = { category: string; region: string; room: string };
 type SheetJob = { id: string; category?: string; sheet_status?: string; created_at?: string; last_error?: string; attempts?: number; sheet_row?: number | null };
 
+// 방문 판단 안내글 기준일(기타 설정) — 비우면 괄호 안 기본값(src/visitAdviceData.ts runVisitAdviceFor 와 같은 값)
+const VISIT_ADVICE_DAY_FIELDS = [
+  { key: "VISIT_ADVICE_MIN_DAYS", label: "방문 판단 점검 경과 기준일", fallback: "60", desc: "분기점검 지점은 마지막 점검에서 이 날수 이상 지나면 \"점검 필요\"로 봅니다. 비우면 60일." },
+  { key: "VISIT_ADVICE_MONTHLY_DAYS", label: "방문 판단 매월점검 기준일", fallback: "25", desc: "워킨맵 매월점검 지점의 기준 날수입니다. 비우면 25일." },
+] as const;
+
 const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boolean }> = [
   { key: "FIELD_KAKAO_SEND_ENABLED", label: "카톡 전송", desc: "끄면 FIELD 전송이 큐에만 쌓이고 방으로 나가지 않습니다." },
   { key: "FIELD_SHEET_SYNC_ENABLED", label: "시트 동기화", desc: "끄면 FIELD 기록이 구글시트에 기입되지 않습니다." },
@@ -36,6 +42,7 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "DEPT_RECEPTION_ENABLED", label: "서비스접수 지원 3종(경영·운영·영업)", desc: "켜면 서비스접수 종류 선택기에 경영지원·운영지원·전략영업 줄과 부서 접수 폼이 보입니다. supabase/reception-dept-types.sql 과 reception-dept-types-rename.sql 을 먼저 실행해야 저장이 됩니다." },
   { key: "RECEPTION_SHEET_OPEN_ENABLED", label: "서비스접수 미처리 = 시트 상태 기준", desc: "켜면 미처리 현황판·홈 미처리 칸의 영업·경영·원격·IT 숫자를 접수 시트 상태 열(처리완료·취소·이관이 아니면 미처리, 최근 90일)로 셉니다. 시트에서 끝난 앱 접수는 자동으로 완료 처리됩니다. 끄면 앱 접수(DB) 기준. 엣지 함수 reception-sheet-open 을 먼저 배포해야 합니다." },
   { key: "KAKAO_SEARCH_ENABLED", label: "카톡 원문 검색", desc: "켜면 검색·필드 🔍·통합검색에서 수집한 카톡방 대화 원문(kakao_messages)까지 찾아 보여 줍니다. 직원들의 카톡 대화가 검색되므로 전 직원에게 먼저 알린 뒤 켜세요. 전화·주민·계좌 번호는 가린 채로 보입니다.", danger: true },
+  { key: "VISIT_ADVICE_ENABLED", label: "AS 접수 방문 판단 안내글", desc: "켜면 복합기 AS 접수(와 IT→CS 방문이관) 글 뒤에 같은 방으로 마지막 점검·AS·워킨맵·추가일정과 점검여부 판단 글을 한 번 더 보냅니다. 할 일이 있을 때만(점검 필요·판단필요·추가일정 있음·못 찾음), 10~20시에만(밖이면 다음 영업일 10시). supabase/visit-advice-20261031.sql 을 먼저 실행한 뒤 켜세요." },
   { key: "SSO_REQUIRED", label: "그룹웨어 로그인 필수", desc: "켜면 그룹웨어 계정으로 로그인한 기기만 FIELD가 열립니다(앨범·설명서 같은 공개 페이지는 예외). 그룹웨어 담당자가 우리 주소를 허용목록에 올려 로그인이 되는 걸 확인한 뒤 켜세요.", danger: true },
 ];
 
@@ -243,6 +250,23 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
             <input defaultValue={valueOf(OVERHAUL_SHEET_TAB_KEY)} placeholder={OVERHAUL_SHEET_DEFAULT_TAB} onBlur={(e) => { if (e.target.value.trim() !== valueOf(OVERHAUL_SHEET_TAB_KEY)) void saveConfig(OVERHAUL_SHEET_TAB_KEY, e.target.value.trim()); }}
               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-56 lg:h-10" />
           </div>
+          {/* 방문 판단 안내글 기준일(2026-10-31) — 비우면 60·25. 양의 정수만 저장 */}
+          {VISIT_ADVICE_DAY_FIELDS.map((f) => (
+            <div key={f.key} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+              <div>
+                <div className="text-sm font-black text-slate-900">{f.label} ({f.key})</div>
+                <p className={UI.desc}>{f.desc}</p>
+              </div>
+              <input key={`${f.key}:${valueOf(f.key)}`} type="number" inputMode="numeric" min={1} step={1} defaultValue={valueOf(f.key)} placeholder={f.fallback}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v === valueOf(f.key)) return;
+                  if (v && !(Number.isInteger(Number(v)) && Number(v) > 0)) { setError(`${f.label}: 1 이상의 정수(일)를 넣으세요`); e.target.value = valueOf(f.key); return; }
+                  void saveConfig(f.key, v);
+                }}
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold tabular-nums outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-28 lg:h-10" />
+            </div>
+          ))}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
               <div className="text-sm font-black text-slate-900">네이버 재연동 (토큰 갱신)</div>

@@ -139,6 +139,57 @@
 - 한계: 시트 날짜 칸의 **미래 날짜**는 엣지가 아직 오타로 보고 걸러 냅니다(2099년 오타 방지) — 실측 0건.
 - 배포 직후 화면이 그대로면 Ctrl+F5(입력 중이면 앱이 새 버전 새로고침을 미룹니다).
 
+## 방문 판단 안내글 (2026-10-31)
+
+복합기 AS(CS 접수) 글이 팀 AS방에 올라간 직후, **같은 방에 글을 하나 더** 올립니다. "이 업체는 점검이 필요한지 + 앞으로 잡힌 일정"을 한 번에 보여 줘서, 기사가 방문을 묶거나 미룰 수 있게 합니다(실사례: 11-02 물류 일정이 있는 업체에 10-30 급하지 않은 AS를 따로 다녀옴). 판단은 사람이 합니다. 글은 안내일 뿐입니다.
+
+**언제 나가나**
+- [저장+AS방 전송] · 단계 버튼 [카톡 전송]·[⚡ 전체] · IT 접수의 [CS 이관]이 성공한 직후. 접수자가 더 누를 것은 없습니다.
+- 접수 글이 나간 **그 방**으로 갑니다(테스트 모드면 테스트방).
+- **할 일이 있을 때만** 나갑니다: 점검여부가 필요·판단필요·판단불가이거나 추가일정이 하나라도 있을 때. "불필요 + 추가일정 없음"이면 보내지 않습니다(기록은 "할 일 없음"으로 남음).
+- 10:00~19:59 접수는 1분 안에, 그 밖의 시간은 다음 영업일 10:00에 나갑니다. 아침에 나가는 글은 첫 줄 끝에 `(10/30 21:40 접수분)`이 붙습니다.
+- 접수 결과 메시지 끝에 한 마디가 붙습니다: `+ 방문 판단 글 대기(1분 안)` · `+ 방문 판단 글 10:00 예정`(다른 날이면 `11/2 10:00`) · `· 방문 판단 글 실패(접수는 정상)` · `· 방문 판단 표 없음(SQL 실행 전)`. 실패는 빨간 알림으로도 뜹니다. **어떤 경우에도 접수·전송은 그대로 정상입니다.**
+
+**글 모양(예시)**
+```
+청오에스떠블유 주식회사(써브웨이 본사) V
+D470/31V0123/ABC12345
+마지막점검일:2026-08-04
+마지막AS일:2026-10-23
+4분기 워킨맵:있음(C팀 분기점검)
+점검여부: 판단필요 (경과 87일 / 기준 60일, 워킨맵 있음)
+근거: 기기 2대 · AS 1대 봄(10-23) · 여분 충분 · 자가신청 0건
+참고: AS는 1대만 봄 — 나머지 기기 점검 필요 가능성 큼
+추가일정:
+1.2026-11-02(월) 교체 — 써브웨이 답십리역점
+추가일정이 있으므로 같이 묶어서 진행할 수 있는지 확인이 필요합니다
+```
+(날짜·기번은 모양 예시.) 추가일정이 없으면 `추가일정:없음`, 마지막 줄 없음. 다른 지점 일정은 지점명을 붙여 보여 줍니다. 600자를 넘으면 추가일정을 줄이고 `외 N건`.
+
+**점검여부 뜻**(위에서부터 먼저 맞는 것)
+| 판정 | 뜻 |
+|---|---|
+| 판단불가 | 임대리스트에서 못 찾음, 자료를 못 읽음, 또는 판단할 자료가 하나도 없음 → "마지막 점검·추가일정을 직접 확인해 주세요" |
+| 불필요 | 이번 분기 워킨맵 없음 · 워킨맵 G5(점검 완료)·G12(이관) · 마지막 점검에서 기준일이 안 지남 |
+| 판단필요 | 기준일이 지났지만 마지막 점검 **뒤에** AS를 다녀옴(그때 점검까지 했는지 사람이 판단) |
+| 필요 | 기준일이 지났고 점검 뒤 AS도 없음 |
+
+- 기준일 = 분기점검 60일, 워킨맵 매월점검 지점 25일(관리 탭 › 기타 설정에서 바꿈). **불필요여도 경과일은 항상 적습니다**(59일처럼 기준 직전이면 사람이 판단).
+- 추가일정 = 그 업체(같은 사업자의 다른 지점 포함)에 앞으로 잡힌 방문 일정 전부: AS·익일AS·물류(납품·철수·교체·세팅)·네이버에서 들어온 일정·매월점검·재계약 확인, 날짜순.
+
+**접수 상세에서 확인**: 접수리스트 줄을 펼치면(CS 접수, CS 이관된 IT) 작은 글씨로 `방문 판단 글: 대기 10:00 / 보냄 12:01 / 할 일 없음 / 실패` 한 줄이 보입니다. 표가 없거나 아직 기록이 없으면 안 보입니다.
+
+**켜는 스위치**: 관리 탭 › 스위치 **AS 접수 방문 판단 안내글**(`VISIT_ADVICE_ENABLED`). 기준일은 관리 탭 › 기타 설정 `VISIT_ADVICE_MIN_DAYS`(60)·`VISIT_ADVICE_MONTHLY_DAYS`(25). `supabase/visit-advice-20261031.sql` 실행 전에 켜면 결과 메시지에 "방문 판단 표 없음(SQL 실행 전)"이 뜹니다.
+
+**안 나가는 경우**
+- 스위치가 꺼져 있음(기본 꺼짐).
+- 불필요 + 추가일정 없음(할 일 없음).
+- IT 접수(CS 이관 전)·원격·경영·운영·영업 접수.
+- 보내기 전에 접수가 취소(접수취소·중복접수)·삭제됨, 또는 너무 오래 밀림.
+- 보낼 방을 못 정함(지역·방 매핑 없음) → 상세에 "실패".
+- 접수 직후 창을 닫아 브라우저가 판정을 못 해도 빠지지 않습니다: DB 크론이 몇 분 뒤 "판단불가" 글로 대신 보냅니다.
+- 한계: 네이버에서 들어온 일정의 업체명이 깨져 있으면 추가일정에서 빠질 수 있습니다(그때는 "추가일정:없음"으로 보임).
+
 ## 자주 하는 실수·주의
 - **업체를 바꾸면 팀 지역이 자동으로 초기화**됩니다. 업체를 바꿨으면 팀 지역을 다시 확인하세요. 지역이 비면 카톡을 보낼 수 없습니다.
 - 지역 → 카톡방·일정 시간: A 09:00 · B 12:00 · C 15:00 · D 18:00 · E 21:00(일정리스트·네이버의 시각은 실제 방문 시각이 아니라 팀 구분용입니다).
@@ -167,4 +218,4 @@
 - 복합기 AS 접수는 일정이 완료되면 완료로 맞춰집니다(네이버에서 완료해도 반영).
 
 ---
-마지막 갱신: 2026-10-28 밤(부서 일정리스트·달력 "시트" 줄·오늘 완료 표시) · 이전 2026-10-28(접수리스트 "시트" 줄·보관 표) · 이전: 2026-10-25 밤 2차(6종 같은 뼈대 — 부서는 [일정리스트][달력] 두 탭만 추가, 현황판 CS 접수 = 홈과 같은 일정 줄, 카드 누르면 상세 팝업 · 근거 src/ServiceReception.tsx·src/receptionRightView.ts·src/DeptWorkspacePanel.tsx·src/ReceptionBoardPanel.tsx·src/receptionBoardData.ts(replaceCopierWithTickets)·src/ReceptionBoard.tsx) · 이전 2026-10-25 밤(현황판 모든 카드 [완료]·[보류]·[배정] + 바로 빠짐, [완료]·[보류] 확인창, 부서 일정리스트 [미처리] 칩 제거, "복합기" 칩 → "CS 접수" · 근거 src/ReceptionBoardPanel.tsx·src/unhandledActions.ts(confirmTextFor·boardRowToUnhandled)·src/UnhandledActionBar.view.tsx·src/deptPlan.ts) · 이전 2026-10-25(미처리 [완료]·[보류]·[배정] — 부서 미니 업무공간·현황판 시트 카드, [시트 열기]를 [접수 저장] 옆으로, 복합기 AS → CS 접수 표시 이름 · 설계 docs/tasks/unhandled-actions-2026-10-25.md, 근거 src/UnhandledActionBar.view.tsx·src/unhandledActions.ts·src/unhandledPending.ts·src/remoteHandling.ts) · 이전 2026-10-25(일정·캘린더 탭 부서 칩 제거 → 서비스접수 탭 올인원, 부서 미니 업무공간 [달력]·[＋ 일정 추가], 시트 행 복구) · 이전 2026-10-22 · 근거 커밋 `ea68d6a`(지원 3종·현황판), `e009c9c`(오른쪽 기둥 전환·일정 미처리), `34eb627`(영업팀 이름·숫자 기준), `3a49c3a`(화면 재설계), `6794f0a`·`6efc6ee`(네이버 완료 동기화·부서 달력·수정/삭제), `6ae5cc4`(원격대기 7일), `a5b4d0b`(시트 상태 기준), `3aa39d1`(부서명 검색), `52b331f`(사진 400px) · 스위치 상태는 2026-10-22 실측 · 근거 파일 src/ServiceReception.tsx, src/ReceptionTypePicker.tsx, src/ReceptionBoard.tsx, src/SheetRowCard.tsx, src/DeptReceptionForm.view.tsx, src/DeptReceptionScreen.tsx, src/DeptActionBar.tsx, src/DeptReceptionDetail.tsx · 설계 docs/tasks/reception-dept-types.md, docs/tasks/reception-unhandled-sheet-and-dept-search.md · 그림 설명 `/guide/reception.html`(2026-08-25 기준)
+마지막 갱신: 2026-10-31(방문 판단 안내글 · 근거 src/visitAdvice.ts·src/visitAdviceData.ts·src/visitAdviceNote.ts·src/VisitAdviceStatusLine.tsx·src/ServiceReception.tsx·src/SystemAdmin.tsx·supabase/visit-advice-20261031.sql · 설계 docs/tasks/as-reception-visit-advice-2026-10-31.md) · 이전 2026-10-28 밤(부서 일정리스트·달력 "시트" 줄·오늘 완료 표시) · 이전 2026-10-28(접수리스트 "시트" 줄·보관 표) · 이전: 2026-10-25 밤 2차(6종 같은 뼈대 — 부서는 [일정리스트][달력] 두 탭만 추가, 현황판 CS 접수 = 홈과 같은 일정 줄, 카드 누르면 상세 팝업 · 근거 src/ServiceReception.tsx·src/receptionRightView.ts·src/DeptWorkspacePanel.tsx·src/ReceptionBoardPanel.tsx·src/receptionBoardData.ts(replaceCopierWithTickets)·src/ReceptionBoard.tsx) · 이전 2026-10-25 밤(현황판 모든 카드 [완료]·[보류]·[배정] + 바로 빠짐, [완료]·[보류] 확인창, 부서 일정리스트 [미처리] 칩 제거, "복합기" 칩 → "CS 접수" · 근거 src/ReceptionBoardPanel.tsx·src/unhandledActions.ts(confirmTextFor·boardRowToUnhandled)·src/UnhandledActionBar.view.tsx·src/deptPlan.ts) · 이전 2026-10-25(미처리 [완료]·[보류]·[배정] — 부서 미니 업무공간·현황판 시트 카드, [시트 열기]를 [접수 저장] 옆으로, 복합기 AS → CS 접수 표시 이름 · 설계 docs/tasks/unhandled-actions-2026-10-25.md, 근거 src/UnhandledActionBar.view.tsx·src/unhandledActions.ts·src/unhandledPending.ts·src/remoteHandling.ts) · 이전 2026-10-25(일정·캘린더 탭 부서 칩 제거 → 서비스접수 탭 올인원, 부서 미니 업무공간 [달력]·[＋ 일정 추가], 시트 행 복구) · 이전 2026-10-22 · 근거 커밋 `ea68d6a`(지원 3종·현황판), `e009c9c`(오른쪽 기둥 전환·일정 미처리), `34eb627`(영업팀 이름·숫자 기준), `3a49c3a`(화면 재설계), `6794f0a`·`6efc6ee`(네이버 완료 동기화·부서 달력·수정/삭제), `6ae5cc4`(원격대기 7일), `a5b4d0b`(시트 상태 기준), `3aa39d1`(부서명 검색), `52b331f`(사진 400px) · 스위치 상태는 2026-10-22 실측 · 근거 파일 src/ServiceReception.tsx, src/ReceptionTypePicker.tsx, src/ReceptionBoard.tsx, src/SheetRowCard.tsx, src/DeptReceptionForm.view.tsx, src/DeptReceptionScreen.tsx, src/DeptActionBar.tsx, src/DeptReceptionDetail.tsx · 설계 docs/tasks/reception-dept-types.md, docs/tasks/reception-unhandled-sheet-and-dept-search.md · 그림 설명 `/guide/reception.html`(2026-08-25 기준)

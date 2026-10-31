@@ -1,9 +1,10 @@
 // CS 접수·물류 완료 공용 모듈 — 일정리스트와 홈 미처리 [완료]가 같은 규칙을 쓰는지
 import { describe, expect, it, vi } from "vitest";
 import {
-  completeTicket, copierDoneKind, copierDoneText, NAVER_DELIVERY_CAL_ID, naverCompleteAction, receptionStatusFromSiblings,
+  completeTicket, copierDoneKind, copierDoneText, DELIVERY_DONE_NOTE, naverCompleteAction, receptionStatusFromSiblings,
   type CompletionDeps,
 } from "../src/ticketCompletion";
+import { linkedTicketPatch } from "../supabase/functions/_shared/naver-linked-patch";
 
 type Row = Record<string, unknown> & { id: string };
 
@@ -44,13 +45,15 @@ const asRow: Row = {
 };
 
 describe("판정 순수 함수", () => {
-  it("naverCompleteAction: IT 제자리·팀 이동·물류 제자리(내용 덧붙임 없음)·미러 없음", () => {
+  it("naverCompleteAction: IT 제자리 체크·AS 팀 이동·물류는 네이버 안 건드림(2026-10-31 (나)안)·미러 없음", () => {
     expect(naverCompleteAction({ naverUid: "u", source: "it", scheduleType: "AS", team: "A" }, { itCalId: "IT1" }))
       .toEqual({ kind: "check", calId: "IT1", writeNote: true, target: "it" });
     expect(naverCompleteAction({ naverUid: "u", scheduleType: "AS", team: "C" })).toEqual({ kind: "move", team: "C", writeNote: true });
-    expect(naverCompleteAction({ naverUid: "u", scheduleType: "납품철수교체휴가교육", team: "C" }))
-      .toEqual({ kind: "check", calId: NAVER_DELIVERY_CAL_ID, writeNote: false, target: "delivery" });
-    expect(naverCompleteAction({ naverUid: "u", scheduleType: "물류", source: "it" }).kind).toBe("check");
+    expect(naverCompleteAction({ naverUid: "u", scheduleType: "익일AS", team: "B" })).toEqual({ kind: "move", team: "B", writeNote: true });
+    expect(naverCompleteAction({ naverUid: "u", scheduleType: "납품철수교체휴가교육", team: "C" })).toEqual({ kind: "none" });
+    expect(naverCompleteAction({ naverUid: "u", scheduleType: "물류", team: "C" })).toEqual({ kind: "none" });
+    // 물류가 IT 출처여도 물류 규칙이 먼저 — 네이버 안 건드림
+    expect(naverCompleteAction({ naverUid: "u", scheduleType: "물류", source: "it" }, { itCalId: "IT1" })).toEqual({ kind: "none" });
     expect(naverCompleteAction({ naverUid: "", scheduleType: "AS" })).toEqual({ kind: "none" });
   });
   it("receptionStatusFromSiblings: 가장 앞선 단계", () => {
@@ -112,12 +115,15 @@ describe("completeTicket", () => {
     expect(log).toEqual(["read"]);
   });
 
-  it("물류: 네이버 납품철수교체 캘린더 제자리 완료 체크만(기록·이동 없음), 카톡·방문 없음", async () => {
+  it("물류: 일정리스트에서만 완료 — 네이버 호출 0건(체크·이동·기록 없음), 카톡·방문 없음, 안내 한 줄", async () => {
     const row = { ...asRow, scheduleType: "납품철수교체휴가교육", receptionId: "", repeatMonthly: false };
     const { deps, log, naverCalls } = makeDeps(row);
     const r = await completeTicket("t1", { text: "설치 완료" }, { author: "이영희" }, deps);
     expect(r.ok).toBe(true);
-    expect(naverCalls).toEqual([{ action: "caldav_check", uid: "u1", done: true, calId: NAVER_DELIVERY_CAL_ID }]);
+    expect(naverCalls).toEqual([]);
+    expect(log.some((l) => l.startsWith("naver"))).toBe(false);
+    expect(r.infos).toEqual([DELIVERY_DONE_NOTE]);
+    expect(deps.patchTicket).toHaveBeenCalledWith("t1", expect.objectContaining({ status: "완료" }));
     expect(log).not.toContain("kakao");
     expect(log).not.toContain("visit");
   });
@@ -152,5 +158,30 @@ describe("completeTicket", () => {
     expect(log).toEqual(["read", "patch", "naver:caldav_move", "emit"]);
     const patch = (deps.patchTicket as ReturnType<typeof vi.fn>).mock.calls[0][1] as Record<string, string>;
     expect(patch.note).toBe("기존 메모");
+  });
+});
+
+// naver-calendar-sync ① 연결 일정 반영 — 앱에서 완료한 일정(특히 물류)을 네이버 미완료로 되돌리지 않는지(2026-10-31 (나)안의 전제)
+describe("naver-calendar-sync 연결 일정 PATCH(linkedTicketPatch)", () => {
+  const ev = { date: "2026-10-30", time: "12:00", title: "납품 가나상사", completed: false };
+  it("앱 완료 + 네이버 미완료(물류 캘린더) → PATCH 없음(상태·날짜·제목 보존)", () => {
+    expect(linkedTicketPatch({ status: "완료", date: "2026-10-29", time: "09:00", vendor: "다른이름" }, ev, "delivery")).toEqual({});
+  });
+  it("앱 완료 + 네이버 완료 → PATCH 없음(이미 완료)", () => {
+    expect(linkedTicketPatch({ status: "완료", date: "2026-10-30", time: "12:00" }, { ...ev, completed: true }, "delivery")).toEqual({});
+  });
+  it("앱 미완료 + 네이버 완료 체크 → 완료로 올림(영업부 완료는 계속 반영)", () => {
+    expect(linkedTicketPatch({ status: "배정", date: "2026-10-30", time: "12:00", vendor: "납품 가나상사" }, { ...ev, completed: true }, "delivery")).toEqual({ status: "완료" });
+  });
+  it("앱 미완료 + 네이버 미완료 → status 키 없음, 날짜·제목 변경만 반영", () => {
+    const p = linkedTicketPatch({ status: "접수", date: "2026-10-29", time: "12:00", vendor: "가나" }, ev, "delivery");
+    expect(p).toEqual({ date: "2026-10-30", time: "12:00", calendarTitle: "납품 가나상사" });
+    expect("status" in p).toBe(false);
+  });
+  it("어떤 경우에도 status 를 완료 외 값으로 쓰지 않는다", () => {
+    for (const status of ["접수", "배정", "익일", "보류", "완료"]) for (const completed of [true, false]) for (const kind of ["main", "delivery", "done"]) {
+      const p = linkedTicketPatch({ status, date: "2026-10-30", time: "12:00" }, { ...ev, completed }, kind);
+      if ("status" in p) expect(p.status).toBe("완료");
+    }
   });
 });

@@ -3,6 +3,54 @@
 export type AgentWorkItem = { date: string; hash: string; agent: string; summary: string };
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
+    "date": "2026-10-31",
+    "hash": "db289c1758",
+    "agent": "feature-planner",
+    "summary": "AS 접수 방문 판단 안내글·C팀 자동 중간보고 SQL 2장(권한나 검사 반영: 주말 보류·발송 시 TEST_MODE 재확인·stale 72h) + 설계안 결정 기록"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "db289c1758",
+    "agent": "db-schema",
+    "summary": "AS 접수 방문 판단 안내글·C팀 자동 중간보고 SQL 2장(권한나 검사 반영: 주말 보류·발송 시 TEST_MODE 재확인·stale 72h) + 설계안 결정 기록"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "db289c1758",
+    "agent": "sql-review",
+    "summary": "AS 접수 방문 판단 안내글·C팀 자동 중간보고 SQL 2장(권한나 검사 반영: 주말 보류·발송 시 TEST_MODE 재확인·stale 72h) + 설계안 결정 기록"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "94eb8f8ef9",
+    "agent": "feature-planner",
+    "summary": "IT A/S 일정 제목 통일(등급·자산번호·시리얼·품목·모델명·증상·거래처명) + 필드 기기 추가 구분선 두 줄 버그 + 일정 카드 높이 축소 + 홈 분기 점검 라벨(CS 전체) 명시 + 12·14시 자동 중간보고 설계안"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "94eb8f8ef9",
+    "agent": "ui-designer",
+    "summary": "IT A/S 일정 제목 통일(등급·자산번호·시리얼·품목·모델명·증상·거래처명) + 필드 기기 추가 구분선 두 줄 버그 + 일정 카드 높이 축소 + 홈 분기 점검 라벨(CS 전체) 명시 + 12·14시 자동 중간보고 설계안"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "94eb8f8ef9",
+    "agent": "developer",
+    "summary": "IT A/S 일정 제목 통일(등급·자산번호·시리얼·품목·모델명·증상·거래처명) + 필드 기기 추가 구분선 두 줄 버그 + 일정 카드 높이 축소 + 홈 분기 점검 라벨(CS 전체) 명시 + 12·14시 자동 중간보고 설계안"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "94eb8f8ef9",
+    "agent": "debugger",
+    "summary": "IT A/S 일정 제목 통일(등급·자산번호·시리얼·품목·모델명·증상·거래처명) + 필드 기기 추가 구분선 두 줄 버그 + 일정 카드 높이 축소 + 홈 분기 점검 라벨(CS 전체) 명시 + 12·14시 자동 중간보고 설계안"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "94eb8f8ef9",
+    "agent": "qa-checker",
+    "summary": "IT A/S 일정 제목 통일(등급·자산번호·시리얼·품목·모델명·증상·거래처명) + 필드 기기 추가 구분선 두 줄 버그 + 일정 카드 높이 축소 + 홈 분기 점검 라벨(CS 전체) 명시 + 12·14시 자동 중간보고 설계안"
+  },
+  {
     "date": "2026-10-30",
     "hash": "c9571b295c",
     "agent": "debugger",

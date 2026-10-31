@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { deleteRows, insertRow, selectRows, updateRows } from "./supabase";
 import { kstDate } from "./visits";
+import { bookFromMembers } from "../supabase/functions/_shared/report/team-order.ts";
 
 // 작성자 명단 — 원본은 Supabase cs_members 테이블이다.
 // 예전에는 브라우저 localStorage에 두어 신입·퇴사 반영이 그 PC에서만 보였다.
@@ -62,21 +63,9 @@ function emptyBook(): Book {
   return { "팀장": [], A: [], B: [], C: [], D: [], E: [], IT: [] };
 }
 
+// 2026-10-31: 본문은 supabase/functions/_shared/report/team-order.ts bookFromMembers — 엣지 자동 중간보고(schedule-report)가 같은 명단 규칙을 쓴다
 function bookOf(rows: MemberRow[]): Book {
-  const next = emptyBook();
-  for (const row of rows.filter((item) => item.active)) {
-    // 겸직 표기("A·B")는 양쪽 팀 모두에 올린다 — 버리면 그 사람 배정 건이 어느 팀 보고에도 안 잡힌다
-    // IT파트는 부서 자체가 IT — 팀 칸이 비어도 IT 명단(서비스접수 원격 처리자)에 올린다(2026-09-20 조직도)
-    const parts = row.team.split(/[·/,]/).map((t) => t.trim());
-    if (row.dept === "IT파트" && !parts.includes("IT")) parts.push("IT");
-    for (const part of parts) {
-      // CSS(운영지원) 인원 = E지역 담당 — E 명단에 올린다. 일정리스트 E 배정·A~D 지원 배정이 여기서 나온다(2026-09-18)
-      const team = (part === "CSS" ? "E" : part) as AuthorTeam;
-      if (!AUTHOR_TEAMS.includes(team)) continue;
-      if (!next[team].includes(row.name)) next[team].push(row.name);
-    }
-  }
-  return next;
+  return { ...emptyBook(), ...bookFromMembers(rows) }; // 칸 모양은 Book 그대로(같은 7칸)
 }
 
 function readMirror(): Book | null {
