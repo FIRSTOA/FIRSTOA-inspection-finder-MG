@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "a059d73d4f",
+    "agent": "developer",
+    "summary": "워킨맵 동기화 메모: 날짜 꼬리 (워킨맵 YYYY-MM-DD), 줄 단위 비교, 정형 줄(임대료·미수금·계약종료년월·방문주기·한조 등) 교체, memo_date_backfill 액션(기존 메모 꼬리·중복 정형 줄 정리) + workin_memo_key 꼬리 제거 SQL"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "230a52b4ac",
     "agent": "developer",
     "summary": "워킨맵 동기화: 상호 변경 자동 잇기(address_rename — 같은 주소 유일한 미짝 앱 행 1:1, 참고 review field_diff) + 테스트"

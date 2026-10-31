@@ -448,7 +448,7 @@ describe("메모 날짜 꼬리 · 줄 단위 · 정형 줄 교체(2026-10-31)", 
     const r = mergeMemos(remote, app, { dates: ["2026-10-20T01:00:00.000Z"], fallbackYmd: "2026-10-31" });
     expect(r.added).toEqual([]);
     expect(r.merged).toEqual(["키맨 김", "기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000 (워킨맵 2026-10-20)", "A3 6000/흑백기본62000"]);
-    expect(r.replaced).toEqual([{ index: 1, before: app[1], after: r.merged[1] }]);
+    expect(r.replaced).toEqual([{ before: app[1], after: [r.merged[1]] }]);
     // 다음 회차: 바뀐 것 없음
     const again = mergeMemos(remote, r.merged, { fallbackYmd: "2026-11-01" });
     expect([again.added, again.replaced]).toEqual([[], []]);
@@ -462,10 +462,19 @@ describe("메모 날짜 꼬리 · 줄 단위 · 정형 줄 교체(2026-10-31)", 
     expect(memoSlotOf("키맨 기본임대료 100")).toBeNull();
     const r = mergeMemos(["미수금 100", "미수금 200", "방문주기 2개월"], ["미수금 50"]);
     expect(r.merged).toEqual(["미수금 200", "방문주기 2개월"]);
-    expect(r.replaced).toEqual([{ index: 0, before: "미수금 50", after: "미수금 200" }]);
-    // 여러 줄 앱 항목이면 그 줄만 교체
-    const m = mergeMemos(["미수금 9"], ["키맨\n미수금 1"]);
-    expect(m.merged).toEqual(["키맨\n미수금 9"]);
+    expect(r.replaced).toEqual([{ before: "미수금 50", after: ["미수금 200"] }]);
+    // 여러 줄 앱 항목이면 줄로 쪼개 교체, 나머지 줄은 따로 항목(이미 있는 줄은 생략)
+    const m = mergeMemos(["미수금 9"], ["키맨\n\n미수금 1\n방문", "방문"]);
+    expect(m.merged).toEqual(["키맨", "미수금 9", "방문"]);
+    expect(m.replaced).toEqual([{ before: "키맨\n\n미수금 1\n방문", after: ["키맨", "미수금 9"] }]);
+  });
+
+  it("엔티에스 성수 실측 그대로: 한 항목 안 줄바꿈 2개(빈 줄) 옛 앱 항목 + 워킨맵 새 줄 → 쪼개서 정형 줄 교체", () => {
+    const old = "기본임대료7700000/연평균임대료7450272.72727273/컬러기본 A4 88000\n\nA3 6000/흑백기본62000";
+    const r = mergeMemos(["기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000\nA3 6000/흑백기본62000"], ["키맨", old], { fallbackYmd: "2026-10-31" });
+    expect(r.merged).toEqual(["키맨", "기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000 (워킨맵 2026-10-31)", "A3 6000/흑백기본62000"]);
+    expect(r.added).toEqual([]);
+    expect(r.replaced).toEqual([{ before: old, after: r.merged.slice(1) }]);
   });
 
   it("planPull: 정형 줄 교체 로그(before 옛 줄 · note replace_slot) + 추가 로그, stats.memoReplaces", () => {
@@ -514,6 +523,20 @@ describe("planMemoDateBackfill — 이미 붙은 메모 보정", () => {
     expect(plan.stats).toMatchObject({ logs: 7, tailed: 1, split: 1, deduped: 1, places: 2 });
     expect(plan.stats.skipped).toMatchObject({ completion: 1, alreadyTailed: 1, notFound: 1, noPlace: 1, backfillLog: 1 });
     expect(plan.changes.find((c) => c.kind === "dedupe")).toEqual({ place_id: 2, kind: "dedupe", before: "기본임대료7700000/연평균임대료7450272.7", after: null });
+  });
+
+  it("엔티에스 성수 실측(보정 1회 뒤 상태) 그대로: 옛 여러 줄 앱 항목을 쪼개 같은 머리글 옛 줄 제거, A3 줄은 따로 보존, 두 번째는 변경 0", () => {
+    const old = "기본임대료7700000/연평균임대료7450272.72727273/컬러기본 A4 88000\n\nA3 6000/흑백기본62000";
+    const fresh = "기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000 (워킨맵 2026-10-31)";
+    const logs = [
+      { id: 10, place_id: 1790041332076, created_at: "2026-10-31T07:00:00.000Z", after_value: "기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000\nA3 6000/흑백기본62000" },
+      { id: 11, place_id: 1790041332076, created_at: "2026-10-31T08:00:00.000Z", after_value: "기본임대료7700000/연평균임대료8109000/컬러기본 A4 88000\nA3 6000/흑백기본62000", before_value: "x", note: "backfill_tail" },
+    ];
+    const plan = planMemoDateBackfill(logs, [{ id: 1790041332076, memos: ["키맨 김", old, fresh] }]);
+    expect(plan.rows).toEqual([{ id: 1790041332076, memos: ["키맨 김", "A3 6000/흑백기본62000", fresh], updated_by: SYNC_ACTOR }]);
+    expect(plan.changes).toEqual([{ place_id: 1790041332076, kind: "dedupe", before: old, after: ["A3 6000/흑백기본62000"] }]);
+    expect(plan.stats).toMatchObject({ tailed: 0, split: 0, deduped: 1, places: 1 });
+    expect(planMemoDateBackfill(logs, [{ id: 1790041332076, memos: plan.rows[0].memos }]).rows).toEqual([]);
   });
 
   it("두 번 돌려도 바뀌는 것 없음 · 로그에서 온 줄이 없는 중복은 손대지 않음(dupNoLog)", () => {

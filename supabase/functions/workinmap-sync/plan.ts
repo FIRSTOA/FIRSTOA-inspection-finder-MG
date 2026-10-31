@@ -544,14 +544,18 @@ export type MergeMemoOpts = {
   /** 항목 날짜가 없을 때 쓸 날짜(그 회차 KST YYYY-MM-DD). 이 값이 있어야 꼬리를 붙인다(없으면 예전처럼 본문만) */
   fallbackYmd?: string;
 };
-export type MemoReplace = { index: number; before: string; after: string };
+/** 정형 줄 교체 1건 — before = 바뀐 앱 항목 원문, after = 그 자리에 들어간 항목들(여러 줄 앱 항목은 줄마다 쪼갠 결과) */
+export type MemoReplace = { before: string; after: string[] };
+/** 항목을 줄로(빈 줄·앞뒤 공백 제거) */
+const itemLines = (s: string): string[] => String(s ?? "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
 
 /**
  * 합집합 + 정형 줄 교체.
  * - 워킨맵 항목 안 줄바꿈은 줄마다 따로 본다(앱은 줄 단위 항목). 비교 키 = 공백 정리 + 날짜 꼬리 뗀 본문(앱 여러 줄 항목은 줄마다도 비교).
  * - 자유 글 줄: 앱에 없는 것만 워킨맵 순서대로 뒤에 붙인다(지우기·덮어쓰기 없음).
- * - 정형 줄(MEMO_SLOT_KEYS): 워킨맵 안 같은 머리글은 마지막 줄만 본다. 앱에 같은 머리글 줄이 있으면(뒤에서부터 첫 줄) 그 줄만 교체
- *   (여러 줄 앱 항목이면 그 줄만 바꾼다), 없으면 덧붙인다.
+ * - 정형 줄(MEMO_SLOT_KEYS): 워킨맵 안 같은 머리글은 마지막 줄만 본다. 앱에 같은 머리글 줄이 있으면(뒤에서부터 첫 항목) 교체,
+ *   없으면 덧붙인다. 그 앱 항목이 여러 줄이면 줄 단위로 쪼개(빈 줄 제거) 같은 머리글 줄은 새 줄로 바꾸거나 지우고,
+ *   나머지 줄은 따로 항목으로 남긴다(다른 항목에 이미 같은 줄이 있으면 생략) — 2026-10-31 엔티에스 성수 실측.
  * - 빈 줄·워킨맵 안 중복·가린 줄(******)은 붙이지 않는다.
  * - opts.fallbackYmd 가 있으면 붙이거나 교체하는 줄 끝에 " (워킨맵 YYYY-MM-DD)"(이미 꼬리가 있는 줄은 그대로).
  */
@@ -593,13 +597,25 @@ export function mergeMemos(remoteLines: string[], localLines: string[], opts: Me
     const out = withTail(c);
     if (slot) {
       for (let x = merged.length - 1; x >= 0; x -= 1) {
-        const lines = merged[x].split(/\r?\n/);
-        const y = lines.map((ln) => memoSlotOf(ln)).lastIndexOf(slot);
-        if (y < 0) continue;
+        const lines = itemLines(merged[x]);
+        if (!lines.some((ln) => memoSlotOf(ln) === slot)) continue;
         const before = merged[x];
-        lines[y] = out;
-        merged[x] = lines.join("\n");
-        replaced.push({ index: x, before, after: merged[x] });
+        const others = new Set<string>();
+        merged.forEach((m, i) => { if (i !== x) for (const ln of itemLines(m)) others.add(memoCompareKey(ln)); });
+        const next: string[] = [];
+        let placed = false;
+        for (const ln of lines) {
+          if (memoSlotOf(ln) === slot) {
+            if (!placed) { next.push(out); placed = true; }
+            continue;
+          }
+          const k = memoCompareKey(ln);
+          if (!k || others.has(k)) continue;
+          others.add(k);
+          next.push(ln);
+        }
+        merged.splice(x, 1, ...next);
+        replaced.push({ before, after: next });
         return;
       }
     }
@@ -612,7 +628,7 @@ export function mergeMemos(remoteLines: string[], localLines: string[], opts: Me
 // ── 차이 ─────────────────────────────────────────────────────────
 
 export type Field = "label" | "visible" | "name" | "comment" | "phone" | "address" | "address_detail" | "coords" | "memos";
-export type Change = { field: Field; before: unknown; after: unknown };
+export type Change = { field: Field; before: unknown; after: unknown; memo?: { added: string[]; replaced: MemoReplace[] } };
 
 const sameText = (a: unknown, b: unknown) => normText(a) === normText(b);
 const COORD_EPS = 1e-6;
@@ -641,7 +657,7 @@ export function diffPlace(remote: RemotePlace, local: LocalPlace, opts: { todayY
     }
   }
   const memo = mergeMemos(remote.memos, local.memos || [], opts.todayYmd ? { dates: remote.memoDates, fallbackYmd: opts.todayYmd } : {});
-  if (memo.added.length || memo.replaced.length) out.push({ field: "memos", before: local.memos || [], after: memo.merged });
+  if (memo.added.length || memo.replaced.length) out.push({ field: "memos", before: local.memos || [], after: memo.merged, memo: { added: memo.added, replaced: memo.replaced } });
   return out;
 }
 
@@ -752,6 +768,7 @@ const isDatedHistoryMemo = (s: string) => /^\[[^\]]+\]\s*\d{4}-\d{2}-\d{2}/.test
 
 export type BackfillLog = { id?: number; place_id: number | null; created_at: string; after_value: unknown; note?: string | null };
 export type BackfillPlace = { id: number; memos: unknown };
+/** dedupe: after = null(한 줄 항목 지움) 또는 남긴 줄 배열(여러 줄 앱 항목을 쪼갬) */
 export type BackfillChange = { place_id: number; kind: "tail" | "split" | "dedupe"; before: string; after: string | string[] | null };
 export type BackfillPlan = {
   rows: Array<{ id: number; memos: string[]; updated_by: string }>;
@@ -769,8 +786,9 @@ const logLines = (v: unknown): string[] => (Array.isArray(v) ? v : [v]).filter((
  * 이미 붙은 메모 보정(순수) — workin_sync_log(direction pull·field memo) 행과 그 장소들의 지금 memos 로 계획.
  * 1) 로그 본문이 장소 memos 에 꼬리 없이 그대로 있으면 → "본문 (워킨맵 로그 KST 날짜)". 여러 줄 항목이면 줄마다 나눠
  *    꼬리를 붙이고, 다른 항목에 이미 있는 줄은 버린다(가져오기 줄 단위 규칙과 맞춤). 이미 꼬리·"[G5 완료]" 류는 건너뜀.
- * 2) 같은 장소에 같은 정형 머리글(MEMO_SLOT_KEYS) 줄이 2개 이상이면 워킨맵에서 온(로그에 있는) 가장 늦은 줄만 남기고
- *    나머지 제거(제거한 줄은 changes 에 before 로 — 엣지가 로그에 남긴다). 로그에서 온 줄이 하나도 없으면 손대지 않음(dupNoLog).
+ * 2) 같은 장소에 같은 정형 머리글(MEMO_SLOT_KEYS) 줄이 2개 이상이면(여러 줄 앱 항목은 줄 단위로 셈) 워킨맵에서 온(로그에 있는)
+ *    가장 늦은 줄만 남기고 나머지 제거(제거한 항목은 changes 에 before 로 — 엣지가 로그에 남긴다). 지울 줄이 여러 줄 앱 항목 안에
+ *    있으면 그 항목을 쪼개 나머지 줄을 따로 항목으로 남긴다(이미 있는 줄은 생략). 로그에서 온 줄이 없으면 손대지 않음(dupNoLog).
  * 같은 결과를 두 번 돌려도 바뀌는 것 없음(보정 로그 note 는 재료에서 뺀다).
  */
 export function planMemoDateBackfill(logs: BackfillLog[], places: BackfillPlace[]): BackfillPlan {
@@ -838,33 +856,52 @@ export function planMemoDateBackfill(logs: BackfillLog[], places: BackfillPlace[
     stats.split += 1;
   }
 
-  // 2) 같은 정형 머리글 중복 정리
+  // 2) 같은 정형 머리글 중복 정리 — 여러 줄 앱 항목은 줄 단위로 본다(2026-10-31 엔티에스 성수: 한 항목 안 "기본임대료…\n\nA3…")
   for (const [pid, memos] of memoMap) {
-    const groups = new Map<string, number[]>();
-    memos.forEach((m, i) => {
-      if (m.includes("\n")) return;   // 여러 줄 앱 항목은 건드리지 않는다
-      const slot = memoSlotOf(m);
-      if (slot) groups.set(slot, [...(groups.get(slot) ?? []), i]);
-    });
-    const drop = new Set<number>();
+    const entries: Array<{ item: number; line: string; slot: string }> = [];
+    memos.forEach((m, i) => { for (const line of itemLines(m)) { const slot = memoSlotOf(line); if (slot) entries.push({ item: i, line, slot }); } });
+    const groups = new Map<string, typeof entries>();
+    for (const e of entries) groups.set(e.slot, [...(groups.get(e.slot) ?? []), e]);
     const seenLog = fromLog.get(pid) ?? new Map<string, number>();
-    for (const idx of groups.values()) {
-      if (idx.length < 2) continue;
-      let keep = -1, best = -Infinity;
-      for (const i of idx) {
-        const t = seenLog.get(memoCompareKey(memos[i]));
-        if (t !== undefined && t >= best) { best = t; keep = i; }
+    const dropLines = new Map<number, Set<string>>();   // 항목 → 지울 줄(원문)
+    for (const g of groups.values()) {
+      if (g.length < 2) continue;
+      let keep: (typeof g)[number] | null = null, best = -Infinity;
+      for (const e of g) {
+        const t = seenLog.get(memoCompareKey(e.line));
+        if (t !== undefined && t >= best) { best = t; keep = e; }
       }
-      if (keep < 0) { skipped.dupNoLog += 1; continue; }
-      for (const i of idx) if (i !== keep) drop.add(i);
-    }
-    if (drop.size) {
-      for (const i of [...drop].sort((a, b) => a - b)) {
-        changes.push({ place_id: pid, kind: "dedupe", before: memos[i], after: null });
+      if (!keep) { skipped.dupNoLog += 1; continue; }
+      for (const e of g) {
+        if (e === keep) continue;
+        const set = dropLines.get(e.item) ?? new Set<string>();
+        set.add(e.line);
+        dropLines.set(e.item, set);
         stats.deduped += 1;
       }
-      memoMap.set(pid, memos.filter((_, i) => !drop.has(i)));
     }
+    if (!dropLines.size) continue;
+    const next: string[] = [];
+    const kept = new Set<string>();
+    memos.forEach((m, i) => { if (!dropLines.has(i)) for (const ln of itemLines(m)) kept.add(memoCompareKey(ln)); });
+    memos.forEach((m, i) => {
+      const drop = dropLines.get(i);
+      if (!drop) { next.push(m); return; }
+      const lines = itemLines(m);
+      if (lines.length <= 1) { changes.push({ place_id: pid, kind: "dedupe", before: m, after: null }); return; }
+      // 여러 줄 항목: 같은 머리글 줄은 지우고 나머지 줄은 따로 항목으로(이미 있는 줄은 생략)
+      const rest: string[] = [];
+      for (const ln of lines) {
+        if (drop.has(ln)) continue;
+        const k = memoCompareKey(ln);
+        if (!k || kept.has(k)) continue;
+        kept.add(k);
+        rest.push(ln);
+      }
+      changes.push({ place_id: pid, kind: "dedupe", before: m, after: rest });
+      next.push(...rest);
+    });
+    memoMap.set(pid, next);
   }
 
   const rows: BackfillPlan["rows"] = [];
@@ -953,7 +990,7 @@ export type PullDetail = {
   /** completion_down = 완료(G5·G12)→낮음(반영+알림) · progress_down = 매월 단계 하강(반영+알림) · keep_app = 첫 가져오기 완료 보존(앱 유지) */
   downgrades: Array<{ id: number; name: string; appLabel: string; workinmapLabel: string | null; reason: "completion_down" | "progress_down" | "keep_app" }>;
   labelChanges: Array<{ id: number; name: string; from: string; to: string }>;
-  memoAdds: Array<{ id: number; name: string; added: string[]; replaced?: Array<{ before: string; after: string }> }>;
+  memoAdds: Array<{ id: number; name: string; added: string[]; replaced?: MemoReplace[] }>;
 };
 export const SAMPLE_FRESH = 20;
 export const SAMPLE_UNMATCHED = 20;
@@ -1120,6 +1157,7 @@ export function planPull(input: PullInput): PullPlan {
     const fields: Field[] = [];
     const oldMemos = Array.isArray(l.memos) ? l.memos : [];
     let memos: string[] | null = null;
+    let memoInfo: { added: string[]; replaced: MemoReplace[] } = { added: [], replaced: [] };
     for (const c of rules.apply) {
       fields.push(c.field);
       if (c.field === "coords") {
@@ -1129,6 +1167,7 @@ export function planPull(input: PullInput): PullPlan {
         if (a.longitude !== l.longitude) logs.push({ field: "longitude", before_value: l.longitude, after_value: a.longitude });
       } else if (c.field === "memos") {
         memos = c.after as string[];
+        if (c.memo) memoInfo = { added: [...c.memo.added], replaced: c.memo.replaced };
       } else {
         set[c.field] = c.after;
         logs.push({ field: FIELD_LOG[c.field], before_value: c.before ?? null, after_value: c.after });
@@ -1143,22 +1182,20 @@ export function planPull(input: PullInput): PullPlan {
       const head = entry ? memoKey(entry).replace(/ \(워킨맵\)$/, "") : "";
       if (entry && !base.some((x) => memoKey(x).startsWith(head))) {
         memos = [...base, entry];
+        memoInfo.added.push(entry);
         if (!fields.includes("memos")) fields.push("memos");
       }
     }
     if (memos) {
       set.memos = memos;
       // 메모는 추가 항목마다 로그 1행(before null) — SQL 머리 "엣지 규칙". 정형 줄 교체는 그 자리 before/after + note replace_slot
-      const replacedItems: Array<{ before: string; after: string }> = [];
-      for (let i = 0; i < oldMemos.length; i += 1) {
-        if (memos[i] === oldMemos[i]) continue;
-        replacedItems.push({ before: oldMemos[i], after: memos[i] });
-        logs.push({ field: "memo", before_value: oldMemos[i], after_value: memos[i], note: "replace_slot" });
-      }
-      for (const item of memos.slice(oldMemos.length)) logs.push({ field: "memo", before_value: null, after_value: item });
+      // (after 는 한 항목이면 글자, 여러 줄 앱 항목을 쪼갰으면 배열)
+      const replacedItems = memoInfo.replaced;
+      for (const x of replacedItems) logs.push({ field: "memo", before_value: x.before, after_value: x.after.length === 1 ? x.after[0] : x.after, note: "replace_slot" });
+      for (const item of memoInfo.added) logs.push({ field: "memo", before_value: null, after_value: item });
       if (rules.apply.some((c) => c.field === "memos")) stats.memoAdds += 1;
       stats.memoReplaces += replacedItems.length;
-      const addedItems = memos.slice(oldMemos.length);
+      const addedItems = memoInfo.added;
       if (full && (addedItems.length || replacedItems.length)) full.memoAdds.push({ id: l.id, name: oneLine(l.name), added: addedItems, ...(replacedItems.length ? { replaced: replacedItems } : {}) });
     }
 

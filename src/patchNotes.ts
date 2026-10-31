@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "4c08797ddd",
+    "date": "2026-10-31",
+    "note": "AGENTS: 워킨맵 메모 정리 실행 기록(꼬리 1,640·중복 1,540)"
+  },
+  {
+    "hash": "a059d73d4f",
+    "date": "2026-10-31",
+    "note": "워킨맵 동기화 메모: 날짜 꼬리 (워킨맵 YYYY-MM-DD), 줄 단위 비교, 정형 줄(임대료·미수금·계약종료년월·방문주기·한조 등) 교체, memo_date_backfill 액션(기존 메모 꼬리·중복 정형 줄 정리) + workin_memo_key 꼬리 제거 SQL"
+  },
+  {
     "hash": "848073c700",
     "date": "2026-10-31",
     "note": "AGENTS: 워킨맵 동기화 P1 가동 기록(2026-10-31 16시 실측 수치·교훈)"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "c7513c1635",
     "date": "2026-10-10",
     "note": "통합 검색 첫 화면 재설계(입력 하나로 검색·질문 자동 판정) · 이름 앞부분 일치 승격 · 마감 문자 식별(임대 코드·기번) + 관리부 목록 도착함(봇 수집)"
-  },
-  {
-    "hash": "dedf424c24",
-    "date": "2026-10-10",
-    "note": "data-ask: 팀 인원 명단 도구(team_members)·이번 주 범위·사람별 집계 규칙 — \"C팀 이번 주 PC 확장성 몇 개씩\" 11초에 답"
-  },
-  {
-    "hash": "ca837094e4",
-    "date": "2026-10-10",
-    "note": "통합 검색: 상태 카드에 현장 메모(특이사항·출근/점심·워킨맵 메모·임대 조건) + \"전체 데이터에 묻기\"(data-ask: 팀·달·등급으로 추리는 질문)"
   }
 ];
