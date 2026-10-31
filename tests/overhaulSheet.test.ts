@@ -116,6 +116,6 @@ describe("오버홀 시트 ID 설정(2026-10-31 — 시트가 새 파일로 바�
     expect(overhaulCsvUrl(url)).toBe("https://docs.google.com/spreadsheets/d/17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0/export?format=csv&gid=555");
     expect(overhaulSheetIdOf("리스트(26년)")).toBe(OVERHAUL_SHEET_ID);
     expect(overhaulSheetIdOf("123")).toBe(OVERHAUL_SHEET_ID);
-    expect(OVERHAUL_SHEET_ID).toBe("17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0");
+    expect(OVERHAUL_SHEET_ID).toBe("1_We_A06s3sk3roIlBcQwCKXRXnWxwrjDtwKC1S-Ku4c");   // 원본(백업 복사본 아님)
   });
 });

@@ -12,9 +12,10 @@ import { isYmd } from "./recontractSchedule";
  * 실측(2026-10-24): 첫 줄이 "-1,,,," 이고 둘째 줄이 머리글, 날짜는 "2026/1/2"·"26/10/01"·"23/10/27(금)" 섞임, 번호는 "2,308", 빈 줄은 "" 또는 0,0 만.
  * KPI K33 "오버홀 점" = 오버홀포인트 합. 수리포인트는 따로(보조 글자).
  */
-/** 기본 시트 — 2026-10-31 사용자 링크(17fVFa…)로 교체. 옛 1lFZdr… 은 10/23 까지만 적힌 복사본이라 홈 오버홀이 이번 주 0 으로 보였다.
- *  시트가 또 바뀌면 관리 탭 OVERHAUL_SHEET_TAB 에 새 시트 주소(…/d/ID/edit#gid=숫자)를 통째로 적으면 ID·탭 둘 다 그걸 쓴다. */
-export const OVERHAUL_SHEET_ID = "17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0";
+/** 기본 시트 = **원본** "오버홀수리포인트_이P"(링크 공개, 2026-10-31 사용자 확인). 그 전엔 매주 금요일 00:49 에 생기는 백업 복사본
+ *  (백업_26.10.24… 1lFZdr… → 백업_26.10.31… 17fVFa…)을 보고 있어 주마다 끊겼다. 원본은 파일이 안 바뀌므로 더는 끊기지 않는다.
+ *  그래도 바뀌면 관리 탭 OVERHAUL_SHEET_TAB 에 새 시트 주소(…/d/ID/edit#gid=숫자)를 통째로 적으면 ID·탭 둘 다 그걸 쓴다. */
+export const OVERHAUL_SHEET_ID = "1_We_A06s3sk3roIlBcQwCKXRXnWxwrjDtwKC1S-Ku4c";
 /** 설정값에 시트 주소가 들어 있으면 그 스프레드시트 ID, 아니면 기본 ID */
 export function overhaulSheetIdOf(tab: string): string {
   const m = String(tab || "").match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/);
@@ -23,7 +24,7 @@ export function overhaulSheetIdOf(tab: string): string {
 export const OVERHAUL_SHEET_TAB_KEY = "OVERHAUL_SHEET_TAB";
 export const OVERHAUL_SHEET_DEFAULT_TAB = "리스트(26년)";
 export const OVERHAUL_SHEET_URL = `https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/edit`;
-/** 알려진 탭 이름 → gid(2026-10-24 시트 htmlview 실측). 새 탭은 여기 추가하거나 설정에 gid 숫자/주소를 적는다 */
+/** 알려진 탭 이름 → gid(2026-10-24 백업 시트 실측; 원본도 리스트(26년)=0 확인 2026-10-31, 옛 탭 gid 는 원본에서 미확인). 새 탭은 여기 추가하거나 설정에 gid 숫자/주소를 적는다 */
 export const OVERHAUL_TAB_GIDS: Readonly<Record<string, string>> = {
   "리스트(26년)": "0",
   "리스트(23년~25년3분기)": "1322158055",

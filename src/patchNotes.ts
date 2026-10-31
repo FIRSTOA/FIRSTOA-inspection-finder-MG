@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "7fe8bfea43",
+    "date": "2026-10-31",
+    "note": "naver-calendar-sync 삭제 가드: 캘린더 목록·다른 캘린더 확인이 실패하면 \"모름\"으로 보류(deferred, 다음 실행 재확인) — 네이버 장애를 삭제로 오판하던 경로 제거(guard.ts) + 30초 타임아웃 + 기록"
+  },
+  {
     "hash": "c4b6302aac",
     "date": "2026-10-31",
     "note": "전체 디버깅 2차: 오버홀 시트 파일 교체(ID 설정화), 영업 시트 A열 머리 완화, 담당자변경 날짜 수식 중복 차단(dedupe.ts)+정리 SQL, 방문 판단 추가일정 같은 건물만(주소 미확인 표시), REST 읽기45/쓰기30초 타임아웃, 문자 상한 조회 실패 차단, GAS·OpenAI·CalDAV 타임아웃 11함수, 일정 카드 폰 높이 축소, 매뉴얼 ops05·08·user06·14"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "488d75f26e",
     "date": "2026-10-09",
     "note": "구동원리: 새 창·iframe 없이 복합기 학습 화면 안에 그대로 그림 — 스타일은 .prin 아래로 가둬 앱에 안 새게, 본문·애니메이션 스크립트는 원본 그대로"
-  },
-  {
-    "hash": "cb27b286a7",
-    "date": "2026-10-08",
-    "note": "복합기 학습·처리이력에 [구동원리] 탭 — 다른 직원이 만든 Apeos 구동원리·급지·ADF 교육가이드(애니메이션 8개)를 FIELD 컨셉으로 다시 입힘 + 내 계정 카드 디자인"
   }
 ];
