@@ -9,6 +9,8 @@ import {
   buildVisitAdviceText,
   judgeVisit,
   notFoundText,
+  judgeMonthlyWindow,
+  monthlyWindow,
   sameBuildingKey,
   shouldSend,
   type UpcomingItem,
@@ -29,7 +31,7 @@ function base(over: Partial<VisitAdviceInput> = {}): VisitAdviceInput {
     workin: { label: "G3", kind: "quarter" },
     upcoming: [],
     today: "2026-10-30",
-    thresholds: { quarterDays: 60, monthlyDays: 25 },
+    thresholds: { quarterDays: 60, monthlyWindowDays: 5 },
     ...over,
   };
 }
@@ -92,11 +94,11 @@ describe("judgeVisit 판정표", () => {
     expect(buildVisitAdviceText(input, r)).not.toContain("근거:");
   });
 
-  it("매월점검은 25일 기준", () => {
-    const input = base({ lastInspection: "2026-10-04", workin: { label: "G7", kind: "monthly" } });
+  it("매월점검은 경과일이 아니라 마감일 창으로 본다(26일 지나도 창 밖이면 불필요)", () => {
+    const input = base({ lastInspection: "2026-10-04", today: "2026-10-30", workin: { label: "C팀", kind: "monthly", closingDay: 20, progress: "G1" } });
     const r = judgeVisit(input);
-    expect(r).toMatchObject({ verdict: "필요", elapsedDays: 26 });
-    expect(buildVisitAdviceText(input, r)).toContain("점검여부: 필요 (경과 26일 / 기준 25일, 워킨맵 있음)");
+    expect(r).toMatchObject({ verdict: "불필요", elapsedDays: 26 });
+    expect(buildVisitAdviceText(input, r)).toContain("점검여부: 불필요 (경과 26일 / 마감 20일 · 창 밖 11/16~11/20, 워킨맵 있음)");
   });
 
   it("점검 기록 없음 + 워킨맵 있음 → 필요(기록 없음 표시)", () => {
@@ -188,5 +190,79 @@ describe("sameBuildingKey(같은 건물)", () => {
   });
   it("빈 주소는 빈 키", () => {
     expect(sameBuildingKey("")).toBe("");
+  });
+});
+
+// 2026-10-31 밤 사용자 결정: 매월점검 = 마감일 기준 주말 제외 5영업일. 웍스피어(마감 20) 11/20(금) → 11/16(월)~11/20(금)
+describe("매월점검 마감일 창(영업일)", () => {
+  const works = (today: string, over: Partial<NonNullable<VisitAdviceInput["workin"]>> = {}) =>
+    base({ today, lastInspection: "2026-10-19", workin: { label: "C팀", kind: "monthly", closingDay: 20, progress: "G2", ...over } });
+
+  it("웍스피어: 11/2 접수 → 불필요(창 밖), 11/16·11/18·11/20 → 필요", () => {
+    const early = judgeVisit(works("2026-11-02"));
+    expect(early.verdict).toBe("불필요");
+    expect(early.reasons).toEqual(["매월점검 마감 20일 · 창 밖(11/16~11/20)"]);
+    for (const d of ["2026-11-16", "2026-11-18", "2026-11-20"]) {
+      const r = judgeVisit(works(d));
+      expect(r.verdict, d).toBe("필요");
+      expect(r.reasons).toEqual(["매월점검 마감 20일 · 창 11/16~11/20"]);
+    }
+    const input = works("2026-11-18");
+    expect(buildVisitAdviceText(input, judgeVisit(input))).toContain("점검여부: 필요 (경과 30일 / 마감 20일 · 창 11/16~11/20, 워킨맵 있음)");
+  });
+
+  it("11/23 접수(마감 지남) → 다음 달 창으로 계산해 불필요", () => {
+    const r = judgeVisit(works("2026-11-23"));
+    expect(r.verdict).toBe("불필요");
+    // 12/20 은 일요일 → 끝 12/18(금), 5영업일 12/14~12/18
+    expect(r.reasons).toEqual(["매월점검 마감 20일 · 창 밖(12/14~12/18)"]);
+  });
+
+  it("마감일이 주말이면 그 전 영업일이 끝(11/22 일 → 11/16~11/20)", () => {
+    expect(monthlyWindow(2026, 11, 22, 5)).toEqual({ start: "2026-11-16", end: "2026-11-20" });
+    expect(judgeVisit(works("2026-11-20", { closingDay: 22 })).verdict).toBe("필요");
+    expect(judgeVisit(works("2026-11-13", { closingDay: 22 })).verdict).toBe("불필요");
+  });
+
+  it("마감일 31인데 11월은 30일까지 → 말일 11/30(월), 창 11/24~11/30(주말 제외 5일)", () => {
+    expect(monthlyWindow(2026, 11, 31, 5)).toEqual({ start: "2026-11-24", end: "2026-11-30" });
+    expect(judgeVisit(works("2026-11-28", { closingDay: 31 })).verdict).toBe("필요"); // 토요일 접수도 창 안
+    expect(judgeVisit(works("2026-11-23", { closingDay: 31 })).verdict).toBe("불필요");
+  });
+
+  it("공휴일이 끼면 창이 늘어난다(10/9 한글날 마감 → 끝 10/8, 10/5 대체공휴일 건너뛰어 10/1~10/8)", () => {
+    expect(monthlyWindow(2026, 10, 9, 5)).toEqual({ start: "2026-10-01", end: "2026-10-08" });
+    expect(judgeVisit(works("2026-10-01", { closingDay: 9, progress: "G1" })).verdict).toBe("필요");
+    expect(judgeVisit(works("2026-09-30", { closingDay: 9, progress: "G1" })).verdict).toBe("불필요");
+  });
+
+  it("월초 마감은 다음 달 창이 이번 달 말에 걸친다(12/1 마감 → 11/25~12/1)", () => {
+    expect(judgeMonthlyWindow("2026-11-26", 1, 5)).toEqual({ inWindow: true, window: { start: "2026-11-25", end: "2026-12-01" } });
+  });
+
+  it("라벨로 이번 달 완료: 11월(분기 2번째 달) G3 → 불필요, G2 → 필요; 10월 G2 → 불필요", () => {
+    const g3 = judgeVisit(works("2026-11-18", { progress: "G3" }));
+    expect(g3.verdict).toBe("불필요");
+    expect(g3.reasons[0]).toBe("이번 달 매월점검 완료(G3)");
+    expect(judgeVisit(works("2026-11-18", { progress: "G2" })).verdict).toBe("필요");
+    expect(judgeVisit(works("2026-10-15", { progress: "G2" })).verdict).toBe("불필요");
+    expect(judgeVisit(works("2026-10-15", { progress: "G1" })).verdict).toBe("필요");
+  });
+
+  it("G5·G12 는 창 안이어도 불필요(기존대로)", () => {
+    expect(judgeVisit(works("2026-11-18", { label: "G5" })).verdict).toBe("불필요");
+    expect(judgeVisit(works("2026-11-18", { label: "G12" })).verdict).toBe("불필요");
+  });
+
+  it("마감일 모르면(이름 앞 숫자 없음) 판단필요", () => {
+    const input = works("2026-11-18", { closingDay: null });
+    const r = judgeVisit(input);
+    expect(r.verdict).toBe("판단필요");
+    expect(buildVisitAdviceText(input, r)).toContain("점검여부: 판단필요 (경과 30일 / 마감일 모름, 워킨맵 있음)");
+  });
+
+  it("분기점검은 그대로 60일 기준", () => {
+    expect(judgeVisit(base({ lastInspection: "2026-09-01" })).verdict).toBe("불필요");
+    expect(judgeVisit(base({ lastAs: "2026-07-01" })).verdict).toBe("필요");
   });
 });

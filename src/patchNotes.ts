@@ -2,6 +2,16 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "f274c5fc2c",
+    "date": "2026-10-31",
+    "note": "workin-sync SQL: plpgsql 변수명 notnull(예약어) → required_cols — 사용자 실행 42601 수정"
+  },
+  {
+    "hash": "ae62608b4a",
+    "date": "2026-10-31",
+    "note": "워킨맵(workinmap.com) ↔ 웹앱 워킨맵 양방향 동기화 P1(가져오기): SQL workin-sync-20261031(표 6·열 7·RPC 있는 행만 갱신·트리거·크론 하루 4회 09/12/15/18) + 엣지 workinmap-sync(Firebase 로그인·워크 이름 규칙·짝짓기·메모 합집합·완료 내려감 review·가드·로그 먼저·120초 예산) + 관리 탭 카드(계정·워크·dry 미리보기·지금 동기화·확인 큐) + 워킨맵 교체 막기·배지 + 매뉴얼 12·14·ops05 + 설계 불변 조건"
+  },
+  {
     "hash": "999527d501",
     "date": "2026-10-31",
     "note": "워킨맵 양방향 동기화 설계안 v2(한설계, 조사만): 계정 2개·A~D 워크 이름 규칙·색 Gn=label_color n-1·가져오기(10분)·되밀기(props 색/숨김, modify2 메모는 읽고-쓰기 한정)·트리거 큐·핑퐁 방지·P1 3일/P2 3일"
@@ -1240,15 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "5bcf63ee2c",
     "date": "2026-10-10",
     "note": "카운터 문자전송: 관리부 목록을 붙여넣으면 팀 목록을 그 목록에 \"맞추기\"(빠진 업체 자동 완료) · 완료 카드는 접기 · 머리글로 팀·달 자동 인식"
-  },
-  {
-    "hash": "465a4be02e",
-    "date": "2026-10-10",
-    "note": "워킨맵 조건에 [점검 경과] 필터(N일 초과만, 자동 일정과 같은 슬라이더) · 내 일정 주소를 줄에서 메모처럼 바로 입력·저장"
-  },
-  {
-    "hash": "479b5282be",
-    "date": "2026-10-10",
-    "note": "서비스접수 증상 사진: 썸네일 크기(긴 변 600px 미만)는 올리기 전에 확인창으로 막고, 타일에 크기 표시"
   }
 ];

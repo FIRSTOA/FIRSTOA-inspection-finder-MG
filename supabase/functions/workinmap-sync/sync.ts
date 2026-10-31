@@ -182,6 +182,8 @@ type WorkResult = {
   stats?: PullPlan["stats"]; colorCheck?: PullPlan["colorCheck"]; error?: string; stop?: PullPlan["stop"];
   writes?: { patched: number; patchFailed: number; skippedDeleted: number; inserted: number; insertFailed: number; reviews: number; logs: number };
   sample?: Array<Record<string, unknown>>;
+  /** dry·중단 때 판단용 표본(새 장소·짝 안 된 앱 행·처음 짝 색 다름) */
+  samples?: PullPlan["samples"];
 };
 
 async function loadLocal(db: Db, workId: string, parse: WorkParse, remoteIds: string[]): Promise<LocalPlace[]> {
@@ -252,9 +254,9 @@ async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: Sto
       await markWork({ last_error: clip(`중단(${plan.stop.reason}): ${plan.stop.detail}`) });
       await insertReviews(db, [{ kind: "format", field: plan.stop.reason, place_id: null, ext_id: null, work_id: w.id, account_no: w.accountNo, detail: { reason: plan.stop.reason, detail: plan.stop.detail, remote: remote.length } }]);
     }
-    return { ...base, result: "stopped", stop: plan.stop, stats: plan.stats, colorCheck: plan.colorCheck };
+    return { ...base, result: "stopped", stop: plan.stop, stats: plan.stats, colorCheck: plan.colorCheck, samples: plan.samples };
   }
-  if (dry) return { ...base, result: "dry", stats: plan.stats, colorCheck: plan.colorCheck, sample, stop: null };
+  if (dry) return { ...base, result: "dry", stats: plan.stats, colorCheck: plan.colorCheck, sample, samples: plan.samples, stop: null };
 
   // ── 쓰기: 200행 묶음 → 그 묶음 로그 먼저, 로그 실패한 묶음은 쓰지 않음 → rpc workin_sync_update_places ──
   // (한 회차 현재 분기 워크 ~12개·장소 ~4,000 을 150초 안에. 없는 id 는 rpc 가 건너뜀 → skippedDeleted)

@@ -12,6 +12,7 @@
  */
 import { buildEntity, dateOf, gather, identKey, str, type Entity, type Row, type SourceResult } from "./entity360";
 import { vendorMatchKey } from "./ids";
+import { monthlyClosingDay } from "./workinPlaces";
 import { isBusinessDay, nextBusinessDay } from "./planDate";
 import { usageSpareAdvice, type SnapshotLike } from "./spareAdvice";
 import { getConfig, rpc, selectAllRows, selectRows } from "./supabase";
@@ -45,7 +46,7 @@ export type VisitAdviceFacts = {
   lastInspect: string;          // yyyy-mm-dd, 없으면 ""
   lastAs: string;               // 다녀온 AS 최댓값(이번 접수·이번 접수로 만든 일정 제외)
   elapsedDays: number | null;   // 오늘 − 마지막점검일
-  workin: { has: boolean; kinds: string[]; labels: string[]; teams: string[]; renewalOnly: boolean; pick: null | { label: string; kind: "quarter" | "monthly" } };
+  workin: { has: boolean; kinds: string[]; labels: string[]; teams: string[]; renewalOnly: boolean; pick: VisitAdviceInput["workin"] };
   deviceCount: number;          // 지점 임대중 복합기·프린터·플로터
   asDeviceCount: number;        // 마지막AS일 하루에 본 서로 다른 기기 수
   asAfterInspection: { date: string; deviceCount: number }[]; // 마지막점검일 뒤 다녀온 AS(날짜별 본 기기 수)
@@ -56,7 +57,7 @@ export type VisitAdviceFacts = {
   today: string;
 };
 
-export type CollectOpts = { today?: string; thresholds?: { quarterDays: number; monthlyDays: number } };
+export type CollectOpts = { today?: string; thresholds?: VisitAdviceInput["thresholds"] };
 type NotFound = { notFound: true; reason: string };
 
 // ── 작은 도우미 ───────────────────────────────────────────────
@@ -246,9 +247,9 @@ export function deriveVisitFacts(input: {
     labels: Array.from(new Set(wp.filter((r) => str(r, "kind") !== "renewal").map((r) => str(r, "label")).filter(Boolean))),
     teams: Array.from(new Set(wp.map((r) => str(r, "team")).filter(Boolean))),
     renewalOnly: kinds.length > 0 && visitKinds.length === 0,
-    pick: null as null | { label: string; kind: "quarter" | "monthly" },
+    pick: null as VisitAdviceInput["workin"],
   };
-  // 글에 찍을 한 곳 — 매월점검이 섞여 있으면 매월(기준 25일). 그 종류의 장소가 전부 G5·G12면 그 라벨(완료·이관), 아니면 "C팀"
+  // 글에 찍을 한 곳 — 매월점검이 섞여 있으면 매월(마감일 기준 영업일 창). 그 종류의 장소가 전부 G5·G12면 그 라벨(완료·이관), 아니면 "C팀"
   const visitRows = wp.filter((r) => str(r, "kind") === "quarter" || str(r, "kind") === "monthly");
   if (visitRows.length) {
     const kind: "quarter" | "monthly" = visitRows.some((r) => str(r, "kind") === "monthly") ? "monthly" : "quarter";
@@ -257,6 +258,11 @@ export function deriveVisitFacts(input: {
     const allDone = ofKind.every((r) => doneLabel(r));
     const team = str(ofKind[0], "team");
     workin.pick = { kind, label: allDone ? (ofKind.some((r) => doneLabel(r) === "G5") ? "G5" : "G12") : team ? (/팀$/.test(team) ? team : `${team}팀`) : "" };
+    // 매월점검: 마감일(이름 맨 앞 숫자)·진행 라벨(G1 시작 전·G2 1개월·G3 2개월 완료) — 완료 안 된 첫 장소 기준
+    if (kind === "monthly" && !allDone) {
+      const open = ofKind.find((r) => !doneLabel(r)) || ofKind[0];
+      workin.pick = { ...workin.pick, closingDay: monthlyClosingDay(str(open, "name")), progress: str(open, "label") };
+    }
   }
 
   const buildingKeys = [rc.address, ...branchRows.map((r) => str(r, "주소상세주소"))].map((a) => sameBuildingKey(String(a || ""))).filter(Boolean);
@@ -319,7 +325,7 @@ export function ticketTitle(t: UpcomingTicket, branchName: string): string {
   return `${kind}${detail}${other}${t.matchedBy === "name" ? " (이름 일치)" : ""}${t.addressUnknown ? " (주소 미확인)" : ""}`;
 }
 
-export function toVisitAdviceInput(f: VisitAdviceFacts, thresholds = { quarterDays: 60, monthlyDays: 25 }): VisitAdviceInput {
+export function toVisitAdviceInput(f: VisitAdviceFacts, thresholds: VisitAdviceInput["thresholds"] = { quarterDays: 60, monthlyWindowDays: 5 }): VisitAdviceInput {
   const deviceLine = [f.model, f.asset, f.serial].map((x) => String(x || "").trim()).filter(Boolean).join("/");
   return {
     vendor: f.branchName || f.vendor, grade: f.grade, deviceLine,
@@ -409,7 +415,7 @@ export async function runVisitAdviceFor(rc: ServiceReceptionRow, roomSent: strin
   let cfg: Record<string, string> = {};
   try { cfg = await getConfig(); } catch (e) { console.warn("[방문 판단] 설정 조회 실패 — 기본값으로 진행(발송은 DB 크론이 스위치를 다시 본다)", e); }
   if (!opts.force && String(cfg.VISIT_ADVICE_ENABLED || "false").toLowerCase() !== "true") return { status: "off" };
-  const thresholds = { quarterDays: numCfg(cfg.VISIT_ADVICE_MIN_DAYS, 60), monthlyDays: numCfg(cfg.VISIT_ADVICE_MONTHLY_DAYS, 25) };
+  const thresholds = { quarterDays: numCfg(cfg.VISIT_ADVICE_MIN_DAYS, 60), monthlyWindowDays: numCfg(cfg.VISIT_ADVICE_MONTHLY_WINDOW_DAYS, 5) };
   const dueAt = visitAdviceDueAt(now, parseAdviceHours(cfg.VISIT_ADVICE_HOURS));
   const immediate = Date.parse(dueAt) <= now.getTime() + 1000;
   let input: VisitAdviceInput;

@@ -99,6 +99,16 @@ describe("collectVisitAdviceInput — 청오에스떠블유 표본", () => {
     expect(rpcMock).toHaveBeenCalledWith("resolve_ticket_vendor_code", { p_reception: "rc-1", p_serial: "ABC12345", p_asset: "31V0123", p_vendor: HQ });
   });
 
+  it("매월점검 장소: 이름 맨 앞 숫자 = 마감일, 실제 라벨 = 진행(2026-10-31 밤)", async () => {
+    mockChungo();
+    const base = sel.getMockImplementation()!;
+    sel.mockImplementation(async (t: string, q: string) =>
+      (t === "workin_map_places" ? [{ ...WORKIN[0], kind: "monthly", label: "G2", name: "20V청오에스떠블유 써브웨이본사" }] : base(t, q)) as never);
+    const got = await collectVisitAdviceInput(reception(), { today: "2026-11-18" });
+    if ("notFound" in got) throw new Error("못 찾음이면 안 된다");
+    expect(got.workin).toEqual({ kind: "monthly", label: "C팀", closingDay: 20, progress: "G2" });
+  });
+
   it("업체 코드도 임대리스트 지점도 없으면 notFound", async () => {
     mockRpc(null);
     sel.mockResolvedValue([] as never);

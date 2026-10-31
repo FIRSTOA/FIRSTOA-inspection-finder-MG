@@ -4,6 +4,36 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "ae62608b4a",
+    "agent": "feature-planner",
+    "summary": "워킨맵(workinmap.com) ↔ 웹앱 워킨맵 양방향 동기화 P1(가져오기): SQL workin-sync-20261031(표 6·열 7·RPC 있는 행만 갱신·트리거·크론 하루 4회 09/12/15/18) + 엣지 workinmap-sync(Firebase 로그인·워크 이름 규칙·짝짓기·메모 합집합·완료 내려감 review·가드·로그 먼저·120초 예산) + 관리 탭 카드(계정·워크·dry 미리보기·지금 동기화·확인 큐) + 워킨맵 교체 막기·배지 + 매뉴얼 12·14·ops05 + 설계 불변 조건"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ae62608b4a",
+    "agent": "db-schema",
+    "summary": "워킨맵(workinmap.com) ↔ 웹앱 워킨맵 양방향 동기화 P1(가져오기): SQL workin-sync-20261031(표 6·열 7·RPC 있는 행만 갱신·트리거·크론 하루 4회 09/12/15/18) + 엣지 workinmap-sync(Firebase 로그인·워크 이름 규칙·짝짓기·메모 합집합·완료 내려감 review·가드·로그 먼저·120초 예산) + 관리 탭 카드(계정·워크·dry 미리보기·지금 동기화·확인 큐) + 워킨맵 교체 막기·배지 + 매뉴얼 12·14·ops05 + 설계 불변 조건"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ae62608b4a",
+    "agent": "developer",
+    "summary": "워킨맵(workinmap.com) ↔ 웹앱 워킨맵 양방향 동기화 P1(가져오기): SQL workin-sync-20261031(표 6·열 7·RPC 있는 행만 갱신·트리거·크론 하루 4회 09/12/15/18) + 엣지 workinmap-sync(Firebase 로그인·워크 이름 규칙·짝짓기·메모 합집합·완료 내려감 review·가드·로그 먼저·120초 예산) + 관리 탭 카드(계정·워크·dry 미리보기·지금 동기화·확인 큐) + 워킨맵 교체 막기·배지 + 매뉴얼 12·14·ops05 + 설계 불변 조건"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ae62608b4a",
+    "agent": "qa-checker",
+    "summary": "워킨맵(workinmap.com) ↔ 웹앱 워킨맵 양방향 동기화 P1(가져오기): SQL workin-sync-20261031(표 6·열 7·RPC 있는 행만 갱신·트리거·크론 하루 4회 09/12/15/18) + 엣지 workinmap-sync(Firebase 로그인·워크 이름 규칙·짝짓기·메모 합집합·완료 내려감 review·가드·로그 먼저·120초 예산) + 관리 탭 카드(계정·워크·dry 미리보기·지금 동기화·확인 큐) + 워킨맵 교체 막기·배지 + 매뉴얼 12·14·ops05 + 설계 불변 조건"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ae62608b4a",
+    "agent": "sql-review",
+    "summary": "워킨맵(workinmap.com) ↔ 웹앱 워킨맵 양방향 동기화 P1(가져오기): SQL workin-sync-20261031(표 6·열 7·RPC 있는 행만 갱신·트리거·크론 하루 4회 09/12/15/18) + 엣지 workinmap-sync(Firebase 로그인·워크 이름 규칙·짝짓기·메모 합집합·완료 내려감 review·가드·로그 먼저·120초 예산) + 관리 탭 카드(계정·워크·dry 미리보기·지금 동기화·확인 큐) + 워킨맵 교체 막기·배지 + 매뉴얼 12·14·ops05 + 설계 불변 조건"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "999527d501",
     "agent": "feature-planner",
     "summary": "워킨맵 양방향 동기화 설계안 v2(한설계, 조사만): 계정 2개·A~D 워크 이름 규칙·색 Gn=label_color n-1·가져오기(10분)·되밀기(props 색/숨김, modify2 메모는 읽고-쓰기 한정)·트리거 큐·핑퐁 방지·P1 3일/P2 3일"

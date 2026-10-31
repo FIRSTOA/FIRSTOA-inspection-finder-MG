@@ -13,6 +13,7 @@
  *   서버 문자열은 화면이 escapeHTML 해서 저장한 값이라 &amp; 등이 섞여 있다 → 비교·저장 전에 풀어 쓴다.
  */
 import { vendorMatchKey } from "../_shared/counter-sms/vendorKey.ts";
+import { historyCoreName } from "../_shared/vendor-core.ts";
 
 export type Team = "A" | "B" | "C" | "D" | "E";
 /** T = 동기화 테스트 워크(app_config.WORKINMAP_TEST_WORK). workin-sync-20261031.sql 이 workin_map_places.team check 에 'T' 를 더한다 */
@@ -144,7 +145,24 @@ export function toIso(value: unknown): string | null {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
-const optText = (v: unknown): string | null => (v === undefined || v === null ? null : decodeHtml(v).trim());
+/**
+ * 텍스트 칸 정규화(2026-10-31 첫 dry 실측: 전화 칸 앱 "A\n\nB" vs 워킨맵 "A\r\nB" 로 100건 가까이 가짜 변경).
+ * CRLF·CR·엑셀 잔재 _x000d_ → LF, 줄 끝 공백 제거, 빈 줄(공백뿐인 줄 포함)은 없앤다 — 앱 엑셀 불러오기가 \r 을 줄로 바꿔
+ * 생긴 빈 줄과 워킨맵 원래 값이 같게 보이도록. 앞뒤 공백 제거. 비교·저장 모두 이 값(LF)으로.
+ */
+export function normText(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFC")
+    .replace(/_x000d_/gi, "\n")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\u00a0]+$/, ""))
+    .filter((line) => line.trim() !== "")
+    .join("\n")
+    .trim();
+}
+
+const optText = (v: unknown): string | null => (v === undefined || v === null ? null : normText(decodeHtml(v)));
 const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
@@ -167,12 +185,12 @@ function memosOf(p: Record<string, unknown>): string[] {
     return p.memo2.map((m) => {
       if (m && typeof m === "object") {
         const o = m as Record<string, unknown>;
-        return decodeHtml(o.content ?? o.text ?? "");
+        return normText(decodeHtml(o.content ?? o.text ?? ""));
       }
-      return decodeHtml(m);
+      return normText(decodeHtml(m));
     });
   }
-  if (typeof p.memo === "string" && p.memo) return p.memo.split(":::").map((x) => decodeHtml(x));
+  if (typeof p.memo === "string" && p.memo) return p.memo.split(":::").map((x) => normText(decodeHtml(x)));
   return [];
 }
 
@@ -201,7 +219,7 @@ export function normalizeRemoteWork(raw: unknown, expectWorkId?: string): { ok: 
     places.push({
       extId: p._id,
       seq: i + 1,
-      name: decodeHtml(p.name).trim(),
+      name: normText(decodeHtml(p.name)),
       comment: optText(p.comment),
       phone: optText(p.number),
       address: addr ? optText(addr.address) : typeof p.address === "string" ? optText(p.address) : null,
@@ -252,6 +270,33 @@ const nameKey = (name: string) => vendorMatchKey(name) || String(name || "").rep
 /** src/workinPlaces.ts addressGroupKey 와 같은 규칙(엣지에서 src 를 import 하지 않으려고 복사) */
 export const addressKey = (address: string | null | undefined) => String(address || "").replace(/\s+/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
 
+/** 이름 느슨한 키 — 통합이력 검색어 규칙(historyCoreName: 등급 접두·㈜/(주)/주식회사·지점 꼬리 제거)으로 뽑은 핵심 이름. 2글자 미만이면 "" */
+export const looseNameKey = (name: string): string => {
+  const k = String(historyCoreName(String(name || "")) || "")
+    .replace(/㈜|\(주\)/g, "")
+    .replace(/[^0-9a-z가-힣]/gi, "")
+    .toLowerCase()
+    .replace(/(주식회사|유한회사|유한책임회사|재단법인|사단법인|농업회사법인|의료법인|학교법인)/g, "");
+  return k.length >= 2 ? k : "";
+};
+const PROVINCE_TOKEN = /^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|제주|충북|충남|전북|전남|경북|경남|충청북|충청남|전라북|전라남|경상북|경상남)(특별시|광역시|특별자치시|특별자치도|시|도)?$/;
+/**
+ * 주소 앞부분 키 — 맨 앞 시·도 토큰을 떼고(서울특별시·서울·경기도 표기 차이 흡수) 첫 번지 토큰(숫자로 시작)의 번호까지만.
+ * "서울특별시 강남구 테헤란로 1, 3층" 과 "서울 강남구 테헤란로 1 (역삼동)" → 같은 키. 번지가 없으면 시·도 뗀 전체. 6글자 미만이면 ""
+ */
+export function addressHeadKey(address: string | null | undefined): string {
+  const tokens = normText(address).replace(/\n/g, " ").split(/\s+/).filter(Boolean);
+  if (tokens.length && PROVINCE_TOKEN.test(tokens[0].replace(/[,.]$/, ""))) tokens.shift();
+  const out: string[] = [];
+  for (const t of tokens) {
+    const n = /^산?\d+(?:-\d+)?/.exec(t);
+    if (n) { out.push(n[0]); break; }
+    out.push(t);
+  }
+  const k = out.join("").replace(/[^0-9a-z가-힣-]/gi, "").toLowerCase();
+  return k.length >= 6 ? k : "";
+}
+
 // ── 짝짓기(v2-B2) ────────────────────────────────────────────────
 
 export type MatchBy = "ext_id" | "number_name" | "name_address";
@@ -263,11 +308,15 @@ export type MatchResult = {
   ambiguous: Array<{ remote: RemotePlace; candidates: number[] }>;
   /** 이 워크에 붙어 있던 앱 행인데 이번 응답에 없음 — 확인 큐 missing(지우지 않는다) */
   missing: LocalPlace[];
+  /** ext_id 빈 앱 행 중 이번에 짝 안 된 행(ambiguous 후보 포함) — dry 표본용 */
+  unmatchedLocal: LocalPlace[];
 };
 
 /**
- * ① ext_id 같음 → ② (ext_id 빈 행 중) 번호 = 응답 순서 + 이름 키 같음, 후보 1개 → ③ 이름 키 + 주소 키 같음, 후보 1개.
- * ②·③에서 후보 2개 이상이면 ambiguous. ③에서 같은 이름+주소 워킨맵 장소가 둘 이상이면 그 장소들 모두 ambiguous(같은 건물 2지점).
+ * ① ext_id 같음 → ② (ext_id 빈 행 중) 번호 = 응답 순서 + 이름 키 같음, 후보 1개 → ③ 이름 + 주소, 후보 1개.
+ * ③(2026-10-31 첫 dry 실측 뒤 강화): 이름은 비교키(vendorMatchKey) 또는 느슨한 키(looseNameKey) 중 하나라도 같고,
+ *   주소는 전체 키(addressKey) 또는 앞부분 키(addressHeadKey: 시·도 표기 무시, 번지까지) 중 하나라도 같으면 후보.
+ * ②·③에서 후보 2개 이상이면 ambiguous. ③에서 한 앱 행을 워킨맵 장소 둘 이상이 후보로 잡으면 그 장소들 모두 ambiguous(같은 건물 2지점).
  * local 은 "ext_id 가 이 워크 장소인 행 + 같은 범위(팀·분기·업무)의 ext_id 빈 행"을 넘긴다. opts.workId 가 있으면 사라진 장소를 고른다.
  */
 export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { workId?: string } = {}): MatchResult {
@@ -297,26 +346,34 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
   rest = afterStep2;
 
   // ③ 이름 + 주소
-  const comboKey = (name: string, address: string | null | undefined) => {
-    const n = nameKey(name), a = addressKey(address);
-    return n && a ? `${n}|${a}` : "";
+  type Keys = { names: string[]; addrs: string[] };
+  const keysOf = (name: string, address: string | null | undefined): Keys => {
+    const full = addressKey(address), head = addressHeadKey(address);
+    return { names: [nameKey(name), looseNameKey(name)].filter(Boolean), addrs: [full ? `f:${full}` : "", head ? `h:${head}` : ""].filter(Boolean) };
   };
-  const remoteKeyCount = new Map<string, number>();
+  const overlap = (a: string[], b: string[]) => a.some((x) => b.includes(x));
+  const same = (a: Keys, b: Keys) => overlap(a.names, b.names) && overlap(a.addrs, b.addrs);
+  const localKeys = new Map<number, Keys>();
+  for (const l of unlinked) if (!used.has(l.id)) localKeys.set(l.id, keysOf(l.name, l.address));
+  const candOf = new Map<string, LocalPlace[]>();
+  const claims = new Map<number, number>();
   for (const r of rest) {
-    const k = comboKey(r.name, r.address);
-    if (k) remoteKeyCount.set(k, (remoteKeyCount.get(k) || 0) + 1);
+    const rk = keysOf(r.name, r.address);
+    const cands = unlinked.filter((l) => localKeys.has(l.id) && same(rk, localKeys.get(l.id) as Keys));
+    candOf.set(r.extId, cands);
+    for (const c of cands) claims.set(c.id, (claims.get(c.id) || 0) + 1);
   }
   for (const r of rest) {
-    const k = comboKey(r.name, r.address);
-    const cands = k ? unlinked.filter((l) => !used.has(l.id) && comboKey(l.name, l.address) === k) : [];
+    const cands = candOf.get(r.extId) || [];
     if (cands.length === 0) { fresh.push(r); continue; }
-    if (cands.length === 1 && (remoteKeyCount.get(k) || 0) === 1) { pairs.push({ remote: r, local: cands[0], by: "name_address" }); used.add(cands[0].id); continue; }
+    if (cands.length === 1 && (claims.get(cands[0].id) || 0) === 1) { pairs.push({ remote: r, local: cands[0], by: "name_address" }); used.add(cands[0].id); continue; }
     ambiguous.push({ remote: r, candidates: cands.map((c) => c.id) });
   }
 
   const remoteIds = new Set(remote.map((r) => r.extId));
   const missing = opts.workId ? local.filter((l) => l.ext_id && l.ext_work_id === opts.workId && !remoteIds.has(l.ext_id)) : [];
-  return { pairs, fresh, ambiguous, missing };
+  const unmatchedLocal = unlinked.filter((l) => !used.has(l.id));
+  return { pairs, fresh, ambiguous, missing, unmatchedLocal };
 }
 
 // ── 메모 합치기 ──────────────────────────────────────────────────
@@ -334,7 +391,7 @@ export function mergeMemos(remoteLines: string[], localLines: string[]): { merge
   const seen = new Set(local.map(memoKey));
   const added: string[] = [];
   for (const raw of Array.isArray(remoteLines) ? remoteLines : []) {
-    const line = String(raw ?? "").trim();
+    const line = normText(raw);
     const key = memoKey(line);
     if (!key || seen.has(key) || hasMaskMark(line)) continue;
     seen.add(key);
@@ -348,19 +405,26 @@ export function mergeMemos(remoteLines: string[], localLines: string[]): { merge
 export type Field = "label" | "visible" | "name" | "comment" | "phone" | "address" | "address_detail" | "coords" | "memos";
 export type Change = { field: Field; before: unknown; after: unknown };
 
-const sameText = (a: unknown, b: unknown) => String(a ?? "").trim() === String(b ?? "").trim();
+const sameText = (a: unknown, b: unknown) => normText(a) === normText(b);
 const COORD_EPS = 1e-6;
 
-/** 짝지은 두 장소의 바뀐 칸. 응답에 없는 칸(null)·빈 이름·(0,0) 좌표·가린 코멘트는 바꾸지 않는다. 메모는 붙일 줄이 있을 때만 */
+/**
+ * 짝지은 두 장소의 바뀐 칸. 응답에 없는 칸(null)·빈 이름·(0,0) 좌표·가린 코멘트는 바꾸지 않는다. 메모는 붙일 줄이 있을 때만.
+ * 텍스트 칸은 normText 로 비교(줄바꿈 CRLF/LF·빈 줄·앞뒤 공백 차이만이면 변경 아님)하고, 바꿀 값(after)도 정규화한 LF 값이다.
+ */
 export function diffPlace(remote: RemotePlace, local: LocalPlace): Change[] {
   const out: Change[] = [];
   if (remote.label && remote.label !== local.label) out.push({ field: "label", before: local.label, after: remote.label });
   if (remote.visible !== null && remote.visible !== (local.visible !== false)) out.push({ field: "visible", before: local.visible, after: remote.visible });
-  if (remote.name && !sameText(remote.name, local.name)) out.push({ field: "name", before: local.name, after: remote.name });
-  if (remote.comment !== null && !hasMaskMark(remote.comment) && !sameText(remote.comment, local.comment)) out.push({ field: "comment", before: local.comment, after: remote.comment });
-  if (remote.phone !== null && !sameText(remote.phone, local.phone)) out.push({ field: "phone", before: local.phone, after: remote.phone });
-  if (remote.address !== null && !sameText(remote.address, local.address)) out.push({ field: "address", before: local.address, after: remote.address });
-  if (remote.addressDetail !== null && !sameText(remote.addressDetail, local.address_detail)) out.push({ field: "address_detail", before: local.address_detail, after: remote.addressDetail });
+  const text = (field: "name" | "comment" | "phone" | "address" | "address_detail", value: string | null, before: unknown) => {
+    if (value === null || sameText(value, before)) return;
+    out.push({ field, before, after: normText(value) });
+  };
+  if (normText(remote.name)) text("name", remote.name, local.name);
+  if (remote.comment !== null && !hasMaskMark(remote.comment)) text("comment", remote.comment, local.comment);
+  text("phone", remote.phone, local.phone);
+  text("address", remote.address, local.address);
+  text("address_detail", remote.addressDetail, local.address_detail);
   const lat = remote.latitude, lng = remote.longitude;
   if (lat !== null && lng !== null && !(lat === 0 && lng === 0)) {
     if (Math.abs(lat - Number(local.latitude || 0)) > COORD_EPS || Math.abs(lng - Number(local.longitude || 0)) > COORD_EPS) {
@@ -499,6 +563,20 @@ export type PullPlan = {
   };
   /** 색 검증(v2 P1-3): label_color 분포와 처음 짝지은 곳의 앱 색 일치 수 */
   colorCheck: { histogram: Record<string, number>; firstMatchSame: number; firstMatchDiff: number };
+  /** dry 판단용 표본(2026-10-31 첫 실측 뒤) — "이름 차이인지 진짜 새 장소인지"·"label_color→G 대응이 맞는지" 사람이 눈으로 보게 */
+  samples: PullSamples;
+};
+export const SAMPLE_FRESH = 20;
+export const SAMPLE_UNMATCHED = 20;
+export const SAMPLE_COLOR_DIFF = 10;
+export type PullSamples = {
+  /** 새 장소(짝 없음) 앞 20곳 — 워킨맵 순서·이름·주소·label_color */
+  fresh: Array<{ extId: string; seq: number; name: string; address: string | null; labelColor: number | null }>;
+  /** 범위(팀·분기·업무) 안 ext_id 빈 앱 행 중 짝 안 된 행 앞 20곳 + 전체 수 */
+  unmatchedLocal: Array<{ id: number; number: number; name: string; address: string }>;
+  unmatchedLocalTotal: number;
+  /** 처음 짝지은 곳 중 색이 다른 곳 앞 10곳 — 앱 G · 워킨맵 label_color · 그 번호를 G 로 바꾼 값 */
+  colorDiff: Array<{ id: number; name: string; appLabel: string; workinmapColor: number | null; workinmapLabel: string | null }>;
 };
 
 /** 확인 큐 중복 키 — SQL workin_sync_review_open_uq(kind, field, work_id, ext_id, place_id)와 같은 칸 */
@@ -552,7 +630,8 @@ export function planPull(input: PullInput): PullPlan {
   const histogram: Record<string, number> = {};
   for (const r of remote) { const k = r.labelColor === null ? "없음" : String(r.labelColor); histogram[k] = (histogram[k] || 0) + 1; }
   const colorCheck = { histogram, firstMatchSame: 0, firstMatchDiff: 0 };
-  const stopped = (reason: "empty" | "shrunk" | "too_many_new", detail: string): PullPlan => ({ stop: { reason, detail }, patches: [], inserts: [], reviews: [], stats, colorCheck });
+  const samples: PullSamples = { fresh: [], unmatchedLocal: [], unmatchedLocalTotal: 0, colorDiff: [] };
+  const stopped = (reason: "empty" | "shrunk" | "too_many_new", detail: string): PullPlan => ({ stop: { reason, detail }, patches: [], inserts: [], reviews: [], stats, colorCheck, samples });
 
   const guard = workGuard(remote.length, input.previousCount);
   if (guard) return stopped(guard, guard === "empty" ? "응답 0곳 — 전부 삭제로 보지 않고 중단" : `응답 ${remote.length}곳 < 평소 ${input.previousCount}곳의 절반`);
@@ -561,6 +640,9 @@ export function planPull(input: PullInput): PullPlan {
   stats.fresh = m.fresh.length;
   stats.ambiguous = m.ambiguous.length;
   stats.missing = m.missing.length;
+  samples.fresh = m.fresh.slice(0, SAMPLE_FRESH).map((r) => ({ extId: r.extId, seq: r.seq, name: r.name, address: r.address, labelColor: r.labelColor }));
+  samples.unmatchedLocal = m.unmatchedLocal.slice(0, SAMPLE_UNMATCHED).map((l) => ({ id: l.id, number: l.number, name: l.name, address: l.address }));
+  samples.unmatchedLocalTotal = m.unmatchedLocal.length;
   const freshGuard = newPlaceGuard(m.fresh.length, input.firstPull);
   if (freshGuard === "too_many") return stopped("too_many_new", `새 장소 ${m.fresh.length}곳 > ${NEW_PLACE_LIMIT}곳`);
 
@@ -584,7 +666,13 @@ export function planPull(input: PullInput): PullPlan {
   for (const { remote: r, local: l, by } of m.pairs) {
     stats.matched += 1;
     if (by === "ext_id") stats.byExtId += 1; else if (by === "number_name") stats.byNumberName += 1; else stats.byNameAddress += 1;
-    if (by !== "ext_id" && r.label) { if (r.label === l.label) colorCheck.firstMatchSame += 1; else colorCheck.firstMatchDiff += 1; }
+    if (by !== "ext_id" && r.label) {
+      if (r.label === l.label) colorCheck.firstMatchSame += 1;
+      else {
+        colorCheck.firstMatchDiff += 1;
+        if (samples.colorDiff.length < SAMPLE_COLOR_DIFF) samples.colorDiff.push({ id: l.id, name: l.name, appLabel: l.label, workinmapColor: r.labelColor, workinmapLabel: r.label });
+      }
+    }
 
     const rules = applyRules(diffPlace(r, l), {
       localUpdatedAt: l.updated_at, localUpdatedBy: l.updated_by, extSyncedAt: l.ext_synced_at, extLastUpdate: l.ext_last_update, remoteLastUpdate: r.lastUpdate,
@@ -683,7 +771,7 @@ export function planPull(input: PullInput): PullPlan {
     stats.inserted = inserts.length;
   }
 
-  return { stop: null, patches, inserts, reviews, stats, colorCheck };
+  return { stop: null, patches, inserts, reviews, stats, colorCheck, samples };
 }
 
 // ── 요청·인증 ─────────────────────────────────────────────────────

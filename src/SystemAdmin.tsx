@@ -30,7 +30,7 @@ type SheetJob = { id: string; category?: string; sheet_status?: string; created_
 // 방문 판단 안내글 기준일(기타 설정) — 비우면 괄호 안 기본값(src/visitAdviceData.ts runVisitAdviceFor 와 같은 값)
 const VISIT_ADVICE_DAY_FIELDS = [
   { key: "VISIT_ADVICE_MIN_DAYS", label: "방문 판단 점검 경과 기준일", fallback: "60", desc: "분기점검 지점은 마지막 점검에서 이 날수 이상 지나면 \"점검 필요\"로 봅니다. 비우면 60일." },
-  { key: "VISIT_ADVICE_MONTHLY_DAYS", label: "방문 판단 매월점검 기준일", fallback: "25", desc: "워킨맵 매월점검 지점의 기준 날수입니다. 비우면 25일." },
+  { key: "VISIT_ADVICE_MONTHLY_WINDOW_DAYS", label: "방문 판단 매월점검 창(영업일)", fallback: "5", desc: "워킨맵 매월점검 지점은 마감일(장소 이름 맨 앞 숫자)을 끝으로 하는 영업일 이 날수 안에 접수되면 \"점검 필요\"로 봅니다(주말·공휴일 제외, 마감일이 주말이면 그 전 영업일까지). 예: 마감 20일·5일 → 11/16(월)~11/20(금) 접수만 필요, 11/2 접수는 안 뜸. 비우면 5일." },
 ] as const;
 
 const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boolean; defaultOn?: boolean }> = [ // defaultOn = 값이 없을 때 켜짐으로 보이는 키(엣지도 같은 기본값)
@@ -273,7 +273,7 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
               }}
               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-28 lg:h-10" />
           </div>
-          {/* 방문 판단 안내글 기준일(2026-10-31) — 비우면 60·25. 양의 정수만 저장 */}
+          {/* 방문 판단 안내글 기준일(2026-10-31) — 비우면 60·5(매월점검 창 영업일). 양의 정수만 저장 */}
           {VISIT_ADVICE_DAY_FIELDS.map((f) => (
             <div key={f.key} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
               <div>

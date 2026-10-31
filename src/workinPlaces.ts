@@ -32,6 +32,18 @@ export function renewalQuarterMonths(quarter: Quarter): number[] {
 }
 
 /** 지금 분기 */
+/**
+ * 매월점검 이름 맨 앞 숫자 = 마감일(1~31). 세금계산서용 카운터 검침을 위해 마감 전 영업일 며칠 안에 방문한다.
+ * 예 "20V웍스피어 유한책임회사…" → 20. 숫자가 없거나 범위 밖이면 null.
+ * 워킨맵 마감일순 정렬과 AS 접수 방문 판단(visitAdvice)이 같이 쓴다.
+ */
+export function monthlyClosingDay(name: string): number | null {
+  const match = String(name ?? "").match(/^\s*(\d{1,2})/);
+  if (!match) return null;
+  const day = Number(match[1]);
+  return day >= 1 && day <= 31 ? day : null;
+}
+
 export function currentQuarter(now = new Date()): Quarter {
   return (Math.floor(now.getMonth() / 3) + 1) as Quarter;
 }

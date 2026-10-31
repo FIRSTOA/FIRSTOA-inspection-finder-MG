@@ -1,6 +1,7 @@
 // AS 접수 뒤 "방문 판단 안내글" — 순수 규칙(2026-10-31, docs/tasks/as-reception-visit-advice-2026-10-31.md).
 // 자료 모으기(supabase)는 visitAdviceData.ts(구현 B)가 한다. 여기는 판정·글 만들기만.
 import { addressCore } from "./address";
+import { isBusinessDay } from "./planDate";
 
 export type VisitVerdict = "불필요" | "필요" | "판단필요" | "판단불가";
 export type SpareState = "충분" | "부족" | "모름";
@@ -24,10 +25,15 @@ export type VisitAdviceInput = {
   deviceTotal: number;
   spare: SpareState;
   selfRequestOpen: number;
-  workin: null | { label: string; kind: "quarter" | "monthly" };
+  /**
+   * 이번 분기 워킨맵. label = 글에 찍을 값(팀 이름 또는 G5·G12).
+   * 매월점검이면 closingDay(이름 맨 앞 숫자 = 마감일)·progress(그 장소의 실제 라벨 G1·G2·G3 …)를 같이 준다.
+   */
+  workin: null | { label: string; kind: "quarter" | "monthly"; closingDay?: number | null; progress?: string };
   upcoming: UpcomingItem[];
   today: string; // KST YYYY-MM-DD (kstDate())
-  thresholds: { quarterDays: number; monthlyDays: number };
+  /** quarterDays = 분기점검 경과 기준일, monthlyWindowDays = 매월점검 마감 전 창(영업일 수, 마감일 포함) */
+  thresholds: { quarterDays: number; monthlyWindowDays: number };
   /** 자료 조회가 실패했으면 그 사유. 있으면 판단불가(자료 못 읽음). */
   lookupError?: string;
   /** 임대리스트에서 업체·지점을 못 찾았으면 true. 있으면 판단불가. */
@@ -82,8 +88,97 @@ function workinDoneLabel(label: string): "G5" | "G12" | null {
   return null;
 }
 
-function thresholdOf(input: VisitAdviceInput): number {
-  return input.workin?.kind === "monthly" ? input.thresholds.monthlyDays : input.thresholds.quarterDays;
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function ymdOf(y: number, m: number, d: number): string {
+  return `${y}-${pad2(m)}-${pad2(d)}`;
+}
+
+function shiftYmd(ymd: string, days: number): string {
+  const t = ymdToUtc(ymd) ?? 0;
+  return new Date(t + days * 86400000).toISOString().slice(0, 10);
+}
+
+/** "2026-11-16" → "11/16" */
+function md(ymd: string): string {
+  const m = YMD.exec(ymd);
+  return m ? `${Number(m[2])}/${Number(m[3])}` : ymd;
+}
+
+export type MonthlyWindow = { start: string; end: string };
+
+/**
+ * 그 달(year·month)의 매월점검 창 = 마감일(달 길이 넘으면 말일)을 끝으로 하는 영업일 N일.
+ * 마감일이 주말·공휴일이면 그 전 영업일이 끝. 시작은 끝에서 거꾸로 영업일 N개째(주말·공휴일은 세지 않으므로 창이 늘어난다).
+ */
+export function monthlyWindow(year: number, month: number, closingDay: number, businessDays: number): MonthlyWindow {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  let end = ymdOf(year, month, Math.min(Math.max(1, closingDay), last));
+  while (!isBusinessDay(end)) end = shiftYmd(end, -1);
+  let start = end;
+  for (let counted = 1; counted < Math.max(1, Math.floor(businessDays)); ) {
+    start = shiftYmd(start, -1);
+    if (isBusinessDay(start)) counted += 1;
+  }
+  return { start, end };
+}
+
+export type MonthlyWindowJudge = { inWindow: boolean; window: MonthlyWindow };
+
+/**
+ * 접수일(today)이 매월점검 창 안인가. 이번 달 마감(창 끝)이 이미 지났으면 다음 달 창으로 본다
+ * (보통 밖 — 마감일이 월초면 다음 달 창이 이번 달 말에 걸칠 수 있어 그때는 안).
+ */
+export function judgeMonthlyWindow(today: string, closingDay: number, businessDays: number): MonthlyWindowJudge | null {
+  const m = YMD.exec(String(today || ""));
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const day = String(today).slice(0, 10);
+  let window = monthlyWindow(y, mo, closingDay, businessDays);
+  if (day > window.end) window = mo === 12 ? monthlyWindow(y + 1, 1, closingDay, businessDays) : monthlyWindow(y, mo + 1, closingDay, businessDays);
+  return { inWindow: day >= window.start && day <= window.end, window };
+}
+
+/** 매월점검 라벨 → 이번 분기 완료 개월 수(G1 시작 전 0 · G2 1 · G3 2). 그 밖은 null(모름). */
+function monthlyDoneMonths(label: string | undefined): number | null {
+  const v = String(label || "").toUpperCase().replace(/\s+/g, "");
+  if (v === "G1") return 0;
+  if (v === "G2") return 1;
+  if (v === "G3") return 2;
+  return null;
+}
+
+/** 이번 달이 분기에서 몇 번째 달인지(1·4·7·10월 = 1 … 3·6·9·12월 = 3) */
+function monthInQuarter(ymd: string): number {
+  const m = YMD.exec(String(ymd || ""));
+  return m ? ((Number(m[2]) - 1) % 3) + 1 : 0;
+}
+
+function monthlyWindowText(closingDay: number, j: MonthlyWindowJudge): string {
+  const range = `${md(j.window.start)}~${md(j.window.end)}`;
+  return `매월점검 마감 ${closingDay}일 · ${j.inWindow ? `창 ${range}` : `창 밖(${range})`}`;
+}
+
+function windowDaysOf(input: VisitAdviceInput): number {
+  const n = Number(input.thresholds.monthlyWindowDays);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 5;
+}
+
+/** 매월점검 지점 판정(G5·G12 는 앞에서 처리). 마감일 모르면 판단필요. */
+function judgeMonthly(input: VisitAdviceInput, elapsedDays: number | null): VisitAdviceResult {
+  const closing = input.workin?.closingDay ?? null;
+  if (closing === null) return { verdict: "판단필요", elapsedDays, reasons: ["매월점검 마감일 모름(워킨맵 이름 앞 숫자 없음)"] };
+  const j = judgeMonthlyWindow(input.today, closing, windowDaysOf(input));
+  if (!j) return { verdict: "판단불가", elapsedDays, reasons: ["접수일을 읽지 못함"] };
+  if (!j.inWindow) return { verdict: "불필요", elapsedDays, reasons: [monthlyWindowText(closing, j)] };
+  const done = monthlyDoneMonths(input.workin?.progress);
+  if (done !== null && done >= monthInQuarter(input.today)) {
+    return { verdict: "불필요", elapsedDays, reasons: [`이번 달 매월점검 완료(${String(input.workin?.progress).toUpperCase().trim()})`, monthlyWindowText(closing, j)] };
+  }
+  return { verdict: "필요", elapsedDays, reasons: [monthlyWindowText(closing, j)] };
 }
 
 function hasAsAfterInspection(input: VisitAdviceInput): boolean {
@@ -97,7 +192,7 @@ function hasAsAfterInspection(input: VisitAdviceInput): boolean {
 export function judgeVisit(input: VisitAdviceInput): VisitAdviceResult {
   const elapsed = input.lastInspection ? daysBetween(input.lastInspection, input.today) : null;
   const elapsedDays = elapsed === null ? null : Math.max(0, elapsed);
-  const threshold = thresholdOf(input);
+  const threshold = input.thresholds.quarterDays;
 
   // 0. 자료 조회 실패 / 못 찾음 / 판단할 자료가 하나도 없음
   if (input.lookupError) return { verdict: "판단불가", elapsedDays, reasons: [`자료 못 읽음: ${input.lookupError}`] };
@@ -110,6 +205,8 @@ export function judgeVisit(input: VisitAdviceInput): VisitAdviceResult {
   // 2. G5(점검 완료)·G12(이관)
   const done = workinDoneLabel(input.workin.label);
   if (done) return { verdict: "불필요", elapsedDays, reasons: [done === "G5" ? "워킨맵 G5 점검 완료" : "워킨맵 G12 이관"] };
+  // 2-1. 매월점검 = 마감일 기준 영업일 창(2026-10-31 사용자 결정, 경과일 기준 아님)
+  if (input.workin.kind === "monthly") return judgeMonthly(input, elapsedDays);
   // 3. 기준 미만
   if (elapsedDays !== null && elapsedDays < threshold) {
     return { verdict: "불필요", elapsedDays, reasons: [`경과 ${elapsedDays}일 < 기준 ${threshold}일`] };
@@ -138,11 +235,17 @@ function workinText(input: VisitAdviceInput): string {
 }
 
 function verdictLine(input: VisitAdviceInput, result: VisitAdviceResult): string {
-  const threshold = thresholdOf(input);
   const elapsed = result.elapsedDays === null ? "점검 기록 없음" : `경과 ${result.elapsedDays}일`;
   const done = input.workin ? workinDoneLabel(input.workin.label) : null;
   const workin = !input.workin ? "워킨맵 없음" : done === "G5" ? "워킨맵 G5 점검 완료" : done === "G12" ? "워킨맵 G12 이관" : "워킨맵 있음";
-  return `점검여부: ${result.verdict} (${elapsed} / 기준 ${threshold}일, ${workin})`;
+  const closing = input.workin?.kind === "monthly" && !done ? input.workin.closingDay ?? null : null;
+  const j = closing !== null ? judgeMonthlyWindow(input.today, closing, windowDaysOf(input)) : null;
+  const basis = input.workin?.kind === "monthly" && !done
+    ? j && closing !== null
+      ? `마감 ${closing}일 · ${j.inWindow ? "창" : "창 밖"} ${md(j.window.start)}~${md(j.window.end)}`
+      : "마감일 모름"
+    : `기준 ${input.thresholds.quarterDays}일`;
+  return `점검여부: ${result.verdict} (${elapsed} / ${basis}, ${workin})`;
 }
 
 function latestAs(input: VisitAdviceInput): { date: string; deviceCount: number } | null {

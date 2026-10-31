@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyRules, classifyWork, colorOf, decodeHtml, diffPlace, isAuthorized, labelOf, matchPlaces, mergeMemos, newPlaceGuard,
   chunkPatchRows, nextScheduledRun, normalizeRemoteWork, parseRequest, parseWorkName, planPull, SYNC_ACTOR, workGuard,
+  addressHeadKey, looseNameKey, normText,
   type LocalPlace, type RemotePlace,
 } from "../supabase/functions/workinmap-sync/plan.ts";
 import { getIdToken, readAccounts, scrub, type TokenRow, type TokenStore } from "../supabase/functions/workinmap-sync/auth.ts";
@@ -124,6 +125,72 @@ describe("matchPlaces — ext_id → 번호+이름 → 이름+주소", () => {
   it("이 워크에 붙었던 행이 응답에 없으면 missing", () => {
     const m = matchPlaces([rp({ extId: "e1", name: "가" })], [lp({ id: 1, name: "가", ext_id: "e1", ext_work_id: WORK }), lp({ id: 2, name: "나", ext_id: "gone", ext_work_id: WORK })], { workId: WORK });
     expect(m.missing.map((l) => l.id)).toEqual([2]);
+  });
+});
+
+// ── 2026-10-31 첫 dry 실측 뒤 보강 ─────────────────────────────────
+describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 · 표본", () => {
+  it("normText: CRLF/LF·빈 줄·앞뒤 공백·_x000d_ 차이는 같은 값(LF)", () => {
+    expect(normText("A\r\nB")).toBe("A\nB");
+    expect(normText("A\n\nB")).toBe("A\nB");
+    expect(normText("  A \r\n\r\n\r\n B  \n")).toBe("A\n B");
+    expect(normText("A_x000d_\nB")).toBe("A\nB");
+    expect(normText(null)).toBe("");
+  });
+
+  it("diffPlace: 앱 \"A\\n\\nB\" vs 워킨맵 \"A\\r\\nB\" 는 변경 아님, 진짜 다르면 저장 값은 LF", () => {
+    const l = lp({ id: 1, name: "가", phone: "010-1\n\n02-2", comment: "키맨\n", address: "서울 중구 1", address_detail: "" });
+    expect(diffPlace(rp({ extId: "e", name: "가", label: "G1", phone: "010-1\r\n02-2", comment: "키맨", address: " 서울 중구 1\r\n", addressDetail: "" }), l)).toEqual([]);
+    const d = diffPlace(rp({ extId: "e", name: "가", phone: "010-9\r\n02-2" }), l);
+    expect(d.find((c) => c.field === "phone")?.after).toBe("010-9\n02-2");
+  });
+
+  it("normalizeRemoteWork 가 텍스트 칸·메모를 LF 로 정리", () => {
+    const n = normalizeRemoteWork({ _id: WORK, name: "w", places: [{ _id: "p1", name: "가\r\n", number: "010\r\n\r\n02", memo2: [{ content: "줄1\r\n줄2" }] }] });
+    if (!n.ok) throw new Error(n.error);
+    expect(n.work.places[0]).toMatchObject({ name: "가", phone: "010\n02", memos: ["줄1\n줄2"] });
+  });
+
+  it("③ 이름 느슨한 키 + 주소 앞부분(시·도 표기·층·괄호 무시)으로 짝", () => {
+    expect(addressHeadKey("서울특별시 강남구 테헤란로 1, 3층")).toBe(addressHeadKey("서울 강남구 테헤란로 1 (역삼동)"));
+    expect(addressHeadKey("서울 강남구 테헤란로 1")).not.toBe(addressHeadKey("서울 강남구 테헤란로 12"));
+    expect(looseNameKey("주식회사 마바산업")).toBe(looseNameKey("마바산업㈜"));
+    const remote = [rp({ extId: "r1", name: "주식회사 마바산업", seq: 40, address: "서울특별시 강남구 테헤란로 1, 3층" })];
+    const m = matchPlaces(remote, [lp({ id: 7, name: "마바산업㈜", number: 3, address: "서울 강남구 테헤란로 1 (역삼동)" })]);
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["r1", 7, "name_address"]]);
+    expect(m.unmatchedLocal).toEqual([]);
+  });
+
+  it("③ 강화 뒤에도 후보 2개+ 면 ambiguous, 번지 다르면 새 장소", () => {
+    const remote = [rp({ extId: "r1", name: "마바산업", seq: 40, address: "서울 강남구 테헤란로 1" }), rp({ extId: "r2", name: "마바산업", seq: 41, address: "서울 강남구 테헤란로 99" })];
+    const local = [lp({ id: 1, name: "(주)마바산업", number: 3, address: "서울특별시 강남구 테헤란로 1, 2층" }), lp({ id: 2, name: "마바산업 주식회사", number: 4, address: "서울 강남구 테헤란로 1 5층" })];
+    const m = matchPlaces(remote, local);
+    expect(m.pairs).toEqual([]);
+    expect(m.ambiguous).toEqual([{ remote: remote[0], candidates: [1, 2] }]);
+    expect(m.fresh.map((r) => r.extId)).toEqual(["r2"]);
+    expect(m.unmatchedLocal.map((l) => l.id)).toEqual([1, 2]);
+  });
+
+  it("planPull 표본: 새 장소(최대 20)·짝 안 된 앱 행(최대 20)·처음 짝 색 다름(최대 10)", () => {
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
+    const remote = [
+      ...Array.from({ length: 12 }, (_, i) => rp({ extId: `m${i}`, name: `업체${i}`, seq: i + 1, label: "G5", labelColor: 4 })),
+      ...Array.from({ length: 25 }, (_, i) => rp({ extId: `n${i}`, name: `새곳${i}`, seq: 100 + i, address: `주소${i}`, labelColor: 1, label: "G2" })),
+    ];
+    const local = [
+      ...Array.from({ length: 12 }, (_, i) => lp({ id: i + 1, name: `업체${i}`, number: i + 1, label: "G2" })),
+      ...Array.from({ length: 22 }, (_, i) => lp({ id: 100 + i, name: `앱만${i}`, number: 200 + i, address: `앱주소${i}` })),
+    ];
+    const p = planPull({ workId: WORK, accountNo: 1, parse, remote, local, firstPull: true, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 30 });
+    expect(p.stats).toMatchObject({ matched: 12, fresh: 25 });
+    expect(p.samples.fresh).toHaveLength(20);
+    expect(p.samples.fresh[0]).toEqual({ extId: "n0", seq: 100, name: "새곳0", address: "주소0", labelColor: 1 });
+    expect(p.samples.unmatchedLocal).toHaveLength(20);
+    expect(p.samples.unmatchedLocalTotal).toBe(22);
+    expect(p.samples.unmatchedLocal[0]).toEqual({ id: 100, number: 200, name: "앱만0", address: "앱주소0" });
+    expect(p.colorCheck.firstMatchDiff).toBe(12);
+    expect(p.samples.colorDiff).toHaveLength(10);
+    expect(p.samples.colorDiff[0]).toEqual({ id: 1, name: "업체0", appLabel: "G2", workinmapColor: 4, workinmapLabel: "G5" });
   });
 });
 
@@ -411,6 +478,11 @@ describe("runAction(fetch 주입)", () => {
     for (const t of ["workin_map_places", "workin_sync_log", "workin_sync_review", "workin_sync_works", "rpc/workin_sync_take_lease"]) expect(writesTo(calls, t)).toEqual([]);
     const results = out.body.results as Array<{ result: string; stats: { matched: number; labelChanges: number } }>;
     expect(results[0]).toMatchObject({ result: "dry", stats: { matched: 2, labelChanges: 1 } });
+    // dry 응답에 판단용 표본(새 장소·짝 안 된 앱 행·색 다름)
+    const samples = (results[0] as unknown as { samples: { fresh: unknown[]; unmatchedLocal: unknown[]; unmatchedLocalTotal: number; colorDiff: unknown[] } }).samples;
+    expect(samples).toBeDefined();
+    expect(Array.isArray(samples.fresh) && Array.isArray(samples.unmatchedLocal) && Array.isArray(samples.colorDiff)).toBe(true);
+    expect(samples.colorDiff.length).toBeGreaterThan(0);
     // 응답에 비밀값 없음
     const text = JSON.stringify(out.body);
     for (const s of [ACC.email, ACC.password, "IDTOKEN-SECRET", "RT-SECRET", "SERVICE-KEY"]) expect(text).not.toContain(s);

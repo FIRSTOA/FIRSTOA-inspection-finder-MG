@@ -13,7 +13,7 @@ import { geocodeKR } from "./geocode";
 import { loadKakaoMaps, type KakaoNS } from "./kakaoMap";
 import { fieldTicketVendor, normalizeId as normalizeIdKey, vendorMatchKey, vendorTokensContained } from "./ids";
 // 등급·계약종료월·라벨 뜻은 재계약 준비 탭과 공유한다 (규칙이 어긋나면 방문 대상이 화면마다 달라진다)
-import { RENEWAL_LABEL_DESC, contractEnd, projectedContractEnd, renewalGrade, renewalQuarterMonths } from "./workinPlaces";
+import { RENEWAL_LABEL_DESC, contractEnd, monthlyClosingDay, projectedContractEnd, renewalGrade, renewalQuarterMonths } from "./workinPlaces";
 import { getAliasCodeMap, getWorkinCodeMap, translateVendor } from "./vendorCodes";
 import { getTeamVisits, kstDate, type VisitRow } from "./visits";
 import { maxUpdatedAt, mergePlaces, staleIdsFromStamps, updatedAtMs } from "./placesSync";
@@ -316,13 +316,7 @@ function misuBalanceLabel(value: string) {
   return digits ? `${Number(digits).toLocaleString()}원` : String(value || "").trim();
 }
 
-// 매월점검 이름 맨 앞 숫자 = 마감일(1~31). 세금계산서용 카운터 검침을 위해 이 날 3~5일 전에 방문한다.
-function monthlyClosingDay(name: string) {
-  const match = String(name).match(/^\s*(\d{1,2})/);
-  if (!match) return null;
-  const day = Number(match[1]);
-  return day >= 1 && day <= 31 ? day : null;
-}
+// 매월점검 마감일(이름 맨 앞 숫자) = workinPlaces.monthlyClosingDay — 방문 판단 안내글(visitAdvice)과 같은 규칙.
 
 function addressGroupKey(place: MapPlace) {
   const address = (place.address.trim() || place.addressDetail.trim()).replace(/\s+/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
