@@ -107,3 +107,15 @@ describe("오버홀 시트 주소 — gviz 말고 export?format=csv&gid=", () =>
     }
   });
 });
+
+describe("오버홀 시트 ID 설정(2026-10-31 — 시트가 새 파일로 바뀌어 10/23 이후가 0 으로 보이던 것)", () => {
+  it("설정에 시트 주소가 통째로 있으면 그 ID·gid 로 읽고, 탭 이름·gid 숫자면 기본 시트", async () => {
+    const { overhaulCsvUrl, overhaulSheetIdOf, OVERHAUL_SHEET_ID } = await import("../src/overhaulSheet");
+    const url = "https://docs.google.com/spreadsheets/d/17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0/edit?gid=555#gid=555";
+    expect(overhaulSheetIdOf(url)).toBe("17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0");
+    expect(overhaulCsvUrl(url)).toBe("https://docs.google.com/spreadsheets/d/17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0/export?format=csv&gid=555");
+    expect(overhaulSheetIdOf("리스트(26년)")).toBe(OVERHAUL_SHEET_ID);
+    expect(overhaulSheetIdOf("123")).toBe(OVERHAUL_SHEET_ID);
+    expect(OVERHAUL_SHEET_ID).toBe("17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0");
+  });
+});

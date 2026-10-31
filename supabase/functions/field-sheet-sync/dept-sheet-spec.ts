@@ -180,6 +180,11 @@ export const normHeader = (v: unknown) => String(v ?? "").replace(/\s+/g, "");
 export function verifyDeptHeaders(spec: DeptSheetSpec, headerRowValues: unknown[]): void {
   for (const c of spec.columns) {
     const actual = String(headerRowValues[c.col - 1] ?? "");
+    // 순번(A열)을 시트가 매기면 앱은 그 열을 쓰지 않는다 — 머리가 비었거나 "순 입력"처럼 달라도 열 밀림이 아니다
+    // (2026-10-30 영업 시트 A5 가 공백이 되어 기입이 5회 실패·멈춤. 사용자 "문제없어 보이는데" → 검사만 완화)
+    if (c.kind === "app" && c.key === "seq" && spec.seqMode === "sheet") {
+      if (!normHeader(actual) || /순/.test(actual)) continue;
+    }
     if (normHeader(actual) !== normHeader(c.header)) {
       throw new Error(`시트 머리 변경: ${colLetter(c.col)}열 기대 '${c.header.replace(/\n/g, " ")}' 실제 '${actual.replace(/\n/g, " ")}'`);
     }

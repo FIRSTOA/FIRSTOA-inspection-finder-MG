@@ -1,4 +1,5 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
+import { AI_TIMEOUT_MS, aiTimeoutResponse, aiTimeoutSignal, isAiTimeout } from "../_shared/ai-timeout.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -185,6 +186,7 @@ Deno.serve(async (req) => {
 
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: aiTimeoutSignal(AI_TIMEOUT_MS), // 2026-10-31 타임아웃(없으면 엣지 한도까지 매달림)
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -219,6 +221,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    if (isAiTimeout(error)) return aiTimeoutResponse(corsHeaders);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

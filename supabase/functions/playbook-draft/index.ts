@@ -1,4 +1,5 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
+import { AI_TIMEOUT_MS, aiTimeoutResponse, aiTimeoutSignal, isAiTimeout } from "../_shared/ai-timeout.ts";
 /**
  * 족보 초안 생성 — 시리즈×증상 클러스터의 실제 처리 기록을 종합해 족보 카드 초안(JSON)을 만든다.
  * 요청: { brand, series, symptom, caseCount, cases: [{title, content}] (표본 ≤60건) }
@@ -52,6 +53,7 @@ Deno.serve(async (req) => {
     };
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: aiTimeoutSignal(AI_TIMEOUT_MS), // 2026-10-31 타임아웃(없으면 엣지 한도까지 매달림)
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
@@ -86,6 +88,7 @@ Deno.serve(async (req) => {
       model,
     }, { headers: jsonHeaders });
   } catch (error) {
+    if (isAiTimeout(error)) return aiTimeoutResponse(jsonHeaders);
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
   }
 });

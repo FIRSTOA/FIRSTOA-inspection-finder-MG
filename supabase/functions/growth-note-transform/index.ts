@@ -1,4 +1,5 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
+import { AI_TIMEOUT_MS, AI_TIMEOUT_MESSAGE, aiTimeoutSignal, isAiTimeout } from "../_shared/ai-timeout.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -106,10 +107,11 @@ Deno.serve(async (req) => {
     });
   }
 
+  let input = ""; // 시간 초과 때 catch 에서 규칙 변환으로 돌려주려고 밖에 둔다
   try {
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     const { text = "" } = await req.json().catch(() => ({}));
-    const input = String(text).trim();
+    input = String(text).trim();
     if (!input) {
       return new Response(JSON.stringify({ result: fields.map((field) => `${field}:`).join("\n") }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -123,6 +125,7 @@ Deno.serve(async (req) => {
 
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: aiTimeoutSignal(AI_TIMEOUT_MS), // 2026-10-31 타임아웃(없으면 엣지 한도까지 매달림)
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -161,6 +164,12 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    // OpenAI 시간 초과도 다른 OpenAI 실패(!ok)와 같게 규칙 변환으로 돌려준다(기존 응답 모양 유지)
+    if (isAiTimeout(error) && input) {
+      return new Response(JSON.stringify({ result: fallbackTransform(input), fallback: true, reason: AI_TIMEOUT_MESSAGE }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

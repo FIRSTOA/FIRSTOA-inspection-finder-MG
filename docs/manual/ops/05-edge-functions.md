@@ -154,3 +154,16 @@ npx supabase functions deploy <함수이름> --project-ref kkdiihazgzesbqxjytqv 
 - **weekly-keyman-poster** — outbox 넣기 응답을 확인하지 않고 `queued=true`·KEYMAN_POSTER_SENT 를 찍던 것 → 실패면 그 지역 오류 + 502, SENT 미기록(노트북 안전망이 다시 시도). dry 경로(poster_send.py)는 그대로.
 - 배포(프로젝트 폴더에서): `npx supabase functions deploy contact-sheet-pull` · `kakao-ingest` · `weekly-keyman-poster` (각각 `--project-ref kkdiihazgzesbqxjytqv`).
 - 보고만 된 것(수정 안 함, 결정 대기): customer-message-send 발송 상한 조회 실패 시 통과(실패 시 막을지), photo-drive-archive GAS 호출 타임아웃 없음(7일 83회 150초 초과), weekly-keyman-poster 크론·수동 겹침 잠금 없음, OpenAI 호출 타임아웃 없는 함수 8개, weekly-keyman-poster run/dry 응답 text 에 키맨 전화 원문, 담당자변경 시트 '청현세무회계컨설팅' 행이 매일 자정 1건씩 재생성(날짜 칸 수식 추정 → 시트 담당이 값으로 고정).
+
+## 2026-10-31 오후 2차 — 타임아웃·상한·중복 (재배포 필요 13개)
+- **customer-message-send**: 발송 상한(시간당·하루) 건수 조회가 실패하면 예전엔 0건으로 쳐서 그냥 나갔다 → 이제 **막는다**(503 "발송 한도 확인 실패 — 잠시 후 다시"). 설정값 조회 실패는 기본값(시간당 40 등)으로 진행. `limits.ts` 분리.
+- **photo-drive-archive**: GAS 호출 140초 타임아웃(504), GAS 본문 `ok:false`/`error` → 502, 본문 4xx 는 그대로, status 조회 실패 500. **배포 직후 ops 기록에 실패가 늘어 보일 수 있다 — 숨어 있던 실패가 드러나는 것.** `rules.ts` 분리.
+- **OpenAI 타임아웃**(`_shared/ai-timeout.ts`): counter-ocr·guide-tag·playbook-draft·golden-card-transform·okr-assist·quarter-result-quantify 60초, entity-ask 90초 → 504 "AI 응답이 늦어 중단했습니다 — 다시 시도". growth-note-transform 은 원래대로 규칙 변환 폴백(200, reason). 남은 곳: data-ask·field-sheet-sync·place-search(다음).
+- **naver-calendar-sync**: CalDAV REPORT·PROPFIND·내려받기 30초 타임아웃. 삭제 안전장치용 조회(listAccountCalendarIds·probe)는 일부러 안 붙임(시간 초과가 삭제로 이어지면 안 됨). **남은 위험**: 그 두 조회가 실패를 "없음"으로 읽어 네이버 장애 때 티켓 삭제 가능 — 별도 작업 권고.
+- **contact-sheet-pull**(`dedupe.ts`): 업체+구분+변경전+변경후+접수자 가 같은 행이 날짜만 다르게 있으면 안 넣는다(청현세무 날짜 수식 행 13건 재발 방지). 응답 `dedupedByContent` 에 합산.
+- **field-sheet-sync**(`dept-sheet-spec.ts verifyDeptHeaders`): 순번을 시트가 매기는 부서 시트(영업·경영)는 A5 머리가 비었거나 "순 입력"이어도 통과(열 밀림은 B열에서 잡힘). 2026-10-30 영업 접수 1건 failed 원인.
+- 배포 한 번에(PowerShell, 프로젝트 폴더에서):
+```
+foreach ($f in "customer-message-send","photo-drive-archive","counter-ocr","entity-ask","guide-tag","playbook-draft","golden-card-transform","growth-note-transform","okr-assist","quarter-result-quantify","naver-calendar-sync","contact-sheet-pull","field-sheet-sync") { npx supabase functions deploy $f --project-ref kkdiihazgzesbqxjytqv }
+```
+- SQL(사용자 실행, 권한나 통과): `supabase/cleanup-20261031.sql` — 청현세무 쓰레기 12행 삭제(최근 1행은 dedupe 기준으로 남김) + `log_outbox_delivery()` EXECUTE 를 public·anon·authenticated 에서 회수(트리거는 소유자 권한이라 계속 동작).

@@ -22,6 +22,9 @@ const corsHeaders = {
 };
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const CALDAV_BASE = "https://caldav.calendar.naver.com";
+// CalDAV 조회·내려받기 타임아웃(2026-10-31). 시간 초과는 throw → 조회(REPORT)는 errors 에 담겨 삭제 판단을 건너뛰고, 내려받기는 이번 실행 실패(500)로 끝난다.
+// 삭제 가드용 조회(listAccountCalendarIds·다른 캘린더 probe)에는 일부러 붙이지 않는다 — 실패를 "없음"으로 읽어 티켓 삭제로 이어질 수 있다.
+const CALDAV_TIMEOUT_MS = 30_000;
 
 function caldavAuth() {
   const id = Deno.env.get("NAVER_CALDAV_ID") || "";
@@ -44,6 +47,7 @@ async function reportEvents(auth: { id: string; header: string }, calId: string,
 </C:calendar-query>`;
   const res = await fetch(`${CALDAV_BASE}/caldav/${encodeURIComponent(auth.id)}/calendar/${encodeURIComponent(calId)}/`, {
     method: "REPORT",
+    signal: AbortSignal.timeout(CALDAV_TIMEOUT_MS),
     headers: { Authorization: auth.header, "Content-Type": "application/xml; charset=utf-8", Depth: "1" },
     body: bodyXml,
   });
@@ -215,6 +219,7 @@ Deno.serve(async (req) => {
       const debugCal = body.debug && body.calId ? `${encodeURIComponent(String(body.calId))}/` : "";
       const res = await fetch(`${CALDAV_BASE}/caldav/${encodeURIComponent(auth.id)}/calendar/${debugCal}`, {
         method: "PROPFIND",
+        signal: AbortSignal.timeout(CALDAV_TIMEOUT_MS),
         headers: { Authorization: auth.header, "Content-Type": "application/xml; charset=utf-8", Depth: debugCal ? "0" : "1" },
         body: body.debug
           ? `<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/" xmlns:I="http://apple.com/ns/ical/" xmlns:N="http://calendar.naver.com/"><D:prop><D:displayname/><D:resourcetype/><D:owner/><CS:getctag/><I:calendar-color/><C:calendar-description/><C:calendar-timezone/><D:current-user-privilege-set/></D:prop></D:propfind>`
@@ -246,7 +251,7 @@ Deno.serve(async (req) => {
       const sample: Array<{ date: string; time: string; completed: boolean; title: string }> = [];
       const unparsed: Array<{ href: string; status: number; raw: string }> = [];
       for (const item of listing.slice(0, limit)) {
-        const r = await fetch(`${CALDAV_BASE}${item.href}`, { headers: { Authorization: auth.header } });
+        const r = await fetch(`${CALDAV_BASE}${item.href}`, { headers: { Authorization: auth.header }, signal: AbortSignal.timeout(CALDAV_TIMEOUT_MS) });
         const text = await r.text();
         if (!r.ok) { if (unparsed.length < 3) unparsed.push({ href: item.href, status: r.status, raw: text.slice(0, 300) }); continue; }
         const ev = parseEvents(text)[0];
@@ -303,7 +308,7 @@ Deno.serve(async (req) => {
     const todayKst = new Date(now + 9 * 3600_000).toISOString().slice(0, 10);
     let manualUpserted = 0, downloaded = 0, ticketUpdated = 0, imported = 0;
     for (const item of changed) {
-      const r = await fetch(`${CALDAV_BASE}${item.href}`, { headers: { Authorization: auth.header } });
+      const r = await fetch(`${CALDAV_BASE}${item.href}`, { headers: { Authorization: auth.header }, signal: AbortSignal.timeout(CALDAV_TIMEOUT_MS) });
       if (!r.ok) continue;
       downloaded += 1;
       const ev = parseEvents(await r.text())[0];

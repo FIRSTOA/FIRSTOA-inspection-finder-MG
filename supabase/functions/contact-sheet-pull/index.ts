@@ -14,6 +14,7 @@
  * - 시트는 읽기만 한다 (원본 훼손 없음)
  */
 import { shareNewChanges } from "./share.ts";
+import { type ContentRow, dedupePayload } from "./dedupe.ts";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -240,27 +241,28 @@ Deno.serve(async (req) => {
     };
     if (!payload.length) return Response.json({ ok: true, tab: title, read: rows.length - 1, inserted: 0, skippedOld, skippedEmpty, ...(await share()) }, { headers: jsonHeaders });
 
-    // 내용 기반 중복 차단 — dupKey는 공백 하나만 달라도 어긋난다(실사고 2026-09-09: 웹앱 구분 값의
-    // 꼬리 공백이 시트를 돌며 사라져 같은 변경이 두 번 등록·공유됨). 업체+날짜+변경후가 같으면 같은 건이다.
+    // 내용 기반 중복 차단(dedupe.ts) — dupKey는 공백 하나만 달라도 어긋난다(실사고 2026-09-09: 웹앱 구분 값의
+    // 꼬리 공백이 시트를 돌며 사라져 같은 변경이 두 번 등록·공유됨). 업체+날짜+변경후 같으면 같은 건,
+    // 날짜만 다르고 업체+구분+변경전+변경후+접수자 같아도 같은 건(실사고 2026-10-31: 청현세무 날짜 수식 행 13건).
+    let dedupedByContent = 0;
     {
       const svcHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
-      const normKey = (company: unknown, date: unknown, after: unknown) =>
-        [company, date, after].map((v) => String(v || "").replace(/\s+/g, "")).join("|");
-      const existing = new Set<string>();
+      const existing: ContentRow[] = [];
       for (let offset = 0; offset < 20000; offset += 1000) {
         const page = await (await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/rest/v1/contact_changes?select=company,change_date,after_text&change_date=gte.${cutoff}&limit=1000&offset=${offset}`,
+          `${Deno.env.get("SUPABASE_URL")}/rest/v1/contact_changes?select=company,change_date,after_text,category,before_text,author&change_date=gte.${cutoff}&limit=1000&offset=${offset}`,
           { headers: svcHeaders },
         )).json();
         if (!Array.isArray(page) || !page.length) break;
-        for (const row of page) existing.add(normKey(row.company, row.change_date, row.after_text));
+        for (const row of page) existing.push(row as ContentRow);
         if (page.length < 1000) break;
       }
       const beforeCount = payload.length;
-      for (let i = payload.length - 1; i >= 0; i--) {
-        if (existing.has(normKey(payload[i].company, payload[i].change_date, payload[i].after_text))) payload.splice(i, 1);
-      }
-      if (!payload.length) return Response.json({ ok: true, tab: title, read: rows.length - 1, inserted: 0, dedupedByContent: beforeCount, skippedOld, skippedEmpty, ...(await share()) }, { headers: jsonHeaders });
+      const result = dedupePayload(payload as unknown as ContentRow[], existing);
+      payload.length = 0;
+      for (const r of result.kept) payload.push(r as Record<string, unknown>);
+      dedupedByContent = beforeCount - payload.length;
+      if (!payload.length) return Response.json({ ok: true, tab: title, read: rows.length - 1, inserted: 0, dedupedByContent, skippedOld, skippedEmpty, ...(await share()) }, { headers: jsonHeaders });
     }
     let inserted = 0;
     for (let i = 0; i < payload.length; i += 200) {

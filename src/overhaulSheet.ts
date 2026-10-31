@@ -5,14 +5,21 @@ import { isYmd } from "./recontractSchedule";
  * 오버홀 기록 시트(공개 구글 시트, 읽기 전용) — 한 행 = 오버홀·수리 1건. 블로그 시트(blogSheet.ts)와 같은 CSV 직접 읽기.
  * 열: 번호,날짜("23/10/27(금)" = yy/mm/dd(요일)),년,월,담당자,부서명(강북A/경기D/외부인력/퇴사자…),모델명,부품명,오버홀품목,수리품목,
  *     소요시간,오버홀포인트,수리포인트,주차별,수리가공,오버홀가공.
- * 탭 = app_config OVERHAUL_SHEET_TAB(없으면 "리스트(26년)") — 탭 이름(아래 표에 있는 것)·gid 숫자·gid= 가 든 시트 주소 중 하나.
+ * 탭 = app_config OVERHAUL_SHEET_TAB(없으면 "리스트(26년)") — 탭 이름(아래 표에 있는 것)·gid 숫자·gid= 가 든 시트 주소 중 하나. 주소에 /d/ID 가 있으면 그 시트를 읽는다(2026-10-31).
  * 읽기는 export?format=csv&gid=(blogSheet·itSheet 와 같은 길). gviz(tq?tqx=out:csv&sheet=) 는 쓰지 않는다 —
  * 2026-10-24 실측: gviz 는 열 형식을 추정해 숫자·날짜로 본 열의 글자 칸을 지워 머리글 줄이 ",,,,담당자,부서명,…"(날짜·오버홀포인트 빠짐)로 와서
  * 머리글 탐색이 실패했고(라이브 K33 "불러오지 못함"), headers=2 로 붙여도 앞 행(1~523)·년/월 칸이 빠졌다.
  * 실측(2026-10-24): 첫 줄이 "-1,,,," 이고 둘째 줄이 머리글, 날짜는 "2026/1/2"·"26/10/01"·"23/10/27(금)" 섞임, 번호는 "2,308", 빈 줄은 "" 또는 0,0 만.
  * KPI K33 "오버홀 점" = 오버홀포인트 합. 수리포인트는 따로(보조 글자).
  */
-export const OVERHAUL_SHEET_ID = "1lFZdrSZiKoPaRUar2txEtzRdPCoJ6oRd6Ox5kKUqNEg";
+/** 기본 시트 — 2026-10-31 사용자 링크(17fVFa…)로 교체. 옛 1lFZdr… 은 10/23 까지만 적힌 복사본이라 홈 오버홀이 이번 주 0 으로 보였다.
+ *  시트가 또 바뀌면 관리 탭 OVERHAUL_SHEET_TAB 에 새 시트 주소(…/d/ID/edit#gid=숫자)를 통째로 적으면 ID·탭 둘 다 그걸 쓴다. */
+export const OVERHAUL_SHEET_ID = "17fVFa48EFA12zhY6sKGQOp4ff9fkEQrp-HvX1RKS4U0";
+/** 설정값에 시트 주소가 들어 있으면 그 스프레드시트 ID, 아니면 기본 ID */
+export function overhaulSheetIdOf(tab: string): string {
+  const m = String(tab || "").match(/\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/);
+  return m ? m[1] : OVERHAUL_SHEET_ID;
+}
 export const OVERHAUL_SHEET_TAB_KEY = "OVERHAUL_SHEET_TAB";
 export const OVERHAUL_SHEET_DEFAULT_TAB = "리스트(26년)";
 export const OVERHAUL_SHEET_URL = `https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/edit`;
@@ -33,7 +40,7 @@ export function overhaulGidOf(tab: string): string {
 export const overhaulCsvUrl = (tab: string = OVERHAUL_SHEET_DEFAULT_TAB) => {
   const gid = overhaulGidOf(tab);
   if (!gid) throw new Error(`오버홀 시트 탭 "${tab}"의 gid 를 모릅니다 — 관리 탭 OVERHAUL_SHEET_TAB 에 그 탭 주소(…#gid=숫자)나 gid 숫자를 적어 주세요`);
-  return `https://docs.google.com/spreadsheets/d/${OVERHAUL_SHEET_ID}/export?format=csv&gid=${gid}`;
+  return `https://docs.google.com/spreadsheets/d/${overhaulSheetIdOf(tab)}/export?format=csv&gid=${gid}`;
 };
 
 export type OverhaulRow = {

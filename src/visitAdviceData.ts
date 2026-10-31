@@ -32,6 +32,8 @@ export type UpcomingTicket = {
   matchedBy: "code" | "name" | "device" | "building";
   /** 이번 접수 지점과 같은 지점 기록인가(업체명 표기·기기 번호 일치) — 아니면 글에 지점명을 붙인다 */
   sameBranch: boolean;
+  /** 같은 사업자 다른 표기인데 일정에 주소가 없어 같은 건물인지 판단 못 함 — 글에 "(주소 미확인)" (2026-10-31) */
+  addressUnknown?: boolean;
 };
 
 export type VisitAdviceFacts = {
@@ -123,6 +125,8 @@ const TICKET_COLS = "id,team,date,time,vendor,address,serial,asset,receptionId,i
 /**
  * as_tickets 중 date ≥ today · 완료/취소 아님 · 휴가 아님 · 이번 접수로 만든 일정 아님, 그리고
  * (a) 같은 거래처 코드 / 코드 없을 때 이름 키 / 지점 기기 번호  (b) 같은 건물(sameBuildingKey 주소 일치)
+ * 단 (a)로 이어졌어도 **같은 지점이 아니고 주소가 다른 건물이면 뺀다** — 사용자 결정(2026-10-31): "같은 사업자의 다른 지점이 아니라
+ * 같은 주소(건물)만. 같은 주소인데 두 번 갈 필요 없잖아". 주소가 비어 판단 못 하면 넣되 addressUnknown 으로 표시한다(놓치는 쪽이 더 나쁘다).
  */
 export function pickUpcomingTickets(rows: TicketRow[], ctx: {
   receptionId: string; code: string; entity: Entity; branchName: string; branchDeviceKeys: string[]; buildingKeys: string[]; today: string;
@@ -148,9 +152,16 @@ export function pickUpcomingTickets(rows: TicketRow[], ctx: {
     }
     if (!matchedBy) continue;
     const sameBranch = devHit || (!!ctx.branchName && normName(s("vendor")) === normName(ctx.branchName));
+    let addressUnknown = false;
+    if (matchedBy !== "building" && !sameBranch) {
+      const bk = sameBuildingKey(s("address"));
+      if (bk && buildings.size) { if (!buildings.has(bk)) continue; }   // 같은 사업자라도 다른 주소 지점 → 제외
+      else addressUnknown = true;                                        // 주소를 모르면 넣고 표시
+    }
     out.push({
       id: s("id"), date: s("date").slice(0, 10), time: s("time"), scheduleType: s("scheduleType"), source: s("source"), status: s("status"),
       vendor: s("vendor"), vendorCode: vcode, calendarTitle: s("calendarTitle"), issue: s("issue"), team: s("team"), matchedBy, sameBranch,
+      ...(addressUnknown ? { addressUnknown: true } : {}),
     });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time) || a.id.localeCompare(b.id));
@@ -305,7 +316,7 @@ export function ticketTitle(t: UpcomingTicket, branchName: string): string {
   }
   const other = t.matchedBy !== "building" && !t.sameBranch && normName(t.vendor) && normName(t.vendor) !== normName(branchName)
     ? ` — ${(t.vendor.match(/\(([^)]+)\)/)?.[1] || t.vendor).trim().slice(0, 16)}` : "";
-  return `${kind}${detail}${other}${t.matchedBy === "name" ? " (이름 일치)" : ""}`;
+  return `${kind}${detail}${other}${t.matchedBy === "name" ? " (이름 일치)" : ""}${t.addressUnknown ? " (주소 미확인)" : ""}`;
 }
 
 export function toVisitAdviceInput(f: VisitAdviceFacts, thresholds = { quarterDays: 60, monthlyDays: 25 }): VisitAdviceInput {

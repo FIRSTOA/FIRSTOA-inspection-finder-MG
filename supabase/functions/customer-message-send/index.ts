@@ -1,3 +1,4 @@
+import { SendLimitCheckError, checkSendLimits, countRows } from "./limits.ts";
 // ---- 솔라피(SOLAPI) 문자 발송 — Secrets: SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER ----
 async function solapiAuth(): Promise<{ headers: Record<string, string>; sender: string }> {
   const apiKey = Deno.env.get("SOLAPI_API_KEY") || "";
@@ -38,46 +39,7 @@ async function solapiSend(to: string, text: string, opts: { imageId?: string; su
 // ---- 발송 제한·기록 (2026-10-10) ----
 // 앱 화면이 보내는 종류만 받는다(해피콜·홍보·고객 리포트·점검 리포트 MMS·분기 안내 테스트). 모르는 종류는 거절.
 const KNOWN_TYPES = new Set(["happycall", "promotion", "report", "inspection_report", "quarter_notice_test"]);
-const kstDayStartIso = () => { const now = new Date(); const kst = new Date(now.getTime() + 9 * 3600_000); kst.setUTCHours(0, 0, 0, 0); return new Date(kst.getTime() - 9 * 3600_000).toISOString(); };
-async function countRows(sbUrl: string, h: Record<string, string>, query: string): Promise<number> {
-  try {
-    const res = await fetch(`${sbUrl}/rest/v1/message_jobs?select=id&${query}&limit=1`, { headers: { ...h, Prefer: "count=exact" } });
-    const range = res.headers.get("content-range") || "";                 // "0-0/123"
-    return Number(range.split("/")[1] || 0) || 0;
-  } catch { return 0; }
-}
-async function configNumber(sbUrl: string, h: Record<string, string>, key: string): Promise<number> {
-  try {
-    const res = await fetch(`${sbUrl}/rest/v1/app_config?select=value&key=eq.${encodeURIComponent(key)}&limit=1`, { headers: h });
-    const rows = await res.json();
-    return Number(rows?.[0]?.value || 0) || 0;
-  } catch { return 0; }
-}
-/** 시간당·하루·수신번호당 상한, 그리고 하루 건수가 30일 평균의 3배를 넘으면 차단. app_config SMS_HOURLY_CAP / SMS_DAILY_CAP 로 바꿀 수 있다 */
-async function checkSendLimits(sbUrl: string, h: Record<string, string>, p: { channel: string; to: string; type: string }): Promise<{ ok: true } | { ok: false; reason: string }> {
-  if (!sbUrl || !h.apikey) return { ok: true };
-  const nowMs = Date.now();
-  const hourAgo = new Date(nowMs - 3600_000).toISOString();
-  const dayStart = kstDayStartIso();
-  const d30 = new Date(nowMs - 30 * 86400_000).toISOString();
-  const base = `source_type=like.direct*&status=eq.sent&channel=eq.${encodeURIComponent(p.channel)}`;
-  const [hour, today, toToday, last30, hourlyCap, dailyCap] = await Promise.all([
-    countRows(sbUrl, h, `${base}&sent_at=gte.${encodeURIComponent(hourAgo)}`),
-    countRows(sbUrl, h, `${base}&sent_at=gte.${encodeURIComponent(dayStart)}`),
-    countRows(sbUrl, h, `${base}&recipient=eq.${encodeURIComponent(p.to)}&sent_at=gte.${encodeURIComponent(dayStart)}`),
-    countRows(sbUrl, h, `${base}&sent_at=gte.${encodeURIComponent(d30)}`),
-    configNumber(sbUrl, h, p.channel === "email" ? "EMAIL_HOURLY_CAP" : "SMS_HOURLY_CAP"),
-    configNumber(sbUrl, h, p.channel === "email" ? "EMAIL_DAILY_CAP" : "SMS_DAILY_CAP"),
-  ]);
-  const avgDaily = last30 / 30;
-  const hCap = hourlyCap || 40;
-  const dCap = dailyCap || Math.max(80, Math.ceil(avgDaily * 3));   // 평소(30일 평균)의 3배, 바닥 80
-  const perTo = 5;
-  if (toToday >= perTo) return { ok: false, reason: `같은 번호(${p.to})로 오늘 ${toToday}건 — 하루 ${perTo}건까지` };
-  if (hour >= hCap) return { ok: false, reason: `최근 1시간 ${hour}건 — 시간당 ${hCap}건까지(관리 탭 app_config SMS_HOURLY_CAP)` };
-  if (today >= dCap) return { ok: false, reason: `오늘 ${today}건 — 하루 ${dCap}건까지(30일 평균 ${avgDaily.toFixed(1)}건의 3배, SMS_DAILY_CAP 로 조정)` };
-  return { ok: true };
-}
+// 건수 조회·상한 규칙은 limits.ts(vitest 로 시험) — 건수 조회 실패는 SendLimitCheckError 로 막는다(2026-10-31 fail-closed)
 async function logDirect(sbUrl: string, h: Record<string, string>, r: { channel: string; to: string; text: string; type: string; vendor: string; author: string; status: "sent" | "failed" | "blocked"; error?: string; mms?: boolean }): Promise<void> {
   if (!sbUrl || !h.apikey) return;
   const now = new Date().toISOString();
@@ -92,7 +54,9 @@ async function logDirect(sbUrl: string, h: Record<string, string>, r: { channel:
 /** 차단되면 담당자에게 웹푸시 — 1시간에 한 번만 */
 async function alertBlocked(sbUrl: string, h: Record<string, string>, reason: string, p: { to: string; type: string; author: string }): Promise<void> {
   if (!sbUrl || !h.apikey) return;
-  const recent = await countRows(sbUrl, h, `source_type=like.direct*&status=eq.blocked&created_at=gte.${encodeURIComponent(new Date(Date.now() - 3600_000).toISOString())}`);
+  // 알림 횟수 조회가 실패하면 알림을 보내는 쪽으로(차단 사실을 놓치지 않게) — 로그는 남긴다
+  const recent = await countRows(fetch, sbUrl, h, `source_type=like.direct*&status=eq.blocked&created_at=gte.${encodeURIComponent(new Date(Date.now() - 3600_000).toISOString())}`)
+    .catch((e) => { console.error("customer-message-send alertBlocked count", e instanceof Error ? e.message : String(e)); return 0; });
   if (recent > 1) return;
   try {
     await fetch(`${sbUrl}/functions/v1/push-send`, { method: "POST", headers: h, body: JSON.stringify({
@@ -234,7 +198,15 @@ Deno.serve(async (req) => {
     const author = String(body.author || "").trim();
     const vendor = String(body.vendor || "").trim();
     if (!KNOWN_TYPES.has(type)) return Response.json({ error: `알 수 없는 발송 종류(${type || "없음"}) — 앱 화면에서 보내 주세요` }, { status: 400, headers: corsHeaders });
-    const limit = await checkSendLimits(sbUrl, sbHeaders, { channel, to, type });
+    let limit: Awaited<ReturnType<typeof checkSendLimits>>;
+    try {
+      limit = await checkSendLimits(fetch, sbUrl, sbHeaders, { channel, to, type });
+    } catch (e) {
+      if (!(e instanceof SendLimitCheckError)) throw e;
+      // 건수를 못 세면 상한이 열린 채 보내지 않는다(fail-closed). 발송 기록은 남기지 않음(같은 DB 가 아플 때라 기록도 실패하기 쉬움)
+      console.error("customer-message-send limit-check-failed", JSON.stringify({ channel, type, error: e.message }));
+      return Response.json({ error: e.message }, { status: 503, headers: corsHeaders });
+    }
     if (!limit.ok) {
       await logDirect(sbUrl, sbHeaders, { channel, to, text, type, vendor, author, status: "blocked", error: limit.reason });
       await alertBlocked(sbUrl, sbHeaders, limit.reason, { to, type, author });

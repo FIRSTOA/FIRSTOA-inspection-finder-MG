@@ -247,8 +247,8 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
           {/* 오버홀 기록 시트 탭(2026-10-24) — 홈 KPI 달성표 K33 오버홀 원본. 비우면 기본 "리스트(26년)" */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <div>
-              <div className="text-sm font-black text-slate-900">오버홀 시트 탭 이름 (OVERHAUL_SHEET_TAB)</div>
-              <p className={UI.desc}>홈 KPI 달성표의 오버홀 점수를 읽는 오버홀 기록 시트의 탭 이름입니다. 비워두면 기본 "{OVERHAUL_SHEET_DEFAULT_TAB}". 해가 바뀌어 새 탭을 만들면 그 탭을 연 주소(…#gid=숫자)나 gid 숫자를 적으세요(앱이 아는 탭 이름은 이름만 적어도 됩니다).</p>
+              <div className="text-sm font-black text-slate-900">오버홀 시트 주소·탭 (OVERHAUL_SHEET_TAB)</div>
+              <p className={UI.desc}>홈 KPI 달성표의 오버홀 점수를 읽는 오버홀 기록 시트입니다. 비워두면 기본 시트의 "{OVERHAUL_SHEET_DEFAULT_TAB}" 탭. 시트 파일이 새로 만들어졌거나(백업·복사) 해가 바뀌어 새 탭이 생기면 **그 탭을 연 주소를 통째로**(…/spreadsheets/d/ID/edit#gid=숫자) 붙여 넣으세요 — 시트 ID 와 탭을 같이 바꿉니다. gid 숫자만 적으면 기본 시트의 그 탭.</p>
             </div>
             <input defaultValue={valueOf(OVERHAUL_SHEET_TAB_KEY)} placeholder={OVERHAUL_SHEET_DEFAULT_TAB} onBlur={(e) => { if (e.target.value.trim() !== valueOf(OVERHAUL_SHEET_TAB_KEY)) void saveConfig(OVERHAUL_SHEET_TAB_KEY, e.target.value.trim()); }}
               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-56 lg:h-10" />

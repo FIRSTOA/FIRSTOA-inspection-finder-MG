@@ -1,4 +1,5 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
+import { AI_TIMEOUT_MS, aiTimeoutResponse, aiTimeoutSignal, isAiTimeout } from "../_shared/ai-timeout.ts";
 // 분기결과표 AI 수치 정리 (2026-09-24)
 // 목표별로 대략 적어 둔 결과 내용을 받아, 원문 설명은 살리고 아래에 [성과] 블록을 붙여
 // 수치·날짜·횟수·시간·달성률 중심으로 다시 쓴다. 근거 없는 숫자는 만들지 않는다.
@@ -80,6 +81,7 @@ Deno.serve(async (req) => {
     const source = { quarter: `${year}년 ${quarter}분기`, months, author: body.author || "", goals, weeklyRecordsText: String(body.weeklyRecordsText || "").slice(0, 12000) };
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: aiTimeoutSignal(AI_TIMEOUT_MS), // 2026-10-31 타임아웃(없으면 엣지 한도까지 매달림)
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
@@ -104,6 +106,7 @@ Deno.serve(async (req) => {
     const out = Array.isArray(parsed.goals) ? parsed.goals.map((g: { n?: unknown; text?: unknown }) => ({ n: Number(g.n) || 0, text: String(g.text || "").trim() })).filter((g: { n: number; text: string }) => g.n > 0 && g.text) : [];
     return new Response(JSON.stringify({ goals: out, model }), { headers: jsonHeaders });
   } catch (error) {
+    if (isAiTimeout(error)) return aiTimeoutResponse(jsonHeaders);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500, headers: jsonHeaders });
   }
 });

@@ -34,7 +34,7 @@ describe("부서 시트 사양", () => {
   it("머리 한 칸 밀림은 throw", () => {
     const row5 = mgmt.columns.map((c) => c.header);
     expect(() => verifyDeptHeaders(mgmt, row5)).not.toThrow();
-    expect(() => verifyDeptHeaders(mgmt, ["", ...row5])).toThrow(/시트 머리 변경: A열 기대 '-' 실제 ''/);
+    expect(() => verifyDeptHeaders(mgmt, ["", ...row5])).toThrow(/시트 머리 변경: B열 기대 '날짜' 실제 '-'/); // A(순번, 시트가 매김)는 2026-10-31부터 비어도 통과 — 밀림은 B열에서 잡힌다
   });
 
   it("순번은 사람 줄이 섞여도 숫자 최댓값 + 1, 날짜는 KST", () => {
@@ -56,5 +56,17 @@ describe("부서 시트 사양", () => {
     const lease = buildLeaseValues(mgmt, MGMT_ROW6, headers, values, { H35: "고친자산" });
     expect([lease[20], lease[54], lease[48]]).toEqual(["고친자산", "고친자산", undefined]);
     expect(buildUpdateValues(sales, { status: "완료", handled: "끝" })).toEqual({ 7: "처리완료", 24: "끝" });
+  });
+});
+
+describe("순번 머리 완화(2026-10-31 영업 시트 A5 공백)", () => {
+  it("seqMode sheet 인 영업 시트는 A5 가 비었거나 '순 입력'이어도 통과, 다른 열은 여전히 검사", async () => {
+    const { DEPT_SHEET_SPECS, verifyDeptHeaders } = await import("../supabase/functions/field-sheet-sync/dept-sheet-spec.ts");
+    const sales = DEPT_SHEET_SPECS.reception_sales;
+    const row5 = sales.columns.map((c) => c.header);
+    expect(() => verifyDeptHeaders(sales, ["", ...row5.slice(1)])).not.toThrow();
+    expect(() => verifyDeptHeaders(sales, ["순 입력", ...row5.slice(1)])).not.toThrow();
+    expect(() => verifyDeptHeaders(sales, ["번호", ...row5.slice(1)])).toThrow(/A열/);
+    expect(() => verifyDeptHeaders(sales, ["", "접수일자", ...row5.slice(2)])).toThrow(/B열/);
   });
 });

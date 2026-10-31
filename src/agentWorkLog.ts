@@ -4,6 +4,30 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "0b3039abf6",
+    "agent": "developer",
+    "summary": "전체 디버깅 1차 + 확장성 탭 BO 본 화면: 린트 92→66(동작 불변 규칙), 조용한 저장·발송 실패 6곳 알림(리포트 문자 기록 실패 ≠ 발송 실패), UTC '오늘' 3곳 KST, 엣지 3개(담당자변경 공유 claim·되돌림·22시 보류 share.ts, kakao-ingest 250행+57014 반분 재시도 rest-batch.ts, keyman-poster outbox 실패 502), 확장성 IT·복합기 탭은 FIELD_EXPANSION_LEGACY_TABS 뒤로, 매뉴얼 ops05·user00·04, 운영 전수 점검 기록"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "0b3039abf6",
+    "agent": "debugger",
+    "summary": "전체 디버깅 1차 + 확장성 탭 BO 본 화면: 린트 92→66(동작 불변 규칙), 조용한 저장·발송 실패 6곳 알림(리포트 문자 기록 실패 ≠ 발송 실패), UTC '오늘' 3곳 KST, 엣지 3개(담당자변경 공유 claim·되돌림·22시 보류 share.ts, kakao-ingest 250행+57014 반분 재시도 rest-batch.ts, keyman-poster outbox 실패 502), 확장성 IT·복합기 탭은 FIELD_EXPANSION_LEGACY_TABS 뒤로, 매뉴얼 ops05·user00·04, 운영 전수 점검 기록"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "0b3039abf6",
+    "agent": "qa-checker",
+    "summary": "전체 디버깅 1차 + 확장성 탭 BO 본 화면: 린트 92→66(동작 불변 규칙), 조용한 저장·발송 실패 6곳 알림(리포트 문자 기록 실패 ≠ 발송 실패), UTC '오늘' 3곳 KST, 엣지 3개(담당자변경 공유 claim·되돌림·22시 보류 share.ts, kakao-ingest 250행+57014 반분 재시도 rest-batch.ts, keyman-poster outbox 실패 502), 확장성 IT·복합기 탭은 FIELD_EXPANSION_LEGACY_TABS 뒤로, 매뉴얼 ops05·user00·04, 운영 전수 점검 기록"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "0b3039abf6",
+    "agent": "ops-monitor",
+    "summary": "전체 디버깅 1차 + 확장성 탭 BO 본 화면: 린트 92→66(동작 불변 규칙), 조용한 저장·발송 실패 6곳 알림(리포트 문자 기록 실패 ≠ 발송 실패), UTC '오늘' 3곳 KST, 엣지 3개(담당자변경 공유 claim·되돌림·22시 보류 share.ts, kakao-ingest 250행+57014 반분 재시도 rest-batch.ts, keyman-poster outbox 실패 502), 확장성 IT·복합기 탭은 FIELD_EXPANSION_LEGACY_TABS 뒤로, 매뉴얼 ops05·user00·04, 운영 전수 점검 기록"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "67e39018b2",
     "agent": "feature-planner",
     "summary": "C팀 12·14시 자동 중간보고: 엣지 schedule-report(claim·영업일/10시/공휴일·copy 60분 건너뜀·AI 다듬기 실패 시 초안·테스트방 머리) + 보고 창 발송 띠·[지금 보내기]·[복사] 기록 + 관리 탭 스위치(AUTO 기본 꺼짐·TEST 기본 켬·TEAMS·방 종류 스케줄) + 익일 0건 \"없음\""

@@ -1,4 +1,5 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
+import { AI_TIMEOUT_MS, aiTimeoutResponse, aiTimeoutSignal, isAiTimeout } from "../_shared/ai-timeout.ts";
 /**
  * 매수·토너 사진 읽기(2026-10-14) — FIELD 점검 양식의 [📷 매수 분석]·[📷 잔량 분석](kind count|toner). 복합기 카운터 화면·소모품 화면 사진에서
  * 흑백·컬러·큰컬러·합계 매수와 K/C/M/Y 토너 잔량(%), 폐통(%)을 읽어 JSON 으로 돌려준다. 못 읽은 칸은 빈 글자.
@@ -32,6 +33,7 @@ Deno.serve(async (req) => {
     const t0 = Date.now();
     const res = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: aiTimeoutSignal(AI_TIMEOUT_MS), // 2026-10-31 타임아웃(없으면 엣지 한도까지 매달림)
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
@@ -59,6 +61,7 @@ Deno.serve(async (req) => {
     result.note = String(out.note || "").slice(0, 200);
     return Response.json(result, { headers: jsonHeaders });
   } catch (error) {
+    if (isAiTimeout(error)) return aiTimeoutResponse(jsonHeaders);
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
   }
 });

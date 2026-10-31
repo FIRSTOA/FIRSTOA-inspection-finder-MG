@@ -1,5 +1,6 @@
 import { addUsage, emptyUsage, loadPrices, logUsage, priceUsage } from "../_shared/ai-usage.ts";
 import { maskDeep, maskRrn } from "../_shared/privacy.ts";
+import { AI_TIMEOUT_LONG_MS, aiTimeoutResponse, aiTimeoutSignal, isAiTimeout } from "../_shared/ai-timeout.ts";
 /**
  * 통합 검색 360 — "이 업체에 대해 물어보기" (2026-10-10)
  *
@@ -56,6 +57,7 @@ Deno.serve(async (req) => {
     const model = Deno.env.get("OPENAI_ASK_MODEL") || Deno.env.get("OPENAI_REPORT_MODEL") || "gpt-5.5";
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: aiTimeoutSignal(AI_TIMEOUT_LONG_MS), // 2026-10-31 타임아웃(없으면 엣지 한도까지 매달림)
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
@@ -84,6 +86,7 @@ Deno.serve(async (req) => {
     await logUsage(sbUrl, sbHeaders, { fn: "entity-ask", model, question, author: String(body.author || ""), usage, usd, ms: Date.now() - t0 });
     return Response.json({ answer: maskRrn(String(answer).trim()).slice(0, 4000), model, used: payload.events.length, usage, cost: { usd, priced: prices.known, model } }, { headers: jsonHeaders });
   } catch (error) {
+    if (isAiTimeout(error)) return aiTimeoutResponse(jsonHeaders);
     return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500, headers: jsonHeaders });
   }
 });

@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "0b3039abf6",
+    "date": "2026-10-31",
+    "note": "전체 디버깅 1차 + 확장성 탭 BO 본 화면: 린트 92→66(동작 불변 규칙), 조용한 저장·발송 실패 6곳 알림(리포트 문자 기록 실패 ≠ 발송 실패), UTC '오늘' 3곳 KST, 엣지 3개(담당자변경 공유 claim·되돌림·22시 보류 share.ts, kakao-ingest 250행+57014 반분 재시도 rest-batch.ts, keyman-poster outbox 실패 502), 확장성 IT·복합기 탭은 FIELD_EXPANSION_LEGACY_TABS 뒤로, 매뉴얼 ops05·user00·04, 운영 전수 점검 기록"
+  },
+  {
     "hash": "ca8f31e51e",
     "date": "2026-10-31",
     "note": "중간보고 업체 토막 규칙: \"/\" 제목에서 상호 표시(학원·병원·㈜·센터…) 든 토막 우선(손나래영어학원), 전화번호 토막 제외 + 실전 전환 기록"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "66f9c26abc",
     "date": "2026-10-08",
     "note": "로그아웃은 FIELD 세션만 지우고 첫 화면으로 — 그룹웨어 화면에 떨궈 두지 않음(자동 재로그인은 그대로)"
-  },
-  {
-    "hash": "ed988148b7",
-    "date": "2026-10-08",
-    "note": "스위치가 꺼져 있으면 그룹웨어 로그인 줄을 어디에도 보이지 않게(검증용 ?sso=test 예외 제거)"
   }
 ];

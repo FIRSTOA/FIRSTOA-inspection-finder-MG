@@ -1,4 +1,5 @@
 import { recordOpenAiUsage } from "../_shared/ai-usage-deno.ts";
+import { AI_TIMEOUT_MS, aiTimeoutResponse, aiTimeoutSignal, isAiTimeout } from "../_shared/ai-timeout.ts";
 // OKR AI 보조 (2026-09-24)
 // 세 가지 일을 한다. 근거 없는 숫자는 절대 만들지 않는다(없으면 "(수치 없음)"으로 표시).
 //  - format  : 팀원이 대충 적은 실제결과 메모 → 작성가이드 양식 "항목 : n건 중 m건 (x%, 등급)" 줄 + 종합판정(가장 나쁜 등급) + 사유·개선계획·근거자료 초안
@@ -75,6 +76,7 @@ Deno.serve(async (req) => {
     const model = Deno.env.get("OPENAI_OKR_MODEL") || Deno.env.get("OPENAI_RESULT_MODEL") || Deno.env.get("OPENAI_GOLDEN_MODEL") || "gpt-5.5";
     const openaiRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
+      signal: aiTimeoutSignal(AI_TIMEOUT_MS), // 2026-10-31 타임아웃(없으면 엣지 한도까지 매달림)
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
@@ -102,6 +104,7 @@ Deno.serve(async (req) => {
       : { actual: pick("actual"), judgment: pick("judgment"), reason: pick("reason"), plan: pick("plan"), evidence: pick("evidence"), model };
     return new Response(JSON.stringify(out), { headers: jsonHeaders });
   } catch (error) {
+    if (isAiTimeout(error)) return aiTimeoutResponse(jsonHeaders);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500, headers: jsonHeaders });
   }
 });

@@ -28,7 +28,7 @@ import StateBox from "./ui/StateBox";
 import { mergeVisibleOrder, moveId, moveWithinGroup } from "./planOrder";
 
 // 목록 한 줄 안의 동작 단추 공통 모양(폰 44px, PC 36px) — card.ts 에 올릴 후보(btnRow)
-const ROW_BTN = "inline-flex min-h-10 flex-1 items-center justify-center rounded-lg px-3 text-center text-xs font-black transition sm:flex-none lg:min-h-8";
+const ROW_BTN = "inline-flex min-h-10 flex-1 items-center justify-center rounded-lg px-1.5 text-center text-xs font-black transition sm:flex-none sm:px-3 lg:min-h-8";
 
 export type MyPlanTicket = {
   id: string; date: string; time: string; team: string; vendor: string; address: string;
@@ -862,9 +862,9 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 </span>
               );
             })()}
-            <div onClick={() => focusTicket(t.id)} className={`relative flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 pr-14 transition ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
+            <div onClick={() => focusTicket(t.id)} className={`relative flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-1 transition sm:gap-y-1 sm:py-2 sm:pr-14 ${g ? "cursor-pointer hover:bg-blue-50/40" : ""}`}>
               <span className="min-w-0 flex-1 basis-[55%] overflow-hidden">
-                <span className="flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5 pr-10 sm:pr-0">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-black" style={scope === "team" ? (t.assignee ? { background: colorOf(who), color: "#fff" } : { border: "1.5px dashed #64748b", color: "#334155", background: "#fff" }) : { background: isPinned ? "#2563eb" : "#0f172a", color: "#fff" }}>{labelNo(t, i)}</span>
                   <span className="min-w-0 truncate text-[13px] font-black text-slate-900">{t.vendor}</span>
                   {t.time && <span className="shrink-0 font-mono text-[11px] font-bold text-slate-400">{t.time}</span>}
@@ -893,7 +893,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                     className="absolute right-1 top-0.5 inline-flex min-h-10 min-w-10 items-center justify-center rounded-full text-xs font-black text-slate-400 transition hover:bg-rose-50 hover:text-rose-600">삭제</button>
                 )}
                 {f && (
-                  <span className="mt-0.5 flex flex-wrap gap-1">
+                  <span className="flex flex-wrap gap-1 sm:mt-0.5">
                     {f.inspection && !f.inspection.done && <span className={`${UI.badge} ${UI.tone.warn}`}>점검 {f.inspection.quarter}분기</span>}
                     {f.inspection?.done && <span className={`${UI.badge} ${UI.tone.off}`}>점검완료</span>}
                     {f.misu && !f.misu.cleared && <span className={`${UI.badge} ${UI.tone.bad}`}>미수{f.misu.months ? ` ${f.misu.months}개월` : ""}</span>}
@@ -904,7 +904,7 @@ export default function MyPlan({ tickets, author, onSelfRequest, onUseField, onL
                 )}
               </span>
               {/* 모바일: 버튼줄이 내용 아래 한 줄로 — 내용 칸이 눌려 업체명이 안 보이던 것 방지 */}
-              <span className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto" onClick={(e) => e.stopPropagation()}>
+              <span className="flex w-full flex-wrap items-center gap-1 sm:w-auto sm:gap-1.5" onClick={(e) => e.stopPropagation()}>
                 <button type="button" onClick={() => setDetail(t)} className={`${ROW_BTN} border border-slate-300 bg-white text-slate-600 hover:bg-slate-50`}>상세</button>
                 {onUseField && <button type="button" onClick={() => (onFieldDirect && /^(AS|익일AS|납품철수교체휴가교육|물류)$/.test(t.scheduleType) && !/휴가|연차/.test(t.vendor) ? onFieldDirect(t) : openFieldPick(t))} className={`${ROW_BTN} bg-slate-900 text-white hover:bg-slate-800`}>FIELD</button>}
                 {/* 못 간 점검·재계약을 다음 영업일로 — 워킨맵에서 다시 등록하던 불편(2026-08-28). AS는 일정리스트의 익일(사유·보고) 흐름을 쓴다 */}
@@ -1219,9 +1219,9 @@ function InlineMemo({ ticketId, value, onSave }: { ticketId: string; value: stri
   useEffect(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }, [draft]);
   const dirty = draft !== value;
   return (
-    <span className="mt-0.5 flex items-start gap-1.5" onClick={(e) => e.stopPropagation()}>
+    <span className="flex items-start gap-1.5 sm:mt-0.5" onClick={(e) => e.stopPropagation()}>
       <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder="📝 메모 — 잊으면 안 되는 것"
-        className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-0.5 text-[11.5px] font-bold leading-4 outline-none transition placeholder:font-semibold placeholder:text-slate-300 ${draft.trim() ? "border-amber-200 bg-amber-50 text-amber-900" : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 focus:border-amber-300 focus:bg-amber-50"}`} />
+        className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-0 sm:py-0.5 text-[11.5px] font-bold leading-4 outline-none transition placeholder:font-semibold placeholder:text-slate-300 ${draft.trim() ? "border-amber-200 bg-amber-50 text-amber-900" : "border-transparent bg-transparent text-slate-700 hover:border-slate-200 focus:border-amber-300 focus:bg-amber-50"}`} />
       {dirty && <button type="button" onClick={() => onSave(ticketId, draft)} className="inline-flex min-h-10 shrink-0 items-center rounded-lg bg-amber-500 px-3 text-xs font-black text-white hover:bg-amber-600 lg:min-h-8">저장</button>}
     </span>
   );
@@ -1238,13 +1238,13 @@ function InlineAddress({ value, suggestion, onSave }: { value: string; suggestio
   useEffect(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }, [draft]);
   const dirty = draft.trim() !== value.trim();
   return (
-    <span className="mt-0.5 block" onClick={(e) => e.stopPropagation()}>
+    <span className="block sm:mt-0.5" onClick={(e) => e.stopPropagation()}>
       <span className="flex items-start gap-1.5">
-        <span className="shrink-0 pt-1 text-[11px] font-black text-slate-300">📍</span>
+        <span className="shrink-0 pt-0.5 text-[11px] sm:pt-1 font-black text-slate-300">📍</span>
         <textarea ref={ref} value={draft} onChange={(e) => setDraft(e.target.value)} rows={1}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (dirty) onSave(draft); } if (e.key === "Escape") setDraft(value); }}
           placeholder="주소 없음 — 여기에 적고 저장 (지도 핀도 이 주소로 옮깁니다)"
-          className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-0.5 text-[11px] font-semibold leading-4 outline-none transition placeholder:font-semibold ${value.trim()
+          className={`min-w-0 flex-1 resize-none overflow-hidden rounded border px-2 py-0 text-[11px] font-semibold sm:py-0.5 leading-4 outline-none transition placeholder:font-semibold ${value.trim()
             ? "border-transparent bg-transparent text-slate-500 hover:border-slate-200 focus:border-blue-300 focus:bg-blue-50/40 focus:text-slate-800"
             : "border-dashed border-amber-300 bg-amber-50/50 text-slate-700 placeholder:text-amber-600 focus:border-blue-300 focus:bg-blue-50/40"}`} />
         {dirty && <button type="button" onClick={() => onSave(draft)} className="inline-flex min-h-10 shrink-0 items-center rounded-lg bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 lg:min-h-8">저장</button>}

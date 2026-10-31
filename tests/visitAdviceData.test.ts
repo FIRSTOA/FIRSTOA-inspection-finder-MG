@@ -80,7 +80,7 @@ function mockChungo(opts: { failJeom?: boolean; queue?: (a: QueueArgs) => unknow
 }
 
 describe("collectVisitAdviceInput — 청오에스떠블유 표본", () => {
-  it("점검 08-04 · AS 10-23 · 워킨맵 C팀 · 11-02 교체 일정(다른 지점) · 같은 건물 다른 업체 일정", async () => {
+  it("점검 08-04 · AS 10-23 · 워킨맵 C팀 · 11-02 교체(다른 주소 지점)는 제외 · 같은 건물 다른 업체 일정은 포함", async () => {
     mockChungo();
     const got = await collectVisitAdviceInput(reception(), { today: "2026-10-30" });
     if ("notFound" in got) throw new Error("못 찾음이면 안 된다");
@@ -90,13 +90,9 @@ describe("collectVisitAdviceInput — 청오에스떠블유 표본", () => {
     expect(got.asAfterInspection).toEqual([{ date: "2026-10-23", deviceCount: 1 }]);
     expect(got.deviceTotal).toBe(2);
     expect(got.workin).toEqual({ kind: "quarter", label: "C팀" });
-    expect(got.upcoming.map((u) => u.date)).toEqual(["2026-11-02", "2026-11-05"]);
-    const [swap, bldg] = got.upcoming;
-    expect(swap.kind).toBe("교체");
-    expect(swap.title).toContain("교체(일반)");
-    expect(swap.title).toContain("써브웨이 답십리역점");
-    expect(swap.source).toBe("네이버 수입, 운영팀");
-    expect(swap.sameBuilding).toBe(false);
+    // 2026-10-31 사용자: 같은 사업자라도 다른 주소(답십리역점)는 추가일정에서 뺀다 — 같은 건물만
+    expect(got.upcoming.map((u) => u.date)).toEqual(["2026-11-05"]);
+    const [bldg] = got.upcoming;
     expect(bldg.sameBuilding).toBe(true);
     expect(bldg.vendor).toBe("다른회사");
     // RPC 는 접수 id·시리얼·자산·업체명 그대로
@@ -133,7 +129,8 @@ describe("runVisitAdviceFor — 판정·적재(RPC queue_visit_advice)", () => {
     expect(text.split("\n")[0]).toBe(`${HQ} V`);
     expect(text).toContain("마지막점검일:2026-08-04");
     expect(text).toContain("마지막AS일:2026-10-23");
-    expect(text).toMatch(/1\.2026-11-02\(월\) 교체/);
+    expect(text).not.toContain("2026-11-02");                       // 다른 주소 지점(답십리역점) 교체는 뺀다(2026-10-31 같은 건물만)
+    expect(text).toMatch(/1\.2026-11-05\(목\) \[같은 건물\] 다른회사/);
     expect(text).toContain(BUNDLE_LINE);
     expect(text.length).toBeLessThanOrEqual(600);
   });
@@ -225,5 +222,22 @@ describe("visitAdviceDueAt", () => {
     expect(visitAdviceDueAt(new Date("2026-10-30T05:00:00Z"))).toBe("2026-10-30T05:00:00.000Z");
     expect(visitAdviceDueAt(new Date("2026-10-30T12:00:00Z"))).toBe("2026-11-02T01:00:00.000Z");
     expect(visitAdviceDueAt(new Date("2026-12-24T23:00:00Z"))).toBe("2026-12-28T01:00:00.000Z"); // 12-25(금) 08시 → 월
+  });
+});
+
+describe("pickUpcomingTickets — 같은 사업자 다른 표기(2026-10-31 같은 건물만)", () => {
+  it("같은 주소면 포함, 다른 주소면 제외, 주소 없으면 포함 + (주소 미확인)", async () => {
+    const { pickUpcomingTickets } = await import("../src/visitAdviceData");
+    const { sameBuildingKey } = await import("../src/visitAdvice");
+    const ctx = { receptionId: "rc-1", code: "1234567890", entity: { deviceKeys: [], nameKeys: [] } as never, branchName: "써브웨이 본사", branchDeviceKeys: [], buildingKeys: [sameBuildingKey("서울 강남구 테헤란로 10, 5층")], today: "2026-10-30" };
+    const rows = [
+      { id: "a", date: "2026-11-02", vendor: "청오에스떠블유(본사 2층)", vendor_code: "1234567890", address: "서울 강남구 테헤란로 10 2층", scheduleType: "물류" },
+      { id: "b", date: "2026-11-03", vendor: "써브웨이 답십리역점", vendor_code: "1234567890", address: "서울 동대문구 답십리로 1", scheduleType: "물류" },
+      { id: "c", date: "2026-11-04", vendor: "청오에스떠블유", vendor_code: "1234567890", address: "", scheduleType: "AS" },
+    ];
+    const got = pickUpcomingTickets(rows as never, ctx);
+    expect(got.map((t) => t.id)).toEqual(["a", "c"]);
+    expect(got[0].addressUnknown).toBeUndefined();
+    expect(got[1].addressUnknown).toBe(true);
   });
 });
