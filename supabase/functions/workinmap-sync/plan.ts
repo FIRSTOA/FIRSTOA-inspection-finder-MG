@@ -316,7 +316,7 @@ export function addressHeadKey(address: string | null | undefined): string {
 
 // ── 짝짓기(v2-B2) ────────────────────────────────────────────────
 
-export type MatchBy = "ext_id" | "exact_name" | "exact_name_order" | "number_name" | "tail_name" | "name_address";
+export type MatchBy = "ext_id" | "exact_name" | "exact_name_order" | "number_name" | "tail_name" | "name_address" | "address_rename";
 /** multiple_candidates = 이 워킨맵 장소에 앱 후보가 2개+ · shared_candidate = 후보 1개지만 그 앱 행을 다른 워킨맵 장소도 후보로 잡음 */
 export type AmbiguousReason = "multiple_candidates" | "shared_candidate";
 export type MatchResult = {
@@ -444,11 +444,35 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
     candOf.set(r.extId, cands);
     for (const c of cands) claims.set(c.id, (claims.get(c.id) || 0) + 1);
   }
+  const noCand: RemotePlace[] = [];
   for (const r of rest) {
     const cands = candOf.get(r.extId) || [];
-    if (cands.length === 0) { fresh.push(r); continue; }
+    if (cands.length === 0) { noCand.push(r); continue; }
     if (cands.length === 1 && (claims.get(cands[0].id) || 0) === 1) { pairs.push({ remote: r, local: cands[0], by: "name_address" }); used.add(cands[0].id); continue; }
     ambiguous.push({ remote: r, candidates: cands.map((c) => c.id), reason: cands.length > 1 ? "multiple_candidates" : "shared_candidate" });
+  }
+
+  // ④(5차 실측) 상호 변경 — 이름으로는 짝이 없는 워킨맵 장소인데, 같은 주소의 짝 안 된 앱 행이 딱 1개이고
+  //   그 앱 행이 이미 짝된 행의 중복(같은 이름·주소)이 아니며, 그 앱 행을 노리는 워킨맵 장소도 이 하나뿐이면 잇는다(address_rename).
+  //   애매 후보로 걸린 앱 행은 쓰지 않는다. 같은 주소에 짝 안 된 앱 행이 2개+ 면 새 장소 그대로.
+  const dupKey = (l: { name: string; address: string }) => `${exactNameKey(l.name)}|${addressKey(l.address)}`;
+  const matchedDup = new Set(pairs.map((p) => dupKey(p.local)));
+  const inAmbiguous = new Set(ambiguous.flatMap((a) => a.candidates));
+  const spare = unlinked.filter((l) => !used.has(l.id) && !inAmbiguous.has(l.id)).map((l) => ({ l, sig: addrKeys(l.address) }));
+  const renameTarget = new Map<string, LocalPlace>();
+  const targetClaims = new Map<number, number>();
+  for (const r of noCand) {
+    const sig = addrKeys(r.address);
+    if (!sig.length) continue;
+    const atAddr = spare.filter((x) => overlap(sig, x.sig));
+    if (atAddr.length !== 1 || matchedDup.has(dupKey(atAddr[0].l))) continue;
+    renameTarget.set(r.extId, atAddr[0].l);
+    targetClaims.set(atAddr[0].l.id, (targetClaims.get(atAddr[0].l.id) || 0) + 1);
+  }
+  for (const r of noCand) {
+    const l = renameTarget.get(r.extId);
+    if (l && targetClaims.get(l.id) === 1) { pairs.push({ remote: r, local: l, by: "address_rename" }); used.add(l.id); continue; }
+    fresh.push(r);
   }
 
   const remoteIds = new Set(remote.map((r) => r.extId));
@@ -661,7 +685,7 @@ export type PullPlan = {
   inserts: PlannedInsert[];
   reviews: PlannedReview[];
   stats: {
-    remote: number; matched: number; byExtId: number; byExactName: number; byExactNameOrder: number; byNumberName: number; byTailName: number; byNameAddress: number;
+    remote: number; matched: number; byExtId: number; byExactName: number; byExactNameOrder: number; byAddressRename: number; byNumberName: number; byTailName: number; byNameAddress: number;
     changed: number; labelChanges: number; memoAdds: number; fresh: number; inserted: number;
     ambiguous: number; missing: number; downgrades: number; keptLocalNewer: number; linkedOnly: number;
     /** 첫 짝짓기에서 앱 완료(G5·G12)를 지킨 곳(keepAppDone) — keptLocalNewer 에도 포함 */
@@ -751,7 +775,7 @@ export function nextScheduledRun(nowMs: number): string {
 export function planPull(input: PullInput): PullPlan {
   const { workId, accountNo, parse, remote, nowIso } = input;
   const stats: PullPlan["stats"] = {
-    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byExactNameOrder: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
+    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byExactNameOrder: 0, byAddressRename: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
     fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0, keptAppDone: 0, firstImport: false,
   };
   const histogram: Record<string, number> = {};
@@ -816,7 +840,7 @@ export function planPull(input: PullInput): PullPlan {
 
   for (const { remote: r, local: l, by } of m.pairs) {
     stats.matched += 1;
-    if (by === "ext_id") stats.byExtId += 1; else if (by === "exact_name") stats.byExactName += 1; else if (by === "exact_name_order") stats.byExactNameOrder += 1; else if (by === "number_name") stats.byNumberName += 1; else if (by === "tail_name") stats.byTailName += 1; else stats.byNameAddress += 1;
+    if (by === "ext_id") stats.byExtId += 1; else if (by === "exact_name") stats.byExactName += 1; else if (by === "exact_name_order") stats.byExactNameOrder += 1; else if (by === "address_rename") stats.byAddressRename += 1; else if (by === "number_name") stats.byNumberName += 1; else if (by === "tail_name") stats.byTailName += 1; else stats.byNameAddress += 1;
     if (by !== "ext_id" && r.label) {
       if (r.label === l.label) colorCheck.firstMatchSame += 1;
       else {
@@ -835,6 +859,8 @@ export function planPull(input: PullInput): PullPlan {
       localUpdatedAt: l.updated_at, localUpdatedBy: l.updated_by, extSyncedAt: l.ext_synced_at, extLastUpdate: l.ext_last_update, remoteLastUpdate: r.lastUpdate, kind: parse.kind,
     });
     if (keepDone || rules.kept.some((k) => k.reason === "local_newer")) stats.keptLocalNewer += 1;
+    // 주소로 이은 상호 변경 — 이름은 워킨맵 값으로 바뀌고(name 칸 diff), 참고용 확인 큐 한 줄
+    if (by === "address_rename") pushReview({ kind: "field_diff", field: "name", place_id: l.id, ext_id: r.extId, detail: { from: l.name, to: r.name, address: r.address, by: "address_rename" } });
     if (keepDone) {
       stats.keptAppDone += 1;
       full?.downgrades.push({ id: l.id, name: oneLine(l.name), appLabel: l.label, workinmapLabel: r.label, reason: "keep_app" });
@@ -891,7 +917,7 @@ export function planPull(input: PullInput): PullPlan {
     if (!fields.length && !needsLink && !unmissing) continue;
     if (fields.length) stats.changed += 1; else stats.linkedOnly += 1;
     if (keepDone) logs.push({ field: "label", before_value: l.label, after_value: l.label, note: "keep_done" });
-    if (l.ext_id !== r.extId) logs.push({ field: "_link", before_value: l.ext_id ?? null, after_value: { ext_id: r.extId, work_id: workId, account_no: accountNo, by } });
+    if (l.ext_id !== r.extId) logs.push({ field: "_link", before_value: l.ext_id ?? null, after_value: { ext_id: r.extId, work_id: workId, account_no: accountNo, by }, ...(by === "address_rename" ? { note: "rename" } : {}) });
     if (unmissing) { set.ext_missing_at = null; logs.push({ field: "_unmissing", before_value: l.ext_missing_at, after_value: null }); }
     patches.push({ id: l.id, ext_id: r.extId, set: { ...set, ...linkCols(r) }, fields, by, logs });
   }

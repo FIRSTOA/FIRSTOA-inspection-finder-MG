@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "360ffffe2d",
+    "agent": "developer",
+    "summary": "워킨맵 동기화 dry 4차 반영: 같은 이름 N:N(주소 동일)은 순서로 1:1 짝(exact_name_order), 꼬리 반복 제거, detail fresh.similarLocal·unmatchedLocal.duplicateOfMatched 힌트"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "b30c6685d1",
     "agent": "developer",
     "summary": "워킨맵 동기화 dry 3차 반영: 처음 들여오는 워크(앱 범위 0행)는 상한 없이 전부 추가, 꼬리(매월마감·분기마감…) 뗀 이름+주소 1:1 짝짓기, 첫 가져오기 완료 보존 스위치 WORKINMAP_KEEP_APP_DONE(기본 켬), dry detail:true 전체 목록(애매·새 장소·짝 안 된 앱 행·하강·색 변경·메모 추가)"

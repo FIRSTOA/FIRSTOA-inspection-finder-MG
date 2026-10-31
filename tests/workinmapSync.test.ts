@@ -334,10 +334,41 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
     // 이름이 달라 짝이 안 되면 fresh 로 두고 같은 주소 앱 행을 힌트로
     const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
     const p = planPull({ workId: WORK, accountNo: 1, parse, remote: [rp({ extId: "g2", name: "기산 5층 복합기", seq: 71, address: "서울특별시 금천구 벚꽃로 1, 5층" })],
-      local: [lp({ id: 9, name: "엉뚱한곳", number: 1, address: "부산 중구 중앙대로 1" }), lp({ id: 3, name: "19SS㈜기산리더스5층매월마감", number: 2, address: addr })],
+      // 같은 주소에 짝 안 된 앱 행이 2개라 상호 변경 잇기(address_rename)는 안 되고 fresh + 힌트(번호 순 첫 행)
+      local: [lp({ id: 9, name: "엉뚱한곳", number: 1, address: "부산 중구 중앙대로 1" }), lp({ id: 3, name: "19SS㈜기산리더스5층매월마감", number: 2, address: addr }), lp({ id: 4, name: "다른회사 6층", number: 3, address: addr })],
       firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 2, withDetail: true });
     expect(p.stats.fresh).toBe(1);
     expect(p.detail!.fresh[0].similarLocal).toEqual({ id: 3, name: "19SS㈜기산리더스5층매월마감" });
+  });
+
+  it("5차 실측: 상호 변경 — 같은 주소의 유일한 짝 안 된 앱 행이면 address_rename 으로 이음(로그 _link note rename · field_diff name 참고)", () => {
+    const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
+    const addr = "경기 군포시 산본로 1";
+    const remote = [rp({ extId: "s1", name: "산본글로벌어학원", seq: 10, address: addr })];
+    const local = [lp({ id: 7, name: "산본이지어학원", number: 3, address: addr }), lp({ id: 8, name: "딴곳", number: 4, address: "서울 중구 세종대로 9" })];
+    const p = planPull({ workId: WORK, accountNo: 1, parse, remote, local, firstPull: false, previousCount: null, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 4 });
+    expect(p.stats).toMatchObject({ byAddressRename: 1, fresh: 0 });
+    const patch = p.patches.find((x) => x.id === 7)!;
+    expect(patch.by).toBe("address_rename");
+    expect(patch.set.name).toBe("산본글로벌어학원");
+    expect(patch.logs.find((l) => l.field === "_link")?.note).toBe("rename");
+    expect(p.reviews.map((r) => [r.kind, r.field, r.detail])).toEqual([["field_diff", "name", expect.objectContaining({ from: "산본이지어학원", to: "산본글로벌어학원" })]]);
+  });
+
+  it("상호 변경 잇기 안 함: 같은 주소에 짝 안 된 앱 행 2개+ · 그 앱 행이 이미 짝된 행의 중복 · 워킨맵 둘이 같은 앱 행을 노림", () => {
+    const addr = "서울 강남구 테헤란로 5";
+    const two = matchPlaces([rp({ extId: "a", name: "새이름", seq: 1, address: addr })], [lp({ id: 1, name: "옛1", number: 1, address: addr }), lp({ id: 2, name: "옛2", number: 2, address: addr })]);
+    expect(two.pairs).toEqual([]);
+    expect(two.fresh.map((r) => r.extId)).toEqual(["a"]);
+    const dup = matchPlaces(
+      [rp({ extId: "m", name: "같은곳", seq: 1, address: addr }), rp({ extId: "n", name: "새이름", seq: 2, address: addr })],
+      [lp({ id: 1, name: "같은곳", number: 1, address: addr, ext_id: "m" }), lp({ id: 2, name: "같은곳", number: 2, address: addr })],
+    );
+    expect(dup.pairs.map((p) => p.by)).toEqual(["ext_id"]);
+    expect(dup.fresh.map((r) => r.extId)).toEqual(["n"]);
+    const race = matchPlaces([rp({ extId: "x", name: "새1", seq: 1, address: addr }), rp({ extId: "y", name: "새2", seq: 2, address: addr })], [lp({ id: 1, name: "옛", number: 1, address: addr })]);
+    expect(race.pairs).toEqual([]);
+    expect(race.fresh.map((r) => r.extId)).toEqual(["x", "y"]);
   });
 
   it("duplicateOfMatched: 같은 이름·주소의 다른 앱 행이 이미 짝되면 true", () => {
