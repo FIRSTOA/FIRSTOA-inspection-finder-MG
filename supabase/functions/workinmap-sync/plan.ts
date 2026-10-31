@@ -266,7 +266,10 @@ export type LocalPlace = {
   ext_missing_at?: string | null;
 };
 
-const nameKey = (name: string) => vendorMatchKey(name) || String(name || "").replace(/\s+/g, "").toLowerCase();
+// 2차 실측: 앱 이름에 엑셀 잔재 "_x000d_\n" 이 있으면 vendorMatchKey 가 밑줄만 지워 "x000d" 가 키에 남았다 → normText 먼저
+const nameKey = (name: string) => { const n = normText(name); return vendorMatchKey(n) || n.replace(/\s+/g, "").toLowerCase(); };
+/** 전체 이름 완전 일치 키 — normText(_x000d_·CR/LF·빈 줄) 뒤 모든 공백을 한 칸으로. 등급 접두·층·부서는 그대로 */
+export const exactNameKey = (name: string) => normText(name).replace(/\s+/g, " ").trim();
 /** src/workinPlaces.ts addressGroupKey 와 같은 규칙(엣지에서 src 를 import 하지 않으려고 복사) */
 export const addressKey = (address: string | null | undefined) => String(address || "").replace(/\s+/g, "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
 
@@ -299,7 +302,7 @@ export function addressHeadKey(address: string | null | undefined): string {
 
 // ── 짝짓기(v2-B2) ────────────────────────────────────────────────
 
-export type MatchBy = "ext_id" | "number_name" | "name_address";
+export type MatchBy = "ext_id" | "exact_name" | "number_name" | "name_address";
 export type MatchResult = {
   pairs: Array<{ remote: RemotePlace; local: LocalPlace; by: MatchBy }>;
   /** 후보 0 — 새 장소 */
@@ -313,10 +316,11 @@ export type MatchResult = {
 };
 
 /**
- * ① ext_id 같음 → ② (ext_id 빈 행 중) 번호 = 응답 순서 + 이름 키 같음, 후보 1개 → ③ 이름 + 주소, 후보 1개.
+ * ① ext_id 같음 → ①-2(2차 실측 뒤) 정규화한 전체 이름 완전 일치, 워킨맵·앱 양쪽 다 1개 → ② (ext_id 빈 행 중) 번호 = 응답 순서 + 이름 키 같음,
+ *   후보 1개 → ③ 이름 + 주소, 후보 1개.
  * ③(2026-10-31 첫 dry 실측 뒤 강화): 이름은 비교키(vendorMatchKey) 또는 느슨한 키(looseNameKey) 중 하나라도 같고,
  *   주소는 전체 키(addressKey) 또는 앞부분 키(addressHeadKey: 시·도 표기 무시, 번지까지) 중 하나라도 같으면 후보.
- * ②·③에서 후보 2개 이상이면 ambiguous. ③에서 한 앱 행을 워킨맵 장소 둘 이상이 후보로 잡으면 그 장소들 모두 ambiguous(같은 건물 2지점).
+ * ③에서 후보 2개 이상이면 ambiguous(②의 후보 여럿은 ③으로 넘긴다). ③에서 한 앱 행을 워킨맵 장소 둘 이상이 후보로 잡으면 그 장소들 모두 ambiguous(같은 건물 2지점).
  * local 은 "ext_id 가 이 워크 장소인 행 + 같은 범위(팀·분기·업무)의 ext_id 빈 행"을 넘긴다. opts.workId 가 있으면 사라진 장소를 고른다.
  */
 export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { workId?: string } = {}): MatchResult {
@@ -334,13 +338,31 @@ export function matchPlaces(remote: RemotePlace[], local: LocalPlace[], opts: { 
   }
 
   const unlinked = local.filter((l) => !l.ext_id);
-  // ② 번호 + 이름
+  // ①-2 정규화한 전체 이름 완전 일치(등급 접두·층·부서 포함 그대로), 양쪽 다 1개일 때만 — 같은 업체·같은 주소 기기 여러 대
+  const exactCount = (list: Array<{ name: string }>) => {
+    const c = new Map<string, number>();
+    for (const x of list) { const k = exactNameKey(x.name); if (k) c.set(k, (c.get(k) || 0) + 1); }
+    return c;
+  };
+  const remoteExact = exactCount(rest);
+  const localExact = exactCount(unlinked.filter((l) => !used.has(l.id)));
+  const afterExact: RemotePlace[] = [];
+  for (const r of rest) {
+    const k = exactNameKey(r.name);
+    if (k && remoteExact.get(k) === 1 && localExact.get(k) === 1) {
+      const l = unlinked.find((x) => !used.has(x.id) && exactNameKey(x.name) === k);
+      if (l) { pairs.push({ remote: r, local: l, by: "exact_name" }); used.add(l.id); continue; }
+    }
+    afterExact.push(r);
+  }
+  rest = afterExact;
+
+  // ② 번호 + 이름(후보 여럿이면 ③ 으로 넘김 — ambiguous 는 ③ 에서만)
   const afterStep2: RemotePlace[] = [];
   for (const r of rest) {
     const key = nameKey(r.name);
     const cands = key ? unlinked.filter((l) => !used.has(l.id) && Number(l.number) === r.seq && nameKey(l.name) === key) : [];
     if (cands.length === 1) { pairs.push({ remote: r, local: cands[0], by: "number_name" }); used.add(cands[0].id); }
-    else if (cands.length > 1) ambiguous.push({ remote: r, candidates: cands.map((c) => c.id) });
     else afterStep2.push(r);
   }
   rest = afterStep2;
@@ -447,20 +469,31 @@ export type RuleContext = {
   extLastUpdate?: string | null;
   /** 이번 응답의 워킨맵 last_update */
   remoteLastUpdate?: string | null;
+  /** 워크 업무(quarter·monthly·renewal) — monthly 는 G1~G4 가 진행 단계라 하강을 알림 대상으로 */
+  kind?: string | null;
 };
 export type RuleResult = {
   apply: Change[];
-  /** 확인 큐(conflict) — 완료(G5·G12)가 내려가는 색 변경 */
-  review: Array<Change & { reason: "completion_down" }>;
+  /**
+   * 알림용 확인 큐(downgrade) — 2026-10-31 사용자 "지금은 기존 워킨맵이 주": 색은 이미 apply 에 들어가 반영되고,
+   * 여기는 "이미 반영됨, 참고" 표시만(되돌리기는 workin_sync_log before/after). completion_down = G5·G12 → 그 밖, progress_down = 매월 G1~G4 단계 하강
+   */
+  review: Array<Change & { reason: "completion_down" | "progress_down" }>;
   /** 이번에 손대지 않음 */
   kept: Array<Change & { reason: "remote_unchanged" | "local_newer" }>;
 };
 
 const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
+/** 매월점검 진행 단계 G1(시작 전)·G2(1개월)·G3(2개월)·G4 → 1~4. 그 밖 색은 Infinity(하강 판정은 앞뒤 둘 다 G1~G4 일 때만) */
+const progressRank = (label: unknown): number => {
+  const m = /^G([1-4])$/.exec(String(label ?? ""));
+  return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+};
 
 /**
  * - 워킨맵이 지난 동기화 뒤로 안 바뀜(last_update ≤ ext_last_update) → 손대지 않음(앱에서 바꾼 값은 P2 되밀기 몫).
- * - 색이 앱 G5·G12 → 워킨맵 G5·G12 아님 → 확인 큐(FIELD 자동 완료 보호). 그 밖 칸은 같이 반영.
+ * - 색은 매월·분기 가리지 않고 워킨맵 값을 반영한다(G2→G1, G5→G1 포함). 단 G5·G12 가 낮아지거나 매월 G1~G4 단계가 내려가면
+ *   반영하면서 review 에도 남긴다(알림용, planPull 이 detail.applied=true 로 넣음).
  * - 지난 동기화 뒤 앱(동기화 아닌 사람)도 고쳤고 앱 쪽이 더 늦음 → 그 행은 앱 값 유지(메모 합치기는 예외 — 지우는 게 없어서).
  * - 나머지 전부 워킨맵 값(첫 동기화 포함).
  */
@@ -473,10 +506,13 @@ export function applyRules(diff: Change[], ctx: RuleContext): RuleResult {
   const localNewer = localChanged && (!Number.isFinite(remoteMs) || localMs > remoteMs);
   for (const c of diff) {
     if (!remoteChanged) { res.kept.push({ ...c, reason: "remote_unchanged" }); continue; }
-    if (c.field === "label" && isDone(c.before) && !isDone(c.after)) { res.review.push({ ...c, reason: "completion_down" }); continue; }
     if (c.field === "memos") { res.apply.push(c); continue; }
     if (localNewer) { res.kept.push({ ...c, reason: "local_newer" }); continue; }
     res.apply.push(c);
+    if (c.field === "label") {
+      if (isDone(c.before) && !isDone(c.after)) res.review.push({ ...c, reason: "completion_down" });
+      else if (ctx.kind === "monthly" && progressRank(c.before) <= 4 && progressRank(c.after) < progressRank(c.before)) res.review.push({ ...c, reason: "progress_down" });
+    }
   }
   return res;
 }
@@ -557,7 +593,7 @@ export type PullPlan = {
   inserts: PlannedInsert[];
   reviews: PlannedReview[];
   stats: {
-    remote: number; matched: number; byExtId: number; byNumberName: number; byNameAddress: number;
+    remote: number; matched: number; byExtId: number; byExactName: number; byNumberName: number; byNameAddress: number;
     changed: number; labelChanges: number; memoAdds: number; fresh: number; inserted: number;
     ambiguous: number; missing: number; downgrades: number; keptLocalNewer: number; linkedOnly: number;
   };
@@ -624,7 +660,7 @@ export function nextScheduledRun(nowMs: number): string {
 export function planPull(input: PullInput): PullPlan {
   const { workId, accountNo, parse, remote, nowIso } = input;
   const stats: PullPlan["stats"] = {
-    remote: remote.length, matched: 0, byExtId: 0, byNumberName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
+    remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byNumberName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0,
     fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0,
   };
   const histogram: Record<string, number> = {};
@@ -665,7 +701,7 @@ export function planPull(input: PullInput): PullPlan {
 
   for (const { remote: r, local: l, by } of m.pairs) {
     stats.matched += 1;
-    if (by === "ext_id") stats.byExtId += 1; else if (by === "number_name") stats.byNumberName += 1; else stats.byNameAddress += 1;
+    if (by === "ext_id") stats.byExtId += 1; else if (by === "exact_name") stats.byExactName += 1; else if (by === "number_name") stats.byNumberName += 1; else stats.byNameAddress += 1;
     if (by !== "ext_id" && r.label) {
       if (r.label === l.label) colorCheck.firstMatchSame += 1;
       else {
@@ -675,12 +711,12 @@ export function planPull(input: PullInput): PullPlan {
     }
 
     const rules = applyRules(diffPlace(r, l), {
-      localUpdatedAt: l.updated_at, localUpdatedBy: l.updated_by, extSyncedAt: l.ext_synced_at, extLastUpdate: l.ext_last_update, remoteLastUpdate: r.lastUpdate,
+      localUpdatedAt: l.updated_at, localUpdatedBy: l.updated_by, extSyncedAt: l.ext_synced_at, extLastUpdate: l.ext_last_update, remoteLastUpdate: r.lastUpdate, kind: parse.kind,
     });
     if (rules.kept.some((k) => k.reason === "local_newer")) stats.keptLocalNewer += 1;
     for (const c of rules.review) {
       stats.downgrades += 1;
-      pushReview({ kind: "downgrade", field: c.field, place_id: l.id, ext_id: r.extId, detail: { app: c.before, workinmap: c.after, name: l.name, workinmap_last_update: r.lastUpdate } });
+      pushReview({ kind: "downgrade", field: c.field, place_id: l.id, ext_id: r.extId, detail: { applied: true, from: c.before, to: c.after, reason: c.reason, note: "이미 반영됨, 참고(되돌리기는 동기화 기록 before)", name: l.name, workinmap_last_update: r.lastUpdate } });
     }
 
     const set: Record<string, unknown> = {};

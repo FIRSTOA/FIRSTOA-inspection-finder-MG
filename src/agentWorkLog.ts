@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "f619fcc5fd",
+    "agent": "developer",
+    "summary": "워킨맵 동기화 dry 실측 반영(줄바꿈 정규화 비교·저장, 느슨한 이름+주소 번지 짝짓기, dry 표본 fresh/unmatchedLocal/colorDiff) + 방문 판단 매월점검 = 마감일 전 영업일 5일 창(VISIT_ADVICE_MONTHLY_WINDOW_DAYS, 라벨 완료 개월 반영) + 매뉴얼 06·기록"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "ae62608b4a",
     "agent": "feature-planner",
     "summary": "워킨맵(workinmap.com) ↔ 웹앱 워킨맵 양방향 동기화 P1(가져오기): SQL workin-sync-20261031(표 6·열 7·RPC 있는 행만 갱신·트리거·크론 하루 4회 09/12/15/18) + 엣지 workinmap-sync(Firebase 로그인·워크 이름 규칙·짝짓기·메모 합집합·완료 내려감 review·가드·로그 먼저·120초 예산) + 관리 탭 카드(계정·워크·dry 미리보기·지금 동기화·확인 큐) + 워킨맵 교체 막기·배지 + 매뉴얼 12·14·ops05 + 설계 불변 조건"

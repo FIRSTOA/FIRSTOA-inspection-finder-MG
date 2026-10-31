@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyRules, classifyWork, colorOf, decodeHtml, diffPlace, isAuthorized, labelOf, matchPlaces, mergeMemos, newPlaceGuard,
   chunkPatchRows, nextScheduledRun, normalizeRemoteWork, parseRequest, parseWorkName, planPull, SYNC_ACTOR, workGuard,
-  addressHeadKey, looseNameKey, normText,
+  addressHeadKey, exactNameKey, looseNameKey, normText,
   type LocalPlace, type RemotePlace,
 } from "../supabase/functions/workinmap-sync/plan.ts";
 import { getIdToken, readAccounts, scrub, type TokenRow, type TokenStore } from "../supabase/functions/workinmap-sync/auth.ts";
@@ -97,7 +97,7 @@ describe("matchPlaces — ext_id → 번호+이름 → 이름+주소", () => {
     const local = [
       lp({ id: 10, name: "가나상사", ext_id: "e1", number: 7 }),
       lp({ id: 11, name: "다라물산", number: 2 }),
-      lp({ id: 12, name: "마바산업", number: 3, address: "서울 강남구 테헤란로 1" }),
+      lp({ id: 12, name: "마바산업㈜", number: 3, address: "서울 강남구 테헤란로 1" }),
     ];
     const m = matchPlaces(remote, local);
     expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([
@@ -171,6 +171,23 @@ describe("첫 dry 실측 보강 — 줄바꿈 정규화 · ③ 짝짓기 강화 
     expect(m.unmatchedLocal.map((l) => l.id)).toEqual([1, 2]);
   });
 
+  it("2차 실측: 같은 업체·같은 주소 기기 여러 대는 정규화한 전체 이름 완전 일치로 1:1 짝(앱 _x000d_\n vs 워킨맵 CRLF)", () => {
+    const floors = ["K2 7층 오른쪽", "K2 7층 왼쪽", "K2 8층"];
+    const remote = floors.map((f, i) => rp({ extId: `k${i}`, name: `19V엔티에스케이투\r\n${f} 매월마감`, seq: 60 + i, address: "서울 금천구 가산디지털1로 1" }));
+    const local = floors.map((f, i) => lp({ id: 50 + i, name: `19V엔티에스케이투_x000d_\n${f} 매월마감`, number: 90 + i, address: "서울 금천구 가산디지털1로 1" }));
+    const m = matchPlaces(remote, [...local].reverse());
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["k0", 50, "exact_name"], ["k1", 51, "exact_name"], ["k2", 52, "exact_name"]]);
+    expect(m.ambiguous).toEqual([]);
+    expect(exactNameKey("19V엔티에스케이투_x000d_\nK2  8층")).toBe(exactNameKey("19V엔티에스케이투\r\nK2 8층"));
+  });
+
+  it("완전 일치가 양쪽 중 한쪽이라도 2개+ 면 그 단계에선 짝짓지 않고 다음 단계로", () => {
+    const remote = [rp({ extId: "a", name: "휴스틸", seq: 1, address: "서울 중구 세종대로 1" }), rp({ extId: "b", name: "휴스틸", seq: 2, address: "서울 중구 세종대로 1" })];
+    const local = [lp({ id: 1, name: "휴스틸", number: 1, address: "서울 중구 세종대로 1" }), lp({ id: 2, name: "휴스틸", number: 2, address: "서울 중구 세종대로 1" })];
+    const m = matchPlaces(remote, local);
+    expect(m.pairs.map((p) => [p.remote.extId, p.local.id, p.by])).toEqual([["a", 1, "number_name"], ["b", 2, "number_name"]]);
+  });
+
   it("planPull 표본: 새 장소(최대 20)·짝 안 된 앱 행(최대 20)·처음 짝 색 다름(최대 10)", () => {
     const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "monthly" as const };
     const remote = [
@@ -227,11 +244,25 @@ describe("diffPlace · applyRules", () => {
     expect(diffPlace(r, lp({ id: 1, name: "가", comment: "원본", phone: "02", address: "서울" }))).toEqual([]);
   });
 
-  it("완료 G5 가 G2 로 내려가면 확인 큐, 다른 칸은 반영", () => {
+  it("완료 G5 가 G2 로 내려가도 워킨맵 값 반영 + 알림용 review(completion_down)", () => {
     const d = diffPlace(rp({ extId: "e", name: "가", label: "G2", phone: "010" }), lp({ id: 1, name: "가", label: "G5", phone: "02" }));
     const res = applyRules(d, {});
-    expect(res.review.map((c) => [c.field, c.before, c.after])).toEqual([["label", "G5", "G2"]]);
-    expect(res.apply.map((c) => c.field)).toEqual(["phone"]);
+    expect(res.review.map((c) => [c.field, c.before, c.after, c.reason])).toEqual([["label", "G5", "G2", "completion_down"]]);
+    expect(res.apply.map((c) => c.field)).toEqual(["label", "phone"]);
+  });
+
+  it("매월점검 G2→G1 단계 하강: 반영 + review(progress_down), 분기점검은 review 없음, 올라가면 review 없음", () => {
+    const d = diffPlace(rp({ extId: "e", name: "가", label: "G1" }), lp({ id: 1, name: "가", label: "G2" }));
+    const monthly = applyRules(d, { kind: "monthly" });
+    expect(monthly.apply.map((c) => c.after)).toEqual(["G1"]);
+    expect(monthly.review.map((c) => [c.before, c.after, c.reason])).toEqual([["G2", "G1", "progress_down"]]);
+    const quarter = applyRules(d, { kind: "quarter" });
+    expect(quarter.apply.map((c) => c.after)).toEqual(["G1"]);
+    expect(quarter.review).toEqual([]);
+    const up = applyRules(diffPlace(rp({ extId: "e", name: "가", label: "G3" }), lp({ id: 1, name: "가", label: "G2" })), { kind: "monthly" });
+    expect(up.review).toEqual([]);
+    const fromOther = applyRules(diffPlace(rp({ extId: "e", name: "가", label: "G2" }), lp({ id: 1, name: "가", label: "G7" })), { kind: "monthly" });
+    expect(fromOther.review).toEqual([]);
   });
 
   it("색은 워킨맵 우선(G5 로 올라가는 것·G12 끼리 아닌 것)", () => {
@@ -286,10 +317,11 @@ describe("planPull", () => {
     expect(p1.set).toMatchObject({ ext_id: "e1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026, updated_by: SYNC_ACTOR });
     expect(p1.logs.map((l) => l.field)).toEqual(["label", "memo", "_link"]);
     expect(p1.logs[0]).toEqual({ field: "label", before_value: "G1", after_value: "G5" });
-    // 2번: 완료 내려감 → 색은 안 바꾸고 짝만 연결 + downgrade 큐
+    // 2번: 완료 내려감 → 워킨맵 값(G1) 반영 + 알림용 downgrade 큐(detail.applied)
     const p2 = p.patches.find((x) => x.id === 2)!;
-    expect(p2.set.label).toBeUndefined();
+    expect(p2.set.label).toBe("G1");
     expect(p.reviews.map((r) => [r.kind, r.field, r.ext_id])).toEqual([["downgrade", "label", "e2"], ["new", "", "e3"]]);
+    expect(p.reviews[0].detail).toMatchObject({ applied: true, from: "G5", to: "G1", reason: "completion_down" });
     // 첫 회차: 새 장소는 넣지 않음
     expect(p.inserts).toEqual([]);
     expect(p.colorCheck).toMatchObject({ firstMatchSame: 0, firstMatchDiff: 2 });

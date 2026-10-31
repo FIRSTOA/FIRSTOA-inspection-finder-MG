@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "f619fcc5fd",
+    "date": "2026-10-31",
+    "note": "워킨맵 동기화 dry 실측 반영(줄바꿈 정규화 비교·저장, 느슨한 이름+주소 번지 짝짓기, dry 표본 fresh/unmatchedLocal/colorDiff) + 방문 판단 매월점검 = 마감일 전 영업일 5일 창(VISIT_ADVICE_MONTHLY_WINDOW_DAYS, 라벨 완료 개월 반영) + 매뉴얼 06·기록"
+  },
+  {
     "hash": "f274c5fc2c",
     "date": "2026-10-31",
     "note": "workin-sync SQL: plpgsql 변수명 notnull(예약어) → required_cols — 사용자 실행 42601 수정"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "488952d853",
     "date": "2026-10-10",
     "note": "카운터 문자전송: CMS 마감 목록(따로 올라옴)은 종류를 구분해 같은 종류끼리만 맞추기 — 일반 마감이 지워지지 않게"
-  },
-  {
-    "hash": "5bcf63ee2c",
-    "date": "2026-10-10",
-    "note": "카운터 문자전송: 관리부 목록을 붙여넣으면 팀 목록을 그 목록에 \"맞추기\"(빠진 업체 자동 완료) · 완료 카드는 접기 · 머리글로 팀·달 자동 인식"
   }
 ];
