@@ -150,9 +150,26 @@ describe("보고 한 줄 — 업체 칸 첫 토막이 담당자 이름뿐일 때
       vendor: "신정훈 / 계약갱신제안 2차체크 / SS/ C / 손나래영어학원 / 이다연 010-6669-0973",
       calendarTitle: "신정훈 / 계약갱신제안 2차체크 / SS/ C / 손나래영어학원 / 이다연 010-6669-0973", note: "", issue: "", model: "",
     }), ["이민구", "신정훈"]);
-    expect(line).toMatch(/^•\S/);
-    expect(line).toContain("계약갱신제안");
+    expect(line).toMatch(/^•손나래영어학원/);   // 상호 표시(학원)가 든 토막을 업체로
+    expect(line).not.toContain("신정훈");
     expect(line).not.toMatch(/010-\d{4}-\d{4}/);
+  });
+  it("상호 표시 토막이 없으면 이름 다음 첫 토막, 전화번호 토막은 끝까지 안 쓴다", async () => {
+    const { reportLineOf } = await import("../supabase/functions/_shared/report/mid-report.ts");
+    const line = reportLineOf(toReportTicket({
+      team: "C", date: "2026-11-06", status: "익일", scheduleType: "익일AS", source: "naver", assignee: "신정훈",
+      vendor: "신정훈 / 계약갱신제안 2차체크 / 010-6669-0973", calendarTitle: "", note: "", issue: "", model: "",
+    }), ["이민구", "신정훈"]);
+    expect(line).toMatch(/^•계약갱신제안/);
+    expect(line).not.toMatch(/\d{4}-\d{4}/);
+  });
+  it("보통 제목(업체가 첫 토막)은 그대로 — 'A/S' 슬래시도 구분자가 아니다", async () => {
+    const { reportLineOf } = await import("../supabase/functions/_shared/report/mid-report.ts");
+    const line = reportLineOf(toReportTicket({
+      team: "C", date: "2026-11-02", status: "익일", scheduleType: "익일AS", source: "", assignee: "박영현",
+      vendor: "효성산업 A/S 요청/2차체크", calendarTitle: "", note: "", issue: "급지 불량", model: "DocuPrint-CP 505d",
+    }), ["박영현"]);
+    expect(line).toMatch(/^•효성산업/);
   });
 });
 

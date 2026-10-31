@@ -86,6 +86,9 @@ const shortModel = (model: string) => {
   return cut(model.replace(/^(SL-|APEOS-|ApeosPort-?V?\s*|ECOSYS-|DocuCentre-?V?\s*|DocuPrint-?)/i, "").trim(), 9);
 };
 const DEFER_MARK = /\(\d{1,2}\/\d{1,2}로 연기\)/;
+const PHONE_RE = /\d{2,4}-\d{3,4}-\d{4}/;
+/** "/" 로 나뉜 제목 토막 중 업체명으로 볼 표시(2026-10-31 사용자: 이름/업무/등급/지역/업체/연락처 순 네이버 일정에서 업체를 집도록) */
+export const BUSINESS_HINT = /학원|학교|병원|의원|치과|한의원|약국|클리닉|주식회사|㈜|\(주\)|\(유\)|유한회사|회사|컴퍼니|그룹|센터|사무소|법인|법무|세무|회계|노무|특허|교회|성당|호텔|은행|증권|보험|공사|공단|협회|재단|연구소|연구원|스튜디오|디자인|산업|전자|테크|솔루션|시스템|소프트|네트웍|네트워크|커뮤니케이션|미디어|엔터|마트|카페|식당|빌딩|오피스|지점|본사|본점|공장|물류|건설|개발|기획|에이전시|파트너스|홀딩스|인터내셔널|코리아|글로벌|상사|유통|무역|제약|바이오|메디|헬스|피부과|정형외과|성형외과|안과|내과|외과|이비인후과|소아|산부인과|비뇨|신경|정신|재활|요양|복지|어린이집|유치원|도서관|박물관|미술관|문화|체육|스포츠|피트니스|헬스장|골프|당구|노래|PC방|편의점|마켓|백화점|아울렛|프라자|플라자|타워|파크|캐슬|빌|빌라|아파트|오피스텔|상가/;
 /** 연기 꼬리에 넣는 범위 — 오늘과 같은 달이거나 7일 안(월말에 다음 달 초 건이 끊기지 않게) */
 export const DEFERRED_TAIL_DAYS = 7;
 export function inDeferredWindow(dateYmd: string, todayYmd: string): boolean {
@@ -111,7 +114,9 @@ export function reportLineOf(ticket: ReportTicket, order: string[]): string {
   const stripName = (part: string) => (name ? part.replace(new RegExp(`^\\s*${escapeRegExp(name)}\\s*[-–—:\\s]*`), "") : part);
   const parts = ticket.vendor.replace(/A\/S/g, "A⁄S").split(/\s*>\s*/)[0].split("/").map((part) => stripName(part).replace(/A⁄S/g, "A/S"));
   // 첫 토막이 담당자 이름뿐이면("신정훈 / 계약갱신제안 / … / 010-…") 다음 토막으로 — 빈 "•" 줄 방지, 전화번호 토막은 건너뜀(2026-10-31 dryRun 실측)
-  const raw = parts.find((part) => part.trim() && !/\d{2,4}-\d{3,4}-\d{4}/.test(part)) ?? parts[0];
+  // 상호 표시(학원·병원·㈜·센터…)가 든 토막을 먼저 — "신정훈 / 계약갱신제안 / SS / C / 손나래영어학원 / 이다연 010-…" → 손나래영어학원
+  const usable = parts.filter((part) => part.trim() && !PHONE_RE.test(part));
+  const raw = usable.find((part) => BUSINESS_HINT.test(part)) ?? usable[0] ?? parts[0];
   const vendor = cut(historyCoreName(raw) || fieldTicketVendor(raw).vendor || raw.trim(), 12);
   const issue = extractIssue(ticket.issue, ticket.note).replace(/\s+/g, " ");
   const category = extractCategory(ticket.vendor, ticket.calendarTitle, name);
