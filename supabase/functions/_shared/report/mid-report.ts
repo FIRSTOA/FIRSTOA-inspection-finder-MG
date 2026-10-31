@@ -123,7 +123,9 @@ function frame(day: MidReportDay, stamp: string, groups: string[], tomorrowLines
     "",
     REPORT_SEP,
     "익일일정",
-    ...(tomorrowLines.length ? ["", ...tomorrowLines] : []),
+    "",
+    // 익일 일정이 0건이어도 제목만 덩그러니 두지 않고 "없음"(팀장 결정 2026-10-31 — 자동 발송 글이 끊긴 것처럼 보이지 않게)
+    ...(tomorrowLines.length ? tomorrowLines : ["없음"]),
   ].join("\n");
 }
 

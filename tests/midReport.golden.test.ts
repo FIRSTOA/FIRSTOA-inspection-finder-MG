@@ -20,6 +20,8 @@ const ai = (n: number) => Array.from({ length: n }, (_, i) => `AI${i + 1}`);
 const stripManual = (text: string) => text
   .replace("\n(진행중인 업무는 * 표시)\n", "\n")
   .replace(/\n\n-------------------\n특이사항$/, "");
+/** 팀장 결정(2026-10-31): 익일 일정 0건이면 "익일일정" 제목 아래 "없음" 한 줄 — 제목으로 끝나는 글(empty·allDone·todayA)에만 붙는다 */
+const afterDecision = (text: string) => stripManual(text).replace(/\n익일일정$/, "\n익일일정\n\n없음");
 
 const LEGACY_TEAM_ASSIGNEES = {"A": ["이권선", "김정민", "지경민", "신정훈"], "B": ["조윤", "윤기준", "지경민", "신정훈"], "C": ["이홍진", "이민구", "박영현", "한왕주", "조윤", "지경민", "신정훈"], "D": ["김종희", "지경민", "신정훈"], "E": ["지경민", "신정훈"], "기타": []};
 const LEGACY_ORDER_C = ["신정훈", "이홍진", "이민구", "박영현", "한왕주", "조윤", "지경민", "이권선", "김정민", "윤기준", "김종희"];
@@ -62,14 +64,14 @@ describe("중간보고 본문 골든", () => {
     const plan = buildMidReportPlan({ tickets: c.tickets, team: c.team, order, todayYmd: c.today, tomorrowYmd: nextBusinessDay(c.today), day: c.day, stamp: c.stamp, detailOf: detailStub });
     const legacy = LEGACY[c.key];
     it(`${c.key}: 초안 = 옛 글에서 두 군데만 뺀 글`, () => {
-      expect(plan.draft).toBe(stripManual(legacy.draft));
+      expect(plan.draft).toBe(afterDecision(legacy.draft));
     });
     it(`${c.key}: AI 재료(payload)·진단 줄은 옛 값 그대로`, () => {
       expect(plan.payload).toEqual(legacy.payload);
       expect(plan.diag ?? null).toBe(legacy.diag);
     });
     it(`${c.key}: AI 줄 조립 = 옛 조립에서 두 군데만 뺀 글`, () => {
-      expect(plan.assemble(ai(plan.payload.length))).toBe(stripManual(legacy.text));
+      expect(plan.assemble(ai(plan.payload.length))).toBe(afterDecision(legacy.text));
     });
   }
 

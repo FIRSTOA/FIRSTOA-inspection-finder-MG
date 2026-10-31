@@ -24,6 +24,8 @@ import { buildMidReportPlan } from "../supabase/functions/_shared/report/mid-rep
 import { reportOrderOf, teamAssigneesOf } from "../supabase/functions/_shared/report/team-order.ts";
 import { addedAssignees, formatAssignees, titleAssigneeLabel } from "./assignees";
 import AssigneePicker from "./AssigneePicker";
+import ScheduleReportBand, { ScheduleReportCopyNote } from "./ScheduleReportBand"; // 자동 중간보고 띠(2026-10-31)
+import { recordReportCopy } from "./scheduleReportAuto";
 import DoneReasonModal from "./DoneReasonModal";
 import { copierDoneKind, copierDoneText, DELIVERY_DONE_NOTE, isDeliveryTicket, naverCompleteAction, receptionStatusFromSiblings, TICKETS_CHANGED_EVENT } from "./ticketCompletion";
 
@@ -2233,7 +2235,7 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                 <div className="text-[15px] font-black text-white">{midReport.day === "next" ? "익일스케줄 보고" : "중간보고"} 생성</div>
                 <div className="mt-0.5 text-[11px] font-semibold text-slate-400">{midReport.polishing ? "🤖 AI가 보고를 만드는 중…"
                   : midReport.day === "next" ? "내일 일정 전부입니다(미배정 포함) — 누락 건은 직접 추가하고 복사하세요"
-                  : "완료된 건은 자동으로 빠졌습니다 — 진행중(*)만 표시하고 복사하세요"}</div>
+                  : "완료된 건은 자동으로 빠졌습니다 — 그대로 복사해 올리세요(특이사항은 방에서 덧붙이기)"}</div>
               </div>
               <button type="button" onClick={() => setMidReport(null)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">✕</button>
             </div>
@@ -2243,13 +2245,15 @@ function CsAsWorkspace({ view, author = "", onUseField, onSelfRequest, onLoadFor
                   className={`rounded-full px-3 py-1.5 text-[12px] font-black transition ${midReport.team === value ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{value}팀</button>
               ))}
             </div>
+            {midReport.day === "today" && <ScheduleReportBand team={midReport.team} author={author} members={teamAssignees[midReport.team] || []} leaders={csLeaders} />}
             {midReport.diag && <div className="border-b border-slate-100 bg-amber-50/70 px-4 py-1.5 text-[11px] font-semibold text-slate-500">{midReport.diag}</div>}
             <textarea value={midReport.text} readOnly={midReport.polishing} placeholder="🤖 AI가 보고를 만드는 중… 몇 초만 기다려 주세요" onChange={(event) => setMidReport({ ...midReport, text: event.target.value })} rows={16}
               className="min-h-0 flex-1 resize-none border-0 px-5 py-4 font-mono text-[13px] leading-6 text-slate-800 outline-none" />
+            {midReport.day === "today" && <ScheduleReportCopyNote team={midReport.team} />}
             <div className="flex shrink-0 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-3">
               <button type="button" onClick={() => composeMidReport(midReport.team, midReport.day)}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-600">다시 생성</button>
-              <button type="button" disabled={midReport.polishing} onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => notify(`${midReport.day === "next" ? "익일스케줄 보고" : "중간보고"}를 복사했습니다 — 카톡방에 붙여넣으세요 ✓`, "success")).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
+              <button type="button" disabled={midReport.polishing} onClick={() => { void navigator.clipboard.writeText(midReport.text).then(() => { notify(`${midReport.day === "next" ? "익일스케줄 보고" : "중간보고"}를 복사했습니다 — 카톡방에 붙여넣으세요 ✓`, "success"); if (midReport.day === "today") void recordReportCopy(midReport.team, author).catch(() => { /* 복사 기록은 자동 발송 중복 막기용 보조 — 표가 없거나(SQL 전) 실패해도 복사는 이미 됐다 */ }); }).catch(() => notify("복사 실패 — 본문을 직접 선택해 복사하세요.", "error")); }}
                 className="flex-1 rounded-full bg-blue-600 py-2.5 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">{midReport.polishing ? "생성 중…" : "복사"}</button>
             </div>
           </div>

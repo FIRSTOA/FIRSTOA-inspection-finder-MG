@@ -4,6 +4,48 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "f110dd809a",
+    "agent": "feature-planner",
+    "summary": "거래처 3단 명칭 통합 실행 계획(한설계) + 팀장 MCP 실측(이름 매칭 55~78%, 42% 업체 표기 2개+, 청오 전수)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ac19d10102",
+    "agent": "feature-planner",
+    "summary": "AS 접수 방문 판단 안내글(접수 글 뒤 같은 방, 할 일 있을 때만, 같은 건물 일정 묶기) + 납품 완료는 네이버 안 건드림((나)안) + 중간보고 글 생성기 _shared 이전(자동 발송 준비)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ac19d10102",
+    "agent": "db-schema",
+    "summary": "AS 접수 방문 판단 안내글(접수 글 뒤 같은 방, 할 일 있을 때만, 같은 건물 일정 묶기) + 납품 완료는 네이버 안 건드림((나)안) + 중간보고 글 생성기 _shared 이전(자동 발송 준비)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ac19d10102",
+    "agent": "developer",
+    "summary": "AS 접수 방문 판단 안내글(접수 글 뒤 같은 방, 할 일 있을 때만, 같은 건물 일정 묶기) + 납품 완료는 네이버 안 건드림((나)안) + 중간보고 글 생성기 _shared 이전(자동 발송 준비)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ac19d10102",
+    "agent": "debugger",
+    "summary": "AS 접수 방문 판단 안내글(접수 글 뒤 같은 방, 할 일 있을 때만, 같은 건물 일정 묶기) + 납품 완료는 네이버 안 건드림((나)안) + 중간보고 글 생성기 _shared 이전(자동 발송 준비)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ac19d10102",
+    "agent": "qa-checker",
+    "summary": "AS 접수 방문 판단 안내글(접수 글 뒤 같은 방, 할 일 있을 때만, 같은 건물 일정 묶기) + 납품 완료는 네이버 안 건드림((나)안) + 중간보고 글 생성기 _shared 이전(자동 발송 준비)"
+  },
+  {
+    "date": "2026-10-31",
+    "hash": "ac19d10102",
+    "agent": "sql-review",
+    "summary": "AS 접수 방문 판단 안내글(접수 글 뒤 같은 방, 할 일 있을 때만, 같은 건물 일정 묶기) + 납품 완료는 네이버 안 건드림((나)안) + 중간보고 글 생성기 _shared 이전(자동 발송 준비)"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "db289c1758",
     "agent": "feature-planner",
     "summary": "AS 접수 방문 판단 안내글·C팀 자동 중간보고 SQL 2장(권한나 검사 반영: 주말 보류·발송 시 TEST_MODE 재확인·stale 72h) + 설계안 결정 기록"

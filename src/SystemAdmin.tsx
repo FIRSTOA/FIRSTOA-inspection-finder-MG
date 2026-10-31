@@ -32,7 +32,7 @@ const VISIT_ADVICE_DAY_FIELDS = [
   { key: "VISIT_ADVICE_MONTHLY_DAYS", label: "방문 판단 매월점검 기준일", fallback: "25", desc: "워킨맵 매월점검 지점의 기준 날수입니다. 비우면 25일." },
 ] as const;
 
-const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boolean }> = [
+const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boolean; defaultOn?: boolean }> = [ // defaultOn = 값이 없을 때 켜짐으로 보이는 키(엣지도 같은 기본값)
   { key: "FIELD_KAKAO_SEND_ENABLED", label: "카톡 전송", desc: "끄면 FIELD 전송이 큐에만 쌓이고 방으로 나가지 않습니다." },
   { key: "FIELD_SHEET_SYNC_ENABLED", label: "시트 동기화", desc: "끄면 FIELD 기록이 구글시트에 기입되지 않습니다." },
   { key: "TEST_MODE", label: "테스트 모드", desc: "켜면 모든 카카오톡 전송이 실제 방 대신 아래 테스트 카톡방으로만 갑니다.", danger: true },
@@ -43,10 +43,12 @@ const SWITCHES: Array<{ key: string; label: string; desc: string; danger?: boole
   { key: "RECEPTION_SHEET_OPEN_ENABLED", label: "서비스접수 미처리 = 시트 상태 기준", desc: "켜면 미처리 현황판·홈 미처리 칸의 영업·경영·원격·IT 숫자를 접수 시트 상태 열(처리완료·취소·이관이 아니면 미처리, 최근 90일)로 셉니다. 시트에서 끝난 앱 접수는 자동으로 완료 처리됩니다. 끄면 앱 접수(DB) 기준. 엣지 함수 reception-sheet-open 을 먼저 배포해야 합니다." },
   { key: "KAKAO_SEARCH_ENABLED", label: "카톡 원문 검색", desc: "켜면 검색·필드 🔍·통합검색에서 수집한 카톡방 대화 원문(kakao_messages)까지 찾아 보여 줍니다. 직원들의 카톡 대화가 검색되므로 전 직원에게 먼저 알린 뒤 켜세요. 전화·주민·계좌 번호는 가린 채로 보입니다.", danger: true },
   { key: "VISIT_ADVICE_ENABLED", label: "AS 접수 방문 판단 안내글", desc: "켜면 복합기 AS 접수(와 IT→CS 방문이관) 글 뒤에 같은 방으로 마지막 점검·AS·워킨맵·추가일정과 점검여부 판단 글을 한 번 더 보냅니다. 할 일이 있을 때만(점검 필요·판단필요·추가일정 있음·못 찾음), 10~20시에만(밖이면 다음 영업일 10시). supabase/visit-advice-20261031.sql 을 먼저 실행한 뒤 켜세요." },
+  { key: "SCHEDULE_REPORT_AUTO", label: "자동 중간보고(12:00·14:00)", desc: "켜면 평일 12:00·14:00 에 기타 설정의 대상 팀(SCHEDULE_REPORT_TEAMS, 기본 C) 중간보고를 서버가 만들어 카톡방 매핑 '스케줄|팀' 방으로 보냅니다. 공휴일·10시 전은 쉬고, 그 차수 60분 전부터 누가 [복사]했으면 건너뜁니다. 엣지 schedule-report 배포 → supabase/schedule-report-20261031.sql 실행 → 방 매핑 뒤에 켜세요. 꺼져 있어도 일정리스트의 [지금 보내기]는 됩니다.", danger: true },
+  { key: "SCHEDULE_REPORT_TEST", label: "자동 중간보고 테스트방", desc: "켜져 있으면(기본) 자동 중간보고만 실제 스케줄방 대신 위 테스트 카톡방으로 갑니다(글 머리에 [테스트 · 원래는 ○○]). 하루 확인한 뒤 끄세요. 전역 테스트 모드가 켜져 있어도 테스트방으로 갑니다.", defaultOn: true },
   { key: "SSO_REQUIRED", label: "그룹웨어 로그인 필수", desc: "켜면 그룹웨어 계정으로 로그인한 기기만 FIELD가 열립니다(앨범·설명서 같은 공개 페이지는 예외). 그룹웨어 담당자가 우리 주소를 허용목록에 올려 로그인이 되는 걸 확인한 뒤 켜세요.", danger: true },
 ];
 
-const ROOM_CATEGORIES = ["점검", "AS", "미수", "재계약", "불만", "초과조정", "자가", "부품", "물류", "PC", "복합기", "IT접수", "마감", "반납", "불량토너", "불량부품", "경영접수", "운영접수", "영업접수"]; // 부서 접수 → 카톡방(2026-10-26, 지역은 * 공통) // // 반납·불량토너·불량부품 = 조회 탭 자가·부품신청의 [반납]·[불량] 글이 가는 방(2026-10-11) // IT접수|* = 서비스접수 IT 건이 가는 방(2026-09-17) · 마감|*(또는 팀) = 카운터 사진이 올라가고 봇이 관리부 목록을 읽는 마감방(2026-10-10, 한 곳에서 관리)
+const ROOM_CATEGORIES = ["점검", "AS", "미수", "재계약", "불만", "초과조정", "자가", "부품", "물류", "PC", "복합기", "IT접수", "마감", "반납", "불량토너", "불량부품", "경영접수", "운영접수", "영업접수", "스케줄"]; // 스케줄|팀 = 자동 중간보고 방(2026-10-31, 예: 스케줄|C → 강남C 스케줄) // 부서 접수 → 카톡방(2026-10-26, 지역은 * 공통) // // 반납·불량토너·불량부품 = 조회 탭 자가·부품신청의 [반납]·[불량] 글이 가는 방(2026-10-11) // IT접수|* = 서비스접수 IT 건이 가는 방(2026-09-17) · 마감|*(또는 팀) = 카운터 사진이 올라가고 봇이 관리부 목록을 읽는 마감방(2026-10-10, 한 곳에서 관리)
 const ROOM_REGIONS = ["*", "A", "B", "C", "D", "E", "CD"];
 
 import { SYSTEM_VIEWS, type SystemView } from "./adminViews";
@@ -189,7 +191,7 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
         {loading && !config.length && <StateBox inside kind="loading" message="설정을 불러오는 중입니다…" />}
         <div className="divide-y divide-slate-100">
           {SWITCHES.map((item) => {
-            const on = isOn(item.key);
+            const on = item.defaultOn && !valueOf(item.key).trim() ? true : isOn(item.key);
             return (
               <div key={item.key} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
                 <div className="min-w-0">
@@ -249,6 +251,22 @@ export default function SystemAdmin({ view = "switches" }: { view?: SystemView }
             </div>
             <input defaultValue={valueOf(OVERHAUL_SHEET_TAB_KEY)} placeholder={OVERHAUL_SHEET_DEFAULT_TAB} onBlur={(e) => { if (e.target.value.trim() !== valueOf(OVERHAUL_SHEET_TAB_KEY)) void saveConfig(OVERHAUL_SHEET_TAB_KEY, e.target.value.trim()); }}
               className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-56 lg:h-10" />
+          </div>
+          {/* 자동 중간보고 대상 팀(2026-10-31) — 쉼표로 A~E, 비우면 C. 엣지 schedule-report 가 이 값으로 팀을 돈다 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+            <div>
+              <div className="text-sm font-black text-slate-900">자동 중간보고 대상 팀 (SCHEDULE_REPORT_TEAMS)</div>
+              <p className={UI.desc}>12:00·14:00 자동 중간보고를 보낼 팀입니다. 쉼표로 여러 팀(예: C,A). 비워두면 C. 팀을 넣기 전에 카톡방 매핑에 &quot;스케줄 | 그 팀 | 방 이름&quot;을 먼저 넣으세요.</p>
+            </div>
+            <input key={`SCHEDULE_REPORT_TEAMS:${valueOf("SCHEDULE_REPORT_TEAMS")}`} defaultValue={valueOf("SCHEDULE_REPORT_TEAMS")} placeholder="C"
+              onBlur={(e) => {
+                const raw = e.target.value.trim().toUpperCase();
+                if (raw === valueOf("SCHEDULE_REPORT_TEAMS")) return;
+                const teams = raw.split(/[\s,·/]+/).filter(Boolean);
+                if (teams.some((t) => !/^[A-E]$/.test(t))) { setError("자동 중간보고 대상 팀: A~E 를 쉼표로 넣으세요(예: C,A)"); e.target.value = valueOf("SCHEDULE_REPORT_TEAMS"); return; }
+                void saveConfig("SCHEDULE_REPORT_TEAMS", [...new Set(teams)].join(","));
+              }}
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 sm:w-28 lg:h-10" />
           </div>
           {/* 방문 판단 안내글 기준일(2026-10-31) — 비우면 60·25. 양의 정수만 저장 */}
           {VISIT_ADVICE_DAY_FIELDS.map((f) => (
