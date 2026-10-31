@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "9cb9e1898e",
+    "date": "2026-10-31",
+    "note": "워킨맵 목록 배지 제거(사용자: 헷갈림) + 매뉴얼 12"
+  },
+  {
     "hash": "33252ea7df",
     "date": "2026-10-31",
     "note": "매뉴얼 12: 워킨맵 배지 이름·가동 상태·메모 날짜 꼬리 설명"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "8100a070b6",
     "date": "2026-10-10",
     "note": "카운터 전송 확인창 + 마감방을 관리 탭 카톡방 매핑으로 통합 + 봇 수집 한 파일로"
-  },
-  {
-    "hash": "f3a3ed19be",
-    "date": "2026-10-10",
-    "note": "통합 검색: 워킨맵은 (팀·분기·종류·라벨)별 개수로 묶고, 메모는 최신 분기 꼬리표 한 줄 + 사람이 쓴 글만 — 웍스피어 34대·3·4분기 중복으로 화면이 터지던 것"
   }
 ];

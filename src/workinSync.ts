@@ -44,6 +44,11 @@ export type PullStats = {
   remote: number; matched: number; byExtId: number; byNumberName: number; byNameAddress: number;
   changed: number; labelChanges: number; memoAdds: number; fresh: number; inserted: number;
   ambiguous: number; missing: number; downgrades: number; keptLocalNewer: number; linkedOnly: number;
+  /** 정형 줄 교체 수(엣지 2026-10-31 뒤) */
+  memoReplaces?: number;
+  /** 워킨맵에 없어 숨긴(dry 는 숨길) 앱 행 수(엣지 2026-10-31 뒤) */
+  appOnlyHidden?: number;
+  appOnlyKeptByUser?: number;
 };
 export type ColorCheck = { histogram: Record<string, number>; firstMatchSame: number; firstMatchDiff: number };
 export type PullWorkResult = {
@@ -73,10 +78,31 @@ export const REVIEW_KIND_LABEL: Record<string, string> = {
   conflict: "양쪽 동시 변경", field_diff: "칸 차이", loop: "왕복 반복", format: "응답 형식 이상",
 };
 
+/**
+ * 확인 큐 종류 나누기(2026-10-31 사용자: "확인 필요 304건 중 294건이 참고용이라 겁을 줌").
+ * 처리 필요 = 사람이 맞추거나 판단해야 하는 것. 참고 = 이미 반영됐거나(완료 내려감·상호 변경) 앱 값을 지킨 기록 — 노란 줄·머리 수에서 뺀다.
+ */
+export const REVIEW_ACTION_KINDS = ["new", "ambiguous", "missing", "unmatched", "format", "loop"] as const;
+export const REVIEW_INFO_KINDS = ["downgrade", "conflict", "field_diff"] as const;
+/** PostgREST 조건 kind=in.(…) — 영문 값이라 인코딩 불필요 */
+export const reviewKindFilter = (kinds: readonly string[]) => `kind=in.(${kinds.join(",")})`;
+
+/** status.openReviews(종류별 미처리 수) → 처리 필요·참고 합계. 모르는 종류는 처리 필요로 센다(새 종류를 놓치지 않게) */
+export function splitOpenReviews(openByKind: Record<string, number> | null | undefined): { action: number; info: number } {
+  let action = 0, info = 0;
+  for (const [k, v] of Object.entries(openByKind || {})) {
+    const n = Number(v) || 0;
+    if ((REVIEW_INFO_KINDS as readonly string[]).includes(k)) info += n; else action += n;
+  }
+  return { action, info };
+}
+
 /** 한 워크 미리보기 결과를 표 한 줄로 */
 export type DryRow = {
   key: string; name: string; account: number; result: string; tone: "ok" | "warn" | "bad";
   remote: number | null; matched: number | null; fresh: number | null; changed: number | null; labelChanges: number | null; memoAdds: number | null;
+  /** 엣지가 이 칸을 보낼 때만 숫자(옛 응답이면 null) */
+  memoReplaces: number | null; appOnlyHidden: number | null;
   color: string; reason: string;
 };
 
@@ -99,9 +125,16 @@ export function dryRows(results: readonly PullWorkResult[] | undefined): DryRow[
       tone: r.result === "error" ? "bad" : r.result === "stopped" ? "warn" : "ok",
       remote: s ? s.remote : null, matched: s ? s.matched : null, fresh: s ? s.fresh : null, changed: s ? s.changed : null,
       labelChanges: s ? s.labelChanges : null, memoAdds: s ? s.memoAdds : null,
+      memoReplaces: typeof s?.memoReplaces === "number" ? s.memoReplaces : null,
+      appOnlyHidden: typeof s?.appOnlyHidden === "number" ? s.appOnlyHidden : null,
       color, reason,
     };
   });
+}
+
+/** 표에 정형 줄 교체·숨김 칸을 그릴지 — 어느 워크든 1 이상일 때만 */
+export function dryExtraColumns(rows: readonly DryRow[]): { memoReplaces: boolean; appOnlyHidden: boolean } {
+  return { memoReplaces: rows.some((r) => (r.memoReplaces ?? 0) > 0), appOnlyHidden: rows.some((r) => (r.appOnlyHidden ?? 0) > 0) };
 }
 
 /** 미리보기 머리 한 줄 */
@@ -111,9 +144,17 @@ export function pullSummary(res: PullResponse): string {
   const matched = rows.reduce((a, r) => a + (r.stats?.matched || 0), 0);
   const changed = rows.reduce((a, r) => a + (r.stats?.changed || 0), 0);
   const fresh = rows.reduce((a, r) => a + (r.stats?.fresh || 0), 0);
+  const hidden = rows.reduce((a, r) => a + (r.stats?.appOnlyHidden || 0), 0);
   const bad = rows.filter((r) => r.result === "error" || r.result === "stopped").length;
   const head = res.dryRun ? "미리보기(쓰기 0)" : "동기화";
-  return `${head} · ${res.kst || ""} 워크 ${res.picked ?? rows.length}개 · 짝 ${matched}곳 · 바뀔 곳 ${changed} · 새 장소 ${fresh}${bad ? ` · 중단·오류 ${bad}개` : ""}`;
+  return `${head} · ${res.kst || ""} 워크 ${res.picked ?? rows.length}개 · 짝 ${matched}곳 · 바뀔 곳 ${changed} · 새 장소 ${fresh}${hidden ? ` · 워킨맵에 없어 숨김 ${hidden}` : ""}${bad ? ` · 중단·오류 ${bad}개` : ""}`;
+}
+
+/** 확인 큐 배지 글자 — missing·app_only(앱에만 있어 숨김)는 따로 이름 */
+export function reviewLabel(r: { kind: string; field?: string | null }): string {
+  if (r.kind === "missing" && r.field === "app_only") return "워킨맵에 없음(숨김)";
+  if (r.kind === "format" && r.field === "app_only_too_many") return "숨길 곳 너무 많음";
+  return `${REVIEW_KIND_LABEL[r.kind] || r.kind}${r.field ? ` · ${r.field}` : ""}`;
 }
 
 /** 미처리 확인 큐 한 줄 요약(detail 은 엣지가 넣는 자유 jsonb — 이름·주소·전후 값만 골라 짧게) */

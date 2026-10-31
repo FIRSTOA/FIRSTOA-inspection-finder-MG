@@ -24,7 +24,6 @@ import { addressCore, mapQuery } from "./address";
 import { maskRrn } from "./privacy";
 import { restoreMaskedImport } from "./workinPrivacy";
 import { REPLACE_BLOCKED_MESSAGE, canReplaceScope } from "./workinSync";
-import WorkinSyncReviewLine from "./WorkinSyncReviewLine";
 import { monthlyUnits, teamWorkinProgress } from "./workinProgress";
 
 type MapLabel = {
@@ -2657,7 +2656,7 @@ export default function WalkingMap({ userKey = "guest", onSelfRequest, onOpenFie
           <button type="button" onClick={exportExcel} className={`${UI.btnGhost} text-xs!`}>현재 목록 내보내기</button>
           <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleExcelImport(file); }} />
         </div>
-        <WorkinSyncReviewLine />
+        {/* 워킨맵 동기화 확인 줄은 직원 화면에서 뺌(2026-10-31 사용자 "헷갈릴 것 같다") — 관리 탭 카드에서만 */}
         {(missingCoords.length > 0 || coordBusy) && (
           <button type="button" disabled={!!coordBusy} onClick={() => void fillMissingCoords()} className="mt-2 min-h-11 w-full rounded-full border border-amber-300 bg-amber-50 px-3 text-xs font-black text-amber-800 transition hover:bg-amber-100 disabled:opacity-60">
             {coordBusy || `📍 좌표 없는 ${missingCoords.length}곳 — 주소로 지도에 올리기`}

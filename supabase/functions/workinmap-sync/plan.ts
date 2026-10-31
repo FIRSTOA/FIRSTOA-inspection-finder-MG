@@ -923,7 +923,7 @@ export type PlannedReview = { kind: ReviewKind; field: string; place_id: number 
 export type LogField = "label" | "visible" | "memo" | "name" | "comment" | "phone" | "address" | "address_detail" | "latitude" | "longitude" | "number"
   | "_insert" | "_missing" | "_unmissing" | "_link" | "_unlink";
 export type PlannedLog = { field: LogField; before_value: unknown; after_value: unknown; note?: string };
-export type PlannedPatch = { id: number; ext_id: string; set: Record<string, unknown>; fields: Field[]; by: MatchBy | "missing"; logs: PlannedLog[] };
+export type PlannedPatch = { id: number; ext_id: string; set: Record<string, unknown>; fields: Field[]; by: MatchBy | "missing" | "app_only"; logs: PlannedLog[] };
 export type PlannedInsert = { row: Record<string, unknown> & { id: number; ext_id: string }; log: PlannedLog };
 
 export type PullInput = {
@@ -953,7 +953,37 @@ export type PullInput = {
   keepAppDone?: boolean;
   /** true 면 plan.detail 을 채운다(dry detail:true) */
   withDetail?: boolean;
+  /**
+   * 워킨맵에 없는 앱 행 자동 숨김(2026-10-31 사용자 결정) — sync.ts 가 appOnlyHideAllowed 로 정한다
+   * (그 범위의 최신 연도 대상 워크가 이 워크 하나일 때만). 팀 T·E·첫 회차는 planPull 이 한 번 더 막는다
+   */
+  hideAppOnly?: boolean;
 };
+
+// ── 워킨맵에 없는 앱 행 숨김(2026-10-31 사용자: "미래에이비엠 철수 2대가 앱에 남아 있음 → 문제없게") ──
+
+/** 숨길 때 메모에 붙는 줄 머리 — 이 줄이 있는데 visible=true 면 사람이 되살린 것으로 보고 다시 숨기지 않는다 */
+export const APP_ONLY_MEMO_HEAD = "[워킨맵에 없음]";
+export const appOnlyMemo = (ymd: string) => `${APP_ONLY_MEMO_HEAD} ${ymd} 숨김 (${SYNC_ACTOR})`;
+/** 한 워크 한 회차 숨김 상한 — 넘으면 숨기지 않고 확인 큐 format(app_only_too_many) 한 줄(짝짓기 이상 방어) */
+export const APP_ONLY_HIDE_LIMIT = 50;
+const hasAppOnlyMemo = (memos: unknown) => Array.isArray(memos) && memos.some((m) => String(m ?? "").trim().startsWith(APP_ONLY_MEMO_HEAD));
+
+/**
+ * 이 워크로 앱 행을 숨겨도 되는가 — 앱 범위(팀·분기·업무)에는 연도가 없어서, 같은 팀·분기·업무 대상 워크가
+ * 여러 개면(작년 같은 분기 워크·계약종료+재계약 등) 한 워크 기준으로 숨기면 다른 워크의 장소를 숨길 수 있다.
+ * → 같은 범위 대상 워크 중 연도가 가장 높고, 그 연도에 이 워크 하나뿐일 때만 true. 팀 T·E 는 false.
+ */
+export function appOnlyHideAllowed(work: { id: string; parse: WorkParse | null }, all: Array<{ id: string; status: string; parse: WorkParse | null }>): boolean {
+  const p = work.parse;
+  if (!p || p.team === "T" || p.team === "E") return false;
+  const same = all.filter((w) => w.status === "target" && w.parse && w.parse.team === p.team && w.parse.quarter === p.quarter && w.parse.kind === p.kind);
+  const maxYear = Math.max(p.year, ...same.map((w) => (w.parse as WorkParse).year));
+  if (p.year !== maxYear) return false;
+  const ids = new Set(same.filter((w) => (w.parse as WorkParse).year === maxYear).map((w) => w.id));
+  ids.add(work.id);
+  return ids.size === 1;
+}
 
 export type PullPlan = {
   stop: null | { reason: "empty" | "shrunk" | "too_many_new"; detail: string };
@@ -970,6 +1000,10 @@ export type PullPlan = {
     keptAppDone: number;
     /** 처음 들여오는 워크(scopeEmpty) — 가드 없이 전부 insert */
     firstImport: boolean;
+    /** 워킨맵에 없는 앱 행(ext_id 없음·이번에 짝 안 됨·후보 아님)을 숨긴 수(dry 는 숨길 수) */
+    appOnlyHidden: number;
+    /** 숨겼던 줄이 메모에 있는데 사람이 다시 켠(visible=true) 행 — 다시 숨기지 않음 */
+    appOnlyKeptByUser: number;
   };
   /** 색 검증(v2 P1-3): label_color 분포와 처음 짝지은 곳의 앱 색 일치 수 */
   colorCheck: { histogram: Record<string, number>; firstMatchSame: number; firstMatchDiff: number };
@@ -991,6 +1025,8 @@ export type PullDetail = {
   downgrades: Array<{ id: number; name: string; appLabel: string; workinmapLabel: string | null; reason: "completion_down" | "progress_down" | "keep_app" }>;
   labelChanges: Array<{ id: number; name: string; from: string; to: string }>;
   memoAdds: Array<{ id: number; name: string; added: string[]; replaced?: MemoReplace[] }>;
+  /** 워킨맵에 없어 숨길(숨긴) 앱 행 */
+  appOnlyHidden: Array<{ id: number; name: string; address: string; label: string }>;
 };
 export const SAMPLE_FRESH = 20;
 export const SAMPLE_UNMATCHED = 20;
@@ -1055,12 +1091,13 @@ export function planPull(input: PullInput): PullPlan {
   const stats: PullPlan["stats"] = {
     remote: remote.length, matched: 0, byExtId: 0, byExactName: 0, byExactNameOrder: 0, byAddressRename: 0, byNumberName: 0, byTailName: 0, byNameAddress: 0, changed: 0, labelChanges: 0, memoAdds: 0, memoReplaces: 0,
     fresh: 0, inserted: 0, ambiguous: 0, missing: 0, downgrades: 0, keptLocalNewer: 0, linkedOnly: 0, keptAppDone: 0, firstImport: false,
+    appOnlyHidden: 0, appOnlyKeptByUser: 0,
   };
   const histogram: Record<string, number> = {};
   for (const r of remote) { const k = r.labelColor === null ? "없음" : String(r.labelColor); histogram[k] = (histogram[k] || 0) + 1; }
   const colorCheck = { histogram, firstMatchSame: 0, firstMatchDiff: 0 };
   const samples: PullSamples = { fresh: [], unmatchedLocal: [], unmatchedLocalTotal: 0, colorDiff: [], ambiguous: [] };
-  const full: PullDetail | undefined = input.withDetail ? { ambiguous: [], fresh: [], unmatchedLocal: [], downgrades: [], labelChanges: [], memoAdds: [] } : undefined;
+  const full: PullDetail | undefined = input.withDetail ? { ambiguous: [], fresh: [], unmatchedLocal: [], downgrades: [], labelChanges: [], memoAdds: [], appOnlyHidden: [] } : undefined;
   const stopped = (reason: "empty" | "shrunk" | "too_many_new", detail: string): PullPlan => ({ stop: { reason, detail }, patches: [], inserts: [], reviews: [], stats, colorCheck, samples, ...(full ? { detail: full } : {}) });
 
   const guard = workGuard(remote.length, input.previousCount);
@@ -1220,6 +1257,38 @@ export function planPull(input: PullInput): PullPlan {
       logs: [{ field: "_missing", before_value: null, after_value: nowIso }],
     });
     pushReview({ kind: "missing", field: "", place_id: l.id, ext_id: l.ext_id ?? null, detail: { name: l.name, address: l.address, label: l.label } });
+  }
+
+  // 워킨맵에 없는 앱 행 숨김 — ext_id 없음 + 이번에 짝 안 됨 + 후보 여럿(ambiguous)에 안 걸림. 지우지 않고 visible=false + 메모 한 줄.
+  // 첫 회차(짝이 아직 덜 맞음)·팀 T·E·hideAppOnly 아님(같은 범위 워크 여럿)이면 하지 않는다. 이미 숨김은 건너뜀,
+  // 숨김 메모가 있는데 켜져 있으면 사람이 되살린 것 → 다시 숨기지 않음. 상한 초과면 숨기지 않고 format 확인 큐.
+  if (input.hideAppOnly === true && !input.firstPull && parse.team !== "T" && parse.team !== "E") {
+    const inAmbiguous = new Set(m.ambiguous.flatMap((a) => a.candidates));
+    const targets: LocalPlace[] = [];
+    for (const l of m.unmatchedLocal) {
+      if (l.ext_id || inAmbiguous.has(l.id) || l.visible === false) continue;
+      if (hasAppOnlyMemo(l.memos)) { stats.appOnlyKeptByUser += 1; continue; }
+      targets.push(l);
+    }
+    if (targets.length > APP_ONLY_HIDE_LIMIT) {
+      pushReview({ kind: "format", field: "app_only_too_many", place_id: null, ext_id: null, detail: { reason: "app_only_too_many", detail: `워킨맵에 없는 앱 행 ${targets.length}곳 > ${APP_ONLY_HIDE_LIMIT}곳 — 숨기지 않음`, count: targets.length } });
+    } else {
+      const line = appOnlyMemo(todayYmd);
+      for (const l of targets) {
+        const memos = [...(Array.isArray(l.memos) ? l.memos : []), line];
+        patches.push({
+          id: l.id, ext_id: "", set: { visible: false, memos, updated_by: SYNC_ACTOR }, fields: ["visible", "memos"], by: "app_only",
+          logs: [
+            { field: "visible", before_value: true, after_value: false, note: "app_only_hidden" },
+            { field: "memo", before_value: null, after_value: line, note: "app_only_hidden" },
+          ],
+        });
+        stats.appOnlyHidden += 1;
+        const info = { id: l.id, name: oneLine(l.name), address: l.address, label: l.label };
+        full?.appOnlyHidden.push(info);
+        pushReview({ kind: "missing", field: "app_only", place_id: l.id, ext_id: null, detail: info });
+      }
+    }
   }
 
   const inserts: PlannedInsert[] = [];

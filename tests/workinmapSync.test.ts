@@ -4,6 +4,7 @@ import {
   chunkPatchRows, nextScheduledRun, normalizeRemoteWork, parseRequest, parseWorkName, planPull, SYNC_ACTOR, workGuard,
   addressHeadKey, exactNameKey, looseNameKey, normText, tailNameKey,
   memoCompareKey, memoSlotOf, planMemoDateBackfill, stripMemoTail,
+  APP_ONLY_HIDE_LIMIT, appOnlyHideAllowed, appOnlyMemo,
   type LocalPlace, type RemotePlace,
 } from "../supabase/functions/workinmap-sync/plan.ts";
 import { getIdToken, readAccounts, scrub, type TokenRow, type TokenStore } from "../supabase/functions/workinmap-sync/auth.ts";
@@ -666,6 +667,71 @@ describe("planPull", () => {
   });
 });
 
+// ── 워킨맵에 없는 앱 행 숨김(2026-10-31) ─────────────────────────────
+describe("planPull — 워킨맵에 없는 앱 행 숨김", () => {
+  const parse = { team: "C" as const, year: 2026, quarter: 4 as const, kind: "quarter" as const };
+  const base = { workId: WORK, accountNo: 1, parse, nowIso: "2026-10-31T05:00:00.000Z", idBase: 1_000, scopeMaxNumber: 30, firstPull: false, previousCount: 2, hideAppOnly: true };
+  const remote = [rp({ extId: "e1", name: "가나상사", address: "서울 강남구 테헤란로 1" })];
+  const linked = lp({ id: 1, name: "가나상사", address: "서울 강남구 테헤란로 1", ext_id: "e1", ext_work_id: WORK, ext_account_no: 1, ext_year: 2026, ext_last_update: "2026-10-31T03:00:00.000Z" });
+  const gone = lp({ id: 2, name: "미래에이비엠", address: "서울 중구 세종대로 9", memos: ["키맨 김"] });
+
+  it("ext_id 없고 짝 안 된 행 → visible=false + 메모 한 줄 + 로그 + 확인 큐 missing/app_only", () => {
+    const p = planPull({ ...base, remote, local: [linked, gone], withDetail: true });
+    const h = p.patches.find((x) => x.id === 2)!;
+    expect(h.by).toBe("app_only");
+    expect(h.set).toEqual({ visible: false, memos: ["키맨 김", "[워킨맵에 없음] 2026-10-31 숨김 (워킨맵 동기화)"], updated_by: SYNC_ACTOR });
+    expect(appOnlyMemo("2026-10-31")).toBe("[워킨맵에 없음] 2026-10-31 숨김 (워킨맵 동기화)");
+    expect(h.logs[0]).toEqual({ field: "visible", before_value: true, after_value: false, note: "app_only_hidden" });
+    expect(p.reviews).toEqual([expect.objectContaining({ kind: "missing", field: "app_only", place_id: 2, ext_id: null, detail: { id: 2, name: "미래에이비엠", address: "서울 중구 세종대로 9", label: "G1" } })]);
+    expect(p.stats.appOnlyHidden).toBe(1);
+    expect(p.detail?.appOnlyHidden).toEqual([{ id: 2, name: "미래에이비엠", address: "서울 중구 세종대로 9", label: "G1" }]);
+  });
+
+  it("이미 숨김·사람이 되살린 행(숨김 메모 + 켜짐)·후보 여럿 행은 건너뜀", () => {
+    const hidden = lp({ id: 3, name: "이미숨김", visible: false });
+    const restored = lp({ id: 4, name: "되살림", memos: ["[워킨맵에 없음] 2026-10-30 숨김 (워킨맵 동기화)"] });
+    // 같은 이름·주소 후보 2개 → ambiguous 후보는 숨기지 않음
+    const amb = [rp({ extId: "e9", name: "다라물산", address: "부산 해운대구 센텀로 5", seq: 9 })];
+    const c1 = lp({ id: 5, name: "다라물산", address: "부산 해운대구 센텀로 5" });
+    const c2 = lp({ id: 6, name: "다라물산", address: "부산 해운대구 센텀로 5" });
+    const p = planPull({ ...base, remote: [...remote, ...amb], local: [linked, hidden, restored, c1, c2] });
+    expect(p.stats.ambiguous).toBe(1);
+    expect(p.patches.filter((x) => x.by === "app_only")).toEqual([]);
+    expect(p.stats).toMatchObject({ appOnlyHidden: 0, appOnlyKeptByUser: 1 });
+  });
+
+  it("hideAppOnly 꺼짐·첫 회차·팀 T·멈춤이면 숨기지 않음", () => {
+    for (const p of [
+      planPull({ ...base, hideAppOnly: false, remote, local: [linked, gone] }),
+      planPull({ ...base, firstPull: true, remote, local: [linked, gone] }),
+      planPull({ ...base, parse: { ...parse, team: "T", test: true }, remote, local: [linked, gone] }),
+      planPull({ ...base, remote: [], local: [linked, gone] }),
+    ]) {
+      expect(p.stats.appOnlyHidden).toBe(0);
+      expect(p.patches.some((x) => x.by === "app_only")).toBe(false);
+    }
+  });
+
+  it(`한 워크 ${APP_ONLY_HIDE_LIMIT}곳 초과면 숨기지 않고 format 확인 큐`, () => {
+    const many = Array.from({ length: APP_ONLY_HIDE_LIMIT + 1 }, (_, i) => lp({ id: 100 + i, name: `앱만${i}`, address: `대구 중구 ${i}` }));
+    const p = planPull({ ...base, remote, local: [linked, ...many] });
+    expect(p.stats.appOnlyHidden).toBe(0);
+    expect(p.reviews.map((r) => [r.kind, r.field])).toEqual([["format", "app_only_too_many"]]);
+  });
+
+  it("appOnlyHideAllowed: 같은 팀·분기·업무 최신 연도 워크가 하나일 때만", () => {
+    const w = (id: string, team: string, year: number, kind = "quarter", status = "target") => ({ id, status, parse: { team, year, quarter: 4, kind } as never });
+    const cur = w("a", "C", 2026);
+    expect(appOnlyHideAllowed(cur, [cur, w("b", "D", 2026)])).toBe(true);
+    expect(appOnlyHideAllowed(cur, [cur, w("old", "C", 2025)])).toBe(true);           // 작년 워크가 있어도 올해 워크는 됨
+    expect(appOnlyHideAllowed(w("old", "C", 2025), [cur, w("old", "C", 2025)])).toBe(false); // 작년 워크로는 숨기지 않음
+    expect(appOnlyHideAllowed(cur, [cur, w("x", "C", 2026)])).toBe(false);             // 같은 범위 워크 둘
+    expect(appOnlyHideAllowed(cur, [cur, w("x", "C", 2026, "quarter", "excluded")])).toBe(true);
+    expect(appOnlyHideAllowed(w("t", "T", 2026), [])).toBe(false);
+    expect(appOnlyHideAllowed({ id: "n", parse: null }, [])).toBe(false);
+  });
+});
+
 // ── 응답 정리 ─────────────────────────────────────────────────────
 describe("normalizeRemoteWork", () => {
   it("work2.js 모양 → RemotePlace, escapeHTML 풀기", () => {
@@ -760,7 +826,7 @@ describe("auth", () => {
 
 // ── 실행부(가짜 서버) ─────────────────────────────────────────────
 type Call = { method: string; url: string; headers: Record<string, string>; body: unknown };
-function fakeServer(opts: { enabled: boolean; logFails?: boolean; firstPulled?: boolean; token109Once?: boolean; twoWorks?: boolean; tickPerWork?: number; storedWorks?: Array<Record<string, unknown>> }) {
+function fakeServer(opts: { enabled: boolean; logFails?: boolean; firstPulled?: boolean; token109Once?: boolean; twoWorks?: boolean; newInBoth?: boolean; tickPerWork?: number; storedWorks?: Array<Record<string, unknown>> }) {
   const calls: Call[] = [];
   let fail109 = Boolean(opts.token109Once);
   let accountRow: Record<string, unknown> | null = null;
@@ -784,7 +850,9 @@ function fakeServer(opts: { enabled: boolean; logFails?: boolean; firstPulled?: 
     if (url.includes("identitytoolkit")) return json({ idToken: "IDTOKEN-SECRET", refreshToken: "RT-SECRET", expiresIn: "3600" });
     if (url.includes("api.solgit.co/api/v2/users/info")) return json({ works: [{ _id: WORK, name: workPayload.name, places: [1, 2] }, { _id: "f".repeat(24), name: "영업확장성리스트_박P_워킨맵표현" }, ...(opts.twoWorks ? [{ _id: WORK2, name: "수도권D_26년4분기점검(26.10.26)", places: [1] }] : [])] });
     if (url.includes("api.solgit.co/api/v2/works/")) clock.now += clock.tickPerWork;
-    if (url.includes("api.solgit.co/api/v2/works/" + WORK2)) return json({ ...workPayload, _id: WORK2, places: [] });
+    const newPlace = (id: string, name: string) => ({ _id: id, name, label_color: 0, hide: false, memo2: [], last_update: "2026-10-31T01:00:00Z", address: { address: `대전 ${name}`, detail_addr: "" } });
+    if (url.includes("api.solgit.co/api/v2/works/" + WORK2)) return json({ ...workPayload, _id: WORK2, places: opts.newInBoth ? [newPlace("n2", "새곳둘")] : [] });
+    if (opts.newInBoth && url.includes(`api.solgit.co/api/v2/works/${WORK}`)) return json({ ...workPayload, places: [...workPayload.places, newPlace("n1", "새곳하나")] });
     if (url.includes(`api.solgit.co/api/v2/works/${WORK}`)) {
       if (fail109) { fail109 = false; return json({ error_code: 109, message: "토큰 인증에 실패했습니다.", status: 401 }); }
       return json(workPayload);
@@ -900,6 +968,18 @@ describe("runAction(fetch 주입)", () => {
     expect(out.body.deferred).toEqual([{ account: 1, workId: WORK, name: "수도권C_26년4분기점검(26.10.26)" }]);
     const mark = calls.find((c) => c.method === "PATCH" && c.url.includes(`work_id=eq.${WORK}`));
     expect(String((mark?.body as Record<string, unknown>).last_error)).toMatch(/^미완료:/);
+  });
+
+  it("한 회차에 두 워크가 새 장소를 넣어도 id 가 겹치지 않는다(같은 nowMs — 실측 23505)", async () => {
+    const stored = [
+      { account_no: 1, work_id: WORK, name: "C", place_count: 2, override_skip: false, first_pulled_at: "2026-10-30T00:00:00Z", last_pulled_at: "2026-10-30T00:00:00Z" },
+      { account_no: 1, work_id: WORK2, name: "D", place_count: 0, override_skip: false, first_pulled_at: "2026-10-30T00:00:00Z", last_pulled_at: "2026-10-30T01:00:00Z" },
+    ];
+    const { calls, deps } = fakeServer({ enabled: true, twoWorks: true, newInBoth: true, storedWorks: stored });
+    await runAction({ action: "pull", scope: "current", dryRun: false }, deps);
+    const inserted = writesTo(calls, "workin_map_places").flatMap((c) => c.body as Array<{ id: number; ext_id: string }>);
+    expect(inserted.map((r) => r.ext_id).sort()).toEqual(["n1", "n2"]);
+    expect(new Set(inserted.map((r) => r.id)).size).toBe(2);
   });
 
   it("status: 마지막 실행·다음 예정(09/12/15/18)·미완료 워크, 토큰 칸 없음", async () => {

@@ -15,7 +15,7 @@
 import { fetchWork, fetchWorkList, type WorkListItem } from "./api.ts";
 import { FIREBASE_WEB_API_KEY_FALLBACK, getIdToken, readAccounts, type Account, type AuthCtx, type FetchFn, type TokenRow, type TokenStore } from "./auth.ts";
 import {
-  classifyWork, DEFAULT_EXCLUDE_WORKS, DEFERRED_PREFIX, chunkPatchRows, kstParts, nextScheduledRun, PULL_HOURS_KST, listConfig, normalizeRemoteWork, planMemoDateBackfill, planPull, reviewKey,
+  appOnlyHideAllowed, classifyWork, DEFAULT_EXCLUDE_WORKS, DEFERRED_PREFIX, chunkPatchRows, kstParts, nextScheduledRun, PULL_HOURS_KST, listConfig, normalizeRemoteWork, planMemoDateBackfill, planPull, reviewKey,
   BACKFILL_NOTE_DEDUPE, BACKFILL_NOTE_TAIL, type BackfillLog, switchOn, SYNC_ACTOR,
   type LocalPlace, type PlannedLog, type PlannedReview, type PullPlan, type SyncRequest, type WorkParse, type WorkStatus,
 } from "./plan.ts";
@@ -221,7 +221,7 @@ async function insertReviews(db: Db, reviews: PlannedReview[]): Promise<number> 
   return n;
 }
 
-async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: StoredWork | undefined, dry: boolean, nowMs: number, keepAppDone = true, withDetail = false): Promise<WorkResult> {
+async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: StoredWork | undefined, dry: boolean, nowMs: number, keepAppDone = true, withDetail = false, hideAppOnly = false, runTakenIds: Set<number> = new Set()): Promise<WorkResult> {
   const base = { workId: w.id, name: w.name, account: w.accountNo };
   const parse = w.parse as WorkParse;
   const nowIso = new Date(nowMs).toISOString();
@@ -250,9 +250,11 @@ async function pullOneWork(db: Db, auth: AuthCtx, w: ClassifiedWork, stored: Sto
     firstPull: !stored?.first_pulled_at,
     previousCount: Math.max(Number(stored?.place_count || 0), linked) || null,
     nowIso, openReviewKeys: new Set(openRows.map(reviewKey)),
-    idBase: nowMs, takenIds: new Set(local.map((l) => l.id)), scopeMaxNumber: Number(maxRows[0]?.number || 0), scopeEmpty: maxRows.length === 0, keepAppDone, withDetail: dry && withDetail,
+    // takenIds 에 회차 공용 집합을 합친다 — 한 회차 안 여러 워크가 같은 nowMs 기반 id 를 쓰면 23505 충돌(2026-10-31 실측)
+    idBase: nowMs, takenIds: new Set([...local.map((l) => l.id), ...runTakenIds]), scopeMaxNumber: Number(maxRows[0]?.number || 0), scopeEmpty: maxRows.length === 0, keepAppDone, withDetail: dry && withDetail, hideAppOnly,
   });
 
+  for (const x of plan.inserts) runTakenIds.add(x.row.id);   // 다음 워크가 같은 id 를 다시 고르지 않게
   const sample = plan.patches.slice(0, 15).map((p) => ({ id: p.id, by: p.by, fields: p.fields, logs: p.logs.filter((l) => l.field !== "_link").slice(0, 4) }));
   if (plan.stop) {
     if (!dry) {
@@ -371,6 +373,7 @@ export async function runAction(req: SyncRequest, deps: SyncDeps): Promise<SyncR
   const authOf = (account: Account): AuthCtx => ({ fetchFn: deps.fetchFn, apiKey: cfg.apiKey, account, store, nowMs: deps.now });
   const nowMs = deps.now();
   const startedMs = nowMs;
+  const runTakenIds = new Set<number>();   // 이 회차에서 새로 쓴 장소 id(워크 간 충돌 방지)
   const nowIso = new Date(nowMs).toISOString();
 
   if (req.action === "status") {
@@ -459,7 +462,7 @@ export async function runAction(req: SyncRequest, deps: SyncDeps): Promise<SyncR
     for (const w of picked) {
       if (deps.now() - startedMs > PULL_BUDGET_MS) { deferred.push({ account: w.accountNo, workId: w.id, name: w.name }); continue; }
       const account = accounts.find((a) => a.no === w.accountNo) as Account;
-      try { results.push(await pullOneWork(db, authOf(account), w, storedBy.get(`${w.accountNo}|${w.id}`), dry, nowMs, cfg.keepAppDone, req.detail === true)); }
+      try { results.push(await pullOneWork(db, authOf(account), w, storedBy.get(`${w.accountNo}|${w.id}`), dry, nowMs, cfg.keepAppDone, req.detail === true, appOnlyHideAllowed(w, works), runTakenIds)); }
       catch (e) { results.push({ workId: w.id, name: w.name, account: w.accountNo, result: "error", error: errMsg(e) }); }
     }
     // 시간 초과로 못 한 워크 — status 의 "미완료 워크"(last_error 머리 DEFERRED_PREFIX). 다음 회차에 성공하면 '' 로 지워진다

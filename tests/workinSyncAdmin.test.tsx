@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import WorkinSyncAdmin, { WorkinDryTable } from "../src/WorkinSyncAdmin";
 import {
-  REPLACE_BLOCKED_MESSAGE, canReplaceScope, dryRows, nextPullKst, pullSummary, scopeOptions, syncedCountInScope,
+  REPLACE_BLOCKED_MESSAGE, canReplaceScope, dryExtraColumns, dryRows, reviewKindFilter, reviewLabel, splitOpenReviews, REVIEW_ACTION_KINDS, REVIEW_INFO_KINDS, nextPullKst, pullSummary, scopeOptions, syncedCountInScope,
   type PullResponse, type SyncStatus,
 } from "../src/workinSync";
 
@@ -36,7 +36,9 @@ describe("WorkinSyncAdmin 렌더", () => {
     expect(html).toContain("CD팀");
     expect(html).toContain("멈춤(로그인 3회 실패)");
     expect(html).toContain("C 4Q 분기점검");
-    expect(html).toContain("확인 필요 3");
+    expect(html).toContain("확인 필요 2"); // unmatched 2 — downgrade(참고)는 빼고
+    expect(html).toContain("참고 1");
+    expect(html).toContain("모두 확인함");
     expect(html).not.toMatch(/PASSWORD=|id_token|refresh_token/);
   });
 
@@ -87,6 +89,27 @@ describe("workinSync 순수 함수", () => {
   it("범위 고르기: 대상이고 건너뛰기 아닌 워크만", () => {
     const opts = scopeOptions(status(true).works);
     expect(opts.map((o) => o.value)).toEqual(["current", "a".repeat(24)]);
+  });
+  it("확인 큐 나누기: 처리 필요 vs 참고, kind=in.(…)", () => {
+    expect(splitOpenReviews({ downgrade: 218, conflict: 68, field_diff: 8, new: 6, ambiguous: 4 })).toEqual({ action: 10, info: 294 });
+    expect(splitOpenReviews({ someday_new_kind: 1 })).toEqual({ action: 1, info: 0 }); // 모르는 종류는 처리 필요로
+    expect(splitOpenReviews(undefined)).toEqual({ action: 0, info: 0 });
+    expect(reviewKindFilter(REVIEW_ACTION_KINDS)).toBe("kind=in.(new,ambiguous,missing,unmatched,format,loop)");
+    expect(reviewKindFilter(REVIEW_INFO_KINDS)).toBe("kind=in.(downgrade,conflict,field_diff)");
+    expect(reviewLabel({ kind: "missing", field: "app_only" })).toBe("워킨맵에 없음(숨김)");
+    expect(reviewLabel({ kind: "downgrade", field: "label" })).toBe("완료 내려감 · label");
+  });
+  it("미리보기 표: 정형 교체·숨김 칸은 있을 때만", () => {
+    const withExtra: PullResponse = { ...dry, results: [{ ...dry.results![0], stats: { ...dry.results![0].stats!, memoReplaces: 4, appOnlyHidden: 2 } }] };
+    const rows = dryRows(withExtra.results);
+    expect(rows[0]).toMatchObject({ memoReplaces: 4, appOnlyHidden: 2 });
+    expect(dryExtraColumns(rows)).toEqual({ memoReplaces: true, appOnlyHidden: true });
+    expect(dryExtraColumns(dryRows(dry.results))).toEqual({ memoReplaces: false, appOnlyHidden: false });
+    const html = renderToString(createElement(WorkinDryTable, { res: withExtra }));
+    expect(html).toContain("정형 교체");
+    expect(html).toContain(">숨김<");
+    expect(pullSummary(withExtra)).toContain("워킨맵에 없어 숨김 2");
+    expect(renderToString(createElement(WorkinDryTable, { res: dry }))).not.toContain("정형 교체");
   });
   it("요약 한 줄", () => {
     expect(pullSummary(dry)).toBe("미리보기(쓰기 0) · 2026년 4분기 워크 2개 · 짝 400곳 · 바뀔 곳 17 · 새 장소 3 · 중단·오류 1개");

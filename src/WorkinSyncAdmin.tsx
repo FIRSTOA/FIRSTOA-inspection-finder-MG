@@ -7,7 +7,8 @@ import { askConfirm } from "./confirmModal";
 import { notify } from "./toast";
 import { invokeEdgeFunction, selectRows, updateRows } from "./supabase";
 import {
-  KIND_LABEL, REVIEW_KIND_LABEL, WORK_STATUS_LABEL, actorName, dryRows, kstShort, nextPullKst, pullSummary, reviewSummary, scopeOptions,
+  KIND_LABEL, REVIEW_ACTION_KINDS, REVIEW_INFO_KINDS, WORK_STATUS_LABEL, actorName, dryExtraColumns, dryRows, kstShort, nextPullKst, pullSummary,
+  reviewKindFilter, reviewLabel, reviewSummary, scopeOptions, splitOpenReviews,
   type PullResponse, type ReviewRow, type SyncStatus, type SyncWorkRow,
 } from "./workinSync";
 
@@ -21,11 +22,13 @@ import {
 const HEAD_BLOCK = "border-b border-slate-100 bg-slate-50 px-4 py-3 lg:px-5";
 const FN = "workinmap-sync";
 const REVIEW_COLS = "id,kind,field,place_id,ext_id,account_no,work_id,detail,created_at";
-type Busy = "" | "status" | "works" | "dry" | "pull" | `login${number}` | `skip:${string}` | `review:${number}`;
+type Busy = "" | "status" | "works" | "dry" | "pull" | "info" | `login${number}` | `skip:${string}` | `review:${number}`;
 
 export type WorkinSyncInitial = {
   status?: SyncStatus | null;
   reviews?: ReviewRow[];
+  /** 참고 종류(REVIEW_INFO_KINDS) 미처리 */
+  infoReviews?: ReviewRow[];
   configEnabled?: boolean | null;
   dry?: PullResponse | null;
 };
@@ -35,6 +38,7 @@ const who = () => actorName(typeof window !== "undefined" ? window.localStorage.
 /** 미리보기·동기화 결과 표(워크별 짝 수·새 장소·바뀔 곳·색 검증·가드 사유) */
 export function WorkinDryTable({ res }: { res: PullResponse }) {
   const rows = dryRows(res.results);
+  const extra = dryExtraColumns(rows);
   return (
     <div className="border-b border-slate-100">
       <div className="px-4 py-2.5 text-[12px] font-black tabular-nums text-slate-800 lg:px-5">{pullSummary(res)}</div>
@@ -48,7 +52,10 @@ export function WorkinDryTable({ res }: { res: PullResponse }) {
               <tr>
                 <th className="px-3 py-2">워크</th><th className="px-2 py-2">결과</th><th className="px-2 py-2 text-right">워킨맵</th>
                 <th className="px-2 py-2 text-right">짝</th><th className="px-2 py-2 text-right">새 장소</th><th className="px-2 py-2 text-right">바뀔 곳</th>
-                <th className="px-2 py-2 text-right">색·메모</th><th className="px-3 py-2">색 검증 · 사유</th>
+                <th className="px-2 py-2 text-right">색·메모</th>
+                {extra.memoReplaces && <th className="px-2 py-2 text-right">정형 교체</th>}
+                {extra.appOnlyHidden && <th className="px-2 py-2 text-right" title="워킨맵에 없는 앱 행 — 지우지 않고 숨김">숨김</th>}
+                <th className="px-3 py-2">색 검증 · 사유</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100" data-testid="workin-dry-rows">
@@ -61,6 +68,8 @@ export function WorkinDryTable({ res }: { res: PullResponse }) {
                   <td className="px-2 py-2 text-right">{r.fresh ?? "-"}</td>
                   <td className="px-2 py-2 text-right">{r.changed ?? "-"}</td>
                   <td className="px-2 py-2 text-right">{r.labelChanges ?? "-"}·{r.memoAdds ?? "-"}</td>
+                  {extra.memoReplaces && <td className="px-2 py-2 text-right">{r.memoReplaces ?? "-"}</td>}
+                  {extra.appOnlyHidden && <td className="px-2 py-2 text-right">{r.appOnlyHidden ?? "-"}</td>}
                   <td className="px-3 py-2">
                     {r.color && <div className="text-slate-500">{r.color}</div>}
                     {r.reason && <div className={r.tone === "bad" ? "text-rose-600" : "text-amber-700"}>{r.reason}</div>}
@@ -83,6 +92,9 @@ export default function WorkinSyncAdmin({ initial }: { initial?: WorkinSyncIniti
   const [statusError, setStatusError] = useState("");
   const [reviews, setReviews] = useState<ReviewRow[]>(initial?.reviews ?? []);
   const [reviewError, setReviewError] = useState("");
+  const [infoReviews, setInfoReviews] = useState<ReviewRow[]>(initial?.infoReviews ?? []);
+  const [infoError, setInfoError] = useState("");
+  const [infoOpen, setInfoOpen] = useState(false);
   const [configEnabled, setConfigEnabled] = useState<boolean | null>(initial?.configEnabled ?? null);
   const [loading, setLoading] = useState(!initial);
   const [busy, setBusy] = useState<Busy>("");
@@ -92,15 +104,18 @@ export default function WorkinSyncAdmin({ initial }: { initial?: WorkinSyncIniti
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [st, rv, cfg] = await Promise.allSettled([
+    const [st, rv, info, cfg] = await Promise.allSettled([
       invokeEdgeFunction<SyncStatus>(FN, { action: "status" }, 45_000),
-      selectRows<ReviewRow>("workin_sync_review", `select=${REVIEW_COLS}&resolved_at=is.null&order=id.desc&limit=200`),
+      selectRows<ReviewRow>("workin_sync_review", `select=${REVIEW_COLS}&resolved_at=is.null&${reviewKindFilter(REVIEW_ACTION_KINDS)}&order=id.desc&limit=200`),
+      selectRows<ReviewRow>("workin_sync_review", `select=${REVIEW_COLS}&resolved_at=is.null&${reviewKindFilter(REVIEW_INFO_KINDS)}&order=id.desc&limit=200`),
       selectRows<{ key: string; value: string }>("app_config", "select=key,value&key=eq.WORKINMAP_SYNC_ENABLED"),
     ]);
     if (st.status === "fulfilled") { setStatus(st.value); setStatusError(""); }
     else setStatusError(st.reason instanceof Error ? st.reason.message : String(st.reason));
     if (rv.status === "fulfilled") { setReviews(rv.value); setReviewError(""); }
     else setReviewError(rv.reason instanceof Error ? rv.reason.message : String(rv.reason));
+    if (info.status === "fulfilled") { setInfoReviews(info.value); setInfoError(""); }
+    else setInfoError(info.reason instanceof Error ? info.reason.message : String(info.reason));
     if (cfg.status === "fulfilled") setConfigEnabled(String(cfg.value[0]?.value ?? "").trim().toLowerCase() === "true");
     setLoading(false);
   }, []);
@@ -114,7 +129,9 @@ export default function WorkinSyncAdmin({ initial }: { initial?: WorkinSyncIniti
   }, [status]);
   const works = useMemo(() => status?.works || [], [status]);
   const options = useMemo(() => scopeOptions(works), [works]);
-  const openTotal = Object.values(status?.openReviews || {}).reduce((a, b) => a + b, 0);
+  // 머리 수는 처리가 필요한 종류만(참고 종류는 아래 "참고" 접이식) — status 가 없으면 불러온 목록 길이
+  const open = status ? splitOpenReviews(status.openReviews) : { action: reviews.length, info: infoReviews.length };
+  const infoCount = Math.max(open.info, infoReviews.length);
 
   const fail = (what: string, e: unknown) => {
     const text = `${what} 실패: ${e instanceof Error ? e.message : String(e)}`;
@@ -182,6 +199,19 @@ export default function WorkinSyncAdmin({ initial }: { initial?: WorkinSyncIniti
     finally { setBusy(""); }
   };
 
+  const resolveAllInfo = async () => {
+    const ok = await askConfirm(`참고 ${infoCount}건(완료 내려감 반영·앱 값 유지·상호 변경)을 모두 확인함으로 처리합니다.\n이미 반영된 기록이라 장소 값은 바뀌지 않습니다. 계속할까요?`, { okLabel: "모두 확인함" });
+    if (!ok) return;
+    setBusy("info");
+    try {
+      await updateRows("workin_sync_review", `resolved_at=is.null&${reviewKindFilter(REVIEW_INFO_KINDS)}`, { resolved_at: new Date().toISOString(), resolved_by: who(), resolution: "ignored" });
+      setInfoReviews([]);
+      setStatus((s) => s && { ...s, openReviews: Object.fromEntries(Object.entries(s.openReviews || {}).filter(([k]) => !(REVIEW_INFO_KINDS as readonly string[]).includes(k))) });
+      notify(`참고 ${infoCount}건을 확인함으로 처리했습니다.`, "success");
+    } catch (e) { fail("참고 모두 확인", e); }
+    finally { setBusy(""); }
+  };
+
   const workName = (id: string | null) => works.find((w) => w.work_id === id)?.name || id || "-";
 
   return (
@@ -208,7 +238,8 @@ export default function WorkinSyncAdmin({ initial }: { initial?: WorkinSyncIniti
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-4 py-3 text-[12px] font-black tabular-nums text-slate-800 lg:px-5">
         <span className={`${UI.badge} ${enabled ? UI.tone.ok : UI.tone.off}`}>자동 가져오기 {enabled ? "켜짐" : "꺼짐"}</span>
         <span>{enabled ? `다음 예정 ${nextPullKst()} (매일 09·12·15·18시)` : "스위치가 꺼져 있어 자동 실행 없음 — 미리보기만 됩니다"}</span>
-        {openTotal > 0 && <span className={`${UI.badge} ${UI.tone.warn}`}>{`확인 필요 ${openTotal}`}</span>}
+        {open.action > 0 && <span className={`${UI.badge} ${UI.tone.warn}`}>{`확인 필요 ${open.action}`}</span>}
+        {infoCount > 0 && <span className={`${UI.badge} ${UI.tone.off}`}>{`참고 ${infoCount}`}</span>}
       </div>
 
       {/* 계정 */}
@@ -287,13 +318,13 @@ export default function WorkinSyncAdmin({ initial }: { initial?: WorkinSyncIniti
       {/* 확인 큐 */}
       <div className="px-4 py-3 lg:px-5">
         <div className="text-xs font-black text-slate-700">확인 큐 {reviews.length}</div>
-        <p className={UI.desc}>자동으로 반영하지 않은 것(짝 없음·후보 여럿·완료 내려감·사라짐 등)입니다. 웹앱 워킨맵에서 직접 맞춘 뒤 [반영함], 그대로 두려면 [무시]를 누르세요.</p>
+        <p className={UI.desc}>처리가 필요한 것(후보 여럿·새 장소·사라짐·워킨맵에 없어 숨김·형식 이상 등)입니다. 웹앱 워킨맵에서 직접 맞춘 뒤 [반영함], 그대로 두려면 [무시]를 누르세요.</p>
         {reviewError && <div role="alert" className={`${UI.note("bad")} mt-2`}>확인 큐 조회 실패: {reviewError}</div>}
         {!reviewError && reviews.length === 0 && !loading && <div className="mt-2 text-[11px] font-semibold text-slate-400">미처리 건이 없습니다.</div>}
         <div className="mt-2 divide-y divide-slate-100">
           {reviews.map((r) => (
             <div key={r.id} className="flex flex-wrap items-start gap-2 py-2">
-              <span className={`${UI.badge} ${UI.tone.warn}`}>{REVIEW_KIND_LABEL[r.kind] || r.kind}{r.field ? ` · ${r.field}` : ""}</span>
+              <span className={`${UI.badge} ${UI.tone.warn}`}>{reviewLabel(r)}</span>
               <span className="min-w-0 flex-1 text-[11px] font-semibold text-slate-600">
                 <span className="block truncate font-black text-slate-800">{workName(r.work_id)}{r.place_id ? ` · 장소 ${r.place_id}` : ""}</span>
                 <span className="block break-all">{reviewSummary(r.detail)}</span>
@@ -306,6 +337,38 @@ export default function WorkinSyncAdmin({ initial }: { initial?: WorkinSyncIniti
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 참고(이미 반영·앱 값 유지 기록) — 머리 수·노란 줄에서 뺀 종류 */}
+      <div className="border-t border-slate-100 px-4 py-3 lg:px-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" aria-expanded={infoOpen} onClick={() => setInfoOpen((v) => !v)} className={`${UI.btnGhost} text-xs!`}>
+            {`참고 ${infoCount}건 ${infoOpen ? "접기" : "펼치기"}`}
+          </button>
+          {infoCount > 0 && (
+            <button type="button" disabled={!!busy} onClick={() => void resolveAllInfo()} className={`${UI.btnGhost} ml-auto text-xs!`}>
+              {busy === "info" ? "처리 중…" : "모두 확인함"}
+            </button>
+          )}
+        </div>
+        <p className={`${UI.desc} mt-1`}>이미 반영된 완료 내려감·첫 동기화 때 앱 값을 지킨 곳·상호 변경 기록입니다. 할 일은 없고, 되돌리려면 동기화 기록(before)을 보세요.</p>
+        {infoError && <div role="alert" className={`${UI.note("bad")} mt-2`}>참고 목록 조회 실패: {infoError}</div>}
+        {infoOpen && (
+          <div className="mt-2 divide-y divide-slate-100" data-testid="workin-info-rows">
+            {infoReviews.length === 0 && !infoError && <div className="py-2 text-[11px] font-semibold text-slate-400">참고 건이 없습니다.</div>}
+            {infoReviews.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-start gap-2 py-2">
+                <span className={`${UI.badge} ${UI.tone.off}`}>{reviewLabel(r)}</span>
+                <span className="min-w-0 flex-1 text-[11px] font-semibold text-slate-600">
+                  <span className="block truncate font-black text-slate-800">{workName(r.work_id)}{r.place_id ? ` · 장소 ${r.place_id}` : ""}</span>
+                  <span className="block break-all">{reviewSummary(r.detail)}</span>
+                  <span className="block text-slate-400">{kstShort(r.created_at)}</span>
+                </span>
+              </div>
+            ))}
+            {infoCount > infoReviews.length && <div className="py-2 text-[11px] font-semibold text-slate-400">최근 {infoReviews.length}건만 보입니다(전체 {infoCount}건). [모두 확인함]은 전체에 적용됩니다.</div>}
+          </div>
+        )}
       </div>
     </section>
   );
