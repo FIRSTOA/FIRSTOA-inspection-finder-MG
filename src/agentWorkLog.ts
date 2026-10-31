@@ -4,6 +4,12 @@ export type AgentWorkItem = { date: string; hash: string; agent: string; summary
 export const AGENT_WORK_LOG: AgentWorkItem[] = [
   {
     "date": "2026-10-31",
+    "hash": "f7f5bbacb9",
+    "agent": "developer",
+    "summary": "워킨맵 메모: 여러 줄 앱 항목을 줄 단위로 쪼개 정형 교체·중복 정리(backfill 2차), 교체 로그 모양 통일"
+  },
+  {
+    "date": "2026-10-31",
     "hash": "a059d73d4f",
     "agent": "developer",
     "summary": "워킨맵 동기화 메모: 날짜 꼬리 (워킨맵 YYYY-MM-DD), 줄 단위 비교, 정형 줄(임대료·미수금·계약종료년월·방문주기·한조 등) 교체, memo_date_backfill 액션(기존 메모 꼬리·중복 정형 줄 정리) + workin_memo_key 꼬리 제거 SQL"

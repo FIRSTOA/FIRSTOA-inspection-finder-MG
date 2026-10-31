@@ -2,6 +2,11 @@
 export type PatchNote = { hash: string; date: string; note: string };
 export const PATCH_NOTES: PatchNote[] = [
   {
+    "hash": "f7f5bbacb9",
+    "date": "2026-10-31",
+    "note": "워킨맵 메모: 여러 줄 앱 항목을 줄 단위로 쪼개 정형 교체·중복 정리(backfill 2차), 교체 로그 모양 통일"
+  },
+  {
     "hash": "4c08797ddd",
     "date": "2026-10-31",
     "note": "AGENTS: 워킨맵 메모 정리 실행 기록(꼬리 1,640·중복 1,540)"
@@ -1245,10 +1250,5 @@ export const PATCH_NOTES: PatchNote[] = [
     "hash": "b96a855601",
     "date": "2026-10-10",
     "note": "통합 검색: 워킨맵 메모를 장소당 한 줄로 정리(상태 카드에 있는 꼬리표 제외) · 마지막 AS는 AS 보고·접수·일정 중 최신으로(출처 표시)"
-  },
-  {
-    "hash": "c7513c1635",
-    "date": "2026-10-10",
-    "note": "통합 검색 첫 화면 재설계(입력 하나로 검색·질문 자동 판정) · 이름 앞부분 일치 승격 · 마감 문자 식별(임대 코드·기번) + 관리부 목록 도착함(봇 수집)"
   }
 ];
